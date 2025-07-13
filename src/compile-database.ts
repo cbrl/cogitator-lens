@@ -1,0 +1,160 @@
+import { Uri, workspace, window } from "vscode";
+import { CompilerBase, CompilerInfo, baseCompilerInfoFor, CompileOptions } from "./compiler";
+import { getCompilerByType } from "./compilers/compiler-map";
+import { ParsedAsmResult } from './parsers/asmresult.interfaces';
+import { ParseFiltersAndOutputOptions } from "./parsers/filters.interfaces";
+
+export type CompilationInfo = {
+	compilerName: string;
+	defines: string[];
+	includes: string[];
+	args: string[];
+}
+
+// Handles creation and caching of compilers based on their ID
+export class CompilerCache {
+	private cache: Map<string, CompilerBase> = new Map();
+
+	public get compilerNames(): string[] {
+		return Array.from(this.cache.keys());
+	}
+
+	public get compilers(): CompilerBase[] {
+		return Array.from(this.cache.values());
+	}
+
+	public hasCompiler(name: string): boolean {
+		return this.cache.has(name);
+	}
+
+	public getCompiler(name: string): CompilerBase | undefined {
+		return this.cache.get(name);
+	}
+
+	public createCompiler(info: CompilerInfo): CompilerBase {
+		try {
+			const compilerType = getCompilerByType(info.type);
+			const compiler = new compilerType(info);
+			this.cache.set(info.name, compiler);
+			return compiler;
+		}
+		catch (error) {
+			const errorMessage = (error instanceof Error) ? error.message : JSON.stringify(error);
+			throw new Error(`Failed to create compiler: ${errorMessage}`);
+		}
+	}
+
+	public createCompilers(info: CompilerInfo[]): CompilerBase[] {
+		return info.map(value => this.createCompiler(value));
+	}
+
+	public getOrCreateCompiler(info: CompilerInfo): CompilerBase {
+		return this.getCompiler(info.name) ?? this.createCompiler(info);
+	}
+
+	public getOrCreateCompilers(info: CompilerInfo[]): CompilerBase[] {
+		return info.map(value => this.getOrCreateCompiler(value));
+	}
+}
+
+// Associates files with their compiler exectuables and settings
+export class CompileInfoDatabase {
+	private compilationInfo: Map<string, CompilationInfo> = new Map();
+
+	public defaultCompileInfo: CompilationInfo | undefined = undefined;
+
+	public get info() {
+		return this.compilationInfo;
+	}
+
+	public getCompilationInfo(file: Uri): CompilationInfo | undefined {
+		return this.compilationInfo.get(file.fsPath);
+	}
+
+	public getCompilationInfoOrDefault(file: Uri): CompilationInfo | undefined {
+		return this.compilationInfo.get(file.fsPath) ?? this.defaultCompileInfo;
+	}
+
+	public setCompilationInfo(file: Uri, info: CompilationInfo): void {
+		this.compilationInfo.set(file.fsPath, info);
+	}
+}
+
+export class CompileManager {
+	// Maps file path to compiler info
+	private _compilationInfo: CompileInfoDatabase = new CompileInfoDatabase();
+
+	// Maps compiler names to compiler
+	private _compilerCache: CompilerCache = new CompilerCache();
+
+	constructor() {
+		// TODO: support multi-workspace settings?
+		const scope = workspace.workspaceFolders?.at(0) ?? null;
+
+		// Load compiler info from workspace configuration
+		// TODO: handle configuration changes during runtime
+		const compilers = workspace.getConfiguration('coglens', scope).get<CompilerInfo[]>('compilers') ?? [];
+
+		for (const compiler of compilers) {
+			if (!this._compilerCache.hasCompiler(compiler.name)) {
+				this._compilerCache.createCompiler(compiler);
+			}
+			else {
+				window.showWarningMessage(`Compiler "${compiler.name}" already exists. Skipping.`);
+			}
+		}
+
+		const defaultCompileInfo = workspace.getConfiguration('coglens', scope).get<CompilationInfo>('defaultCompileInfo');
+
+		// For whatever reason, Code exposes this behavior for default or optional return values,
+		// but also tries its absolute hardest to return a value even if the user hasn't set
+		// anything in the config, rendering the default/optional return behavior functionally
+		// useless: https://github.com/Microsoft/vscode/issues/35451
+		//
+		// In this case that means it always returns an empty object if the config value isn't set.
+		if (defaultCompileInfo !== undefined && Object.keys(defaultCompileInfo).length > 0) {
+			this._compilationInfo.defaultCompileInfo = defaultCompileInfo;
+		}
+	}
+
+	public get compilerCache(): CompilerCache {
+		return this._compilerCache;
+	}
+
+	public get compilationInfo(): CompileInfoDatabase {
+		return this._compilationInfo;
+	}
+
+	public setCompilationInfo(file: Uri, info: CompilationInfo): void {
+		this._compilationInfo.setCompilationInfo(file, info);
+	}
+
+	public async compile(file: Uri): Promise<ParsedAsmResult> {
+		let compilationInfo = this._compilationInfo.getCompilationInfoOrDefault(file);
+
+		if (compilationInfo === undefined) {
+			throw new Error(`No compile info found for file: ${file.fsPath}`);
+		}
+
+		const compiler = this._compilerCache.getCompiler(compilationInfo.compilerName);
+
+		if (compiler === undefined) {
+			throw new Error(`Compiler not found: ${compilationInfo.compilerName}`);
+		}
+
+		//const workspaceConfig = workspace.getConfiguration('', file.with({scheme: 'file'}));
+
+		const options: CompileOptions = {
+			defines: compilationInfo.defines,
+			includes: compilationInfo.includes,
+			args: compilationInfo.args
+		};
+
+		// TODO: additional user-configurable filter options?
+		const filter: ParseFiltersAndOutputOptions = {};
+		//filter.binary = ...;
+		//filter.demangle = ...;
+
+		return compiler.compile(file.fsPath, options, filter);
+	}
+}

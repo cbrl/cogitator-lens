@@ -1,0 +1,361 @@
+{
+    "name": "coglens",
+    "displayName": "Cogitator Lens",
+    "description": "Divine the substratal invocations of your digital canticles",
+    "version": "0.1.0",
+    "icon": "icon.png",
+    "publisher": "cbrl",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/cbrl/vscode-coglens"
+    },
+    "engines": {
+    	"vscode": "^1.94.0"
+    },
+    "categories": [
+        "Other"
+    ],
+	"activationEvents": [],
+    "main": "./dist/extension.js",
+    "contributes": {
+		"viewsContainers": {
+			"activitybar": [
+				{
+					"id": "coglens",
+					"title": "Cogitator Lens",
+					"icon": "resources/gear-phi.png"
+				}
+			]
+		},
+		"views": {
+			"coglens": [
+				{
+					"id": "coglens.compilers",
+					"name": "Compilers",
+					"icon": "$(blank)"
+				},
+				{
+					"id": "coglens.compileinfo",
+					"name": "Compilation Info",
+					"icon": "$(blank)"
+				}
+			]
+		},
+        "commands": [
+            {
+                "command": "coglens.Disassemble",
+                "title": "Disassemble Current File",
+                "category": "Cogitator Lens",
+				"icon": "$(file-binary)"
+            },
+			{
+				"command": "coglens.GetInput",
+				"title": "Get Input",
+				"category": "Cogitator Lens",
+				"icon": "$(pencil)"
+			},
+			{
+				"command": "coglens.GetFile",
+				"title": "Get File",
+				"category": "Cogitator Lens",
+				"icon": "$(folder-opened)"
+			},
+            {
+                "command": "coglens.ClearInput",
+                "title": "Clear Input",
+                "category": "Cogitator Lens",
+                "icon": "$(clear-all)"
+            },
+            {
+                "command": "coglens.CopyText",
+                "title": "Copy Input",
+                "category": "Cogitator Lens",
+                "icon": "$(clippy)"
+            },
+			{
+				"command": "coglens.AddElement",
+				"title": "Add Element",
+				"category": "Cogitator Lens",
+				"icon": "$(add)"
+			},
+			{
+				"command": "coglens.RemoveElement",
+				"title": "Remove Element",
+				"category": "Cogitator Lens",
+				"icon": "$(remove)"
+			},
+			{
+				"command": "coglens.AddDefaultCompileInfo",
+				"title": "Add Default Compile Info",
+				"category": "Cogitator Lens",
+				"icon": "$(add)"
+			}
+        ],
+        "configuration": [
+            {
+                "title": "Cogitator Lens",
+                "properties": {
+                    "coglens.dimUnusedSourceLines": {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Dim the lines that was thrown away by compiler",
+                        "scope": "resource"
+                    },
+					"coglens.compilers": {
+						"type": "array",
+						"scope": "window",
+						"default": [],
+						"items": {
+							"type": "object",
+							"title": "Compiler configuration",
+							"description": "Compiler configuration parameters (name, path, flags, etc...)",
+							"default": {},
+							"required": ["name", "type", "exe", "includeFlag", "defineFlag"],
+							"additionalProperties": false,
+							"properties": {
+								"name": {
+									"type": "string",
+									"description": "The name of this compiler configuration"
+								},
+								"type": {
+									"type": "string",
+									"description": "The type of compiler",
+									"enum": ["msvc", "gcc"]
+								},
+								"exe": {
+									"type": "string",
+									"description": "The path to the compiler executable"
+								},
+								"includeFlag": {
+									"type": "string",
+									"description": "The flag provided to the compiler to indicate an include path",
+									"default": "-I"
+								},
+								"defineFlag": {
+									"type": "string",
+									"description": "The flag provided to the compiler to indicate an macro definition",
+									"default": "-D"
+								},
+								"defines": {
+									"type": "array",
+									"description": "A list of macro definitions (without compiler flag) to be used when compiling files",
+									"items": {
+										"type": "string"
+									},
+									"default": []
+								},
+								"includes": {
+									"type": "array",
+									"description": "A list of include paths (without compiler flag) to be used when compiling files",
+									"items": {
+										"type": "string"
+									},
+									"default": []
+								},
+								"args": {
+									"type": "array",
+									"description": "A list of arguments to provide to the compiler when compiling files",
+									"items": {
+										"type": "string"
+									},
+									"default": []
+								},
+								"env": {
+									"type": "object",
+									"description": "Environment variables to be defined when using this compiler",
+									"additionalProperties": {
+										"type": "string"
+									},
+									"default": {}
+								},
+								"supportsDemangle": {
+									"type": "boolean",
+									"description": "Whether this compiler supports demangling of C++ symbols"
+								},
+								"supportsIntel": {
+									"type": "boolean",
+									"description": "Whether this compiler supports Intel syntax"
+								},
+								"supportsLibraryCodeFilter": {
+									"type": "boolean",
+									"description": "Whether this compiler supports library code filtering"
+								},
+								"useBinaryParsing": {
+									"type": "boolean",
+									"description": "Parse as assembly produced by objdump"
+								},
+								"objDumpExe": {
+									"type": "string",
+									"description": "Path to objdump executable"
+								}
+							}
+						}
+					},
+					"coglens.defaultCompileInfo": {
+						"type": "object",
+						"title": "Default Compile Info",
+						"description": "Default compile info to be used when compiling files that have no associated compiler configuration",
+						"default": {},
+						"required": ["compiler"],
+						"additionalProperties": false,
+						"properties": {
+							"compiler": {
+								"type": "string",
+								"description": "The name of the compiler to use for compilation. Must match one of the compilers defined in `coglens.compilers`",
+								"default": ""
+							},
+							"defines": {
+								"type": "array",
+								"description": "A list of macro definitions (without compiler flag) to be used when compiling files",
+								"items": {
+									"type": "string"
+								},
+								"default": []
+							},
+							"includes": {
+								"type": "array",
+								"description": "A list of include paths (without compiler flag) to be used when compiling files",
+								"items": {
+									"type": "string"
+								},
+								"default": []
+							},
+							"args": {
+								"type": "array",
+								"description": "A list of arguments to provide to the compiler when compiling files",
+								"items": {
+									"type": "string"
+								},
+								"default": []
+							},
+							"env": {
+								"type": "object",
+								"description": "Environment variables to be defined when compiling files",
+								"additionalProperties": {
+									"type": "string"
+								},
+								"default": {}
+							}
+						}
+					}
+                }
+            }
+        ],
+		"menus": {
+			"commandPalette": [
+				{
+					"command": "coglens.GetInput",
+					"when": "false"
+				},
+				{
+					"command": "coglens.GetFile",
+					"when": "false"
+				},
+				{
+					"command": "coglens.ClearInput",
+					"when": "false"
+				},
+				{
+					"command": "coglens.CopyText",
+					"when": "false"
+				},
+				{
+					"command": "coglens.AddElement",
+					"when": "false"
+				},
+				{
+					"command": "coglens.RemoveElement",
+					"when": "false"
+				}
+			],
+			"editor/title": [
+				{
+					"command": "coglens.Disassemble",
+					"group": "navigation@1"
+				}
+			],
+			"view/title": [
+				{
+					"command": "coglens.Disassemble",
+					"when": "view == coglens.compilers",
+					"group": "navigation@1"
+				},
+				{
+					"command": "coglens.AddDefaultCompileInfo",
+					"when": "view == coglens.compileinfo",
+					"group": "navigation@1"
+				}
+			],
+			"view/item/context": [
+				{
+					"command": "coglens.GetInput",
+					"when": "view =~ /^coglens/ && viewItem =~ /editText/",
+					"group": "inline@1"
+				},
+				{
+					"command": "coglens.GetFile",
+					"when": "view =~ /^coglens/ && viewItem =~ /pickFile/",
+					"group": "inline@1"
+				},
+                {
+                    "command": "coglens.ClearInput",
+                    "when": "view =~ /^coglens/ && viewItem =~ /editText/",
+                    "group": "inline@2"
+                },
+                {
+                    "command": "coglens.CopyText",
+                    "when": "view =~ /^coglens/ && (viewItem =~ /text/ || viewItem =~ /editText/ || viewItem =~ /pickFile/)"
+                },
+                {
+                    "command": "coglens.AddElement",
+                    "when": "view =~ /^coglens/ && viewItem =~ /array/",
+					"group": "inline@3"
+                },
+				{
+                    "command": "coglens.RemoveElement",
+                    "when": "view =~ /^coglens/ && (viewItem =~ /array/ || viewItem =~ /element/)",
+					"group": "inline@4"
+				}
+			]
+		}
+    },
+    "scripts": {
+		"vscode:prepublish": "npm run package",
+		"compile": "npm run check-types && npm run lint && node esbuild.js",
+		"watch": "npm-run-all -p watch:*",
+		"watch:esbuild": "node esbuild.js --watch",
+		"watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+		"package": "npm run check-types && npm run lint && node esbuild.js --production",
+		"compile-tests": "tsc -p . --outDir out",
+		"watch-tests": "tsc -p . -w --outDir out",
+		"pretest": "npm run compile-tests && npm run compile && npm run lint",
+		"check-types": "tsc --noEmit",
+		"lint": "eslint src",
+		"test": "vscode-test"
+    },
+	"dependencies": {
+		"underscore": "^1.13.7",
+        "vscode-cmake-tools": "^1.2.0"
+	},
+    "devDependencies": {
+		"@types/vscode": "^1.94.0",
+		"@types/mocha": "^10.0.9",
+		"@types/node": "20.x",
+		"@types/underscore": "^1.11.15",
+		"@typescript-eslint/eslint-plugin": "^8.10.0",
+		"@typescript-eslint/parser": "^8.7.0",
+		"@vscode/test-cli": "^0.0.10",
+		"@vscode/test-electron": "^2.4.1",
+		"eslint": "^9.13.0",
+		"esbuild": "^0.24.0",
+		"npm-run-all": "^4.1.5",
+		"typescript": "^5.6.3"
+    },
+	"extensionDependencies": [
+		"ms-vscode.cmake-tools"
+	],
+	"extensionPack": [
+		"13xforever.language-x86-64-assembly"
+	]
+}
