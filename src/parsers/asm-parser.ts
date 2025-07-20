@@ -32,7 +32,7 @@ import {
 } from './asmresult.interfaces.js';
 import {ParseFiltersAndOutputOptions} from './filters.interfaces.js';
 import {assert} from '../assert.js';
-import * as utils from '../utils.js';
+import * as utils from '../ce-utils.js';
 
 import {IAsmParser} from './asm-parser.interfaces.js';
 import {AsmRegex} from './asmregex.js';

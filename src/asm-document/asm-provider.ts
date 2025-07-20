@@ -1,6 +1,7 @@
 import { Uri, EventEmitter, TextDocumentContentProvider, Event, window } from 'vscode';
 import { AsmDocument } from './asm-document';
 import { CompileManager } from '../compile-database';
+import { replaceExtension } from '../utils';
 
 export class AsmProvider implements TextDocumentContentProvider {
     static scheme = 'assembly';
@@ -52,7 +53,7 @@ export class AsmProvider implements TextDocumentContentProvider {
 export function getAsmUri(source: Uri): Uri {
     return source.with({
         scheme: AsmProvider.scheme,
-		path: source.path,
+		path: replaceExtension(source.path, '.asm'),
         query: source.toString() //query field stores original URI
     });
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2018, Compiler Explorer Authors
+// Copyright (c) 2016, Matt Godbolt
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -22,32 +22,40 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import {ParseFiltersAndOutputOptions} from './filters.interfaces.js';
-import * as utils from '../ce-utils.js';
-
+const tabsRe = /\t/g;
+const lineRe = /\r?\n/;
 const findQuotes = /(.*?)("(?:[^"\\]|\\.)*")(.*)/;
 
-export class AsmRegex {
-    protected labelDef: RegExp;
+export function splitLines(text: string): string[] {
+    if (!text) {
+		return [];
+	}
+    const result = text.split(lineRe);
+    if (result.length > 0 && result[result.length - 1] === '') {
+		return result.slice(0, -1);
+	}
+    return result;
+}
 
-    constructor() {
-        this.labelDef = /^(?:.proc\s+)?([\w$.@]+):/i;
-    }
+export function expandTabs(line: string): string {
+    let extraChars = 0;
+    return line.replaceAll(tabsRe, (match, offset) => {
+        const total = offset + extraChars;
+        const spacesNeeded = (total + 8) & 7;
+        extraChars += spacesNeeded - 1;
+        return '        '.substring(spacesNeeded);
+    });
+}
 
-    static squashHorizontalWhitespace(line: string, atStart: boolean): string {
-        const quotes = line.match(findQuotes);
-        if (quotes) {
-            return (
-                this.squashHorizontalWhitespace(quotes[1], atStart) +
-                quotes[2] +
-                this.squashHorizontalWhitespace(quotes[3], false)
-            );
-        }
-        return utils.squashHorizontalWhitespace(line, atStart);
+export function squashHorizontalWhitespace(line: string, atStart = true): string {
+    if (line.trim().length === 0) {
+        return '';
     }
-
-    static filterAsmLine(line: string, filters: ParseFiltersAndOutputOptions): string {
-        if (!filters.trim) return line;
-        return this.squashHorizontalWhitespace(line, true);
+    const splat = line.split(/\s+/);
+    if (splat[0] === '' && atStart) {
+        // An indented line: preserve a two-space indent (max)
+        const intent = line[1] === ' ' ? '  ' : ' ';
+        return intent + splat.slice(1).join(' ');
     }
+    return splat.join(' ');
 }

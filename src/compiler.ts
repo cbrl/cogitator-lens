@@ -3,7 +3,7 @@ import os from 'os';
 import path from 'path';
 import { AsmParser } from './parsers/asm-parser.js';
 import * as exec from './exec';
-import * as Path from 'path';
+import { replaceExtension } from './utils.js';
 import { ParseFiltersAndOutputOptions } from './parsers/filters.interfaces.js';
 import { ParsedAsmResult } from './parsers/asmresult.interfaces.js';
 import { Uri } from 'vscode';
@@ -118,11 +118,4 @@ export function baseCompilerInfoFor(compiler: Uri): CompilerInfo {
 
 		default: return defaultInfo;
 	}
-}
-
-function replaceExtension(filename: string, extension: string): string {
-	return Path.join(
-		Path.dirname(filename),
-		Path.basename(filename, Path.extname(filename)) + extension
-	);
 }

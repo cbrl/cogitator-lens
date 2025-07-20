@@ -10,6 +10,7 @@ import { CompilerTreeProvider, CompilerTreeNode } from './tree/compiler-tree';
 import { CompilationInfoTreeProvider } from './tree/compilation-info-tree';
 import { TreeNode, TreeProvider } from './tree/treedata';
 import assert from 'assert';
+import path from 'path';
 
 /*
 TODO:
@@ -23,28 +24,28 @@ function setupCommands(
 	compileManager: CompileManager,
 	compilerTreeProvider: CompilerTreeProvider,
 	infoTreeProvider: CompilationInfoTreeProvider
-): void {
+) {
 	const GetInput = vscode.commands.registerCommand('coglens.GetInput', async (node: TreeNode | undefined) => {
 		if (node === undefined) {
 			vscode.window.showErrorMessage("No node selected.");
 			return;
 		}
 
-        const { objectRef, attr } = node;
+		const { objectRef, attr } = node;
 
 		assert(objectRef !== undefined && attr !== undefined && typeof(objectRef[attr]) === 'string');
 
-        const last = objectRef[attr] as string ?? '';
-        const userInput = await vscode.window.showInputBox({
-            placeHolder: 'Enter text',
-            value: last,
-        });
+		const last = objectRef[attr] as string ?? '';
+		const userInput = await vscode.window.showInputBox({
+			placeHolder: 'Enter text',
+			value: last,
+		});
 
-        if (userInput) {
-            objectRef[attr] = userInput;
-            node.tree!.refresh();
-        }
-    });
+		if (userInput) {
+			objectRef[attr] = userInput;
+			node.tree!.refresh();
+		}
+	});
 
 	const GetFile = vscode.commands.registerCommand('coglens.GetFile', async (node: TreeNode | undefined) => {
 		if (node === undefined) {
@@ -52,41 +53,41 @@ function setupCommands(
 			return;
 		}
 
-        const { objectRef, attr } = node;
+		const { objectRef, attr } = node;
 
 		assert(objectRef !== undefined && attr !== undefined && typeof(objectRef[attr]) === 'string');
 
-        const last = objectRef[attr] as string ?? '';
+		const last = objectRef[attr] as string ?? '';
 		const userInput = await vscode.window.showOpenDialog({ defaultUri: vscode.Uri.file(last), canSelectMany: false });
 
-        if (userInput) {
-            objectRef[attr] = userInput?.at(0)?.fsPath;
-            node.tree!.refresh();
-        }
-    });
+		if (userInput) {
+			objectRef[attr] = userInput?.at(0)?.fsPath;
+			node.tree!.refresh();
+		}
+	});
 
-    const ClearInput = vscode.commands.registerCommand('coglens.ClearInput', async (node: TreeNode | undefined) => {
+	const ClearInput = vscode.commands.registerCommand('coglens.ClearInput', async (node: TreeNode | undefined) => {
 		if (node === undefined) {
 			vscode.window.showErrorMessage("No node selected.");
 			return;
 		}
 
-        const { objectRef, attr } = node;
+		const { objectRef, attr } = node;
 
 		assert(objectRef !== undefined && attr !== undefined && typeof(objectRef[attr]) === 'string');
 
-        objectRef[attr] = '';
+		objectRef[attr] = '';
 		node.tree!.refresh();
-    });
+	});
 
-    const CopyText = vscode.commands.registerCommand('coglens.CopyText', async (node: TreeNode | undefined) => {
+	const CopyText = vscode.commands.registerCommand('coglens.CopyText', async (node: TreeNode | undefined) => {
 		if (node === undefined) {
 			vscode.window.showErrorMessage("No node selected.");
 			return;
 		}
 
-        vscode.env.clipboard.writeText(node.label!);
-    });
+		vscode.env.clipboard.writeText(node.label!);
+	});
 
 	const AddElement = vscode.commands.registerCommand("coglens.AddElement", async (node: TreeNode | undefined) => {
 		if (node === undefined) {
@@ -147,7 +148,60 @@ function setupCommands(
 		infoTreeProvider.refresh();
 	});
 
-	context.subscriptions.push(GetInput, GetFile, ClearInput, CopyText, AddElement, RemoveElement, AddDefaultCompileInfo);
+	const AddCompiler = vscode.commands.registerCommand('coglens.AddCompiler', async () => {
+		// Get compiler executable
+		const exeUris = await vscode.window.showOpenDialog({
+			canSelectMany: false,
+			openLabel: 'Select Compiler Executable',
+			filters: { 'Executables': ['exe', '*'] }
+		});
+
+		if (!exeUris || exeUris.length === 0) {
+			return;
+		}
+
+		const exeUri = exeUris[0];
+
+		// Get compiler name
+		let name: string | undefined = path.basename(exeUri.fsPath, path.extname(exeUri.fsPath));
+		do {
+			name = await vscode.window.showInputBox({
+				prompt: 'Enter a name for this compiler',
+				value: name
+			});
+
+			if (name === undefined) {
+				return;
+			}
+
+			name = name.trim();
+
+			if (compileManager.compilerCache.hasCompiler(name)) {
+				window.showWarningMessage(`Compiler '${name}' already exists.`);
+				name = undefined;
+			}
+
+		} while(name === undefined);
+
+		// Generate default compiler info
+		const info = baseCompilerInfoFor(exeUri);
+		info.name = name;
+
+		// Add to cache
+		compileManager.compilerCache.createCompiler(info);
+		compilerTreeProvider.refresh();
+	});
+
+	context.subscriptions.push(
+		GetInput,
+		GetFile,
+		ClearInput,
+		CopyText,
+		AddElement,
+		RemoveElement,
+		AddDefaultCompileInfo,
+		AddCompiler
+	);
 }
 
 function createCompilerTreeView(context: ExtensionContext, cache: CompilerCache): CompilerTreeProvider {
@@ -181,7 +235,7 @@ function createCompilationInfoTreeView(context: ExtensionContext, compilationInf
 
 export async function activate(context: ExtensionContext): Promise<void> {
 	const compileManager = new CompileManager();
-    const provider = new AsmProvider(compileManager);
+	const provider = new AsmProvider(compileManager);
 
 	const compilerTreeProvider = createCompilerTreeView(context, compileManager.compilerCache);
 	const infoTreeProvider = createCompilationInfoTreeView(context, compileManager.compilationInfo);
@@ -211,36 +265,36 @@ export async function activate(context: ExtensionContext): Promise<void> {
 
 	cmakeMonitor.initCmakeApi();
 
-    // Register content provider for the 'assembly' scheme
-    const asmProviderRegistration = workspace.registerTextDocumentContentProvider(AsmProvider.scheme, provider);
+	// Register content provider for the 'assembly' scheme
+	const asmProviderRegistration = workspace.registerTextDocumentContentProvider(AsmProvider.scheme, provider);
 
 	const asmDefRegistration = AsmDefinitionProvider.register(provider);
 
-    // Register main command. This will create a URI with the 'assembly' scheme, open the document,
+	// Register main command. This will create a URI with the 'assembly' scheme, open the document,
 	// and display it an an editor to the right.
-    const commandRegistration = commands.registerTextEditorCommand('coglens.Disassemble', async srcEditor => {
-        const asmUri = getAsmUri(srcEditor.document.uri);
+	const commandRegistration = commands.registerTextEditorCommand('coglens.Disassemble', async srcEditor => {
+		const asmUri = getAsmUri(srcEditor.document.uri);
 
 		await provider.updateAsmDocument(asmUri);
 
-        const options: TextDocumentShowOptions = {
-            viewColumn: ViewColumn.Beside,
-            preserveFocus: true,
-        };
+		const options: TextDocumentShowOptions = {
+			viewColumn: ViewColumn.Beside,
+			preserveFocus: true,
+		};
 
-        window.showTextDocument(asmUri, options).then(asmEditor => {
-            const decorator = new AsmDecorator(srcEditor, asmEditor, provider);
-            // dirty way to get decorations work after showing assembly
-            setTimeout(() => decorator.updateSelection(srcEditor), 500);
-        });
-    });
+		window.showTextDocument(asmUri, options).then(asmEditor => {
+			const decorator = new AsmDecorator(srcEditor, asmEditor, provider);
+			// dirty way to get decorations work after showing assembly
+			setTimeout(() => decorator.updateSelection(srcEditor), 500);
+		});
+	});
 
-    context.subscriptions.push(
-        provider,
+	context.subscriptions.push(
+		provider,
 		cmakeMonitor,
 		compileInfoRegistration,
-        asmProviderRegistration,
+		asmProviderRegistration,
 		asmDefRegistration,
-        commandRegistration
-    );
+		commandRegistration
+	);
 }

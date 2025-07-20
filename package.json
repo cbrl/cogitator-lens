@@ -90,6 +90,12 @@
 				"title": "Add Default Compile Info",
 				"category": "Cogitator Lens",
 				"icon": "$(add)"
+			},
+			{
+				"command": "coglens.AddCompiler",
+				"title": "Add Compiler",
+				"category": "Cogitator Lens",
+				"icon": "$(add)"
 			}
         ],
         "configuration": [
@@ -280,6 +286,11 @@
 					"command": "coglens.Disassemble",
 					"when": "view == coglens.compilers",
 					"group": "navigation@1"
+				},
+				{
+					"command": "coglens.AddCompiler",
+					"when": "view == coglens.compilers",
+					"group": "navigation@2"
 				},
 				{
 					"command": "coglens.AddDefaultCompileInfo",
