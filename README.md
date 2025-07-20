@@ -6,14 +6,14 @@ Divine the substratal invocations of your digital canticles.
 
 This VS Code extension allows you to view the assembly output of compiled C and C++ code in a CMake
 project. It supports automatic navigation and highlighting for source lines corresponding to the
-selected assembly line, even across multiple source files.
+selected assembly line across all source files that contribute to the compiled object.
 
 ## Usage
 
 This extension uses the
 [CMake Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools) extension
-API in order to detect project source files and their compile options. The CMake project must be
-succesfully configured before viewing assembly.
+API in order to detect project source files and their compile options. The CMake project must have
+successfully completed configuration before viewing assembly.
 
 Select the option `Cogitator Lens: Disassemble Current File` from the command palette. Assembly for
 the current source file will be opened to the right. Alternatively, click on the disassemble button

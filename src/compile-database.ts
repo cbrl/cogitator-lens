@@ -1,5 +1,5 @@
 import { Uri, workspace, window } from "vscode";
-import { CompilerBase, CompilerInfo, baseCompilerInfoFor, CompileOptions } from "./compiler";
+import { CompilerBase, CompilerInfo, CompileOptions } from "./compiler";
 import { getCompilerByType } from "./compilers/compiler-map";
 import { ParsedAsmResult } from './parsers/asmresult.interfaces';
 import { ParseFiltersAndOutputOptions } from "./parsers/filters.interfaces";
@@ -34,6 +34,10 @@ export class CompilerCache {
 	public createCompiler(info: CompilerInfo): CompilerBase {
 		try {
 			const compilerType = getCompilerByType(info.type);
+			if (compilerType === undefined) {
+				throw new Error(`Unknown compiler type: ${info.type}`);
+			}
+
 			const compiler = new compilerType(info);
 			this.cache.set(info.name, compiler);
 			return compiler;

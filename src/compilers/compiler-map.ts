@@ -1,43 +1,24 @@
 import * as allCompilers from './all';
-
-/**
- * Given a record of objects where each object has a given key, create a mapping of the key
- * values to their corresponding objects.
- *
- * @param objects A record of objects where each object has the specified key
- * @param key The key to map
- *
- * @returns A record mapping the key values to their corresponding objects
- */
-function keyToTypeMap<K extends keyof any, T extends Record<K, string>>(objects: Record<string, T>, key: K): Record<string, T> {
-	const keyToType: Record<string, T> = {};
-    const keyToName: Record<string, string> = {};
-
-	for (const objectName in objects) {
-		const type = objects[objectName];
-
-		if (type[key] === undefined) {
-			throw new Error(`${objectName}.${String(key)} does not exist`);
-		}
-		else if (type[key]) {
-			if (keyToType[type[key]] === undefined) {
-				keyToType[type[key]] = type;
-				keyToName[type[key]] = objectName;
-			}
-			else {
-				throw new Error(`Value of ${objectName}.${String(key)} is the same as ${keyToName[type[key]]}.${String(key)}`);
-			}
-		}
-		else {
-			throw new Error(`Value of ${objectName}.${String(key)} is empty`);
-		}
-	}
-
-	return keyToType;
-}
+import { keyToTypeMap } from '../utils';
 
 const compilerMap = keyToTypeMap(allCompilers, 'type');
 
-export function getCompilerByType(type: string) {
-	return compilerMap[type];
+export function getCompilerByType(type: string): typeof compilerMap[keyof typeof compilerMap] | undefined {
+	if (type in compilerMap) {
+		return compilerMap[type];
+	}
+
+	return undefined;
+}
+
+export function getCompilerByExe(exe: string): typeof compilerMap[keyof typeof compilerMap] | undefined {
+	for (const type in compilerMap) {
+		const compiler = compilerMap[type];
+
+		if (compiler.isCompiler(exe)) {
+			return compiler;
+		}
+	}
+
+	return undefined;
 }

@@ -3,7 +3,6 @@ import { BuildsystemCompileInfo, BuildsystemMonitor } from './buildsystem-monito
 import { CompilationInfo } from '../compile-database';
 import * as cmakeTools from 'vscode-cmake-tools';
 import path from 'path';
-import { baseCompilerInfoFor } from '../compiler';
 
 // Monitors CMake project and outputs a mapping of file URI to compile info
 export class CmakeMonitor extends BuildsystemMonitor {

@@ -3,7 +3,7 @@ import { workspace, window, commands, ExtensionContext, TextDocumentShowOptions,
 import { AsmProvider, getAsmUri } from './asm-document/asm-provider';
 import { AsmDecorator } from './asm-document/asm-decorator';
 import { AsmDefinitionProvider } from './asm-document/asm-definition-provider';
-import { baseCompilerInfoFor, CompilerInfo } from './compiler';
+import { CompilerInfo } from './compiler';
 import { CompileInfoDatabase, CompileManager, CompilerCache, CompilationInfo } from './compile-database';
 import { CmakeMonitor } from './buildsystems/cmake';
 import { CompilerTreeProvider, CompilerTreeNode } from './tree/compiler-tree';
@@ -11,6 +11,7 @@ import { CompilationInfoTreeProvider } from './tree/compilation-info-tree';
 import { TreeNode, TreeProvider } from './tree/treedata';
 import assert from 'assert';
 import path from 'path';
+import { getCompilerByExe } from './compilers/compiler-map';
 
 /*
 TODO:
@@ -162,6 +163,13 @@ function setupCommands(
 
 		const exeUri = exeUris[0];
 
+		// Detect compiler type by executable
+		const compiler = getCompilerByExe(exeUri.fsPath);
+		if (compiler === undefined) {
+			window.showErrorMessage(`Could not detect compiler type for ${exeUri.fsPath}.`);
+			return;
+		}
+
 		// Get compiler name
 		let name: string | undefined = path.basename(exeUri.fsPath, path.extname(exeUri.fsPath));
 		do {
@@ -184,8 +192,7 @@ function setupCommands(
 		} while(name === undefined);
 
 		// Generate default compiler info
-		const info = baseCompilerInfoFor(exeUri);
-		info.name = name;
+		const info = compiler.baseCompilerInfo(name, exeUri.fsPath);
 
 		// Add to cache
 		compileManager.compilerCache.createCompiler(info);
@@ -246,19 +253,31 @@ export async function activate(context: ExtensionContext): Promise<void> {
 	const cmakeMonitor = new CmakeMonitor();
 	const compileInfoRegistration = cmakeMonitor.onNewCompilationInfo(infoArray => {
 		for (let [file, prelimInfo] of infoArray) {
-			const compilerInfo = baseCompilerInfoFor(prelimInfo.compilerPath);
-			compilerInfo.name = 'CMake: ' + compilerInfo.name;
+			// Detect compiler type by executable
+			const compiler = getCompilerByExe(prelimInfo.compilerPath.fsPath);
+
+			if (compiler === undefined) {
+				window.showErrorMessage(`Could not detect compiler type for ${file.fsPath}.`);
+				continue;
+			}
+
+			// Create base compiler info
+			const compilerName = 'CMake: ' + path.basename(prelimInfo.compilerPath.fsPath);
+			const compilerInfo = compiler.baseCompilerInfo(compilerName, prelimInfo.compilerPath.fsPath);
 
 			if (!compileManager.compilerCache.hasCompiler(compilerInfo.name)) {
 				compileManager.compilerCache.createCompiler(compilerInfo);
 			}
 
+			// Create file compilation info
 			const info: CompilationInfo = {
 				compilerName: compilerInfo.name,
 				...prelimInfo,
 			};
+
 			compileManager.setCompilationInfo(file, info);
 		}
+
 		compilerTreeProvider.refresh();
 		infoTreeProvider.refresh();
 	});

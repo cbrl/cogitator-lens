@@ -179,6 +179,10 @@
 									"type": "boolean",
 									"description": "Whether this compiler supports demangling of C++ symbols"
 								},
+								"demangler": {
+									"type": "string",
+									"description": "Path to the demangler executable (e.g. c++filt for GCC)"
+								},
 								"supportsIntel": {
 									"type": "boolean",
 									"description": "Whether this compiler supports Intel syntax"
@@ -186,14 +190,6 @@
 								"supportsLibraryCodeFilter": {
 									"type": "boolean",
 									"description": "Whether this compiler supports library code filtering"
-								},
-								"useBinaryParsing": {
-									"type": "boolean",
-									"description": "Parse as assembly produced by objdump"
-								},
-								"objDumpExe": {
-									"type": "string",
-									"description": "Path to objdump executable"
 								}
 							}
 						}

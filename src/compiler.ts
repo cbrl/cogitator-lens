@@ -6,7 +6,6 @@ import * as exec from './exec';
 import { replaceExtension } from './utils.js';
 import { ParseFiltersAndOutputOptions } from './parsers/filters.interfaces.js';
 import { ParsedAsmResult } from './parsers/asmresult.interfaces.js';
-import { Uri } from 'vscode';
 
 export type CompilerInfo = {
 	name: string;
@@ -89,33 +88,4 @@ export abstract class CompilerBase implements ICompiler {
 	}
 
 	protected abstract prepareArgs(outputFile: string): string[];
-}
-
-
-export function baseCompilerInfoFor(compiler: Uri): CompilerInfo {
-	const baseNameWithoutExtension = path.basename(compiler.fsPath, path.extname(compiler.fsPath));
-
-	let defaultInfo = {
-		name: baseNameWithoutExtension,
-		type: 'gcc',
-		exe: compiler.fsPath,
-		includeFlag: '-I',
-		defineFlag: '-D'
-	};
-
-	switch (baseNameWithoutExtension.toLowerCase()) {
-		case 'clang-cl': return Object.assign(defaultInfo, {
-			type: 'clang-cl',
-			includeFlag: '/I',
-			defineFlag: '/D'
-		});
-
-		case 'cl': return Object.assign(defaultInfo, {
-			type: 'msvc',
-			includeFlag: '/I',
-			defineFlag: '/D'
-		});
-
-		default: return defaultInfo;
-	}
 }

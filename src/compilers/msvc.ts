@@ -1,4 +1,5 @@
 import * as path from 'path';
+import * as fs from 'fs';
 import * as exec from '../exec';
 import { CompilerBase, CompilerInfo } from '../compiler';
 import { VcAsmParser } from '../parsers/asm-parser-vc';
@@ -7,6 +8,35 @@ import { AsmParser } from '../parsers/asm-parser';
 export class MsvcCompiler extends CompilerBase {
 	public static get type(): string {
 		return 'msvc';
+	}
+
+	public static baseCompilerInfo(name: string, exe: string): CompilerInfo {
+		const info: CompilerInfo = {
+			name: name,
+			type: MsvcCompiler.type,
+			exe: exe,
+
+			includeFlag: '/I',
+			defineFlag: '/D',
+
+			supportsDemangle: true,
+			supportsIntel: false,
+			supportsLibraryCodeFilter: true
+		};
+
+		// Try to auto-detect demangler
+		const demangler = exe.replace(/cl\.exe$/, 'undname.exe');
+
+		if (fs.existsSync(demangler)) {
+			info.demangler = fs.realpathSync(demangler);
+		}
+
+		return info;
+	}
+
+	public static isCompiler(exe: string): boolean {
+		const lowerExe = exe.toLowerCase();
+		return lowerExe.includes('cl.exe');
 	}
 
 	constructor(info: CompilerInfo) {
@@ -53,6 +83,28 @@ export class MsvcCompiler extends CompilerBase {
 export class ClangClCompiler extends MsvcCompiler {
 	public static override get type(): string {
 		return 'clang-cl';
+	}
+
+	public static override baseCompilerInfo(name: string, exe: string): CompilerInfo {
+		const info = MsvcCompiler.baseCompilerInfo(name, exe);
+		info.type = ClangClCompiler.type;
+		info.supportsIntel = true;
+
+		// Get the demangler from the Clang installation
+		const demangler = path.join(path.dirname(exe), 'llvm-cxxfilt.exe');
+		if (fs.existsSync(demangler)) {
+			info.demangler = fs.realpathSync(demangler);
+		}
+		else {
+			info.demangler = undefined;
+		}
+
+		return info;
+	}
+
+	public static isCompiler(exe: string): boolean {
+		const lowerExe = exe.toLowerCase();
+		return lowerExe.includes('clang-cl.exe');
 	}
 
 	constructor(info: CompilerInfo) {
