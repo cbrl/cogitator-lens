@@ -15,7 +15,6 @@ import { getCompilerByExe } from './compilers/compiler-map';
 
 /*
 TODO:
-  - Default compile info at top of compile info tree
   - objdump support (is this needed?)
   - Settings for binary ASM parsing
 */
