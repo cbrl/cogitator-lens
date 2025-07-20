@@ -3,7 +3,11 @@ import tsParser from "@typescript-eslint/parser";
 
 export default [{
     files: ["**/*.ts"],
-}, {
+},
+{
+	ignores: ["src/parsers/**/*", "src/stacktrace.ts"]
+},
+{
     plugins: {
         "@typescript-eslint": typescriptEslint,
     },
