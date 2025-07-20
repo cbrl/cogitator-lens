@@ -19,6 +19,15 @@ Select the option `Cogitator Lens: Disassemble Current File` from the command pa
 the current source file will be opened to the right. Alternatively, click on the disassemble button
 on the right hand side of the tab bar.
 
+### Manual Configuration
+
+This project supports a basic level of manual compiler configuration for simple cases without a
+CMake project.
+
+The configuration options `coglens.compilers` and `coglens.defaultCompileInfo` will let you define
+a set of compilers and the default compilation arguments respectively. These can also be added via
+the buttons on the associated views within the extension panel.
+
 ## Acknowledgements
 
 This extension is inspired by the following works:
