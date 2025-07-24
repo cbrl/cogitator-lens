@@ -3,13 +3,12 @@ import { workspace, window, commands, ExtensionContext, TextDocumentShowOptions,
 import { AsmProvider, getAsmUri } from './asm-document/asm-provider';
 import { AsmDecorator } from './asm-document/asm-decorator';
 import { AsmDefinitionProvider } from './asm-document/asm-definition-provider';
-import { CompilerInfo } from './compiler';
 import { CompileInfoDatabase, CompileManager, CompilerCache, CompilationInfo } from './compile-database';
 import { CmakeMonitor } from './buildsystems/cmake';
-import { CompilerTreeProvider, CompilerTreeNode } from './tree/compiler-tree';
+import { CompilerTreeProvider } from './tree/compiler-tree';
 import { CompilationInfoTreeProvider } from './tree/compilation-info-tree';
 import { GlobalOptionsTreeProvider } from './tree/global-options-tree';
-import { TreeNode, TreeProvider } from './tree/treedata';
+import { TreeNode } from './tree/treedata';
 import assert from 'assert';
 import path from 'path';
 import { getCompilerByExe } from './compilers/compiler-map';

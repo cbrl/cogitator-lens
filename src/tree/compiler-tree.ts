@@ -2,7 +2,6 @@ import vscode from 'vscode';
 import { CompilerBase, ICompiler } from '../compiler';
 import { CompilerCache } from '../compile-database';
 import _ from 'underscore';
-import path from 'path';
 import { TreeNode, TreeItem, TreeProvider } from './treedata';
 
 export class CompilerTreeNode extends TreeNode {
