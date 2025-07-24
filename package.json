@@ -101,12 +101,6 @@
 				"title": "Add Compiler",
 				"category": "Cogitator Lens",
 				"icon": "$(add)"
-			},
-			{
-				"command": "coglens.ResetAsmFilters",
-				"title": "Reset ASM Filters",
-				"category": "Cogitator Lens",
-				"icon": "$(clear-all)"
 			}
         ],
         "configuration": [

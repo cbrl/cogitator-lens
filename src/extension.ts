@@ -17,7 +17,6 @@ import * as logger from './logger';
 
 /*
 TODO:
-  - UI panel for ASM filter
   - objdump support (is this needed?)
   - Settings for binary ASM parsing
 */
