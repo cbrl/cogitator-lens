@@ -8,6 +8,7 @@ import { CompileInfoDatabase, CompileManager, CompilerCache, CompilationInfo } f
 import { CmakeMonitor } from './buildsystems/cmake';
 import { CompilerTreeProvider, CompilerTreeNode } from './tree/compiler-tree';
 import { CompilationInfoTreeProvider } from './tree/compilation-info-tree';
+import { GlobalOptionsTreeProvider } from './tree/global-options-tree';
 import { TreeNode, TreeProvider } from './tree/treedata';
 import assert from 'assert';
 import path from 'path';
@@ -25,7 +26,8 @@ function setupCommands(
 	context: ExtensionContext,
 	compileManager: CompileManager,
 	compilerTreeProvider: CompilerTreeProvider,
-	infoTreeProvider: CompilationInfoTreeProvider
+	infoTreeProvider: CompilationInfoTreeProvider,
+	asmFilterTreeProvider: GlobalOptionsTreeProvider
 ) {
 	const GetInput = vscode.commands.registerCommand('coglens.GetInput', async (node: TreeNode | undefined) => {
 		if (node === undefined) {
@@ -155,9 +157,8 @@ function setupCommands(
 	const AddCompiler = vscode.commands.registerCommand('coglens.AddCompiler', async () => {
 		// Get compiler executable
 		const exeUris = await vscode.window.showOpenDialog({
+			title: 'Select Compiler Executable',
 			canSelectMany: false,
-			openLabel: 'Select Compiler Executable',
-			filters: { 'Executables': ['exe', '*'] }
 		});
 
 		if (!exeUris || exeUris.length === 0) {
@@ -236,7 +237,28 @@ function createCompilerTreeView(context: ExtensionContext, cache: CompilerCache)
 
 function createCompilationInfoTreeView(context: ExtensionContext, compilationInfo: CompileInfoDatabase): CompilationInfoTreeProvider {
 	const treeProvider = new CompilationInfoTreeProvider(compilationInfo);
-	const treeView = window.createTreeView('coglens.compileinfo', { treeDataProvider: treeProvider });
+	const treeView = window.createTreeView('coglens.compileInfo', { treeDataProvider: treeProvider });
+
+	context.subscriptions.push(treeView);
+
+	return treeProvider;
+}
+
+function createGlobalOptionsTreeView(context: ExtensionContext, compileManager: CompileManager): GlobalOptionsTreeProvider {
+	const treeProvider = new GlobalOptionsTreeProvider(compileManager);
+	const treeView = window.createTreeView('coglens.globalOptions', { treeDataProvider: treeProvider });
+
+	treeView.onDidChangeCheckboxState(async (event) => {
+		const [[node]] = event.items;
+		const { objectRef, attr } = node;
+
+		assert(objectRef !== undefined && attr !== undefined);
+		assert(typeof(objectRef[attr]) === 'boolean' || typeof(objectRef[attr]) === 'undefined');
+
+		objectRef[attr] = !(objectRef[attr] ?? false);
+
+		treeProvider.refresh();
+	});
 
 	context.subscriptions.push(treeView);
 
@@ -249,8 +271,9 @@ export async function activate(context: ExtensionContext): Promise<void> {
 
 	const compilerTreeProvider = createCompilerTreeView(context, compileManager.compilerCache);
 	const infoTreeProvider = createCompilationInfoTreeView(context, compileManager.compilationInfo);
+	const globalOptionsTreeProvider = createGlobalOptionsTreeView(context, compileManager);
 
-	setupCommands(context, compileManager, compilerTreeProvider, infoTreeProvider);
+	setupCommands(context, compileManager, compilerTreeProvider, infoTreeProvider, globalOptionsTreeProvider);
 
 	// Use CMake API to fetch build info for each file in the project
 	const cmakeMonitor = new CmakeMonitor();

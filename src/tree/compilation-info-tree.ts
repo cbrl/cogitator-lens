@@ -49,7 +49,7 @@ function isSubdirectory(parent: string, child: string): boolean {
 }
 
 export class CompilationInfoTreeNode extends TreeNode {
-	public static build(compileInfo: CompileInfoDatabase) {
+	public static build(compileInfo: CompileInfoDatabase): CompilationInfoTreeNode[] {
 		let insideWorkspace = new Map<string, string[]>();
 		let outsideWorkspace: string[] = [];
 
@@ -77,12 +77,6 @@ export class CompilationInfoTreeNode extends TreeNode {
 			}
 		}
 
-		let defaultNode = undefined;
-		if (compileInfo.defaultCompileInfo !== undefined) {
-			const fileElem = { basename: 'Default', path: 'Default', children: [] };
-			defaultNode = CompilationInfoTreeNode.makeFileNode(fileElem, compileInfo.defaultCompileInfo, undefined);
-		}
-
 		let workspaceNodes = Array.from(insideWorkspace.entries()).flatMap(([workspace, items]) => CompilationInfoTreeNode.makeTree(items, compileInfo, workspace));
 		let outsideNodes = CompilationInfoTreeNode.makeTree(outsideWorkspace, compileInfo);
 
@@ -90,16 +84,16 @@ export class CompilationInfoTreeNode extends TreeNode {
 			node.iconPath = new vscode.ThemeIcon('repo' /*'project'*/ /*'library'*/);
 		}
 
-		return _.flatten([defaultNode, workspaceNodes, outsideNodes]).filter(node => node !== undefined);
+		return _.flatten([workspaceNodes, outsideNodes]).filter(node => node !== undefined);
 	}
 
-	private static makeTree(info: string[], compileInfo: CompileInfoDatabase, workspace?: string): CompilationInfoTreeNode[] {
+	public static makeTree(info: string[], compileInfo: CompileInfoDatabase, workspace?: string): CompilationInfoTreeNode[] {
 		const workspaceRelative = info.map(value => value.replace(path.dirname(workspace ?? ''), ''));
 
 		return filePathsToTree(workspaceRelative).map(item => CompilationInfoTreeNode.makeItem(item, compileInfo, workspace));
 	}
 
-	private static makeItem(elem: FileTreeElement, compileInfo: CompileInfoDatabase, workspace?: string): CompilationInfoTreeNode {
+	public static makeItem(elem: FileTreeElement, compileInfo: CompileInfoDatabase, workspace?: string): CompilationInfoTreeNode {
 		if (elem.children.length > 0) {
 			const result: CompilationInfoTreeNode = {
 				label: `${elem.basename}`,
@@ -117,7 +111,7 @@ export class CompilationInfoTreeNode extends TreeNode {
 		}
 	}
 
-	private static makeFileNode(elem: FileTreeElement, compileInfo: CompilationInfo, workspace?: string): CompilationInfoTreeNode {
+	public static makeFileNode(elem: FileTreeElement, compileInfo: CompilationInfo, workspace?: string): CompilationInfoTreeNode {
 		let result: CompilationInfoTreeNode = {
 			label: `${elem.basename}`,
 			nodeType: 'subtree',
@@ -129,6 +123,7 @@ export class CompilationInfoTreeNode extends TreeNode {
 			label: `Compiler: ${compileInfo.compilerName}`,
 			nodeType: 'text',
 			treeContext: 'editText',
+			iconPath: new vscode.ThemeIcon('chip'),
 			objectRef: compileInfo,
 			attr: 'compilerName'
 		};
@@ -139,7 +134,7 @@ export class CompilationInfoTreeNode extends TreeNode {
 			label: 'Arguments',
 			nodeType: 'subtree',
 			treeContext: 'array',
-			iconPath: new vscode.ThemeIcon('list-tree'),
+			iconPath: new vscode.ThemeIcon('list-ordered'),
 			objectRef: compileInfo,
 			attr: 'args'
 		};
@@ -151,7 +146,7 @@ export class CompilationInfoTreeNode extends TreeNode {
 			label: 'Defines',
 			nodeType: 'subtree',
 			treeContext: 'array',
-			iconPath: new vscode.ThemeIcon('list-tree'),
+			iconPath: new vscode.ThemeIcon('list-ordered'),
 			objectRef: compileInfo,
 			attr: 'defines'
 		};
@@ -163,7 +158,7 @@ export class CompilationInfoTreeNode extends TreeNode {
 			label: 'Includes',
 			nodeType: 'subtree',
 			treeContext: 'array',
-			iconPath: new vscode.ThemeIcon('list-tree'),
+			iconPath: new vscode.ThemeIcon('list-ordered'),
 			objectRef: compileInfo,
 			attr: 'includes'
 		};

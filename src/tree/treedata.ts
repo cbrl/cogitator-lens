@@ -26,7 +26,7 @@ export class TreeNode {
 	children?: TreeNode[];
 
 	/**
-	 * The tag to identify different nodes. Context taken from nodeType if null.
+	 * The context value used for vscode.TreeItem.contextValue, which allows for item-specific commands. Context taken from nodeType if null.
 	 */
 	treeContext?: TreeContextSpecifier;
 
@@ -44,6 +44,11 @@ export class TreeNode {
 	 * A reference to the tree that owns this node. Automatically set by the tree.
 	 */
 	tree?: TreeProvider<TreeNode>;
+
+	/**
+	 * The tooltip to display for this node.
+	 */
+	tooltip?: string;
 
 	/**
 	 * Creates a context string representing multiple context types. This is used for nodes that can be interacted with in multiple ways.
@@ -89,6 +94,7 @@ export class TreeItem extends vscode.TreeItem {
 
 		this.label = label;
 		this.iconPath = iconPath;
+		this.tooltip = node.tooltip;
 		this.contextValue = treeContext ?? nodeType;
 
 		if (nodeType === 'subtree') {

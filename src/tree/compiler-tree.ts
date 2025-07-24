@@ -83,7 +83,7 @@ export class CompilerTreeNode extends TreeNode {
 			label: 'Arguments',
 			nodeType: 'subtree',
 			treeContext: 'array',
-			iconPath: new vscode.ThemeIcon('list-tree'),
+			iconPath: new vscode.ThemeIcon('list-ordered'),
 			children: [] as CompilerTreeNode[],
 			objectRef: info,
 			attr: 'args',
@@ -103,7 +103,7 @@ export class CompilerTreeNode extends TreeNode {
 			label: 'Defines',
 			nodeType: 'subtree',
 			treeContext: 'array',
-			iconPath: new vscode.ThemeIcon('list-tree'),
+			iconPath: new vscode.ThemeIcon('list-ordered'),
 			children: [] as CompilerTreeNode[],
 			objectRef: info,
 			attr: 'defines',
@@ -123,7 +123,7 @@ export class CompilerTreeNode extends TreeNode {
 			label: 'Include Directories',
 			nodeType: 'subtree',
 			treeContext: 'array',
-			iconPath: new vscode.ThemeIcon('list-tree'),
+			iconPath: new vscode.ThemeIcon('list-ordered'),
 			children: [] as CompilerTreeNode[],
 			objectRef: info,
 			attr: 'includePaths',
@@ -148,6 +148,7 @@ export class CompilerTreeNode extends TreeNode {
 		const node: CompilerTreeNode = {
 			label: 'Info',
 			nodeType: 'subtree',
+			iconPath: new vscode.ThemeIcon('gear'),
 			children: [] as CompilerTreeNode[],
 			compiler: compiler
 		};

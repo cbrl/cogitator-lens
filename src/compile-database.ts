@@ -2,7 +2,7 @@ import { Uri, workspace, window } from "vscode";
 import { CompilerBase, CompilerInfo, CompileOptions } from "./compiler";
 import { getCompilerByType } from "./compilers/compiler-map";
 import { ParsedAsmResult } from './parsers/asmresult.interfaces';
-import { ParseFiltersAndOutputOptions } from "./parsers/filters.interfaces";
+import { CompilerOutputOptions, ParseFiltersAndOutputOptions } from "./parsers/filters.interfaces";
 import * as logger from "./logger";
 
 export type CompilationInfo = {
@@ -66,7 +66,12 @@ export class CompilerCache {
 export class CompileInfoDatabase {
 	private compilationInfo: Map<string, CompilationInfo> = new Map();
 
-	public defaultCompileInfo: CompilationInfo | undefined = undefined;
+	public defaultCompileInfo: CompilationInfo = {
+		compilerName: '',
+		defines: [],
+		includes: [],
+		args: [],
+	};
 
 	public get info() {
 		return this.compilationInfo;
@@ -76,8 +81,9 @@ export class CompileInfoDatabase {
 		return this.compilationInfo.get(file.fsPath);
 	}
 
-	public getCompilationInfoOrDefault(file: Uri): CompilationInfo | undefined {
-		return this.compilationInfo.get(file.fsPath) ?? this.defaultCompileInfo;
+	public getCompilationInfoOrDefault(file: Uri): [CompilationInfo, boolean] {
+		const info = this.compilationInfo.get(file.fsPath);
+		return [info ?? this.defaultCompileInfo, info !== undefined];
 	}
 
 	public setCompilationInfo(file: Uri, info: CompilationInfo): void {
@@ -91,6 +97,9 @@ export class CompileManager {
 
 	// Maps compiler names to compiler
 	private _compilerCache: CompilerCache = new CompilerCache();
+
+	// Global filter options to be used for all compilations
+	private _globalFilterOptions: ParseFiltersAndOutputOptions = {};
 
 	constructor() {
 		// TODO: support multi-workspace settings?
@@ -134,17 +143,27 @@ export class CompileManager {
 		this._compilationInfo.setCompilationInfo(file, info);
 	}
 
-	public async compile(file: Uri): Promise<ParsedAsmResult> {
-		let compilationInfo = this._compilationInfo.getCompilationInfoOrDefault(file);
+	public get globalFilterOptions(): ParseFiltersAndOutputOptions {
+		return this._globalFilterOptions;
+	}
 
-		if (compilationInfo === undefined) {
-			throw new Error(`No compile info found for file: ${file.fsPath}`);
-		}
+	public set globalFilterOptions(filterOptions: ParseFiltersAndOutputOptions) {
+		this._globalFilterOptions = filterOptions;
+	}
+
+	public async compile(file: Uri): Promise<ParsedAsmResult> {
+		const [compilationInfo, infoFound] = this._compilationInfo.getCompilationInfoOrDefault(file);
 
 		const compiler = this._compilerCache.getCompiler(compilationInfo.compilerName);
 
 		if (compiler === undefined) {
-			throw new Error(`Compiler not found: ${compilationInfo.compilerName}`);
+			let errorMessage = `Compiler not found: ${compilationInfo.compilerName}`;
+
+			if (!infoFound) {
+				errorMessage = `(default compile info) Compiler not found: ${compilationInfo.compilerName}`;
+			}
+
+			throw new Error(errorMessage);
 		}
 
 		//const workspaceConfig = workspace.getConfiguration('', file.with({scheme: 'file'}));
@@ -155,11 +174,16 @@ export class CompileManager {
 			args: compilationInfo.args
 		};
 
-		// TODO: additional user-configurable filter options?
-		const filter: ParseFiltersAndOutputOptions = {};
-		//filter.binary = ...;
-		//filter.demangle = ...;
-
-		return compiler.compile(file.fsPath, options, filter);
+		try {
+			const result = await compiler.compile(file.fsPath, options, this._globalFilterOptions);
+			return result;
+		} catch (error) {
+			if (!infoFound && error instanceof Error) {
+				throw new Error(`(default compile info) ${error.message}`);
+			}
+			else {
+				throw error;
+			}
+		}
 	}
 }

@@ -36,9 +36,14 @@
 					"icon": "$(blank)"
 				},
 				{
-					"id": "coglens.compileinfo",
-					"name": "Compilation Info",
+					"id": "coglens.compileInfo",
+					"name": "Project Compile Info",
 					"icon": "$(blank)"
+				},
+				{
+					"id": "coglens.globalOptions",
+					"name": "Global Options",
+					"icon": "$(filter)"
 				}
 			]
 		},
@@ -96,6 +101,12 @@
 				"title": "Add Compiler",
 				"category": "Cogitator Lens",
 				"icon": "$(add)"
+			},
+			{
+				"command": "coglens.ResetAsmFilters",
+				"title": "Reset ASM Filters",
+				"category": "Cogitator Lens",
+				"icon": "$(clear-all)"
 			}
         ],
         "configuration": [
