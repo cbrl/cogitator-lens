@@ -66,6 +66,12 @@
 				"category": "Cogitator Lens",
 				"icon": "$(folder-opened)"
 			},
+			{
+				"command": "coglens.PickCompiler",
+				"title": "Pick Compiler",
+				"category": "Cogitator Lens",
+				"icon": "$(pencil)"
+			},
             {
                 "command": "coglens.ClearInput",
                 "title": "Clear Input",
@@ -260,6 +266,10 @@
 					"when": "false"
 				},
 				{
+					"command": "coglens.PickCompiler",
+					"when": "false"
+				},
+				{
 					"command": "coglens.ClearInput",
 					"when": "false"
 				},
@@ -308,6 +318,11 @@
 				{
 					"command": "coglens.GetFile",
 					"when": "view =~ /^coglens/ && viewItem =~ /pickFile/",
+					"group": "inline@1"
+				},
+				{
+					"command": "coglens.PickCompiler",
+					"when": "view =~ /^coglens/ && viewItem =~ /pickCompiler/",
 					"group": "inline@1"
 				},
                 {

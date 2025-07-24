@@ -122,7 +122,7 @@ export class CompilationInfoTreeNode extends TreeNode {
 		const compiler: CompilationInfoTreeNode = {
 			label: `Compiler: ${compileInfo.compilerName}`,
 			nodeType: 'text',
-			treeContext: 'editText',
+			treeContext: 'pickCompiler',
 			iconPath: new vscode.ThemeIcon('chip'),
 			objectRef: compileInfo,
 			attr: 'compilerName'

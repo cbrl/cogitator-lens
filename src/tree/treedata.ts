@@ -2,7 +2,7 @@ import assert from "assert";
 import vscode from "vscode";
 
 export type TreeItemSpecifier = 'checkbox' | 'subtree' | 'text';
-export type TreeContextSpecifier = 'array' | 'editText' | 'element' | 'filters' | 'instance' | 'pickFile' | 'text';
+export type TreeContextSpecifier = 'array' | 'editText' | 'element' | 'filters' | 'instance' | 'pickCompiler' | 'pickFile' | 'text';
 
 export class TreeNode {
 	/**

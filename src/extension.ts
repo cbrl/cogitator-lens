@@ -69,6 +69,44 @@ function setupCommands(
 		}
 	});
 
+	const PickCompiler = vscode.commands.registerCommand('coglens.PickCompiler', async (node: TreeNode | undefined) => {
+		if (node === undefined) {
+			logger.logAndShowError("No node selected");
+			return;
+		}
+
+		const { objectRef, attr } = node;
+
+		assert(objectRef !== undefined && attr !== undefined && typeof(objectRef[attr]) === 'string');
+
+		const availableCompilers = compileManager.compilerCache.compilerNames;
+
+		if (availableCompilers.length === 0) {
+			logger.logAndShowError("No compilers available. Please add a compiler first.");
+			return;
+		}
+
+		const currentCompiler = objectRef[attr] as string ?? '';
+
+		// Create QuickPick items with current selection highlighted
+		const quickPickItems: vscode.QuickPickItem[] = availableCompilers.map(name => ({
+			label: name,
+			description: name === currentCompiler ? '(current)' : undefined,
+			picked: name === currentCompiler
+		}));
+
+		const selectedItem = await vscode.window.showQuickPick(quickPickItems, {
+			placeHolder: 'Select a compiler',
+			matchOnDescription: true,
+			matchOnDetail: true,
+		});
+
+		if (selectedItem) {
+			objectRef[attr] = selectedItem.label;
+			node.tree!.refresh();
+		}
+	});
+
 	const ClearInput = vscode.commands.registerCommand('coglens.ClearInput', async (node: TreeNode | undefined) => {
 		if (node === undefined) {
 			logger.logAndShowError("No node selected");
@@ -205,6 +243,7 @@ function setupCommands(
 	context.subscriptions.push(
 		GetInput,
 		GetFile,
+		PickCompiler,
 		ClearInput,
 		CopyText,
 		AddElement,
