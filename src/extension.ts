@@ -107,7 +107,9 @@ function setupCommands(
 			objectRef[attr] = [];
 		}
 
-		objectRef[attr].push('');
+		const userInput = await vscode.window.showInputBox({placeHolder: 'Enter element value'});
+
+		objectRef[attr].push(userInput ?? '');
 		node.tree!.refresh();
 	});
 
