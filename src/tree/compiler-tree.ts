@@ -85,8 +85,10 @@ export class CompilerTreeNode extends TreeNode {
 			treeContext: 'array',
 			iconPath: new vscode.ThemeIcon('list-tree'),
 			children: [] as CompilerTreeNode[],
+			objectRef: info,
+			attr: 'args',
 		};
-		TreeNode.populateArrayChildren(
+		TreeNode.populateArrayNodeChildren(
 			argListNode,
 			info.args ?? [],
 			{
@@ -103,8 +105,10 @@ export class CompilerTreeNode extends TreeNode {
 			treeContext: 'array',
 			iconPath: new vscode.ThemeIcon('list-tree'),
 			children: [] as CompilerTreeNode[],
+			objectRef: info,
+			attr: 'defines',
 		};
-		TreeNode.populateArrayChildren(
+		TreeNode.populateArrayNodeChildren(
 			defineListNode,
 			info.defines ?? [],
 			{
@@ -121,8 +125,10 @@ export class CompilerTreeNode extends TreeNode {
 			treeContext: 'array',
 			iconPath: new vscode.ThemeIcon('list-tree'),
 			children: [] as CompilerTreeNode[],
+			objectRef: info,
+			attr: 'includePaths',
 		};
-		TreeNode.populateArrayChildren(
+		TreeNode.populateArrayNodeChildren(
 			includeListNode,
 			info.includePaths ?? [],
 			{

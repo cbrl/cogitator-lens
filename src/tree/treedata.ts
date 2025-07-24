@@ -5,9 +5,24 @@ export type TreeItemSpecifier = 'checkbox' | 'subtree' | 'text';
 export type TreeContextSpecifier = 'array' | 'editText' | 'element' | 'filters' | 'instance' | 'pickFile' | 'text';
 
 export class TreeNode {
+	/**
+	 * The label to display in the tree view.
+	 */
 	label?: string;
+
+	/**
+	 * The type of node. This is used to determine how the node is displayed in the tree view.
+	 */
 	nodeType?: TreeItemSpecifier;
+
+	/**
+	 * The icon to display in the tree view.
+	 */
 	iconPath?: string | vscode.Uri | vscode.ThemeIcon | { light: string | vscode.Uri; dark: string | vscode.Uri }; // The icon to display in the tree view
+
+	/**
+	 * The children of this node.
+	 */
 	children?: TreeNode[];
 
 	/**
@@ -21,7 +36,7 @@ export class TreeNode {
 	objectRef?: any;
 
 	/**
-	 * If the node refers to a value stored in some object, this will be the name of the attribute within the object.
+	 * If the node refers to a value stored in some object, this will be the name or index of the attribute within the object.
 	 */
 	attr?: string | number;
 
@@ -30,11 +45,24 @@ export class TreeNode {
 	 */
 	tree?: TreeProvider<TreeNode>;
 
+	/**
+	 * Creates a context string representing multiple context types. This is used for nodes that can be interacted with in multiple ways.
+	 * @param args The arguments to join together.
+	 * @returns The joined context string.
+	 */
 	static multiContext(...args: string[]): string {
 		return args.join('&');
 	}
 
-	static populateArrayChildren(node: TreeNode, array: any[], options: { nodeType: TreeItemSpecifier, [key: string]: any }): void {
+	/**
+	 * Populates the children of a node representing an array of values. Each child node will
+	 * represent an element in the array, and will be labeled with its index and value.
+	 *
+	 * @param node The node to populate with children.
+	 * @param array The array of values to use as children.
+	 * @param options Additional options for the child nodes.
+	 */
+	static populateArrayNodeChildren(node: TreeNode, array: any[], options: { nodeType: TreeItemSpecifier, [key: string]: any }): void {
 		if (node.children === undefined) {
 			node.children = [];
 		}
@@ -52,24 +80,20 @@ export class TreeNode {
 	}
 }
 
-export class TreeItem implements vscode.TreeItem {
-    contextValue?: string;
-    label?: string | vscode.TreeItemLabel;
-    checkboxState?: vscode.TreeItemCheckboxState;
-    collapsibleState?: vscode.TreeItemCollapsibleState;
-    iconPath?: string | vscode.Uri | vscode.ThemeIcon | { light: string | vscode.Uri; dark: string | vscode.Uri };
-    command?: vscode.Command;
-
+export class TreeItem extends vscode.TreeItem {
     constructor(node: TreeNode) {
+		// Initialize the base class with default empty values. These will be overwritten further down.
+		super('', vscode.TreeItemCollapsibleState.None);
+
         const { label, nodeType, treeContext, iconPath, objectRef, attr } = node;
 
-        this.label = label;
-        this.iconPath = iconPath;
-        this.contextValue = treeContext ?? nodeType;
+		this.label = label;
+		this.iconPath = iconPath;
+		this.contextValue = treeContext ?? nodeType;
 
-        if (nodeType === 'subtree') {
-            this.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
-        }
+		if (nodeType === 'subtree') {
+			this.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
+		}
 		else if (nodeType === 'checkbox') {
 			assert(objectRef !== undefined && attr !== undefined);
 
@@ -80,6 +104,7 @@ export class TreeItem implements vscode.TreeItem {
 				? vscode.TreeItemCheckboxState.Checked
 				: vscode.TreeItemCheckboxState.Unchecked;
         }
+
     }
 }
 

@@ -143,7 +143,7 @@ export class CompilationInfoTreeNode extends TreeNode {
 			objectRef: compileInfo,
 			attr: 'args'
 		};
-		TreeNode.populateArrayChildren(args, compileInfo.args, { nodeType: 'text', treeContext: TreeNode.multiContext('element', 'editText') });
+		TreeNode.populateArrayNodeChildren(args, compileInfo.args, { nodeType: 'text', treeContext: TreeNode.multiContext('element', 'editText') });
 		result.children!.push(args);
 
 		// Definitions
@@ -155,7 +155,7 @@ export class CompilationInfoTreeNode extends TreeNode {
 			objectRef: compileInfo,
 			attr: 'defines'
 		};
-		TreeNode.populateArrayChildren(defs, compileInfo.defines, { nodeType: 'text', treeContext: TreeNode.multiContext('element', 'editText') });
+		TreeNode.populateArrayNodeChildren(defs, compileInfo.defines, { nodeType: 'text', treeContext: TreeNode.multiContext('element', 'editText') });
 		result.children!.push(defs);
 
 		// Include directories
@@ -167,7 +167,7 @@ export class CompilationInfoTreeNode extends TreeNode {
 			objectRef: compileInfo,
 			attr: 'includes'
 		};
-		TreeNode.populateArrayChildren(includes, compileInfo.includes, { nodeType: 'text', treeContext: TreeNode.multiContext('element', 'editText') });
+		TreeNode.populateArrayNodeChildren(includes, compileInfo.includes, { nodeType: 'text', treeContext: TreeNode.multiContext('element', 'editText') });
 		result.children!.push(includes);
 
 		return result;
