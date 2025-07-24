@@ -12,8 +12,7 @@ export function getCompilerByType(type: string): typeof compilerMap[keyof typeof
 }
 
 export function getCompilerByExe(exe: string): typeof compilerMap[keyof typeof compilerMap] | undefined {
-	for (const type in compilerMap) {
-		const compiler = compilerMap[type];
+	for (const compiler of Object.values(allCompilers)) {
 
 		if (compiler.isCompiler(exe)) {
 			return compiler;

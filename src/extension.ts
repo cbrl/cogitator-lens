@@ -12,9 +12,11 @@ import { TreeNode, TreeProvider } from './tree/treedata';
 import assert from 'assert';
 import path from 'path';
 import { getCompilerByExe } from './compilers/compiler-map';
+import * as logger from './logger';
 
 /*
 TODO:
+  - UI panel for ASM filter
   - objdump support (is this needed?)
   - Settings for binary ASM parsing
 */
@@ -27,7 +29,7 @@ function setupCommands(
 ) {
 	const GetInput = vscode.commands.registerCommand('coglens.GetInput', async (node: TreeNode | undefined) => {
 		if (node === undefined) {
-			vscode.window.showErrorMessage("No node selected.");
+			logger.logAndShowError("No node selected");
 			return;
 		}
 
@@ -49,7 +51,7 @@ function setupCommands(
 
 	const GetFile = vscode.commands.registerCommand('coglens.GetFile', async (node: TreeNode | undefined) => {
 		if (node === undefined) {
-			vscode.window.showErrorMessage("No node selected.");
+			logger.logAndShowError("No node selected");
 			return;
 		}
 
@@ -68,7 +70,7 @@ function setupCommands(
 
 	const ClearInput = vscode.commands.registerCommand('coglens.ClearInput', async (node: TreeNode | undefined) => {
 		if (node === undefined) {
-			vscode.window.showErrorMessage("No node selected.");
+			logger.logAndShowError("No node selected");
 			return;
 		}
 
@@ -82,7 +84,7 @@ function setupCommands(
 
 	const CopyText = vscode.commands.registerCommand('coglens.CopyText', async (node: TreeNode | undefined) => {
 		if (node === undefined) {
-			vscode.window.showErrorMessage("No node selected.");
+			logger.logAndShowError("No node selected");
 			return;
 		}
 
@@ -91,7 +93,7 @@ function setupCommands(
 
 	const AddElement = vscode.commands.registerCommand("coglens.AddElement", async (node: TreeNode | undefined) => {
 		if (node === undefined) {
-			vscode.window.showErrorMessage("No node selected.");
+			logger.logAndShowError("No node selected");
 			return;
 		}
 
@@ -111,7 +113,7 @@ function setupCommands(
 
 	const RemoveElement = vscode.commands.registerCommand("coglens.RemoveElement", async (node: TreeNode | undefined) => {
 		if (node === undefined) {
-			vscode.window.showErrorMessage("No node selected.");
+			logger.logAndShowError("No node selected");
 			return;
 		}
 
@@ -165,7 +167,7 @@ function setupCommands(
 		// Detect compiler type by executable
 		const compiler = getCompilerByExe(exeUri.fsPath);
 		if (compiler === undefined) {
-			window.showErrorMessage(`Could not detect compiler type for ${exeUri.fsPath}.`);
+			logger.logAndShowError(`Could not detect compiler type for ${exeUri.fsPath}`);
 			return;
 		}
 
@@ -184,7 +186,7 @@ function setupCommands(
 			name = name.trim();
 
 			if (compileManager.compilerCache.hasCompiler(name)) {
-				window.showWarningMessage(`Compiler '${name}' already exists.`);
+				logger.logAndShowWarning(`Compiler '${name}' already exists.`);
 				name = undefined;
 			}
 
@@ -256,7 +258,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
 			const compiler = getCompilerByExe(prelimInfo.compilerPath.fsPath);
 
 			if (compiler === undefined) {
-				window.showErrorMessage(`Could not detect compiler type for ${file.fsPath}.`);
+				logger.logAndShowError(`Could not detect compiler type for ${file.fsPath}`);
 				continue;
 			}
 

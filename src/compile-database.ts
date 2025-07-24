@@ -3,6 +3,7 @@ import { CompilerBase, CompilerInfo, CompileOptions } from "./compiler";
 import { getCompilerByType } from "./compilers/compiler-map";
 import { ParsedAsmResult } from './parsers/asmresult.interfaces';
 import { ParseFiltersAndOutputOptions } from "./parsers/filters.interfaces";
+import * as logger from "./logger";
 
 export type CompilationInfo = {
 	compilerName: string;
@@ -104,7 +105,7 @@ export class CompileManager {
 				this._compilerCache.createCompiler(compiler);
 			}
 			else {
-				window.showWarningMessage(`Compiler "${compiler.name}" already exists. Skipping.`);
+				logger.logAndShowWarning(`Compiler "${compiler.name}" already exists. Skipping.`);
 			}
 		}
 

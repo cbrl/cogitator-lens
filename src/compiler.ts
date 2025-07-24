@@ -6,6 +6,7 @@ import * as exec from './exec';
 import { replaceExtension } from './utils.js';
 import { ParseFiltersAndOutputOptions } from './parsers/filters.interfaces.js';
 import { ParsedAsmResult } from './parsers/asmresult.interfaces.js';
+import * as logger from './logger.js';
 
 export type CompilerInfo = {
 	name: string;
@@ -65,15 +66,21 @@ export abstract class CompilerBase implements ICompiler {
 			...(this.info.defines?.map(value => this.info.defineFlag + value) ?? []),
 			...(options.defines?.map(value => this.info.defineFlag + value) ?? []),
 			...this.prepareArgs(outputFile),
-			file
 		];
 
-		const envVars = Object.assign({}, this.info.envVars ?? {}, options.env ?? {});
+		const envVars = Object.assign({}, process.env, this.info.envVars ?? {}, options.env ?? {});
 
-		const execResult = await exec.execute(this.info.exe, args, envVars);
+		logger.logChannel.info(`Compiling ${file} with ${this.info.exe}`);
+		logger.logChannel.info(`Arguments: ${args.join(' ')}`);
+		logger.logChannel.debug(`Environment Variables: ${JSON.stringify(envVars, undefined, 2)}`);
+
+		const execResult = await this.doCompile(file, args, envVars);
 
 		if (execResult.returnCode !== 0) {
 			throw new Error(`Failed to compile ${file}: ${execResult.stdout}`);
+		}
+		else {
+			logger.logChannel.info(`Compilation of ${file} succeeded`);
 		}
 
 		// TODO: demangle
@@ -85,6 +92,10 @@ export abstract class CompilerBase implements ICompiler {
 		const finalFilter = Object.assign({}, this.defaultFilter, filter);
 
 		return this.asmParser.process(asmText, finalFilter);
+	}
+
+	protected async doCompile(file: string, args: string[], envVars: Record<string, string>): Promise<exec.ExecResult> {
+		return exec.execute(this.info.exe, [...args, file], envVars);
 	}
 
 	protected abstract prepareArgs(outputFile: string): string[];

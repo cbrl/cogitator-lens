@@ -6,8 +6,8 @@ export type ExecResult = {
 	stderr: string
 };
 
-export function execute(command: string, args: string[], env: Record<string, string>, shell: boolean = false): Promise<ExecResult> {
-	const process = child_process.spawn(command, args, { env: env, shell: shell });
+export function execute(command: string, args: string[], options: child_process.SpawnOptions): Promise<ExecResult> {
+	const process = child_process.spawn(command, args, options);
 
 	const streams = {
 		stdout: '',

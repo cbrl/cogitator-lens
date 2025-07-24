@@ -4,8 +4,21 @@ import * as exec from '../exec';
 import { CompilerBase, CompilerInfo } from '../compiler';
 import { VcAsmParser } from '../parsers/asm-parser-vc';
 import { AsmParser } from '../parsers/asm-parser';
+import * as logger from '../logger.js';
 
-export class MsvcCompiler extends CompilerBase {
+export abstract class WindowsCompilerBase extends CompilerBase {
+	protected override prepareArgs(outputFile: string): string[] {
+		return [
+			'/c',
+			'/FA',
+			`/Fa${outputFile}`,
+			`/Fo${outputFile}.obj`,
+			`/Fd${outputFile}.pdb`
+		];
+	}
+}
+
+export class MsvcCompiler extends WindowsCompilerBase {
 	public static get type(): string {
 		return 'msvc';
 	}
@@ -35,21 +48,16 @@ export class MsvcCompiler extends CompilerBase {
 	}
 
 	public static isCompiler(exe: string): boolean {
-		const lowerExe = exe.toLowerCase();
-		return lowerExe.includes('cl.exe');
+		const lowerExe = path.basename(exe).toLowerCase();
+		return lowerExe === 'cl.exe';
 	}
 
 	constructor(info: CompilerInfo) {
 		super(info);
 		this.asmParser = new VcAsmParser();
-		this.getVariables();
 	}
 
-	protected override prepareArgs(outputFile: string): string[] {
-		return ['/c', '/FA', `/Fa${outputFile}`];
-	}
-
-	private async getVariables(): Promise<void> {
+	protected override async doCompile(file: string, args: string[], envVars: Record<string, string>): Promise<exec.ExecResult> {
 		const parentDir = path.parse(this.info.exe).dir;
 		const arch = path.parse(parentDir).base.replace('x64', 'amd64');
 		const host = path.parse(path.parse(parentDir).dir).base.replace('Host', '').replace('x64', 'amd64');
@@ -57,26 +65,10 @@ export class MsvcCompiler extends CompilerBase {
 		const vcvarsArch = (host === arch) ? arch : `${host}_${arch}`;
 		const vcvarsScript = path.join(parentDir, '../'.repeat(6), 'Auxiliary/Build/vcvarsall.bat');
 
-		// Setup compile environment and print include and library paths with an easily searchable prefix
-		const includeCommand = `cmd /V:ON /C ""${vcvarsScript}" ${vcvarsArch} && echo @INCLUDE:!INCLUDE!"`;
-		const libCommand = `cmd /V:ON /C ""${vcvarsScript}" ${vcvarsArch} && echo @LIB:!LIB!"`;
+		const command = `"${vcvarsScript}" ${vcvarsArch} && cl.exe ${args.join(' ')} "${file}"`;
 
-		// Synchronously execute commands
-		//const includeOutput = new TextDecoder().decode(child_process.execSync(includeCommand, {shell: 'cmd'}));
-		//const libOutput = new TextDecoder().decode(child_process.execSync(libCommand, {shell: 'cmd'}));
-
-		return Promise.all([
-			exec.execute(includeCommand, [], {}, true),
-			exec.execute(libCommand, [], {}, true)
-		]).then(([includeOutput, libOutput]) => {
-			const includePaths = includeOutput.stdout.split('@INCLUDE:')[1].trim();
-			const libPaths = libOutput.stdout.split('@LIB:')[1].trim();
-
-			this.info.envVars ??= {};
-			this.info.envVars['INCLUDE'] = includePaths;
-		}).catch(reason => {
-			// TODO: print error
-		});
+		logger.logChannel.info(`Final compile command: ${command}`);
+		return exec.execute(command, [], {env: envVars, shell: true});
 	}
 }
 
@@ -103,8 +95,8 @@ export class ClangClCompiler extends MsvcCompiler {
 	}
 
 	public static isCompiler(exe: string): boolean {
-		const lowerExe = exe.toLowerCase();
-		return lowerExe.includes('clang-cl.exe');
+		const lowerExe = path.basename(exe).toLowerCase();
+		return lowerExe === 'clang-cl.exe';
 	}
 
 	constructor(info: CompilerInfo) {

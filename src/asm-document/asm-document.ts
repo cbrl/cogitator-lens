@@ -1,6 +1,7 @@
 import { workspace, Uri, EventEmitter, FileSystemWatcher, window } from 'vscode';
 import { ParsedAsmResultLine } from '../parsers/asmresult.interfaces';
 import { CompileManager } from '../compile-database';
+import * as logger from '../logger';
 
 export class AsmDocument {
     private _srcUri: Uri;
@@ -42,7 +43,8 @@ export class AsmDocument {
 		}
 		catch (error) {
 			const errorMessage = (error instanceof Error) ? error.message : JSON.stringify(error);
-			window.showErrorMessage(`Failed to compile (${errorMessage}). Verify buildsystem settings and/or wait for configuration to complete.`);
+			window.showErrorMessage(`Compile failed. Verify buildsystem settings and/or wait for configuration to complete. See log for error details.`);
+			logger.logChannel.error(`Failed to compile ${this._srcUri.fsPath}: ${errorMessage}`);
 		}
 
 		// Causes VSCode to call TextDocumentContentProvider.provideTextDocumentContent() again
