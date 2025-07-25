@@ -25,6 +25,7 @@
 import {ParsedAsmResult, ParsedAsmResultLine} from './asmresult.interfaces.js';
 import {ParseFiltersAndOutputOptions} from './filters.interfaces.js';
 import {assert} from '../assert.js';
+import * as logger from '../logger.js';
 import * as utils from '../ce-utils.js';
 
 import {AsmParser} from './asm-parser.js';
@@ -60,7 +61,6 @@ export class VcAsmParser extends AsmParser {
 
     constructor() {
         super();
-
         this.asmBinaryParser = new AsmParser();
         this.commentOnly = /^;/;
 
@@ -112,17 +112,15 @@ export class VcAsmParser extends AsmParser {
             const matches = line.match(this.filenameComment);
             if (matches) {
                 return matches[1];
-            } else {
-                return null;
             }
+            return null;
         };
         const getLineNumberFromComment = (line: string) => {
             const matches = line.match(this.lineNumberComment);
             if (matches) {
-                return parseInt(matches[1]);
-            } else {
-                return null;
+                return Number.parseInt(matches[1]);
             }
+            return null;
         };
 
         const asmLines = utils.splitLines(asm);
@@ -186,7 +184,7 @@ export class VcAsmParser extends AsmParser {
 
         const checkForDdefLabel = (line: string) => {
             const ddef = line.match(this.dataDefn);
-            if (ddef && ddef[1]) {
+            if (ddef?.[1]) {
                 datadefLabels.push(ddef[1]);
             }
         };
@@ -220,7 +218,7 @@ export class VcAsmParser extends AsmParser {
                 const lineNum = getLineNumberFromComment(line);
                 if (lineNum !== null) {
                     if (currentFile === undefined) {
-                        console.error('Somehow, we have a line number comment without a file comment: %s', line);
+                        logger.logChannel.error('Somehow, we have a line number comment without a file comment: %s', line);
                     }
                     assert(currentFunction);
                     if (currentFunction.initialLine === undefined) {
@@ -230,7 +228,7 @@ export class VcAsmParser extends AsmParser {
                 }
             } else {
                 if (currentFunction === null) {
-                    console.error('We have a file comment outside of a function: %s', line);
+                    logger.logChannel.error('We have a file comment outside of a function: %s', line);
                 }
                 // if the file is the "main file", give it the file `null`
                 if (stdInLooking.test(fileName)) {
@@ -319,10 +317,9 @@ export class VcAsmParser extends AsmParser {
                 // order by name
                 if (f1.initialLine === f2.initialLine) {
                     return collator.compare(f1.name || '', f2.name || '');
-                } else {
-                    // NOTE: initialLine can be undefined here, that's ok
-                    return (f1.initialLine as number) - (f2.initialLine as number);
                 }
+                // NOTE: initialLine can be undefined here, that's ok
+                return (f1.initialLine as number) - (f2.initialLine as number);
             }
 
             // else, order by file

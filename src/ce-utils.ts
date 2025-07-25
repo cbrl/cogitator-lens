@@ -26,6 +26,8 @@ const tabsRe = /\t/g;
 const lineRe = /\r?\n/;
 const findQuotes = /(.*?)("(?:[^"\\]|\\.)*")(.*)/;
 
+export const ce_temp_prefix = 'compiler-explorer-compiler';
+
 export function splitLines(text: string): string[] {
     if (!text) {
 		return [];
@@ -58,4 +60,8 @@ export function squashHorizontalWhitespace(line: string, atStart = true): string
         return intent + splat.slice(1).join(' ');
     }
     return splat.join(' ');
+}
+
+export function deltaTimeNanoToMili(startTime: bigint, endTime: bigint): number {
+    return Number((endTime - startTime) / BigInt(1_000_000));
 }

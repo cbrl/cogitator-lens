@@ -116,12 +116,7 @@ export class AsmDecorator {
     private refreshDecorations() {
 		this.clearAllDecorations();
 
-        const dimUnused = workspace.getConfiguration('', this.srcDocument.uri)
-            .get('coglens.dimUnusedSourceLines', true);
-
-        if (dimUnused) {
-            this.dimUnusedSourceLines();
-        }
+		this.dimUnusedSourceLines();
 
 		// Treat as if the user selected the current line of the first editor (only highlights the line, doesn't scroll)
 		// TODO: use active editor instead of the first visible source editor?
@@ -129,8 +124,9 @@ export class AsmDecorator {
 			this.onSrcLineSelected(this.visibleSrcEditors[0], true);
 		}
 
+		// If the ASM document is empty, show a loading decoration.
+		// TODO: detect compile state instead of just checking line count
 		if (this.asmData.lines.length === 0) {
-			// If the ASM document is empty, show a loading decoration
 			this.asmEditor.setDecorations(this.loadingDecorationType, [new Range(0, 0, 0, 0)]);
 		}
 	}
@@ -195,7 +191,12 @@ export class AsmDecorator {
 		};
 
 		for (let editor of this.visibleSrcEditors) {
-			editor.setDecorations(this.unusedLineDecorationType, getUnusedLines(editor.document));
+			const config = workspace.getConfiguration('', editor.document);
+			const dimUnused = config.get('coglens.dimUnusedSourceLines', true);
+
+			if (dimUnused) {
+				editor.setDecorations(this.unusedLineDecorationType, getUnusedLines(editor.document));
+			}
 		}
     }
 
@@ -281,12 +282,8 @@ export class AsmDecorator {
 		this.active = editors.includes(this.asmEditor) && _.any(editors.map(e => this.mappings.has(e.document.uri.fsPath)));
 
 		if (this.active) {
-			// Update decorations when the editors change
-			const dimUnused = workspace.getConfiguration('', this.srcDocument.uri).get('coglens.dimUnusedSourceLines', true);
-
-			if (dimUnused) {
-				this.dimUnusedSourceLines();
-			}
+			// Update dimmed lines when the editors change
+			this.dimUnusedSourceLines();
 		}
 		else {
 			// Clear all decorations if no longer active. An editor that goes out of view will automatically have
