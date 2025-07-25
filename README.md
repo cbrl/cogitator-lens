@@ -15,9 +15,9 @@ This extension uses the
 API in order to detect project source files and their compile options. The CMake project must have
 successfully completed configuration before viewing assembly.
 
-Select the option `Cogitator Lens: Disassemble Current File` from the command palette. Assembly for
-the current source file will be opened to the right. Alternatively, click on the disassemble button
-on the right hand side of the tab bar.
+Click on the disassemble button on the right hand side of the tab bar. Assembly for the current
+source file will be opened to the right. Alternatively, select the option
+`Cogitator Lens: Disassemble Current File` from the command palette.
 
 ### Manual Configuration
 

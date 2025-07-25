@@ -60,12 +60,12 @@ export class AsmDecorator {
         });
 
         this.loadMappings();
-        this.applyDecorations();
+        this.refreshDecorations();
 
         // Rebuild mapping and decorations on asm document change
         const providerEventRegistration = asmData.onDidChange(() => {
             this.loadMappings();
-			this.applyDecorations();
+			this.refreshDecorations();
         });
 
 		const visibilityChangeRegistration = window.onDidChangeVisibleTextEditors(this.onChangeVisibleEditors.bind(this));
@@ -93,7 +93,7 @@ export class AsmDecorator {
         this.registrations.dispose();
     }
 
-    public async onEditorSelectionChanged(event: TextEditorSelectionChangeEvent): Promise<void> {
+    public onEditorSelectionChanged(event: TextEditorSelectionChangeEvent): void {
 		// We only want to handle the cases where the user manually selected a new line in the assembly or source
 		// editor. Opening a new editor (e.g. the assembly document or a new source document) will also fire this
 		// event, so processing all events without checking the kind would mean that opening a new editor would be
@@ -109,11 +109,11 @@ export class AsmDecorator {
 			this.onSrcLineSelected(event.textEditor);
 		}
 		else if (event.textEditor === this.asmEditor) {
-			await this.onAsmLineSelected();
+			this.onAsmLineSelected();
 		}
     }
 
-    private applyDecorations() {
+    private refreshDecorations() {
 		this.clearAllDecorations();
 
         const dimUnused = workspace.getConfiguration('', this.srcDocument.uri)
@@ -123,10 +123,10 @@ export class AsmDecorator {
             this.dimUnusedSourceLines();
         }
 
-		this.onAsmLineSelected();
-
-		for (let editor of this.visibleSrcEditors) {
-			this.onSrcLineSelected(editor);
+		// Treat as if the user selected the current line of the first editor (only highlights the line, doesn't scroll)
+		// TODO: use active editor instead of the first visible source editor?
+		if (this.asmData.lines.length > 0) {
+			this.onSrcLineSelected(this.visibleSrcEditors[0], true);
 		}
 
 		if (this.asmData.lines.length === 0) {
@@ -199,7 +199,7 @@ export class AsmDecorator {
 		}
     }
 
-    private onSrcLineSelected(selectedEditor: TextEditor) {
+    private onSrcLineSelected(selectedEditor: TextEditor, highlightOnly: boolean = false): void {
 		const getSelectedLines = (srcFile: string, line: number) => {
 			const asmLinesRanges: Range[] = [];
 			const mapped = this.mappings.get(srcFile)?.get(line);
@@ -231,13 +231,13 @@ export class AsmDecorator {
 
         this.asmEditor.setDecorations(this.selectedLineDecorationType, asmLines);
 
-        if (asmLines.length > 0) {
+        if (asmLines.length > 0 && !highlightOnly) {
 			// First line will be from the editor that actually had its selection changed (the editor passed to this function)
             this.asmEditor.revealRange(asmLines[0], TextEditorRevealType.InCenterIfOutsideViewport);
         }
     }
 
-    private async onAsmLineSelected() {
+    private onAsmLineSelected(highlightOnly: boolean = false): void {
 		const line = this.asmEditor.selection.start.line;
         const asmLine = this.asmData.lines[line];
 
@@ -250,11 +250,15 @@ export class AsmDecorator {
 			const srcUri = Uri.file(path.normalize(asmLine.source!.file!));
 
 			// Open the correct source document if this line of assembly refers to a different file
-			const targetEditor = await this.getOrCreateSecondarySourceEditor(srcUri);
+			this.getOrCreateSourceEditor(srcUri).then(targetEditor => {
+				const srcLineRange = targetEditor.document.lineAt(asmLine.source!.line! - 1).range;
 
-            const srcLineRange = targetEditor.document.lineAt(asmLine.source!.line! - 1).range;
-            targetEditor.setDecorations(this.selectedLineDecorationType, [srcLineRange]);
-            targetEditor.revealRange(srcLineRange, TextEditorRevealType.InCenterIfOutsideViewport);
+				targetEditor.setDecorations(this.selectedLineDecorationType, [srcLineRange]);
+
+				if (!highlightOnly) {
+					targetEditor.revealRange(srcLineRange, TextEditorRevealType.InCenterIfOutsideViewport);
+				}
+			});
         }
 		else {
 			// Clear selected line decoration when the assembly editor line doesn't correspond to a source location
@@ -265,8 +269,6 @@ export class AsmDecorator {
     }
 
 	private onChangeVisibleEditors(editors: readonly TextEditor[]): void {
-		const previouslyVisibleSrcEditors = this.visibleSrcEditors;
-
 		// Editors can seemingly change under us. When switching from an editor to a different tab, then back
 		// to the editor, this.[x]Editor will no longer refer to any editor inside the new array of visible
 		// editors. Comparing the documents seems to always work though. However, if the user had multiple editors
@@ -278,13 +280,7 @@ export class AsmDecorator {
 		// Active if the assembly editor is visible and one of the associated source editors is visible
 		this.active = editors.includes(this.asmEditor) && _.any(editors.map(e => this.mappings.has(e.document.uri.fsPath)));
 
-		// Clear any source editors that are no longer visible
-		previouslyVisibleSrcEditors.filter(editor => !this.visibleSrcEditors.includes(editor)).forEach(editor => this.clearDecorations(editor));
-
 		if (this.active) {
-			this.onAsmLineSelected();
-			this.visibleSrcEditors.forEach(editor => this.onSrcLineSelected(editor));
-
 			// Update decorations when the editors change
 			const dimUnused = workspace.getConfiguration('', this.srcDocument.uri).get('coglens.dimUnusedSourceLines', true);
 
@@ -299,9 +295,8 @@ export class AsmDecorator {
 		}
 	}
 
-	// Get the editor for a source document that is referenced by the current ASM document (but isn't the main source
-	// document that was compiled to ASM)
-	private async getOrCreateSecondarySourceEditor(uri: Uri): Promise<TextEditor> {
+	// Get the editor for a source document that is referenced by the current ASM document
+	private async getOrCreateSourceEditor(uri: Uri): Promise<TextEditor> {
 		// Doesn't do anything if the document was already opened
 		const document = await workspace.openTextDocument(uri);
 

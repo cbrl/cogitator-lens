@@ -2,7 +2,7 @@
     "name": "coglens",
     "displayName": "Cogitator Lens",
     "description": "Divine the substratal invocations of your digital canticles",
-    "version": "0.2.1",
+    "version": "0.2.2",
     "icon": "resources/gear-phi.png",
     "publisher": "cbrl",
     "license": "MIT",
@@ -116,7 +116,7 @@
                     "coglens.dimUnusedSourceLines": {
                         "type": "boolean",
                         "default": true,
-                        "description": "Dim the lines that was thrown away by compiler",
+                        "description": "Dim lines that do not contribute to the assembly output",
                         "scope": "resource"
                     },
 					"coglens.compilers": {
