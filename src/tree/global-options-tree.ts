@@ -37,7 +37,6 @@ export class GlobalOptionsNode extends TreeNode {
 			{ label: 'Hide comment-only lines', attr: 'commentOnly', description: 'Remove lines containing only comments' },
 			{ label: 'Trim horizontal whitespace', attr: 'trim', description: 'Remove excessive horizontal whitespace' },
 			{ label: 'Debug calls', attr: 'debugCalls', description: 'Show debug-related function calls' },
-			{ label: 'Don\'t mask filenames', attr: 'dontMaskFilenames', description: 'Show actual filenames instead of masked ones' },
 			{ label: 'Optimized output', attr: 'optOutput', description: 'Show optimized assembly output' }
 		];
 

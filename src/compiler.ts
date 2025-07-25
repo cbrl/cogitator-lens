@@ -47,7 +47,6 @@ export interface ICompiler {
 export abstract class CompilerBase implements ICompiler {
 	info: CompilerInfo;
 	asmParser: AsmParser;
-	defaultFilter: ParseFiltersAndOutputOptions = {};
 
 	constructor(info: CompilerInfo) {
 		this.info = info;
@@ -88,10 +87,7 @@ export abstract class CompilerBase implements ICompiler {
 		const asmBytes = await fs.promises.readFile(outputFile);
 		const asmText = new TextDecoder().decode(asmBytes);
 
-		// Override default settings with user settings (if specified)
-		const finalFilter = Object.assign({}, this.defaultFilter, filter);
-
-		return this.asmParser.process(asmText, finalFilter);
+		return this.asmParser.process(asmText, filter);
 	}
 
 	protected async doCompile(file: string, args: string[], envVars: Record<string, string>): Promise<exec.ExecResult> {

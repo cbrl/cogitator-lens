@@ -9,6 +9,7 @@ import * as logger from '../logger.js';
 export abstract class WindowsCompilerBase extends CompilerBase {
 	protected override prepareArgs(outputFile: string): string[] {
 		return [
+			'/nologo',
 			'/c',
 			'/FA',
 			`/Fa${outputFile}`,
@@ -77,6 +78,11 @@ export class ClangClCompiler extends WindowsCompilerBase {
 		return 'clang-cl';
 	}
 
+	protected override prepareArgs(outputFile: string): string[] {
+		// Enable debug info in the object file
+		return ['/Z7', ...super.prepareArgs(outputFile)];
+	}
+
 	public static baseCompilerInfo(name: string, exe: string): CompilerInfo {
 		const info = MsvcCompiler.baseCompilerInfo(name, exe);
 		info.type = ClangClCompiler.type;
@@ -97,10 +103,5 @@ export class ClangClCompiler extends WindowsCompilerBase {
 	public static isCompiler(exe: string): boolean {
 		const lowerExe = path.basename(exe).toLowerCase();
 		return lowerExe === 'clang-cl.exe';
-	}
-
-	constructor(info: CompilerInfo) {
-		super(info);
-		this.asmParser = new AsmParser();
 	}
 }

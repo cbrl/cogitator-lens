@@ -99,7 +99,13 @@ export class CompileManager {
 	private _compilerCache: CompilerCache = new CompilerCache();
 
 	// Global filter options to be used for all compilations
-	private _globalFilterOptions: ParseFiltersAndOutputOptions = {};
+	private _globalFilterOptions: ParseFiltersAndOutputOptions = {
+		labels: true,
+		directives: true,
+		commentOnly: true,
+		libraryCode: false, //this can be a bit counter-intuitive if part of the user's project is a library
+		dontMaskFilenames: true //filename masking is part of the Compiler Explorer code, but not very useful in this context
+	};
 
 	constructor() {
 		// TODO: support multi-workspace settings?

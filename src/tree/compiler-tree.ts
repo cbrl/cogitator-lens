@@ -24,53 +24,11 @@ export class CompilerTreeNode extends TreeNode {
 
 		result.children!.push(...CompilerTreeNode.buildCompilerArgsNodes(instance));
 
-        result.children!.push({
-            label: 'Filters',
-            nodeType: 'subtree',
-			treeContext: 'filters',
-            iconPath: new vscode.ThemeIcon('filter'),
-            children: CompilerTreeNode.buildFilterNodes(instance),
-        });
-
         for (const child of result.children as CompilerTreeNode[]) {
             child.compiler = instance;
         }
 
         return result;
-    }
-
-    private static buildFilterNodes(compiler: CompilerBase): CompilerTreeNode[] {
-        const info = compiler.info;
-        const filters: CompilerTreeNode[] = [];
-
-        filters.push({ label: 'Skip assembly', attr: 'skipASM' });
-
-        if (info?.supportsIntel) {
-            filters.push({ label: 'Use Intel assembly syntax', attr: 'intel' });
-        }
-
-        if (info?.supportsDemangle) {
-            filters.push({ label: 'Demangle the symbols', attr: 'demangle' });
-        }
-
-        filters.push({ label: 'Hide unused labels', attr: 'labels' });
-
-        if (info?.supportsLibraryCodeFilter) {
-            filters.push({ label: 'Hide library code', attr: 'libraryCode' });
-        }
-
-        filters.push({ label: 'Hide directives', attr: 'directives' });
-        filters.push({ label: 'Hide comment only lines', attr: 'commentOnly' });
-        filters.push({ label: 'Horizontal whitespace', attr: 'trim' });
-        filters.push({ label: 'Debug calls', attr: 'debugCalls' });
-
-        for (const child of filters) {
-            child.nodeType = 'checkbox';
-            child.compiler = compiler;
-			child.objectRef = compiler.defaultFilter;
-        }
-
-        return filters;
     }
 
 	private static buildCompilerArgsNodes(compiler: CompilerBase): CompilerTreeNode[] {
