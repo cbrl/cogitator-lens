@@ -2,7 +2,7 @@
     "name": "coglens",
     "displayName": "Cogitator Lens",
     "description": "Divine the substratal invocations of your digital canticles",
-    "version": "0.2.2",
+    "version": "0.3.0",
     "icon": "resources/gear-phi.png",
     "publisher": "cbrl",
     "license": "MIT",
