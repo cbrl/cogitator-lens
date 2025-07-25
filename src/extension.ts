@@ -256,7 +256,7 @@ function createCompilerTreeView(context: ExtensionContext, cache: CompilerCache)
 	const treeProvider = new CompilerTreeProvider(cache);
 	const treeView = window.createTreeView('coglens.compilers', { treeDataProvider: treeProvider });
 
-	treeView.onDidChangeCheckboxState(async (event) => {
+	treeView.onDidChangeCheckboxState((event) => {
 		const [[node]] = event.items;
 		const { objectRef, attr } = node;
 
@@ -285,7 +285,7 @@ function createGlobalOptionsTreeView(context: ExtensionContext, compileManager: 
 	const treeProvider = new GlobalOptionsTreeProvider(compileManager);
 	const treeView = window.createTreeView('coglens.globalOptions', { treeDataProvider: treeProvider });
 
-	treeView.onDidChangeCheckboxState(async (event) => {
+	treeView.onDidChangeCheckboxState((event) => {
 		const [[node]] = event.items;
 		const { objectRef, attr } = node;
 
@@ -304,7 +304,8 @@ function createGlobalOptionsTreeView(context: ExtensionContext, compileManager: 
 
 export async function activate(context: ExtensionContext): Promise<void> {
 	const compileManager = new CompileManager();
-	const provider = new AsmProvider(compileManager);
+	const asmProvider = new AsmProvider(compileManager);
+	const asmDefProvider = new AsmDefinitionProvider();
 
 	const compilerTreeProvider = createCompilerTreeView(context, compileManager.compilerCache);
 	const infoTreeProvider = createCompilationInfoTreeView(context, compileManager.compilationInfo);
@@ -348,16 +349,13 @@ export async function activate(context: ExtensionContext): Promise<void> {
 	cmakeMonitor.initCmakeApi();
 
 	// Register content provider for the 'assembly' scheme
-	const asmProviderRegistration = workspace.registerTextDocumentContentProvider(AsmProvider.scheme, provider);
-
-	const asmDefRegistration = AsmDefinitionProvider.register(provider);
+	const asmProviderRegistration = workspace.registerTextDocumentContentProvider(AsmProvider.scheme, asmProvider);
+	const asmDefRegistration = vscode.languages.registerDefinitionProvider({scheme: AsmProvider.scheme}, asmDefProvider);
 
 	// Register main command. This will create a URI with the 'assembly' scheme, open the document,
 	// and display it an an editor to the right.
-	const commandRegistration = commands.registerTextEditorCommand('coglens.Disassemble', async srcEditor => {
+	const commandRegistration = commands.registerTextEditorCommand('coglens.Disassemble', srcEditor => {
 		const asmUri = getAsmUri(srcEditor.document.uri);
-
-		await provider.updateAsmDocument(asmUri);
 
 		const options: TextDocumentShowOptions = {
 			viewColumn: ViewColumn.Beside,
@@ -365,14 +363,13 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		};
 
 		window.showTextDocument(asmUri, options).then(asmEditor => {
-			const decorator = new AsmDecorator(srcEditor, asmEditor, provider);
-			// dirty way to get decorations work after showing assembly
-			setTimeout(() => decorator.updateSelection(srcEditor), 500);
+			const asmData = asmProvider.provideAssembly(asmUri);
+			const decorator = new AsmDecorator(srcEditor, asmEditor, asmData);
 		});
 	});
 
 	context.subscriptions.push(
-		provider,
+		asmProvider,
 		cmakeMonitor,
 		compileInfoRegistration,
 		asmProviderRegistration,

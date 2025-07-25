@@ -72,12 +72,12 @@ export class MsvcCompiler extends WindowsCompilerBase {
 	}
 }
 
-export class ClangClCompiler extends MsvcCompiler {
-	public static override get type(): string {
+export class ClangClCompiler extends WindowsCompilerBase {
+	public static get type(): string {
 		return 'clang-cl';
 	}
 
-	public static override baseCompilerInfo(name: string, exe: string): CompilerInfo {
+	public static baseCompilerInfo(name: string, exe: string): CompilerInfo {
 		const info = MsvcCompiler.baseCompilerInfo(name, exe);
 		info.type = ClangClCompiler.type;
 		info.supportsIntel = true;
