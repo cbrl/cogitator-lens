@@ -27,6 +27,7 @@ export class AsmDecorator {
 
     private selectedLineDecorationType: TextEditorDecorationType;
     private unusedLineDecorationType: TextEditorDecorationType;
+	private loadingDecorationType: TextEditorDecorationType;
     private registrations: Disposable;
 
 	private active: boolean = true;
@@ -49,6 +50,13 @@ export class AsmDecorator {
 
         this.unusedLineDecorationType = window.createTextEditorDecorationType({
             opacity: '0.5'
+        });
+
+        this.loadingDecorationType = window.createTextEditorDecorationType({
+            after: {
+                contentText: ' ⏳ Compiling...',
+                color: 'gray'
+            }
         });
 
         this.loadMappings();
@@ -106,6 +114,8 @@ export class AsmDecorator {
     }
 
     private applyDecorations() {
+		this.clearAllDecorations();
+
         const dimUnused = workspace.getConfiguration('', this.srcDocument.uri)
             .get('coglens.dimUnusedSourceLines', true);
 
@@ -118,7 +128,12 @@ export class AsmDecorator {
 		for (let editor of this.visibleSrcEditors) {
 			this.onSrcLineSelected(editor);
 		}
-    }
+
+		if (this.asmData.lines.length === 0) {
+			// If the ASM document is empty, show a loading decoration
+			this.asmEditor.setDecorations(this.loadingDecorationType, [new Range(0, 0, 0, 0)]);
+		}
+	}
 
     private loadMappings() {
         this.mappings.clear();
@@ -150,6 +165,7 @@ export class AsmDecorator {
 	private clearDecorations(editor: TextEditor) {
 		editor.setDecorations(this.selectedLineDecorationType, []);
 		editor.setDecorations(this.unusedLineDecorationType, []);
+		editor.setDecorations(this.loadingDecorationType, []);
 	}
 
 	private clearAllDecorations() {
