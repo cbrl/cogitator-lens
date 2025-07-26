@@ -18,7 +18,6 @@ import * as logger from './logger';
 TODO:
   - show compiler error log in the asm editor
     - requires an error state in the CompiledAssembly so the AsmDecorator knows to ignore the contents
-  - fix decorations being applied when source document is edited after asm editor is closed
   - objdump support (is this needed?)
   - Settings for binary ASM parsing
 */
