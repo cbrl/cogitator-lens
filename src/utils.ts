@@ -1,4 +1,5 @@
 import * as Path from 'path';
+import vscode from 'vscode';
 
 export function replaceExtension(filename: string, extension: string): string {
 	return Path.join(
@@ -41,4 +42,26 @@ export function keyToTypeMap<K extends keyof any, T extends Record<K, string>>(o
 	}
 
 	return keyToType;
+}
+
+export function equalUri(
+	uri1: vscode.Uri | undefined,
+	uri2: vscode.Uri | undefined,
+	ignoreFragment: boolean = false,
+	ignorePathCase: boolean = false
+): boolean {
+	if (uri1 === uri2) {
+		return true;
+	}
+	if (!uri1 || !uri2) {
+		return false;
+	}
+	return toComparisonKey(uri1, ignoreFragment, ignorePathCase) === toComparisonKey(uri2, ignoreFragment, ignorePathCase);
+}
+
+export function toComparisonKey(uri: vscode.Uri, ignoreFragment: boolean = false, ignorePathCase: boolean = false): string {
+	return uri.with({
+		path: ignorePathCase ? uri.path.toLowerCase() : undefined,
+		fragment: ignoreFragment ? '' : uri.fragment
+	}).toString();
 }

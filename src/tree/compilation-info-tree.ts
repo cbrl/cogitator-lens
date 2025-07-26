@@ -58,14 +58,14 @@ export class CompilationInfoTreeNode extends TreeNode {
 
 			if (vscode.workspace.workspaceFolders !== undefined) {
 				for (const folder of vscode.workspace.workspaceFolders) {
-					if (isSubdirectory(folder.uri.fsPath, file)) {
+					if (isSubdirectory(folder.uri.fsPath, file.fsPath)) {
 						isInWorkspace = true;
 
 						if (insideWorkspace.get(folder.uri.fsPath) === undefined) {
 							insideWorkspace.set(folder.uri.fsPath, []);
 						}
 
-						insideWorkspace.get(folder.uri.fsPath)!.push(file);
+						insideWorkspace.get(folder.uri.fsPath)!.push(file.fsPath);
 						break;
 					}
 				}
@@ -73,7 +73,7 @@ export class CompilationInfoTreeNode extends TreeNode {
 
 			if (!isInWorkspace) {
 				// Is there ever going to be known compile info for a file that's not in a workspace?
-				outsideWorkspace.push(file);
+				outsideWorkspace.push(file.fsPath);
 			}
 		}
 

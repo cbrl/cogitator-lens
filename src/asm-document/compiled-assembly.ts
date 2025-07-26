@@ -4,8 +4,9 @@ import { CompileManager } from '../compile-database';
 import * as logger from '../logger';
 
 export class CompiledAssembly {
-    private _srcUri: Uri;
-	private _asmUri: Uri;
+    public readonly srcUri: Uri;
+	public readonly asmUri: Uri;
+
     private _providerEmitter: EventEmitter<Uri>;
 	private _selfEmitter: EventEmitter<void> = new EventEmitter<void>();
     private _watcher: FileSystemWatcher;
@@ -16,15 +17,15 @@ export class CompiledAssembly {
 	public sourceToAsmMapping = new Map<number, number[]>();
 
     constructor(srcUri: Uri, asmUri: Uri, compileManager: CompileManager, providerEmitter: EventEmitter<Uri>) {
-        this._srcUri = srcUri;
-		this._asmUri = asmUri;
+        this.srcUri = srcUri;
+		this.asmUri = asmUri;
 		this.compileManager = compileManager;
 
         // The AsmDocument signals changes through the event emitter from the containing provider
         this._providerEmitter = providerEmitter;
 
         // Watch for underlying assembly file and reload it on change
-        this._watcher = workspace.createFileSystemWatcher(this._srcUri.fsPath);
+        this._watcher = workspace.createFileSystemWatcher(this.srcUri.fsPath);
         this._watcher.onDidChange(() => this.updateLater());
         this._watcher.onDidCreate(() => this.updateLater());
         this._watcher.onDidDelete(() => this.updateLater());
@@ -39,7 +40,7 @@ export class CompiledAssembly {
 
     public async update(): Promise<void> {
 		try {
-			const compileResult = await this.compileManager.compile(this._srcUri);
+			const compileResult = await this.compileManager.compile(this.srcUri);
 			this.lines = compileResult.asm;
 		}
 		catch (error) {
@@ -49,7 +50,7 @@ export class CompiledAssembly {
 		}
 
 		// Causes VSCode to call TextDocumentContentProvider.provideTextDocumentContent() again
-		this._providerEmitter.fire(this._asmUri);
+		this._providerEmitter.fire(this.asmUri);
 
 		this._selfEmitter.fire();
     }

@@ -370,10 +370,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
 			preview: false,
 		};
 
-		window.showTextDocument(asmUri, options).then(asmEditor => {
-			const asmData = asmProvider.provideAssembly(asmUri);
-			const decorator = new AsmDecorator(srcEditor, asmEditor, asmData);
-		});
+		window.showTextDocument(asmUri, options);
 	});
 
 	context.subscriptions.push(

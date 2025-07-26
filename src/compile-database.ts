@@ -4,6 +4,7 @@ import { getCompilerByType } from "./compilers/compiler-map";
 import { ParsedAsmResult } from './parsers/asmresult.interfaces';
 import { CompilerOutputOptions, ParseFiltersAndOutputOptions } from "./parsers/filters.interfaces";
 import * as logger from "./logger";
+import { UriMap } from "./uri-containers";
 
 export type CompilationInfo = {
 	compilerName: string;
@@ -64,7 +65,7 @@ export class CompilerCache {
 
 // Associates files with their compiler exectuables and settings
 export class CompileInfoDatabase {
-	private compilationInfo: Map<string, CompilationInfo> = new Map();
+	private compilationInfo: UriMap<CompilationInfo> = new UriMap({ignoreFragment: true});
 
 	public defaultCompileInfo: CompilationInfo = {
 		compilerName: '',
@@ -78,16 +79,16 @@ export class CompileInfoDatabase {
 	}
 
 	public getCompilationInfo(file: Uri): CompilationInfo | undefined {
-		return this.compilationInfo.get(file.fsPath);
+		return this.compilationInfo.get(file);
 	}
 
 	public getCompilationInfoOrDefault(file: Uri): [CompilationInfo, boolean] {
-		const info = this.compilationInfo.get(file.fsPath);
+		const info = this.compilationInfo.get(file);
 		return [info ?? this.defaultCompileInfo, info !== undefined];
 	}
 
 	public setCompilationInfo(file: Uri, info: CompilationInfo): void {
-		this.compilationInfo.set(file.fsPath, info);
+		this.compilationInfo.set(file, info);
 	}
 }
 
@@ -103,7 +104,7 @@ export class CompileManager {
 		labels: true,
 		directives: true,
 		commentOnly: true,
-		libraryCode: false, //this can be a bit counter-intuitive if part of the user's project is a library
+		libraryCode: false, //enabling this can give counter-intuitive results if part of the user's project is a library
 		dontMaskFilenames: true //filename masking is part of the Compiler Explorer code, but not very useful in this context
 	};
 
@@ -126,10 +127,10 @@ export class CompileManager {
 
 		const defaultCompileInfo = workspace.getConfiguration('coglens', scope).get<CompilationInfo>('defaultCompileInfo');
 
-		// For whatever reason, Code exposes this behavior for default or optional return values,
-		// but also tries its absolute hardest to return a value even if the user hasn't set
-		// anything in the config, rendering the default/optional return behavior functionally
-		// useless: https://github.com/Microsoft/vscode/issues/35451
+		// For whatever reason, Code has behavior for default or optional return values, but also
+		// tries its absolute hardest to return a value even if the user hasn't set anything in the
+		// config, rendering the default/optional return behavior functionally useless:
+		// https://github.com/Microsoft/vscode/issues/35451
 		//
 		// In this case that means it always returns an empty object if the config value isn't set.
 		if (defaultCompileInfo !== undefined && Object.keys(defaultCompileInfo).length > 0) {
