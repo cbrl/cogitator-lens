@@ -367,6 +367,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		const options: TextDocumentShowOptions = {
 			viewColumn: ViewColumn.Beside,
 			preserveFocus: true,
+			preview: false,
 		};
 
 		window.showTextDocument(asmUri, options).then(asmEditor => {
