@@ -93,13 +93,11 @@ export class AsmDecorator {
     }
 
     public onEditorSelectionChanged(event: TextEditorSelectionChangeEvent): void {
-		// We only want to handle the cases where the user manually selected a new line in the assembly or source
-		// editor. Opening a new editor (e.g. the assembly document or a new source document) will also fire this
-		// event, so processing all events without checking the kind would mean that opening a new editor would be
-		// treated as if the user clicked whichever line happens to be selected in that new editor when it opens.
-		// In the case where the user's selection in the assembly viewer caused a new editor to open, not checking
-		// the event kind would make it override the line that the user selected with the line that was selected
-		// when the editor opened. The event kind is undefined when fired due to an editor opening.
+		// This event will fire when an editor is opened as well, in which case the kind will be undefined. We don't
+		// want to process that event, since it would act as if the user clicked whichever line happens to be selected
+		// in that new editor when it opens. This would cause problems when the selected ASM line causes a new source
+		// editor to open, since it would override the line that the user selected with the line that was selected when
+		// the new editor opened.
 		if (event.kind === undefined || !this.active) {
 			return;
 		}
@@ -114,6 +112,11 @@ export class AsmDecorator {
 
     private refreshDecorations() {
 		this.clearAllDecorations();
+
+		// If the ASM document failed to compile, then don't decorate anything.
+		if (this.asmData.lines instanceof Error) {
+			return;
+		}
 
 		this.dimUnusedSourceLines();
 
@@ -132,6 +135,10 @@ export class AsmDecorator {
 
     private loadMappings() {
         this.mappings.clear();
+
+		if (this.asmData.lines instanceof Error) {
+			return;
+		}
 
         this.asmData.lines.forEach((line, index) => {
             if (!this.asmLineHasSource(line)) {
@@ -206,6 +213,10 @@ export class AsmDecorator {
     }
 
     private onSrcLineSelected(selectedEditor: TextEditor, highlightOnly: boolean = false): void {
+		if (this.asmData.lines instanceof Error) {
+			return;
+		}
+
 		const asmEditor = getEditor(this.asmUri);
 
 		if (asmEditor === undefined) {
@@ -250,6 +261,10 @@ export class AsmDecorator {
     }
 
     private onAsmLineSelected(asmEditor: TextEditor, highlightOnly: boolean = false): void {
+		if (this.asmData.lines instanceof Error) {
+			return;
+		}
+
 		const line = asmEditor.selection.start.line;
         const asmLine = this.asmData.lines[line];
 

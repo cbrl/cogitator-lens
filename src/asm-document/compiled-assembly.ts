@@ -13,7 +13,7 @@ export class CompiledAssembly {
 
 	private compileManager: CompileManager;
 
-	public lines: ParsedAsmResultLine[] = [];
+	public lines: ParsedAsmResultLine[] | Error = [];
 	public sourceToAsmMapping = new Map<number, number[]>();
 
     constructor(srcUri: Uri, asmUri: Uri, compileManager: CompileManager, providerEmitter: EventEmitter<Uri>) {
@@ -47,6 +47,8 @@ export class CompiledAssembly {
 			const errorMessage = (error instanceof Error) ? error.message : JSON.stringify(error);
 			window.showErrorMessage(`Compile failed. Verify buildsystem settings and/or wait for configuration to complete. See log for error details.`);
 			logger.logChannel.error(errorMessage);
+
+			this.lines = new Error(errorMessage);
 		}
 
 		// Causes VSCode to call TextDocumentContentProvider.provideTextDocumentContent() again
@@ -56,6 +58,9 @@ export class CompiledAssembly {
     }
 
     public getContent(): string {
+		if (this.lines instanceof Error) {
+			return this.lines.message;
+		}
 		return this.lines.map(line => line.text).join('\n');
     }
 

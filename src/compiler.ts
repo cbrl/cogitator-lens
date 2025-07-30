@@ -76,7 +76,7 @@ export abstract class CompilerBase implements ICompiler {
 		const execResult = await this.doCompile(file, args, envVars);
 
 		if (execResult.returnCode !== 0) {
-			throw new Error(`Failed to compile ${file}: ${execResult.stdout}`);
+			throw new Error(`Failed to compile ${file}: ${execResult.stderr || execResult.stdout}`);
 		}
 		else {
 			logger.logChannel.info(`Compilation of ${file} succeeded`);

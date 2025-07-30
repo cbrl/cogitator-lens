@@ -6,7 +6,11 @@ import { CompiledAssembly } from "./compiled-assembly";
 export class AsmDefinitionProvider implements DefinitionProvider {
 	provideDefinition(document: TextDocument, position: Position, token: CancellationToken): ProviderResult<Definition | DefinitionLink[]> {
 		if (!(document instanceof CompiledAssembly)) {
-			throw new Error("Expected asmDoc to be an instance of AsmDocument");
+			throw new Error("Expected asmDoc to be an instance of CompiledAssembly");
+		}
+
+		if (document.lines instanceof Error) {
+			return;
 		}
 
 		if (position.line >= document.lines.length) {

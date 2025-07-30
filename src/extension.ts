@@ -13,6 +13,7 @@ import * as setup from './setup';
 TODO:
   - show compiler error log in the asm editor
     - requires an error state in the CompiledAssembly so the AsmDecorator knows to ignore the contents
+  - support loading compile info from compile_commands.json
   - objdump support (is this needed?)
   - Settings for binary ASM parsing
 */
@@ -36,21 +37,22 @@ export async function activate(context: ExtensionContext): Promise<void> {
 			const compiler = getCompilerByExe(prelimInfo.compilerPath.fsPath);
 
 			if (compiler === undefined) {
-				logger.logAndShowError(`Could not detect compiler type for ${file.fsPath}`);
+				logger.logAndShowError(`Could not detect compiler type for ${prelimInfo.compilerPath.fsPath} (when processing ${file.fsPath})`);
 				continue;
 			}
 
-			// Create base compiler info
+			// Add prefix to auto-detected compiler names
 			const compilerName = 'CMake: ' + path.basename(prelimInfo.compilerPath.fsPath);
-			const compilerInfo = compiler.baseCompilerInfo(compilerName, prelimInfo.compilerPath.fsPath);
 
-			if (!compileManager.compilerCache.hasCompiler(compilerInfo.name)) {
+			// Create compiler if needed
+			if (!compileManager.compilerCache.hasCompiler(compilerName)) {
+				const compilerInfo = compiler.baseCompilerInfo(compilerName, prelimInfo.compilerPath.fsPath);
 				compileManager.compilerCache.createCompiler(compilerInfo);
 			}
 
 			// Create file compilation info
 			const info: CompilationInfo = {
-				compilerName: compilerInfo.name,
+				compilerName: compilerName,
 				...prelimInfo,
 			};
 
