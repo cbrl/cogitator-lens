@@ -11,13 +11,13 @@ export class GlobalOptionsNode extends TreeNode {
 		// Default Compile Options
 		const fileElem = {
 			basename: 'Default Compile Options',
-			path: 'Default',
+			path: 'Default', // placeholder since this isn't a real file
 			description: 'Default compile options used for files without auto-discovered compile info',
-			iconPath: new vscode.ThemeIcon('settings-gear'),
 			children: []
 		};
 
 		const compileInfoNode = CompilationInfoTreeNode.makeFileNode(fileElem, defaultCompileInfo, undefined);
+		compileInfoNode.iconPath = new vscode.ThemeIcon('gist');
 
 		rootNodes.push(compileInfoNode);
 

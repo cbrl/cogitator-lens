@@ -11,8 +11,6 @@ import * as setup from './setup';
 
 /*
 TODO:
-  - show compiler error log in the asm editor
-    - requires an error state in the CompiledAssembly so the AsmDecorator knows to ignore the contents
   - support loading compile info from compile_commands.json
   - objdump support (is this needed?)
   - Settings for binary ASM parsing
