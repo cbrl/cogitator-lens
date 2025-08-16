@@ -1,10 +1,10 @@
-import { TextEditor, window, TextEditorDecorationType, Range, ThemeColor, workspace, Uri, Disposable, TextEditorRevealType, TextDocument, ViewColumn, TextEditorSelectionChangeEvent } from 'vscode';
+import { TextEditor, window, TextEditorDecorationType, Range, ThemeColor, workspace, Event, Uri, Disposable, TextEditorRevealType, TextDocument, ViewColumn, TextEditorSelectionChangeEvent } from 'vscode';
 import { CompiledAssembly } from './compiled-assembly';
 import { ParsedAsmResultLine } from '../parsers/asmresult.interfaces';
 import _ from 'underscore';
 import path from 'path';
 import { equalUri } from '../utils';
-import { UriSet } from '../uri-containers';
+import assert from 'assert';
 
 /*
 Nice-to-have features:
@@ -20,9 +20,7 @@ export class AsmDecorator {
 	private readonly srcUri: Uri;
 	private readonly asmUri: Uri;
 
-    private readonly asmData: CompiledAssembly;
-
-	private readonly allSourceUris = new UriSet();
+    private asmData: CompiledAssembly | Error;
 
     private readonly selectedLineDecoration: TextEditorDecorationType;
     private readonly unusedLineDecoration: TextEditorDecorationType;
@@ -31,15 +29,10 @@ export class AsmDecorator {
 
 	private active: boolean = true;
 
-    // Mapping of source line to assembly line for each source file: file -> (source line -> ASM line)
-    private readonly mappings = new Map<string, Map<number, number[]>>();
-
-    constructor(asmData: CompiledAssembly) {
-        this.asmData = asmData;
-		this.asmUri = asmData.asmUri;
-		this.srcUri = asmData.srcUri;
-
-		this.allSourceUris.add(asmData.srcUri);
+    constructor(srcUri: Uri, asmUri: Uri, asmEvent: Event<CompiledAssembly | Error>) {
+		this.asmUri = asmUri;
+		this.srcUri = srcUri;
+		this.asmData = new CompiledAssembly(this.srcUri, this.asmUri, []);
 
         this.selectedLineDecoration = window.createTextEditorDecorationType({
             isWholeLine: true,
@@ -58,12 +51,11 @@ export class AsmDecorator {
             }
         });
 
-        this.loadMappings();
         this.refreshDecorations();
 
         // Rebuild mapping and decorations on asm document change
-        const providerEventRegistration = asmData.onDidChange(() => {
-            this.loadMappings();
+        const providerEventRegistration = asmEvent((resultOrError) => {
+			this.asmData = resultOrError;
 			this.refreshDecorations();
         });
 
@@ -102,7 +94,11 @@ export class AsmDecorator {
 			return;
 		}
 
-		if (this.allSourceUris.has(event.textEditor.document.uri)) {
+		if (this.asmData instanceof Error) {
+			return;
+		}
+
+		if (this.asmData.allReferencedSrcUris.has(event.textEditor.document.uri)) {
 			this.onSrcLineSelected(event.textEditor);
 		}
 		else if (equalUri(event.textEditor.document.uri, this.asmUri)) {
@@ -114,7 +110,7 @@ export class AsmDecorator {
 		this.clearAllDecorations();
 
 		// If the ASM document failed to compile, then don't decorate anything.
-		if (this.asmData.lines instanceof Error) {
+		if (this.asmData instanceof Error) {
 			return;
 		}
 
@@ -132,35 +128,6 @@ export class AsmDecorator {
 			getEditor(this.asmUri)?.setDecorations(this.loadingDecoration, [new Range(0, 0, 0, 0)]);
 		}
 	}
-
-    private loadMappings() {
-        this.mappings.clear();
-
-		if (this.asmData.lines instanceof Error) {
-			return;
-		}
-
-        this.asmData.lines.forEach((line, index) => {
-            if (!this.asmLineHasSource(line)) {
-                return;
-            }
-
-			const sourceUri = Uri.file(path.normalize(line.source!.file!));
-            const sourceLine = line.source!.line! - 1;
-
-			this.allSourceUris.add(sourceUri);
-
-			let lineMap = this.mappings.get(sourceUri.fsPath);
-			if (lineMap === undefined) {
-				lineMap = new Map();
-				this.mappings.set(sourceUri.fsPath, lineMap);
-			}
-            if (lineMap.get(sourceLine) === undefined) {
-                lineMap.set(sourceLine, []);
-            }
-            lineMap.get(sourceLine)!.push(index);
-        });
-    }
 
     private asmLineHasSource(asmLine: ParsedAsmResultLine) {
         // eslint-disable-next-line eqeqeq
@@ -186,9 +153,11 @@ export class AsmDecorator {
 
     private dimUnusedSourceLines() {
 		const getUnusedLines = (document: TextDocument) => {
+			assert(this.asmData instanceof CompiledAssembly);
+
 			const unusedLines: Range[] = [];
 
-			const map = this.mappings.get(document.uri.fsPath);
+			const map = this.asmData.getSourceToAsmLineMapping(document.uri);
 			if (map === undefined) {
 				return unusedLines;
 			}
@@ -213,7 +182,7 @@ export class AsmDecorator {
     }
 
     private onSrcLineSelected(selectedEditor: TextEditor, highlightOnly: boolean = false): void {
-		if (this.asmData.lines instanceof Error) {
+		if (this.asmData instanceof Error) {
 			return;
 		}
 
@@ -223,9 +192,11 @@ export class AsmDecorator {
 			return;
 		}
 
-		const getSelectedLines = (srcFile: string, line: number) => {
+		const getSelectedLines = (srcFile: Uri, line: number) => {
+			assert(this.asmData instanceof CompiledAssembly);
+
 			const asmLinesRanges: Range[] = [];
-			const mapped = this.mappings.get(srcFile)?.get(line);
+			const mapped = this.asmData.getSourceLinesForAsmLine(srcFile, line);
 
 			if (mapped !== undefined) {
 				for (let line of mapped) {
@@ -244,11 +215,11 @@ export class AsmDecorator {
         selectedEditor.setDecorations(this.selectedLineDecoration, [srcLineRange]);
 
 		// Highlight associated lines in ASM editor
-		const asmLines: Range[] = getSelectedLines(selectedEditor.document.uri.fsPath, selectedEditor.selection.start.line);
+		const asmLines: Range[] = getSelectedLines(selectedEditor.document.uri, selectedEditor.selection.start.line);
 
 		for (let editor of this.getAllSourceEditors()) {
 			if (editor !== selectedEditor) {
-				asmLines.push(...getSelectedLines(editor.document.uri.fsPath, editor.selection.start.line));
+				asmLines.push(...getSelectedLines(editor.document.uri, editor.selection.start.line));
 			}
 		}
 
@@ -261,7 +232,7 @@ export class AsmDecorator {
     }
 
     private onAsmLineSelected(asmEditor: TextEditor, highlightOnly: boolean = false): void {
-		if (this.asmData.lines instanceof Error) {
+		if (this.asmData instanceof Error) {
 			return;
 		}
 
@@ -296,9 +267,15 @@ export class AsmDecorator {
     }
 
 	private onChangeVisibleEditors(editors: readonly TextEditor[]): void {
+		if (this.asmData instanceof Error) {
+			return;
+		}
+
+		const srcUris = this.asmData.allReferencedSrcUris;
+
 		// Active if the assembly editor is visible and one of the associated source editors is visible
 		const hasAsmEditor = editors.find(editor => equalUri(editor.document.uri, this.asmUri)) !== undefined;
-		const hasAnySourceEditor = _.any(editors.map(e => this.allSourceUris.has(e.document.uri)));
+		const hasAnySourceEditor = _.any(editors.map(e => srcUris.has(e.document.uri)));
 
 		this.active = hasAsmEditor && hasAnySourceEditor;
 
@@ -336,17 +313,21 @@ export class AsmDecorator {
 			visibleSrcEditors.push(editor);
 		}
 
-		this.allSourceUris.add(uri);
-
 		return editor;
 	}
 
 	private getAllSourceEditors(): TextEditor[] {
+		if (this.asmData instanceof Error) {
+			return [];
+		}
+
+		const srcUris = this.asmData.allReferencedSrcUris;
+
 		// It would be great if we could just store text editors and use those everywhere instead
 		// of URIs or documents, but the text editor objects are not stable. For example, switching
 		// from one tab to another then back to the first tab will most likely create an entirely
 		// new editor object, even though it's the same underlying document.
-		return window.visibleTextEditors.filter(editor => this.allSourceUris.has(editor.document.uri));
+		return window.visibleTextEditors.filter(editor => srcUris.has(editor.document.uri));
 	}
 }
 

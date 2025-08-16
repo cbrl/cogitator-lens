@@ -9,10 +9,6 @@ export class AsmDefinitionProvider implements DefinitionProvider {
 			throw new Error("Expected asmDoc to be an instance of CompiledAssembly");
 		}
 
-		if (document.lines instanceof Error) {
-			return;
-		}
-
 		if (position.line >= document.lines.length) {
 			return undefined;
 		}

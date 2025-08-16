@@ -164,10 +164,10 @@ export class CompileManager {
 		const compiler = this._compilerCache.getCompiler(compilationInfo.compilerName);
 
 		if (compiler === undefined) {
-			let errorMessage = `Compiler not found: ${compilationInfo.compilerName}`;
+			let errorMessage = `Compiler not found: "${compilationInfo.compilerName}"`;
 
 			if (!infoFound) {
-				errorMessage = `(default compile info) Compiler not found: ${compilationInfo.compilerName}`;
+				errorMessage = `(default compile info) Compiler not found: "${compilationInfo.compilerName}"`;
 			}
 
 			throw new Error(errorMessage);

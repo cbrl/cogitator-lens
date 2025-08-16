@@ -1,78 +1,76 @@
-import { workspace, Uri, Event, EventEmitter, FileSystemWatcher, window } from 'vscode';
+import { Uri } from 'vscode';
 import { ParsedAsmResultLine } from '../parsers/asmresult.interfaces';
-import { CompileManager } from '../compile-database';
-import * as logger from '../logger';
+import { UriMap, UriSet } from '../uri-containers';
+import path from 'path';
 
 export class CompiledAssembly {
     public readonly srcUri: Uri;
-	public readonly asmUri: Uri;
-
-    private _providerEmitter: EventEmitter<Uri>;
-	private _selfEmitter: EventEmitter<void> = new EventEmitter<void>();
-    private _watcher: FileSystemWatcher;
-
-	private compileManager: CompileManager;
-
-	public lines: ParsedAsmResultLine[] | Error = [];
-	public sourceToAsmMapping = new Map<number, number[]>();
-
-    constructor(srcUri: Uri, asmUri: Uri, compileManager: CompileManager, providerEmitter: EventEmitter<Uri>) {
-        this.srcUri = srcUri;
-		this.asmUri = asmUri;
-		this.compileManager = compileManager;
-
-        // The AsmDocument signals changes through the event emitter from the containing provider
-        this._providerEmitter = providerEmitter;
-
-        // Watch for underlying assembly file and reload it on change
-        this._watcher = workspace.createFileSystemWatcher(this.srcUri.fsPath);
-        this._watcher.onDidChange(() => this.updateLater());
-        this._watcher.onDidCreate(() => this.updateLater());
-        this._watcher.onDidDelete(() => this.updateLater());
-
-        this.update();
-    }
-
-    private updateLater(): void {
-        // https://github.com/Microsoft/vscode/issues/72831
-        setTimeout(() => this.update(), 100);
-    }
-
-    public async update(): Promise<void> {
-		try {
-			const compileResult = await this.compileManager.compile(this.srcUri);
-			this.lines = compileResult.asm;
-		}
-		catch (error) {
-			const errorMessage = (error instanceof Error) ? error.message : JSON.stringify(error);
-			window.showErrorMessage(`Compile failed. Verify buildsystem settings and/or wait for configuration to complete. See log for error details.`);
-			logger.logChannel.error(errorMessage);
-
-			this.lines = new Error(errorMessage);
-		}
-
-		// Causes VSCode to call TextDocumentContentProvider.provideTextDocumentContent() again
-		this._providerEmitter.fire(this.asmUri);
-
-		this._selfEmitter.fire();
-    }
-
-    public getContent(): string {
-		if (this.lines instanceof Error) {
-			return this.lines.message;
-		}
-		return this.lines.map(line => line.text).join('\n');
-    }
+    public readonly asmUri: Uri;
 
 	/**
-	 * Fired when the assembly document is updated (i.e. after compilation). {@link AsmProvider.onDidChange}
-	 * will fire at the same time as well, but this event is specific to this instance.
+	 * Set of all source documents referenced by this assembly
 	 */
-	public get onDidChange(): Event<void> {
-		return this._selfEmitter.event;
+	public readonly allReferencedSrcUris: UriSet = new UriSet();
+
+    public readonly lines: ParsedAsmResultLine[] = [];
+
+    // Mapping of source line to assembly line for each source file: file -> (source line -> ASM line)
+    private readonly mappings = new UriMap<Map<number, number[]>>();
+
+    constructor(srcUri: Uri, asmUri: Uri, lines: ParsedAsmResultLine[]) {
+        this.srcUri = srcUri;
+        this.asmUri = asmUri;
+        this.lines = lines;
+        this.mapLines();
+    }
+
+    /**
+     * Gets the textual content of the assembly document.
+     */
+    public getContent(): string {
+        if (this.lines instanceof Error) {
+            return this.lines.message;
+        }
+        return this.lines.map(line => line.text).join('\n');
+    }
+
+	public getSourceToAsmLineMapping(file: Uri): Map<number, number[]> | undefined {
+		return this.mappings.get(file);
 	}
 
-    public dispose(): void {
-        this._watcher.dispose();
+	public getSourceLinesForAsmLine(file: Uri, asmLineIndex: number): number[] | undefined {
+		return this.mappings.get(file)?.get(asmLineIndex);
+	}
+
+	private mapLines() {
+		if (this.lines instanceof Error) {
+			return;
+		}
+
+		this.lines.forEach((line, index) => {
+			if (!this.asmLineHasSource(line)) {
+				return;
+			}
+
+			const sourceUri = Uri.file(path.normalize(line.source!.file!));
+			const sourceLine = line.source!.line! - 1;
+
+			this.allReferencedSrcUris.add(sourceUri);
+
+			let lineMap = this.mappings.get(sourceUri);
+			if (lineMap === undefined) {
+				lineMap = new Map();
+				this.mappings.set(sourceUri, lineMap);
+			}
+			if (lineMap.get(sourceLine) === undefined) {
+				lineMap.set(sourceLine, []);
+			}
+			lineMap.get(sourceLine)!.push(index);
+		});
+	}
+
+    private asmLineHasSource(asmLine: ParsedAsmResultLine) {
+        // eslint-disable-next-line eqeqeq
+        return (asmLine.source?.file != null && asmLine.source?.line != null); //checks null or undefined
     }
 }

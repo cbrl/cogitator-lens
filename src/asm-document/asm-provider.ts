@@ -1,5 +1,5 @@
-import { CancellationToken, Disposable, Uri, EventEmitter, TextDocumentContentProvider, Event, ProviderResult, window, workspace, TextDocument, TabInputText, TabChangeEvent } from 'vscode';
-import { CompiledAssembly } from './compiled-assembly';
+import { CancellationToken, Disposable, Uri, EventEmitter, TextDocumentContentProvider, Event, ProviderResult, window, workspace, TextDocument, TabInputText, TabChangeEvent, FileSystemWatcher } from 'vscode';
+import { CompileHandler } from './compile-handler';
 import { CompileManager } from '../compile-database';
 import { replaceExtension } from '../utils';
 import { AsmDecorator } from './asm-decorator';
@@ -8,14 +8,14 @@ import { UriMap } from '../uri-containers';
 export class AsmProvider implements TextDocumentContentProvider {
     public static scheme = 'assembly';
 
-    private documents = new UriMap<CompiledAssembly>();
+    private compileHandlers = new UriMap<CompileHandler>();
 	private decorators = new UriMap<AsmDecorator>();
 
 	private compileManager: CompileManager;
 
     private onDidChangeEvent = new EventEmitter<Uri>();
 
-	private disposables: Disposable;
+	private disposables: Disposable[] = [];
 
 	constructor(compileDb: CompileManager) {
 		this.compileManager = compileDb;
@@ -24,42 +24,50 @@ export class AsmProvider implements TextDocumentContentProvider {
 
 		const onChangeTabsDisposable = window.tabGroups.onDidChangeTabs(this.onChangeTabs.bind(this));
 
-		this.disposables = Disposable.from(
+		this.disposables.push(Disposable.from(
 			onCloseDisposable,
 			onChangeTabsDisposable,
 			this.onDidChangeEvent
-		);
+		));
 	}
 
+	// Implements TextDocumentContentProvider.provideTextDocumentContent. This function will be called for the given
+	// Uri when onDidChange(Uri) is fired. onDidChange will be fired when a source document changes and is recompiled
+	// (or fails to recompile).
     public provideTextDocumentContent(uri: Uri, token: CancellationToken): ProviderResult<string> {
-        const document = this.provideAssembly(uri);
+        const handler = this.getCompileHandler(uri);
 
 		// If creating a TextEditor for the document, then also create a decorator for the editor.
-		if (!this.decorators.has(document.srcUri)) {
-			this.decorators.set(document.srcUri, new AsmDecorator(document));
+		if (!this.decorators.has(handler.srcUri)) {
+			const decorator = new AsmDecorator(handler.srcUri, handler.asmUri, handler.onDidChange);
+			this.decorators.set(handler.srcUri, decorator);
 		}
 
-		const txt = document.getContent();
-		return txt;
+		return handler.update().then((result) => {
+			return result.getContent();
+		}).catch((error: Error) => {
+			return error.message;
+		});
     }
 
-    public provideAssembly(uri: Uri): CompiledAssembly {
-        let document = this.documents.get(uri);
+    private getCompileHandler(asmUri: Uri): CompileHandler {
+        let document = this.compileHandlers.get(asmUri);
 
         if (!document) {
-            document = new CompiledAssembly(Uri.parse(uri.query), uri, this.compileManager, this.onDidChangeEvent);
-            this.documents.set(uri, document);
+			const srcUri = Uri.parse(asmUri.query);
+
+            document = new CompileHandler(srcUri, asmUri, this.compileManager);
+
+			// Fire a change event for the ASM document when the source file changes.
+			const watcher = workspace.createFileSystemWatcher(srcUri.fsPath);
+			const disposable = watcher.onDidChange(() => this.onDidChangeEvent.fire(asmUri));
+			this.disposables.push(Disposable.from(watcher, disposable));
+
+            this.compileHandlers.set(asmUri, document);
         }
 
         return document;
     }
-
-	public async updateDocumentIfExists(uri: Uri): Promise<void> {
-		const document = this.documents.get(uri);
-		if (document) {
-			await document.update();
-		}
-	}
 
     // Signals a change of a virtual assembly document. Implements TextDocumentContentProvider.onDidChange
     public get onDidChange(): Event<Uri> {
@@ -67,16 +75,16 @@ export class AsmProvider implements TextDocumentContentProvider {
     }
 
     public dispose(): void {
-        this.documents.clear();
-        this.disposables.dispose();
+		this.disposables.forEach(d => d.dispose());
+        this.compileHandlers.clear();
     }
 
 	private onCloseTextDocument(document: TextDocument): void {
-		const asmDoc = this.documents.get(document.uri);
+		const asmDoc = this.compileHandlers.get(document.uri);
 
 		if (asmDoc) {
 			asmDoc.dispose();
-			this.documents.delete(document.uri);
+			this.compileHandlers.delete(document.uri);
 		}
 	}
 
@@ -86,15 +94,15 @@ export class AsmProvider implements TextDocumentContentProvider {
 				continue;
 			}
 
-			const asmDoc = this.documents.get(tab.input.uri);
+			const asmDoc = this.compileHandlers.get(tab.input.uri);
 			const decorator = this.decorators.get(tab.input.uri);
 
-			if (asmDoc) {
+			if (asmDoc !== undefined) {
 				asmDoc.dispose();
-				this.documents.delete(tab.input.uri);
+				this.compileHandlers.delete(tab.input.uri);
 			}
 
-			if (decorator) {
+			if (decorator !== undefined) {
 				decorator.dispose();
 				this.decorators.delete(tab.input.uri);
 			}
