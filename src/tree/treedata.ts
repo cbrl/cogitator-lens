@@ -1,7 +1,15 @@
 import assert from "assert";
 import vscode from "vscode";
 
+/**
+ * Specifies the type of item in the tree view.
+ */
 export type TreeItemSpecifier = 'checkbox' | 'subtree' | 'text';
+
+/**
+ * Specifies the context in which a tree item is used. This will be the value of vscode.TreeItem.contextValue,
+ * and can be used to limit commands to specific menu items based on the context.
+ */
 export type TreeContextSpecifier = 'array' | 'editText' | 'element' | 'filters' | 'instance' | 'pickCompiler' | 'pickFile' | 'text';
 
 export class TreeNode {

@@ -24,9 +24,9 @@ export class AsmDecorator {
 
 	private readonly allSourceUris = new UriSet();
 
-    private readonly selectedLineDecorationType: TextEditorDecorationType;
-    private readonly unusedLineDecorationType: TextEditorDecorationType;
-	private readonly loadingDecorationType: TextEditorDecorationType;
+    private readonly selectedLineDecoration: TextEditorDecorationType;
+    private readonly unusedLineDecoration: TextEditorDecorationType;
+	private readonly loadingDecoration: TextEditorDecorationType;
     private readonly registrations: Disposable;
 
 	private active: boolean = true;
@@ -41,17 +41,17 @@ export class AsmDecorator {
 
 		this.allSourceUris.add(asmData.srcUri);
 
-        this.selectedLineDecorationType = window.createTextEditorDecorationType({
+        this.selectedLineDecoration = window.createTextEditorDecorationType({
             isWholeLine: true,
             backgroundColor: new ThemeColor('editor.findMatchHighlightBackground'),
             overviewRulerColor: new ThemeColor('editorOverviewRuler.findMatchForeground')
         });
 
-        this.unusedLineDecorationType = window.createTextEditorDecorationType({
+        this.unusedLineDecoration = window.createTextEditorDecorationType({
             opacity: '0.5'
         });
 
-        this.loadingDecorationType = window.createTextEditorDecorationType({
+        this.loadingDecoration = window.createTextEditorDecorationType({
             after: {
                 contentText: ' ⏳ Compiling...',
                 color: 'gray'
@@ -79,8 +79,8 @@ export class AsmDecorator {
 		});
 
         this.registrations = Disposable.from(
-            this.selectedLineDecorationType,
-            this.unusedLineDecorationType,
+            this.selectedLineDecoration,
+            this.unusedLineDecoration,
             providerEventRegistration,
 			visibilityChangeRegistration,
             selectionChangeRegistration,
@@ -129,7 +129,7 @@ export class AsmDecorator {
 		// If the ASM document is empty, show a loading decoration.
 		// TODO: detect compile state instead of just checking line count
 		if (this.asmData.lines.length === 0) {
-			getEditor(this.asmUri)?.setDecorations(this.loadingDecorationType, [new Range(0, 0, 0, 0)]);
+			getEditor(this.asmUri)?.setDecorations(this.loadingDecoration, [new Range(0, 0, 0, 0)]);
 		}
 	}
 
@@ -168,9 +168,9 @@ export class AsmDecorator {
     }
 
 	private clearDecorations(editor: TextEditor) {
-		editor.setDecorations(this.selectedLineDecorationType, []);
-		editor.setDecorations(this.unusedLineDecorationType, []);
-		editor.setDecorations(this.loadingDecorationType, []);
+		editor.setDecorations(this.selectedLineDecoration, []);
+		editor.setDecorations(this.unusedLineDecoration, []);
+		editor.setDecorations(this.loadingDecoration, []);
 	}
 
 	private clearAllDecorations() {
@@ -207,7 +207,7 @@ export class AsmDecorator {
 			const dimUnused = config.get('coglens.dimUnusedSourceLines', true);
 
 			if (dimUnused) {
-				editor.setDecorations(this.unusedLineDecorationType, getUnusedLines(editor.document));
+				editor.setDecorations(this.unusedLineDecoration, getUnusedLines(editor.document));
 			}
 		}
     }
@@ -241,7 +241,7 @@ export class AsmDecorator {
 
 		// Highlight selected line in source editor
         const srcLineRange = selectedEditor.document.lineAt(selectedEditor.selection.start.line).range;
-        selectedEditor.setDecorations(this.selectedLineDecorationType, [srcLineRange]);
+        selectedEditor.setDecorations(this.selectedLineDecoration, [srcLineRange]);
 
 		// Highlight associated lines in ASM editor
 		const asmLines: Range[] = getSelectedLines(selectedEditor.document.uri.fsPath, selectedEditor.selection.start.line);
@@ -252,7 +252,7 @@ export class AsmDecorator {
 			}
 		}
 
-        asmEditor.setDecorations(this.selectedLineDecorationType, asmLines);
+        asmEditor.setDecorations(this.selectedLineDecoration, asmLines);
 
         if (asmLines.length > 0 && !highlightOnly) {
 			// First line will be from the editor that actually had its selection changed (the editor passed to this function)
@@ -270,7 +270,7 @@ export class AsmDecorator {
 
 		// Highlight selected line in ASM editor
         const asmLineRange = asmEditor.document.lineAt(line).range;
-        asmEditor.setDecorations(this.selectedLineDecorationType, [asmLineRange]);
+        asmEditor.setDecorations(this.selectedLineDecoration, [asmLineRange]);
 
 		// Highlight associated lines in source editor
         if (this.asmLineHasSource(asmLine)) {
@@ -280,7 +280,7 @@ export class AsmDecorator {
 			this.getOrCreateSourceEditor(srcUri).then(targetEditor => {
 				const srcLineRange = targetEditor.document.lineAt(asmLine.source!.line! - 1).range;
 
-				targetEditor.setDecorations(this.selectedLineDecorationType, [srcLineRange]);
+				targetEditor.setDecorations(this.selectedLineDecoration, [srcLineRange]);
 
 				if (!highlightOnly) {
 					targetEditor.revealRange(srcLineRange, TextEditorRevealType.InCenterIfOutsideViewport);
@@ -290,7 +290,7 @@ export class AsmDecorator {
 		else {
 			// Clear selected line decoration when the assembly editor line doesn't correspond to a source location
 			for (let editor of this.getAllSourceEditors()) {
-				editor.setDecorations(this.selectedLineDecorationType, []);
+				editor.setDecorations(this.selectedLineDecoration, []);
 			}
         }
     }

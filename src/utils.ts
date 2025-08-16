@@ -61,7 +61,7 @@ export function equalUri(
 
 export function toComparisonKey(uri: vscode.Uri, ignoreFragment: boolean = false, ignorePathCase: boolean = false): string {
 	return uri.with({
-		path: ignorePathCase ? uri.path.toLowerCase() : undefined,
-		fragment: ignoreFragment ? '' : uri.fragment
+		path: ignorePathCase ? uri.path.toLowerCase() : undefined, //'undefined' will result in no change to the segment
+		fragment: ignoreFragment ? '' : undefined
 	}).toString();
 }
