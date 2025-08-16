@@ -8,6 +8,8 @@ This VS Code extension allows you to view the assembly output of compiled C and 
 project. It supports automatic navigation and highlighting for source lines corresponding to the
 selected assembly line across all source files that contribute to the compiled object.
 
+![Demo](assets/demo.gif)
+
 ## Usage
 
 This extension uses the
