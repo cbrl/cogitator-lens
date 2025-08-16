@@ -2,7 +2,7 @@
     "name": "coglens",
     "displayName": "Cogitator Lens",
     "description": "Divine the substratal invocations of your digital canticles",
-    "version": "0.3.2",
+    "version": "0.3.3",
     "icon": "resources/gear-phi.png",
     "publisher": "cbrl",
     "license": "MIT",
@@ -295,11 +295,6 @@
 				}
 			],
 			"view/title": [
-				{
-					"command": "coglens.Disassemble",
-					"when": "view == coglens.compilers",
-					"group": "navigation@1"
-				},
 				{
 					"command": "coglens.AddCompiler",
 					"when": "view == coglens.compilers",
