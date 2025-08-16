@@ -2,13 +2,13 @@
     "name": "coglens",
     "displayName": "Cogitator Lens",
     "description": "Divine the substratal invocations of your digital canticles",
-    "version": "0.3.3",
+    "version": "0.3.4",
     "icon": "resources/gear-phi.png",
     "publisher": "cbrl",
     "license": "MIT",
     "repository": {
         "type": "git",
-        "url": "https://github.com/cbrl/vscode-coglens"
+        "url": "https://github.com/cbrl/cogitator-lens"
     },
     "engines": {
     	"vscode": "^1.94.0"
