@@ -91,7 +91,7 @@ export abstract class CompilerBase implements ICompiler {
 	}
 
 	protected async doCompile(file: string, args: string[], envVars: Record<string, string>): Promise<exec.ExecResult> {
-		return exec.execute(this.info.exe, [...args, file], envVars);
+		return exec.execute(this.info.exe, [...args, file], { env: envVars });
 	}
 
 	protected abstract prepareArgs(outputFile: string): string[];
