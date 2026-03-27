@@ -1,17 +1,19 @@
-import { TextEditor, window, TextEditorDecorationType, Range, ThemeColor, workspace, Event, Uri, Disposable, TextEditorRevealType, TextDocument, ViewColumn, TextEditorSelectionChangeEvent } from 'vscode';
+import { TextEditor, window, Range, Event, Uri, Disposable, TextEditorRevealType, TextDocument, TextEditorSelectionChangeEvent } from 'vscode';
 import { CompiledAssembly } from './compiled-assembly';
 import { ParsedAsmResultLine } from '../parsers/asmresult.interfaces';
-import _ from 'underscore';
 import path from 'path';
 import { equalUri } from '../utils';
 import assert from 'assert';
+import { DecorationStyleManager } from './decorations/decoration-style-manager.js';
+import { EditorTracker } from './decorations/editor-tracker.js';
+import { ConfigurationService } from '../services/configuration-service.js';
 
 /*
 Nice-to-have features:
  - Hover line in ASM/source editor highlights corresponding source/ASM line(s) (only on currently visible files, doesn't open new ones)
    - VSCode API doesn't appear to expose the line hovered by the mouse
  - Ctrl-click opens corresponding editor (if not open) then highlights lines
-   - VSCode has an 8+ year old issue (#3130) for adding mouse shortcut customization
+   - VSCode has a 10+ year old issue (#3130) for adding mouse shortcut customization
    - Definition provider seems like the best way to do this for now
      - The UX for this isn't ideal unless the user changes VS Code settings to open definitions in an existing editor (can some ugly hacks work around this?)
 */
@@ -22,34 +24,23 @@ export class AsmDecorator {
 
     private asmData: CompiledAssembly | Error;
 
-    private readonly selectedLineDecoration: TextEditorDecorationType;
-    private readonly unusedLineDecoration: TextEditorDecorationType;
-	private readonly loadingDecoration: TextEditorDecorationType;
+	private readonly styleManager: DecorationStyleManager;
+	private readonly editorTracker: EditorTracker;
+	private readonly configService: ConfigurationService;
     private readonly registrations: Disposable;
 
 	private active: boolean = true;
+	private isDisposed: boolean = false;
 
-    constructor(srcUri: Uri, asmUri: Uri, asmEvent: Event<CompiledAssembly | Error>) {
+    constructor(srcUri: Uri, asmUri: Uri, asmEvent: Event<CompiledAssembly | Error>, styleManager: DecorationStyleManager) {
 		this.asmUri = asmUri;
 		this.srcUri = srcUri;
 		this.asmData = new CompiledAssembly(this.srcUri, this.asmUri, []);
 
-        this.selectedLineDecoration = window.createTextEditorDecorationType({
-            isWholeLine: true,
-            backgroundColor: new ThemeColor('editor.findMatchHighlightBackground'),
-            overviewRulerColor: new ThemeColor('editorOverviewRuler.findMatchForeground')
-        });
-
-        this.unusedLineDecoration = window.createTextEditorDecorationType({
-            opacity: '0.5'
-        });
-
-        this.loadingDecoration = window.createTextEditorDecorationType({
-            after: {
-                contentText: ' ⏳ Compiling...',
-                color: 'gray'
-            }
-        });
+		// Initialize services
+		this.styleManager = styleManager;
+		this.editorTracker = new EditorTracker();
+		this.configService = new ConfigurationService();
 
         this.refreshDecorations();
 
@@ -63,24 +54,16 @@ export class AsmDecorator {
 
 		const selectionChangeRegistration = window.onDidChangeTextEditorSelection(this.onEditorSelectionChanged.bind(this));
 
-		const documentCloseRegistration = workspace.onDidCloseTextDocument(document => {
-			// Dispose of decorator if ASM window was closed
-			if (document.uri === this.asmUri) {
-				this.dispose();
-			}
-		});
-
         this.registrations = Disposable.from(
-            this.selectedLineDecoration,
-            this.unusedLineDecoration,
             providerEventRegistration,
 			visibilityChangeRegistration,
-            selectionChangeRegistration,
-            documentCloseRegistration
+            selectionChangeRegistration
         );
     }
 
     public dispose(): void {
+		this.isDisposed = true;
+		this.clearAllDecorations();
         this.registrations.dispose();
     }
 
@@ -114,6 +97,9 @@ export class AsmDecorator {
 			return;
 		}
 
+		// Recalculate active state now that asmData may have changed
+		this.updateActiveState();
+
 		this.dimUnusedSourceLines();
 
 		// Treat as if the user selected the current line of the first editor (only highlights the line, doesn't scroll)
@@ -125,7 +111,8 @@ export class AsmDecorator {
 		// If the ASM document is empty, show a loading decoration.
 		// TODO: detect compile state instead of just checking line count
 		if (this.asmData.lines.length === 0) {
-			getEditor(this.asmUri)?.setDecorations(this.loadingDecoration, [new Range(0, 0, 0, 0)]);
+			const asmEditor = this.editorTracker.getAsmEditor(this.asmUri);
+			asmEditor?.setDecorations(this.styleManager.loadingDecoration, [new Range(0, 0, 0, 0)]);
 		}
 	}
 
@@ -135,9 +122,9 @@ export class AsmDecorator {
     }
 
 	private clearDecorations(editor: TextEditor) {
-		editor.setDecorations(this.selectedLineDecoration, []);
-		editor.setDecorations(this.unusedLineDecoration, []);
-		editor.setDecorations(this.loadingDecoration, []);
+		editor.setDecorations(this.styleManager.selectedLineDecoration, []);
+		editor.setDecorations(this.styleManager.unusedLineDecoration, []);
+		editor.setDecorations(this.styleManager.loadingDecoration, []);
 	}
 
 	private clearAllDecorations() {
@@ -145,7 +132,7 @@ export class AsmDecorator {
 			this.clearDecorations(editor);
 		}
 
-		const asmEditor = getEditor(this.asmUri);
+		const asmEditor = this.editorTracker.getAsmEditor(this.asmUri);
 		if (asmEditor !== undefined) {
 			this.clearDecorations(asmEditor);
 		}
@@ -172,11 +159,10 @@ export class AsmDecorator {
 		};
 
 		for (let editor of this.getAllSourceEditors()) {
-			const config = workspace.getConfiguration('', editor.document);
-			const dimUnused = config.get('coglens.dimUnusedSourceLines', true);
+			const dimUnused = this.configService.getDimUnusedSourceLines(editor.document.uri);
 
 			if (dimUnused) {
-				editor.setDecorations(this.unusedLineDecoration, getUnusedLines(editor.document));
+				editor.setDecorations(this.styleManager.unusedLineDecoration, getUnusedLines(editor.document));
 			}
 		}
     }
@@ -186,7 +172,7 @@ export class AsmDecorator {
 			return;
 		}
 
-		const asmEditor = getEditor(this.asmUri);
+		const asmEditor = this.editorTracker.getAsmEditor(this.asmUri);
 
 		if (asmEditor === undefined) {
 			return;
@@ -212,7 +198,7 @@ export class AsmDecorator {
 
 		// Highlight selected line in source editor
         const srcLineRange = selectedEditor.document.lineAt(selectedEditor.selection.start.line).range;
-        selectedEditor.setDecorations(this.selectedLineDecoration, [srcLineRange]);
+        selectedEditor.setDecorations(this.styleManager.selectedLineDecoration, [srcLineRange]);
 
 		// Highlight associated lines in ASM editor
 		const asmLines: Range[] = getSelectedLines(selectedEditor.document.uri, selectedEditor.selection.start.line);
@@ -223,7 +209,7 @@ export class AsmDecorator {
 			}
 		}
 
-        asmEditor.setDecorations(this.selectedLineDecoration, asmLines);
+        asmEditor.setDecorations(this.styleManager.selectedLineDecoration, asmLines);
 
         if (asmLines.length > 0 && !highlightOnly) {
 			// First line will be from the editor that actually had its selection changed (the editor passed to this function)
@@ -241,7 +227,7 @@ export class AsmDecorator {
 
 		// Highlight selected line in ASM editor
         const asmLineRange = asmEditor.document.lineAt(line).range;
-        asmEditor.setDecorations(this.selectedLineDecoration, [asmLineRange]);
+        asmEditor.setDecorations(this.styleManager.selectedLineDecoration, [asmLineRange]);
 
 		// Highlight associated lines in source editor
         if (this.asmLineHasSource(asmLine)) {
@@ -249,35 +235,52 @@ export class AsmDecorator {
 
 			// Open the correct source document if this line of assembly refers to a different file
 			this.getOrCreateSourceEditor(srcUri).then(targetEditor => {
-				const srcLineRange = targetEditor.document.lineAt(asmLine.source!.line! - 1).range;
+				if (this.isDisposed) {
+					return;
+				}
 
-				targetEditor.setDecorations(this.selectedLineDecoration, [srcLineRange]);
+				const srcLineIndex = asmLine.source!.line! - 1;
+				if (srcLineIndex < 0 || srcLineIndex >= targetEditor.document.lineCount) {
+					return;
+				}
+
+				const srcLineRange = targetEditor.document.lineAt(srcLineIndex).range;
+
+				targetEditor.setDecorations(this.styleManager.selectedLineDecoration, [srcLineRange]);
 
 				if (!highlightOnly) {
 					targetEditor.revealRange(srcLineRange, TextEditorRevealType.InCenterIfOutsideViewport);
 				}
+			}).catch(() => {
+				// Source file may no longer exist or be accessible
 			});
         }
 		else {
 			// Clear selected line decoration when the assembly editor line doesn't correspond to a source location
 			for (let editor of this.getAllSourceEditors()) {
-				editor.setDecorations(this.selectedLineDecoration, []);
+				editor.setDecorations(this.styleManager.selectedLineDecoration, []);
 			}
         }
     }
 
-	private onChangeVisibleEditors(editors: readonly TextEditor[]): void {
+	private updateActiveState(): void {
 		if (this.asmData instanceof Error) {
+			this.active = false;
 			return;
 		}
 
 		const srcUris = this.asmData.allReferencedSrcUris;
+		const editors = window.visibleTextEditors;
 
 		// Active if the assembly editor is visible and one of the associated source editors is visible
-		const hasAsmEditor = editors.find(editor => equalUri(editor.document.uri, this.asmUri)) !== undefined;
-		const hasAnySourceEditor = _.any(editors.map(e => srcUris.has(e.document.uri)));
+		const hasAsmEditor = editors.some(editor => equalUri(editor.document.uri, this.asmUri));
+		const hasAnySourceEditor = editors.some(e => srcUris.has(e.document.uri));
 
 		this.active = hasAsmEditor && hasAnySourceEditor;
+	}
+
+	private onChangeVisibleEditors(): void {
+		this.updateActiveState();
 
 		if (this.active) {
 			// Update dimmed lines when the editors change
@@ -292,28 +295,10 @@ export class AsmDecorator {
 
 	// Get the editor for a source document that is referenced by the current ASM document
 	private async getOrCreateSourceEditor(uri: Uri): Promise<TextEditor> {
-		// Doesn't do anything if the document was already opened
-		const document = await workspace.openTextDocument(uri);
-
-		const visibleSrcEditors = this.getAllSourceEditors();
-
-		// Check if the document is already open in a visible source editor
-		let editor = visibleSrcEditors.find(editor => editor.document === document);
-
-		// Open an editor for the document if it isn't open or visible
-		if (editor === undefined) {
-			// Open on the same column as the first visible source editor, or on the first column if no editors are open.
-			const column = (visibleSrcEditors.length > 0) ? visibleSrcEditors[0].viewColumn : ViewColumn.One;
-
-			editor = await window.showTextDocument(document, {
-				viewColumn: column,
-				preserveFocus: true //don't put focus on the new editor
-			});
-
-			visibleSrcEditors.push(editor);
-		}
-
-		return editor;
+		return this.editorTracker.getOrCreateSourceEditor(uri, {
+			viewColumn: this.getAllSourceEditors()[0]?.viewColumn,
+			preserveFocus: true
+		});
 	}
 
 	private getAllSourceEditors(): TextEditor[] {
@@ -321,16 +306,6 @@ export class AsmDecorator {
 			return [];
 		}
 
-		const srcUris = this.asmData.allReferencedSrcUris;
-
-		// It would be great if we could just store text editors and use those everywhere instead
-		// of URIs or documents, but the text editor objects are not stable. For example, switching
-		// from one tab to another then back to the first tab will most likely create an entirely
-		// new editor object, even though it's the same underlying document.
-		return window.visibleTextEditors.filter(editor => srcUris.has(editor.document.uri));
+		return this.editorTracker.getSourceEditors(this.asmData.allReferencedSrcUris);
 	}
-}
-
-function getEditor(uri: Uri): TextEditor | undefined {
-	return window.visibleTextEditors.find(editor => equalUri(editor.document.uri, uri));
 }
