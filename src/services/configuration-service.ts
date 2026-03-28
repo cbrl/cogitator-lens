@@ -6,6 +6,10 @@ import { Uri, workspace } from 'vscode';
 import { IConfigurationService } from '../interfaces/index.js';
 import { CompilerInfo, CompilationInfo } from '../types/index.js';
 
+/**
+ * Service that provides access to (and validation for) the extension's configuration settings, such as compilers and
+ * compilation info.
+ */
 export class ConfigurationService implements IConfigurationService {
 	/**
 	 * Get configured compilers from workspace settings
@@ -13,7 +17,7 @@ export class ConfigurationService implements IConfigurationService {
 	getCompilers(): CompilerInfo[] {
 		const scope = workspace.workspaceFolders?.at(0) ?? null;
 		const compilers = workspace.getConfiguration('coglens', scope).get<CompilerInfo[]>('compilers') ?? [];
-		
+
 		// Validate all compiler infos
 		return compilers.filter(info => {
 			if (!this.validateCompilerInfo(info)) {

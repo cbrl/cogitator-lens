@@ -2,12 +2,13 @@
  * Tracks and manages editors for source and assembly files
  */
 
-import { TextEditor, window, Uri, TextDocument, TextDocumentShowOptions, ViewColumn } from 'vscode';
+import { TextEditor, window, Uri, TextDocumentShowOptions } from 'vscode';
 import { UriSet } from '../../uri-containers.js';
 import { equalUri, toComparisonKey } from '../../utils.js';
 
 export class EditorTracker {
 	private pendingEditors = new Map<string, Promise<TextEditor>>();
+
 	/**
 	 * Get all visible editors for the given source URIs
 	 */

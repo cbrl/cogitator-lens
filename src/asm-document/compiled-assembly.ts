@@ -3,6 +3,10 @@ import { ParsedAsmResultLine } from '../parsers/asmresult.interfaces';
 import { UriMap, UriSet } from '../uri-containers';
 import path from 'path';
 
+/**
+ * Represents the compiled assembly for a source document. Includes mappings between source and assembly lines
+ * and the set of all source documents referenced by the assembly.
+ */
 export class CompiledAssembly {
     public readonly srcUri: Uri;
     public readonly asmUri: Uri;

@@ -7,6 +7,12 @@ import { AsmDecorator } from './asm-decorator';
 import { DecorationStyleManager } from './decorations/decoration-style-manager';
 import { UriMap } from '../uri-containers';
 
+/**
+ * Provides virtual assembly documents by compiling source files on demand. Manages CompileHandlers for each assembly document,
+ * tracks the latest compiled assembly for each document, and manages decorators for open assembly documents.
+ *
+ * The assembly document content is updated when the source file changes and is recompiled.
+ */
 export class AsmProvider implements TextDocumentContentProvider {
     public static scheme = 'assembly';
 

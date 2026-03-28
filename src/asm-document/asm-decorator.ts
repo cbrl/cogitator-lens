@@ -18,6 +18,14 @@ Nice-to-have features:
      - The UX for this isn't ideal unless the user changes VS Code settings to open definitions in an existing editor (can some ugly hacks work around this?)
 */
 
+/**
+ * Manages decorations for assembly documents, including dimming unused source lines and highlighting corresponding
+ * lines between source and assembly. Each instance of AsmDecorator is associated with one assembly document and its
+ * referenced source documents.
+ *
+ * Decorations are only active when the assembly document is visible along with at least one of its referenced source
+ * documents.
+ */
 export class AsmDecorator {
 	private readonly srcUri: Uri;
 	private readonly asmUri: Uri;

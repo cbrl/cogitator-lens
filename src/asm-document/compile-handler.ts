@@ -4,6 +4,11 @@ import { CompiledAssembly } from './compiled-assembly';
 import * as logger from '../logger';
 
 
+/**
+ * Handles invoking compilation for a source document, and provides an event that clients can subscribe to for updates
+ * when the document is recompiled. Each CompileHandler is associated with one source file and its corresponding
+ * assembly document.
+ */
 export class CompileHandler {
     public readonly srcUri: Uri;
     public readonly asmUri: Uri;
@@ -27,7 +32,7 @@ export class CompileHandler {
 		}
 		catch (error) {
 			const errorMessage = (error instanceof Error) ? error.message : JSON.stringify(error);
-			window.showErrorMessage(`Compile failed. Verify buildsystem settings and/or wait for configuration to complete. See log for error details.`);
+			window.showErrorMessage('Compile failed. Verify buildsystem settings and/or wait for configuration to complete. See log for error details.');
 			logger.logChannel.error(errorMessage);
 
 			result = new Error(errorMessage);

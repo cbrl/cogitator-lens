@@ -44,6 +44,7 @@ export function keyToTypeMap<K extends keyof any, T extends Record<K, string>>(o
 	return keyToType;
 }
 
+/// Compares two URIs for equality, with options to ignore the fragment and/or case sensitivity of the path.
 export function equalUri(
 	uri1: vscode.Uri | undefined,
 	uri2: vscode.Uri | undefined,
@@ -59,6 +60,7 @@ export function equalUri(
 	return toComparisonKey(uri1, ignoreFragment, ignorePathCase) === toComparisonKey(uri2, ignoreFragment, ignorePathCase);
 }
 
+/// Converts a URI to a string key for comparison, with options to ignore the fragment and/or case sensitivity of the path.
 export function toComparisonKey(uri: vscode.Uri, ignoreFragment: boolean = false, ignorePathCase: boolean = false): string {
 	return uri.with({
 		path: ignorePathCase ? uri.path.toLowerCase() : undefined, //'undefined' will result in no change to the segment
