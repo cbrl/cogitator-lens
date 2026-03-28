@@ -1,7 +1,6 @@
 import vscode from 'vscode';
 import { CompilerBase, ICompiler } from '../compiler';
-import { CompilerCache } from '../compile-database';
-import _ from 'underscore';
+import { CompilerRegistry } from '../compilation/index.js';
 import { TreeNode, TreeItem, TreeProvider } from './treedata';
 
 export class CompilerTreeNode extends TreeNode {
@@ -144,9 +143,9 @@ export class CompilerTreeNode extends TreeNode {
 }
 
 export class CompilerTreeProvider extends TreeProvider<CompilerTreeNode> {
-    private instances!: CompilerCache;
+    private instances!: CompilerRegistry;
 
-	constructor(cache: CompilerCache) {
+	constructor(cache: CompilerRegistry) {
 		super();
 		this.instances = cache;
 	}
@@ -156,6 +155,6 @@ export class CompilerTreeProvider extends TreeProvider<CompilerTreeNode> {
     }
 
     protected createChildren(element?: CompilerTreeNode) {
-		return element ? element?.children : _.map(this.instances.compilers, CompilerTreeNode.from);
+		return element ? element?.children : this.instances.getCompilers().map(CompilerTreeNode.from);
     }
 }

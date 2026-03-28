@@ -359,14 +359,12 @@
 		"test": "vscode-test"
     },
 	"dependencies": {
-		"underscore": "^1.13.7",
         "vscode-cmake-tools": "^1.2.0"
 	},
     "devDependencies": {
 		"@types/vscode": "^1.94.0",
 		"@types/mocha": "^10.0.9",
 		"@types/node": "20.x",
-		"@types/underscore": "^1.11.15",
 		"@typescript-eslint/eslint-plugin": "^8.10.0",
 		"@typescript-eslint/parser": "^8.7.0",
 		"@vscode/test-cli": "^0.0.10",

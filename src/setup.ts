@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { CompileManager, CompilerCache, CompileInfoDatabase } from './compile-database';
+import { CompilationService, CompilerRegistry, CompilationConfigDatabase } from './compilation/index.js';
 import { CompilerTreeProvider } from './tree/compiler-tree';
 import { CompilationInfoTreeProvider } from './tree/compilation-info-tree';
 import { GlobalOptionsTreeProvider } from './tree/global-options-tree';
@@ -11,7 +11,7 @@ import path from 'path';
 
 export function setupCommands(
 	context: vscode.ExtensionContext,
-	compileManager: CompileManager,
+	compileManager: CompilationService,
 	compilerTreeProvider: CompilerTreeProvider,
 	infoTreeProvider: CompilationInfoTreeProvider,
 	asmFilterTreeProvider: GlobalOptionsTreeProvider
@@ -67,7 +67,7 @@ export function setupCommands(
 
 		assert(objectRef !== undefined && attr !== undefined && typeof(objectRef[attr]) === 'string');
 
-		const availableCompilers = compileManager.compilerCache.compilerNames;
+		const availableCompilers = compileManager.compilerRegistry.getCompilerNames();
 
 		if (availableCompilers.length === 0) {
 			logger.logAndShowError("No compilers available. Please add a compiler first.");
@@ -171,15 +171,9 @@ export function setupCommands(
 	});
 
 	const AddDefaultCompileInfo = vscode.commands.registerCommand('coglens.AddDefaultCompileInfo', async () => {
-		if (compileManager.compilationInfo.defaultCompileInfo === undefined) {
-			compileManager.compilationInfo.defaultCompileInfo = {
-				"compilerName": compileManager.compilerCache.compilerNames.at(0) ?? '',
-				"defines": [],
-				"includes": [],
-				"args": [],
-			};
-		}
-
+		// Note: Default compile info is now managed through configuration
+		// This command can be enhanced to update workspace settings
+		vscode.window.showInformationMessage('Please configure default compile info in settings (coglens.defaultCompileInfo)');
 		infoTreeProvider.refresh();
 	});
 
@@ -217,7 +211,7 @@ export function setupCommands(
 
 			name = name.trim();
 
-			if (compileManager.compilerCache.hasCompiler(name)) {
+			if (compileManager.compilerRegistry.hasCompiler(name)) {
 				logger.logAndShowWarning(`Compiler '${name}' already exists.`);
 				name = undefined;
 			}
@@ -228,7 +222,7 @@ export function setupCommands(
 		const info = compiler.baseCompilerInfo(name, exeUri.fsPath);
 
 		// Add to cache
-		compileManager.compilerCache.createCompiler(info);
+		compileManager.compilerRegistry.createCompiler(info);
 		compilerTreeProvider.refresh();
 	});
 
@@ -245,7 +239,7 @@ export function setupCommands(
 	);
 }
 
-export function createCompilerTreeView(context: vscode.ExtensionContext, cache: CompilerCache): CompilerTreeProvider {
+export function createCompilerTreeView(context: vscode.ExtensionContext, cache: CompilerRegistry): CompilerTreeProvider {
 	const treeProvider = new CompilerTreeProvider(cache);
 	const treeView = vscode.window.createTreeView('coglens.compilers', { treeDataProvider: treeProvider });
 
@@ -265,8 +259,8 @@ export function createCompilerTreeView(context: vscode.ExtensionContext, cache: 
 	return treeProvider;
 }
 
-export function createCompilationInfoTreeView(context: vscode.ExtensionContext, compilationInfo: CompileInfoDatabase): CompilationInfoTreeProvider {
-	const treeProvider = new CompilationInfoTreeProvider(compilationInfo);
+export function createCompilationInfoTreeView(context: vscode.ExtensionContext, compilationService: CompilationService): CompilationInfoTreeProvider {
+	const treeProvider = new CompilationInfoTreeProvider(compilationService);
 	const treeView = vscode.window.createTreeView('coglens.compileInfo', { treeDataProvider: treeProvider });
 
 	context.subscriptions.push(treeView);
@@ -274,7 +268,7 @@ export function createCompilationInfoTreeView(context: vscode.ExtensionContext, 
 	return treeProvider;
 }
 
-export function createGlobalOptionsTreeView(context: vscode.ExtensionContext, compileManager: CompileManager): GlobalOptionsTreeProvider {
+export function createGlobalOptionsTreeView(context: vscode.ExtensionContext, compileManager: CompilationService): GlobalOptionsTreeProvider {
 	const treeProvider = new GlobalOptionsTreeProvider(compileManager);
 	const treeView = vscode.window.createTreeView('coglens.globalOptions', { treeDataProvider: treeProvider });
 

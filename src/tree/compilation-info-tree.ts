@@ -1,7 +1,7 @@
 import vscode from "vscode";
-import { CompilationInfo, CompileInfoDatabase } from "../compile-database";
+import { CompilationInfo } from '../types/index.js';
+import { CompilationService } from '../compilation/index.js';
 import { TreeNode, TreeItem, TreeProvider } from './treedata';
-import _ from 'underscore';
 import path from "path";
 
 type FileTreeElement = {
@@ -49,11 +49,11 @@ function isSubdirectory(parent: string, child: string): boolean {
 }
 
 export class CompilationInfoTreeNode extends TreeNode {
-	public static build(compileInfo: CompileInfoDatabase): CompilationInfoTreeNode[] {
+	public static build(compilationService: CompilationService): CompilationInfoTreeNode[] {
 		let insideWorkspace = new Map<string, string[]>();
 		let outsideWorkspace: string[] = [];
 
-		for (const file of compileInfo.info.keys()) {
+		for (const file of compilationService.getAllFiles()) {
 			let isInWorkspace = false;
 
 			if (vscode.workspace.workspaceFolders !== undefined) {
@@ -77,36 +77,36 @@ export class CompilationInfoTreeNode extends TreeNode {
 			}
 		}
 
-		let workspaceNodes = Array.from(insideWorkspace.entries()).flatMap(([workspace, items]) => CompilationInfoTreeNode.makeTree(items, compileInfo, workspace));
-		let outsideNodes = CompilationInfoTreeNode.makeTree(outsideWorkspace, compileInfo);
+		let workspaceNodes = Array.from(insideWorkspace.entries()).flatMap(([workspace, items]) => CompilationInfoTreeNode.makeTree(items, compilationService, workspace));
+		let outsideNodes = CompilationInfoTreeNode.makeTree(outsideWorkspace, compilationService);
 
 		for (let node of workspaceNodes) {
 			node.iconPath = new vscode.ThemeIcon('repo' /*'project'*/ /*'library'*/);
 		}
 
-		return _.flatten([workspaceNodes, outsideNodes]).filter(node => node !== undefined);
+		return [workspaceNodes, outsideNodes].flat().filter(node => node !== undefined);
 	}
 
-	public static makeTree(info: string[], compileInfo: CompileInfoDatabase, workspace?: string): CompilationInfoTreeNode[] {
+	public static makeTree(info: string[], compilationService: CompilationService, workspace?: string): CompilationInfoTreeNode[] {
 		const workspaceRelative = info.map(value => value.replace(path.dirname(workspace ?? ''), ''));
 
-		return filePathsToTree(workspaceRelative).map(item => CompilationInfoTreeNode.makeItem(item, compileInfo, workspace));
+		return filePathsToTree(workspaceRelative).map(item => CompilationInfoTreeNode.makeItem(item, compilationService, workspace));
 	}
 
-	public static makeItem(elem: FileTreeElement, compileInfo: CompileInfoDatabase, workspace?: string): CompilationInfoTreeNode {
+	public static makeItem(elem: FileTreeElement, compilationService: CompilationService, workspace?: string): CompilationInfoTreeNode {
 		if (elem.children.length > 0) {
 			const result: CompilationInfoTreeNode = {
 				label: `${elem.basename}`,
 				nodeType: 'subtree',
 				iconPath: vscode.ThemeIcon.Folder,
-				children: elem.children.map(child => CompilationInfoTreeNode.makeItem(child, compileInfo, workspace))
+				children: elem.children.map(child => CompilationInfoTreeNode.makeItem(child, compilationService, workspace))
 			};
 
 			return result;
 		}
 		else {
 			const fullPath = path.join(path.dirname(workspace ?? ''), elem.path);
-			const info = compileInfo.getCompilationInfo(vscode.Uri.file(fullPath))!;
+			const info = compilationService.getCompilationInfo(vscode.Uri.file(fullPath))!;
 			return this.makeFileNode(elem, info, workspace);
 		}
 	}
@@ -170,11 +170,11 @@ export class CompilationInfoTreeNode extends TreeNode {
 }
 
 export class CompilationInfoTreeProvider extends TreeProvider<CompilationInfoTreeNode> {
-	private compileInfo: CompileInfoDatabase;
+	private compilationService: CompilationService;
 
-	constructor(compileInfo: CompileInfoDatabase) {
+	constructor(compilationService: CompilationService) {
 		super();
-		this.compileInfo = compileInfo;
+		this.compilationService = compilationService;
 	}
 
 	public getTreeItem(element: CompilationInfoTreeNode): vscode.TreeItem {
@@ -182,6 +182,6 @@ export class CompilationInfoTreeProvider extends TreeProvider<CompilationInfoTre
 	}
 
 	protected createChildren(element?: CompilationInfoTreeNode) {
-		return element ? element?.children : CompilationInfoTreeNode.build(this.compileInfo);
+		return element ? element?.children : CompilationInfoTreeNode.build(this.compilationService);
 	}
 }

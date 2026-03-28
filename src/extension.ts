@@ -2,7 +2,9 @@ import vscode from 'vscode';
 import { workspace, window, commands, ExtensionContext, TextDocumentShowOptions, ViewColumn } from 'vscode';
 import { AsmProvider, getAsmUri } from './asm-document/asm-provider';
 import { AsmDefinitionProvider } from './asm-document/asm-definition-provider';
-import { CompileManager, CompilationInfo } from './compile-database';
+import { CompilationService } from './compilation/index.js';
+import { CompilationInfo } from './types/index.js';
+import { ConfigurationService } from './services/configuration-service.js';
 import { CmakeMonitor } from './buildsystems/cmake';
 import { getCompilerByExe } from './compilers/compiler-map';
 import path from 'path';
@@ -17,19 +19,20 @@ TODO:
 */
 
 export async function activate(context: ExtensionContext): Promise<void> {
-	const compileManager = new CompileManager();
+	const configService = new ConfigurationService();
+	const compileManager = new CompilationService(configService);
 	const asmProvider = new AsmProvider(compileManager);
-	const asmDefProvider = new AsmDefinitionProvider();
+	const asmDefProvider = new AsmDefinitionProvider(uri => asmProvider.getCompiledAssembly(uri));
 
-	const compilerTreeProvider = setup.createCompilerTreeView(context, compileManager.compilerCache);
-	const infoTreeProvider = setup.createCompilationInfoTreeView(context, compileManager.compilationInfo);
+	const compilerTreeProvider = setup.createCompilerTreeView(context, compileManager.compilerRegistry);
+	const infoTreeProvider = setup.createCompilationInfoTreeView(context, compileManager);
 	const globalOptionsTreeProvider = setup.createGlobalOptionsTreeView(context, compileManager);
 
 	setup.setupCommands(context, compileManager, compilerTreeProvider, infoTreeProvider, globalOptionsTreeProvider);
 
 	// Use CMake API to fetch build info for each file in the project
 	const cmakeMonitor = new CmakeMonitor();
-	const compileInfoRegistration = cmakeMonitor.onNewCompilationInfo(infoArray => {
+	const compileInfoRegistration = cmakeMonitor.onCompilationInfoChanged(infoArray => {
 		for (let [file, prelimInfo] of infoArray) {
 			// Detect compiler type by executable
 			const compiler = getCompilerByExe(prelimInfo.compilerPath.fsPath);
@@ -43,9 +46,9 @@ export async function activate(context: ExtensionContext): Promise<void> {
 			const compilerName = 'CMake: ' + path.basename(prelimInfo.compilerPath.fsPath);
 
 			// Create compiler if needed
-			if (!compileManager.compilerCache.hasCompiler(compilerName)) {
+			if (!compileManager.compilerRegistry.hasCompiler(compilerName)) {
 				const compilerInfo = compiler.baseCompilerInfo(compilerName, prelimInfo.compilerPath.fsPath);
-				compileManager.compilerCache.createCompiler(compilerInfo);
+				compileManager.compilerRegistry.createCompiler(compilerInfo);
 			}
 
 			// Create file compilation info
@@ -61,7 +64,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		infoTreeProvider.refresh();
 	});
 
-	cmakeMonitor.initCmakeApi();
+	cmakeMonitor.initialize();
 
 	// Register content provider for the 'assembly' scheme
 	const asmProviderRegistration = workspace.registerTextDocumentContentProvider(AsmProvider.scheme, asmProvider);
@@ -83,6 +86,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
 
 	context.subscriptions.push(
 		asmProvider,
+		compileManager,
 		cmakeMonitor,
 		compileInfoRegistration,
 		asmProviderRegistration,

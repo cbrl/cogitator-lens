@@ -1,6 +1,7 @@
 import vscode from 'vscode';
 import { CompilerOutputOptions, ParseFiltersAndOutputOptions } from '../parsers/filters.interfaces';
-import { CompilationInfo, CompileManager } from '../compile-database';
+import { CompilationInfo } from '../types/index.js';
+import { CompilationService } from '../compilation/index.js';
 import { TreeNode, TreeItem, TreeProvider } from './treedata';
 import { CompilationInfoTreeNode } from './compilation-info-tree';
 
@@ -94,9 +95,9 @@ export class GlobalOptionsNode extends TreeNode {
 }
 
 export class GlobalOptionsTreeProvider extends TreeProvider<GlobalOptionsNode> {
-	private compileManager: CompileManager;
+	private compileManager: CompilationService;
 
-	constructor(compileManager: CompileManager) {
+	constructor(compileManager: CompilationService) {
 		super();
 		this.compileManager = compileManager;
 	}
@@ -109,7 +110,9 @@ export class GlobalOptionsTreeProvider extends TreeProvider<GlobalOptionsNode> {
 		if (element) {
 			return element.children;
 		} else {
-			return GlobalOptionsNode.createFilterTree(this.compileManager.globalFilterOptions, this.compileManager.compilationInfo.defaultCompileInfo);
+			// Access default compile info through compilation service
+			const defaultInfo = this.compileManager.getCompilationInfoOrDefault(vscode.Uri.file(''))[0];
+			return GlobalOptionsNode.createFilterTree(this.compileManager.globalFilterOptions, defaultInfo);
 		}
 	}
 }
