@@ -1,15 +1,21 @@
 import { Uri, Event, EventEmitter } from 'vscode';
-import { CompilationInfo } from '../compile-database';
+import { IBuildSystemMonitor, BuildsystemCompileInfo } from '../interfaces/index.js';
 
-export type BuildsystemCompileInfo = Omit<CompilationInfo, 'compilerName'> & {
-	compilerPath: Uri;
-};
+export { BuildsystemCompileInfo };
 
-export class BuildsystemMonitor {
-	// Event to notify when compilation info changes
+export abstract class BuildsystemMonitor implements IBuildSystemMonitor {
+	abstract readonly name: string;
+
 	protected compilationInfoEvent = new EventEmitter<[Uri, BuildsystemCompileInfo][]>();
 
-	public get onNewCompilationInfo(): Event<[Uri, BuildsystemCompileInfo][]> {
+	public get onCompilationInfoChanged(): Event<[Uri, BuildsystemCompileInfo][]> {
 		return this.compilationInfoEvent.event;
+	}
+
+	abstract initialize(): Promise<void>;
+	abstract refresh(): Promise<void>;
+
+	dispose(): void {
+		this.compilationInfoEvent.dispose();
 	}
 }

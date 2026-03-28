@@ -1,4 +1,5 @@
 import fs from 'fs';
+import crypto from 'crypto';
 import os from 'os';
 import path from 'path';
 import { AsmParser } from './parsers/asm-parser.js';
@@ -7,35 +8,10 @@ import { replaceExtension } from './utils.js';
 import { ParseFiltersAndOutputOptions } from './parsers/filters.interfaces.js';
 import { ParsedAsmResult } from './parsers/asmresult.interfaces.js';
 import * as logger from './logger.js';
+import { CompilerInfo, CompileOptions } from './types/index.js';
 
-export type CompilerInfo = {
-	name: string;
-	type: string;
-	exe: string;
-
-	args?: string[];
-
-	includeFlag: string;
-	includePaths?: string[];
-
-	defineFlag: string;
-	defines?: string[];
-
-	envVars?: Record<string, string>;
-
-	supportsDemangle?: boolean;
-	demangler?: string;
-
-	supportsIntel?: boolean;
-	supportsLibraryCodeFilter?: boolean;
-}
-
-export type CompileOptions = {
-	args?: string[];
-	defines?: string[];
-	includes?: string[];
-	env?: Record<string, string>;
-}
+// Re-export types for backwards compatibility
+export type { CompilerInfo, CompileOptions };
 
 export interface ICompiler {
 	info: CompilerInfo;
@@ -55,7 +31,8 @@ export abstract class CompilerBase implements ICompiler {
 
 	async compile(file: string, options: CompileOptions, filter: ParseFiltersAndOutputOptions): Promise<ParsedAsmResult> {
 		const outputDir = os.tmpdir();
-		const outputFile = path.join(outputDir, path.basename(replaceExtension(file, '.asm')));
+		const uniqueName = `${path.basename(replaceExtension(file, ''))}-${crypto.randomUUID()}.asm`;
+		const outputFile = path.join(outputDir, uniqueName);
 
 		const args = [
 			...(this.info.args ?? []),
@@ -84,10 +61,14 @@ export abstract class CompilerBase implements ICompiler {
 
 		// TODO: demangle
 
-		const asmBytes = await fs.promises.readFile(outputFile);
-		const asmText = new TextDecoder().decode(asmBytes);
+		try {
+			const asmBytes = await fs.promises.readFile(outputFile);
+			const asmText = new TextDecoder().decode(asmBytes);
 
-		return this.asmParser.process(asmText, filter);
+			return this.asmParser.process(asmText, filter);
+		} finally {
+			fs.promises.unlink(outputFile).catch(() => {});
+		}
 	}
 
 	protected async doCompile(file: string, args: string[], envVars: Record<string, string>): Promise<exec.ExecResult> {

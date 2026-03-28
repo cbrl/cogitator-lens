@@ -1,5 +1,5 @@
-import { Uri, Event, EventEmitter, window } from 'vscode';
-import { CompileManager } from '../compile-database';
+import { Uri, EventEmitter, Event, Disposable, window } from 'vscode';
+import { CompilationService } from '../compilation/index.js';
 import { CompiledAssembly } from './compiled-assembly';
 import * as logger from '../logger';
 
@@ -8,11 +8,11 @@ export class CompileHandler {
     public readonly srcUri: Uri;
     public readonly asmUri: Uri;
 
-	private readonly compileManager: CompileManager;
+	private readonly compileManager: CompilationService;
 
 	private readonly compileEvent: EventEmitter<CompiledAssembly | Error> = new EventEmitter();
 
-    constructor(srcUri: Uri, asmUri: Uri, compileManager: CompileManager) {
+    constructor(srcUri: Uri, asmUri: Uri, compileManager: CompilationService) {
         this.srcUri = srcUri;
         this.asmUri = asmUri;
         this.compileManager = compileManager;

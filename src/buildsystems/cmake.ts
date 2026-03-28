@@ -1,19 +1,27 @@
 import { Uri, workspace, Disposable } from 'vscode';
 import { BuildsystemCompileInfo, BuildsystemMonitor } from './buildsystem-monitor';
-import { CompilationInfo } from '../compile-database';
 import * as cmakeTools from 'vscode-cmake-tools';
+import * as logger from '../logger';
 import path from 'path';
 
 // Monitors CMake project and outputs a mapping of file URI to compile info
 export class CmakeMonitor extends BuildsystemMonitor {
+	readonly name = 'CMake';
+
 	private cmakeApi?: cmakeTools.CMakeToolsApi;
 	private cmakeProject?: cmakeTools.Project;
 	private disposables: Disposable[] = [];
 
-	public async initCmakeApi(): Promise<void> {
-		this.cmakeApi = await cmakeTools.getCMakeToolsApi(cmakeTools.Version.latest);
+	public async initialize(): Promise<void> {
+		try {
+			this.cmakeApi = await cmakeTools.getCMakeToolsApi(cmakeTools.Version.latest);
+		} catch (error) {
+			logger.logAndShowWarning(`Failed to initialize CMake Tools API: ${error}`);
+			return;
+		}
 
 		if (this.cmakeApi === undefined) {
+			logger.logChannel.info('CMake Tools API is not available. CMake integration disabled.');
 			return;
 		}
 
@@ -25,10 +33,15 @@ export class CmakeMonitor extends BuildsystemMonitor {
 		}
 	}
 
+	public async refresh(): Promise<void> {
+		await this.onCodeModelChanged();
+	}
+
 	public dispose(): void {
-		for (let disposable of this.disposables) {
+		for (const disposable of this.disposables) {
 			disposable.dispose();
 		}
+		super.dispose();
 	}
 
 	private async onProjectChange(projectUri?: Uri): Promise<void> {
@@ -36,7 +49,12 @@ export class CmakeMonitor extends BuildsystemMonitor {
 			return;
 		}
 
-		this.cmakeProject = await this.cmakeApi?.getProject(projectUri);
+		try {
+			this.cmakeProject = await this.cmakeApi?.getProject(projectUri);
+		} catch (error) {
+			logger.logAndShowError(`Failed to get CMake project: ${error}`);
+			return;
+		}
 
 		if (this.cmakeProject !== undefined) {
 			await this.onCodeModelChanged();
@@ -47,10 +65,17 @@ export class CmakeMonitor extends BuildsystemMonitor {
 	}
 
 	private async onCodeModelChanged(): Promise<void> {
-		const activeBuildType = await this.cmakeProject?.getActiveBuildType();
+		let activeBuildType: string | undefined;
+
+		try {
+			activeBuildType = await this.cmakeProject?.getActiveBuildType();
+		} catch (error) {
+			logger.logAndShowError(`Failed to get active CMake build type: ${error}`);
+			return;
+		}
 
 		if (activeBuildType === undefined) {
-			// TODO: notify user?
+			logger.logChannel.warn('No active CMake build type found.');
 			return;
 		}
 
@@ -79,8 +104,8 @@ export class CmakeMonitor extends BuildsystemMonitor {
 						defines: fileGroup.defines ?? [],
 						includes: fileGroup.includePath?.map(({ path }, _) => path) ?? [],
 
-						// Each command fragment can be a string with multiple args. It needs to be split in this case.
-						args: fileGroup.compileCommandFragments?.flatMap(str => str.split(/\s+/)) ?? []
+					// Split command fragments respecting quoted strings
+					args: fileGroup.compileCommandFragments?.flatMap(str => splitCommandFragment(str)) ?? []
 					};
 
 					for (let source of fileGroup.sources) {
@@ -95,4 +120,33 @@ export class CmakeMonitor extends BuildsystemMonitor {
 			this.compilationInfoEvent.fire(compilationInfo);
 		}
 	}
+}
+
+/**
+ * Split a command fragment string into arguments, respecting double-quoted strings.
+ */
+function splitCommandFragment(fragment: string): string[] {
+	const args: string[] = [];
+	let current = '';
+	let inQuotes = false;
+
+	for (let i = 0; i < fragment.length; i++) {
+		const ch = fragment[i];
+		if (ch === '"') {
+			inQuotes = !inQuotes;
+		} else if (ch === ' ' && !inQuotes) {
+			if (current.length > 0) {
+				args.push(current);
+				current = '';
+			}
+		} else {
+			current += ch;
+		}
+	}
+
+	if (current.length > 0) {
+		args.push(current);
+	}
+
+	return args;
 }
