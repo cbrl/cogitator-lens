@@ -2,15 +2,22 @@
  * Compilation configuration database for managing file-specific compilation settings
  */
 
-import { Uri } from 'vscode';
+import { Uri, EventEmitter, Event, Disposable } from 'vscode';
 import { CompilationInfo } from '../types/index.js';
 import { UriMap } from '../uri-containers.js';
 
 /**
  * Database that associates files with their compilation settings
  */
-export class CompilationConfigDatabase {
+export class CompilationConfigDatabase implements Disposable {
 	private compilationInfo = new UriMap<CompilationInfo>({ ignoreFragment: true });
+
+	private readonly _onDidChange = new EventEmitter<Uri>();
+
+	/**
+	 * Event fired when compilation info changes for a file
+	 */
+	public readonly onDidChange: Event<Uri> = this._onDidChange.event;
 
 	private _defaultCompileInfo: CompilationInfo = {
 		compilerName: '',
@@ -54,6 +61,7 @@ export class CompilationConfigDatabase {
 	 */
 	setCompilationInfo(file: Uri, info: CompilationInfo): void {
 		this.compilationInfo.set(file, info);
+		this._onDidChange.fire(file);
 	}
 
 	/**
@@ -82,5 +90,9 @@ export class CompilationConfigDatabase {
 	 */
 	clear(): void {
 		this.compilationInfo.clear();
+	}
+
+	dispose(): void {
+		this._onDidChange.dispose();
 	}
 }

@@ -2,7 +2,7 @@
  * Compilation service for orchestrating the compilation process
  */
 
-import { Disposable, Uri, workspace } from 'vscode';
+import { Disposable, Uri, workspace, Event } from 'vscode';
 import { ICompilationService, IConfigurationService } from '../interfaces/index.js';
 import { CompilationInfo, CompileOptions } from '../types/index.js';
 import { CompilerRegistry } from './compiler-registry.js';
@@ -49,6 +49,7 @@ export class CompilationService implements ICompilationService {
 
 	public dispose(): void {
 		this.configChangeDisposable.dispose();
+		this.compilationConfig.dispose();
 	}
 
 	private loadCompilersFromConfig(): void {
@@ -83,6 +84,13 @@ export class CompilationService implements ICompilationService {
 	 */
 	get compilerRegistry(): CompilerRegistry {
 		return this.registry;
+	}
+
+	/**
+	 * Event fired when compilation info changes for a file
+	 */
+	get onCompilationInfoChanged(): Event<Uri> {
+		return this.compilationConfig.onDidChange;
 	}
 
 	/**

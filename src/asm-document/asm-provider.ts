@@ -5,7 +5,7 @@ import { CompiledAssembly } from './compiled-assembly';
 import { replaceExtension } from '../utils';
 import { AsmDecorator } from './asm-decorator';
 import { DecorationStyleManager } from './decorations/decoration-style-manager';
-import { UriMap } from '../uri-containers';
+import { UriMap, UriSet } from '../uri-containers';
 
 /**
  * Provides virtual assembly documents by compiling source files on demand. Manages CompileHandlers for each assembly document,
@@ -22,6 +22,12 @@ export class AsmProvider implements TextDocumentContentProvider {
 	private compiledAssemblies = new UriMap<CompiledAssembly>();
 	private readonly styleManager = new DecorationStyleManager();
 
+	/** Source URIs whose last compilation attempt failed */
+	private failedCompilations = new UriSet();
+
+	/** Maps source URIs to their assembly document URIs */
+	private srcToAsmUri = new UriMap<Uri>();
+
 	private compileManager: CompilationService;
 
     private onDidChangeEvent = new EventEmitter<Uri>();
@@ -33,8 +39,17 @@ export class AsmProvider implements TextDocumentContentProvider {
 
 		const onCloseDisposable = workspace.onDidCloseTextDocument(this.onCloseTextDocument.bind(this));
 
+		// When compilation info changes for a source file, trigger a recompile of its assembly document
+		const onCompileInfoChanged = compileDb.onCompilationInfoChanged((srcUri) => {
+			const asmUri = this.srcToAsmUri.get(srcUri);
+			if (asmUri) {
+				this.onDidChangeEvent.fire(asmUri);
+			}
+		});
+
 		this.disposables.push(
 			onCloseDisposable,
+			onCompileInfoChanged,
 			this.onDidChangeEvent
 		);
 	}
@@ -53,9 +68,11 @@ export class AsmProvider implements TextDocumentContentProvider {
 
 		return handler.update().then((result) => {
 			this.compiledAssemblies.set(uri, result);
+			this.failedCompilations.delete(handler.srcUri);
 			return result.getContent();
 		}).catch((error: Error) => {
 			this.compiledAssemblies.delete(uri);
+			this.failedCompilations.add(handler.srcUri);
 			return error.message;
 		});
     }
@@ -67,6 +84,8 @@ export class AsmProvider implements TextDocumentContentProvider {
 			const srcUri = Uri.parse(asmUri.query);
 
             document = new CompileHandler(srcUri, asmUri, this.compileManager);
+
+			this.srcToAsmUri.set(srcUri, asmUri);
 
 			// Track the latest compiled assembly for definition provider lookups
 			const compileEventDisposable = document.onDidChange((resultOrError) => {
@@ -95,6 +114,14 @@ export class AsmProvider implements TextDocumentContentProvider {
 
 	public getCompiledAssembly(uri: Uri): CompiledAssembly | undefined {
 		return this.compiledAssemblies.get(uri);
+	}
+
+	/**
+	 * Force a recompile of the assembly document for the given URI.
+	 * This fires a change event so VS Code will re-call provideTextDocumentContent.
+	 */
+	public requestRefresh(asmUri: Uri): void {
+		this.onDidChangeEvent.fire(asmUri);
 	}
 
     public dispose(): void {
@@ -134,6 +161,9 @@ export class AsmProvider implements TextDocumentContentProvider {
 				decorator.dispose();
 				this.decorators.delete(handler.srcUri);
 			}
+
+			this.failedCompilations.delete(handler.srcUri);
+			this.srcToAsmUri.delete(handler.srcUri);
 
 			handler.dispose();
 			this.compileHandlers.delete(uri);

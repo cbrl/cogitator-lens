@@ -75,6 +75,10 @@ export async function activate(context: ExtensionContext): Promise<void> {
 	const commandRegistration = commands.registerTextEditorCommand('coglens.Disassemble', srcEditor => {
 		const asmUri = getAsmUri(srcEditor.document.uri);
 
+		// Always trigger a recompile when the command is invoked,
+		// so the user gets fresh output even if the document is already open or was cached from a failed attempt.
+		asmProvider.requestRefresh(asmUri);
+
 		const options: TextDocumentShowOptions = {
 			viewColumn: ViewColumn.Beside,
 			preserveFocus: true,
