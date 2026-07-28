@@ -14,12 +14,12 @@ export class CompiledAssembly {
 	/**
 	 * Set of all source documents referenced by this assembly
 	 */
-	public readonly allReferencedSrcUris: UriSet = new UriSet();
+	public readonly allReferencedSrcUris: UriSet = new UriSet({ ignorePathCase: process.platform === 'win32' });
 
     public readonly lines: ParsedAsmResultLine[] = [];
 
     // Mapping of source line to assembly line for each source file: file -> (source line -> ASM line)
-    private readonly mappings = new UriMap<Map<number, number[]>>();
+    private readonly mappings = new UriMap<Map<number, number[]>>({ ignorePathCase: process.platform === 'win32' });
 
     constructor(srcUri: Uri, asmUri: Uri, lines: ParsedAsmResultLine[]) {
         this.srcUri = srcUri;

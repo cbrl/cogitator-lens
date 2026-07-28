@@ -73,6 +73,7 @@ export class AsmDecorator {
 		this.isDisposed = true;
 		this.clearAllDecorations();
         this.registrations.dispose();
+		this.configService.dispose();
     }
 
     public onEditorSelectionChanged(event: TextEditorSelectionChangeEvent): void {
@@ -113,7 +114,10 @@ export class AsmDecorator {
 		// Treat as if the user selected the current line of the first editor (only highlights the line, doesn't scroll)
 		// TODO: use active editor instead of the first visible source editor?
 		if (this.asmData.lines.length > 0) {
-			this.onSrcLineSelected(this.getAllSourceEditors()[0], true);
+			const sourceEditor = this.getAllSourceEditors()[0];
+			if (sourceEditor) {
+				this.onSrcLineSelected(sourceEditor, true);
+			}
 		}
 
 		// If the ASM document is empty, show a loading decoration.
@@ -231,6 +235,9 @@ export class AsmDecorator {
 		}
 
 		const line = asmEditor.selection.start.line;
+		if (line < 0 || line >= this.asmData.lines.length || line >= asmEditor.document.lineCount) {
+			return;
+		}
         const asmLine = this.asmData.lines[line];
 
 		// Highlight selected line in ASM editor
