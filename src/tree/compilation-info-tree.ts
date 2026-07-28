@@ -1,187 +1,267 @@
-import vscode from "vscode";
-import { CompilationInfo } from '../types/index.js';
+import path from 'path';
+import vscode from 'vscode';
+import type { CompilationVariant } from '../types/index.js';
 import { CompilationService } from '../compilation/index.js';
-import { TreeNode, TreeItem, TreeProvider } from './treedata';
-import path from "path";
+import { TreeItem, TreeNode, TreeProvider } from './treedata.js';
 
-type FileTreeElement = {
-	basename: string;
-	path: string;
-	children: FileTreeElement[];
-	parent?: FileTreeElement;
+type GroupKey = 'project' | 'target' | 'configuration';
+
+interface SourcePathNode {
+	label: string;
+	children: Map<string, SourcePathNode>;
+	variants: CompilationVariant[];
 }
 
-function filePathsToTree(paths: string[]) {
-	const results: FileTreeElement[] = [];
-
-	return paths.reduce((currentResults, currentPath) => {
-		const pathParts = path.normalize(currentPath).split(path.sep).filter(value => value.length > 0);
-		const byPath: Record<string, FileTreeElement> = {};
-
-		pathParts.reduce((nodes, basename, index, arr) => {
-			let node = nodes.find((node) => node.basename === basename);
-			const curPath = arr.slice(0, index + 1).join(path.sep);
-			const parentPath = arr.slice(0, index).join(path.sep);
-
-			if (!node) {
-				node = {
-					basename,
-					path: curPath,
-					parent: byPath[parentPath],
-					children: [],
-				};
-
-				nodes.push(node);
-			}
-
-			byPath[curPath] = node;
-
-			return node.children;
-		}, currentResults);
-
-		return currentResults;
-	}, results);
-}
-
-function isSubdirectory(parent: string, child: string): boolean {
-	const relative = path.relative(parent, child);
-	return relative.length > 0 && !relative.startsWith('..') && !path.isAbsolute(relative);
+interface WorkspaceVariantGroup {
+	folder?: vscode.WorkspaceFolder;
+	variants: CompilationVariant[];
 }
 
 export class CompilationInfoTreeNode extends TreeNode {
-	public static build(compilationService: CompilationService): CompilationInfoTreeNode[] {
-		let insideWorkspace = new Map<string, string[]>();
-		let outsideWorkspace: string[] = [];
+	source?: vscode.Uri;
+	variant?: CompilationVariant;
 
-		for (const file of compilationService.getAllFiles()) {
-			let isInWorkspace = false;
+	static build(compilationService: CompilationService): CompilationInfoTreeNode[] {
+		const groups = new Map<string, WorkspaceVariantGroup>();
+		for (const source of compilationService.getAllSources()) {
+			for (const variant of compilationService.getVariants(source)) {
+				const folder = vscode.workspace.getWorkspaceFolder(variant.source);
+				const key = folder?.uri.toString() ?? 'external';
+				const group = groups.get(key) ?? { folder, variants: [] };
+				group.variants.push(variant);
+				groups.set(key, group);
+			}
+		}
 
-			if (vscode.workspace.workspaceFolders !== undefined) {
-				for (const folder of vscode.workspace.workspaceFolders) {
-					if (isSubdirectory(folder.uri.fsPath, file.fsPath)) {
-						isInWorkspace = true;
+		return [...groups.values()]
+			.sort((left, right) => compareLabels(left.folder?.name ?? 'External Sources', right.folder?.name ?? 'External Sources'))
+			.map(group => this.workspaceNode(group, compilationService));
+	}
 
-						if (insideWorkspace.get(folder.uri.fsPath) === undefined) {
-							insideWorkspace.set(folder.uri.fsPath, []);
-						}
+	private static workspaceNode(
+		group: WorkspaceVariantGroup,
+		compilationService: CompilationService,
+	): CompilationInfoTreeNode {
+		const label = group.folder?.name ?? 'External Sources';
+		return {
+			label,
+			description: group.folder?.uri.fsPath,
+			tooltip: group.folder?.uri.fsPath ?? 'Sources outside the open workspace folders',
+			nodeType: 'subtree',
+			iconPath: new vscode.ThemeIcon(group.folder ? 'repo' : 'globe'),
+			children: this.groupVariants(group.variants, 'project', group.folder, compilationService),
+		};
+	}
 
-						insideWorkspace.get(folder.uri.fsPath)!.push(file.fsPath);
-						break;
-					}
+	private static groupVariants(
+		variants: readonly CompilationVariant[],
+		key: GroupKey,
+		folder: vscode.WorkspaceFolder | undefined,
+		compilationService: CompilationService,
+	): CompilationInfoTreeNode[] {
+		const groups = new Map<string, CompilationVariant[]>();
+		for (const variant of variants) {
+			const label = groupLabel(variant, key);
+			const group = groups.get(label) ?? [];
+			group.push(variant);
+			groups.set(label, group);
+		}
+
+		return [...groups.entries()]
+			.sort(([left], [right]) => compareLabels(left, right))
+			.map(([label, groupedVariants]) => {
+				const next = nextGroupKey(key);
+				return {
+					label,
+					nodeType: 'subtree',
+					iconPath: new vscode.ThemeIcon(groupIcon(key)),
+					children: next
+						? this.groupVariants(groupedVariants, next, folder, compilationService)
+						: this.sourceTree(groupedVariants, folder, compilationService),
+				};
+			});
+	}
+
+	private static sourceTree(
+		variants: readonly CompilationVariant[],
+		folder: vscode.WorkspaceFolder | undefined,
+		compilationService: CompilationService,
+	): CompilationInfoTreeNode[] {
+		const root: SourcePathNode = { label: '', children: new Map(), variants: [] };
+		for (const variant of variants) {
+			const relativePath = folder
+				? path.relative(folder.uri.fsPath, variant.source.fsPath)
+				: externalDisplayPath(variant.source.fsPath);
+
+			const segments = path.normalize(relativePath).split(path.sep).filter(Boolean);
+			let current = root;
+
+			for (const segment of segments) {
+				let child = current.children.get(segment);
+				if (!child) {
+					child = { label: segment, children: new Map(), variants: [] };
+					current.children.set(segment, child);
 				}
+				current = child;
 			}
-
-			if (!isInWorkspace) {
-				// Is there ever going to be known compile info for a file that's not in a workspace?
-				outsideWorkspace.push(file.fsPath);
-			}
+			current.variants.push(variant);
 		}
 
-		let workspaceNodes = Array.from(insideWorkspace.entries()).flatMap(([workspace, items]) => CompilationInfoTreeNode.makeTree(items, compilationService, workspace));
-		let outsideNodes = CompilationInfoTreeNode.makeTree(outsideWorkspace, compilationService);
-
-		for (let node of workspaceNodes) {
-			node.iconPath = new vscode.ThemeIcon('repo' /*'project'*/ /*'library'*/);
-		}
-
-		return [workspaceNodes, outsideNodes].flat().filter(node => node !== undefined);
+		return this.sourcePathChildren(root, compilationService);
 	}
 
-	public static makeTree(info: string[], compilationService: CompilationService, workspace?: string): CompilationInfoTreeNode[] {
-		const workspaceRelative = info.map(value => value.replace(path.dirname(workspace ?? ''), ''));
+	private static sourcePathChildren(
+		node: SourcePathNode,
+		compilationService: CompilationService,
+	): CompilationInfoTreeNode[] {
+		return [...node.children.values()]
+			.sort((left, right) => {
+				const leftDirectory = left.children.size > 0;
+				const rightDirectory = right.children.size > 0;
+				return leftDirectory === rightDirectory
+					? compareLabels(left.label, right.label)
+					: leftDirectory ? -1 : 1;
+			})
+			.map(child => {
+				if (child.children.size > 0) {
+					return {
+						label: child.label,
+						nodeType: 'subtree',
+						iconPath: vscode.ThemeIcon.Folder,
+						children: this.sourcePathChildren(child, compilationService),
+					};
+				}
 
-		return filePathsToTree(workspaceRelative).map(item => CompilationInfoTreeNode.makeItem(item, compilationService, workspace));
+				const source = child.variants[0]?.source;
+				return {
+					label: child.label,
+					description: child.variants.length > 1 ? `${child.variants.length} variants` : undefined,
+					tooltip: source?.fsPath,
+					nodeType: 'subtree',
+					iconPath: vscode.ThemeIcon.File,
+					source,
+					children: child.variants
+						.sort((left, right) => compareLabels(left.displayLabel, right.displayLabel))
+						.map(variant => this.variantNode(variant, compilationService)),
+				};
+			});
 	}
 
-	public static makeItem(elem: FileTreeElement, compilationService: CompilationService, workspace?: string): CompilationInfoTreeNode {
-		if (elem.children.length > 0) {
-			const result: CompilationInfoTreeNode = {
-				label: `${elem.basename}`,
-				nodeType: 'subtree',
-				iconPath: vscode.ThemeIcon.Folder,
-				children: elem.children.map(child => CompilationInfoTreeNode.makeItem(child, compilationService, workspace))
-			};
-
-			return result;
-		}
-		else {
-			const fullPath = path.join(path.dirname(workspace ?? ''), elem.path);
-			const info = compilationService.getCompilationInfo(vscode.Uri.file(fullPath))!;
-			return this.makeFileNode(elem, info, workspace);
-		}
-	}
-
-	public static makeFileNode(elem: FileTreeElement, compileInfo: CompilationInfo, workspace?: string): CompilationInfoTreeNode {
-		let result: CompilationInfoTreeNode = {
-			label: `${elem.basename}`,
+	private static variantNode(
+		variant: CompilationVariant,
+		compilationService: CompilationService,
+	): CompilationInfoTreeNode {
+		const compiler = compilationService.compilerRegistry.getCompilerById(variant.compilerProfileId);
+		return {
+			label: variant.displayLabel,
+			description: variant.provider,
+			tooltip: variant.id,
 			nodeType: 'subtree',
-			iconPath: vscode.ThemeIcon.File,
-			children: [] as CompilationInfoTreeNode[],
+			iconPath: new vscode.ThemeIcon('symbol-interface'),
+			source: variant.source,
+			variant,
+			children: [
+				{
+					label: 'Compiler',
+					description: compiler?.profile.displayName ?? variant.compilerProfileId,
+					tooltip: compiler?.profile.executable,
+					nodeType: 'text',
+					iconPath: new vscode.ThemeIcon('chip'),
+					treeContext: 'text',
+				},
+				{
+					label: 'Working directory',
+					description: variant.workingDirectory,
+					tooltip: variant.workingDirectory,
+					nodeType: 'text',
+					iconPath: new vscode.ThemeIcon('folder'),
+					treeContext: 'text',
+				},
+				makeListNode('Arguments', variant.arguments),
+				makeListNode('Defines', variant.defines),
+				makeListNode('Include directories', variant.includes),
+				makeEnvironmentNode(variant.environment),
+			],
 		};
-
-		const compiler: CompilationInfoTreeNode = {
-			label: `Compiler: ${compileInfo.compilerName}`,
-			nodeType: 'text',
-			treeContext: 'pickCompiler',
-			iconPath: new vscode.ThemeIcon('chip'),
-			objectRef: compileInfo,
-			attr: 'compilerName'
-		};
-		result.children!.push(compiler);
-
-		// Compiler arguments
-		const args: CompilationInfoTreeNode = {
-			label: 'Arguments',
-			nodeType: 'subtree',
-			treeContext: 'array',
-			iconPath: new vscode.ThemeIcon('list-ordered'),
-			objectRef: compileInfo,
-			attr: 'args'
-		};
-		TreeNode.populateArrayNodeChildren(args, compileInfo.args, { nodeType: 'text', treeContext: TreeNode.multiContext('element', 'editText') });
-		result.children!.push(args);
-
-		// Definitions
-		const defs: CompilationInfoTreeNode = {
-			label: 'Defines',
-			nodeType: 'subtree',
-			treeContext: 'array',
-			iconPath: new vscode.ThemeIcon('list-ordered'),
-			objectRef: compileInfo,
-			attr: 'defines'
-		};
-		TreeNode.populateArrayNodeChildren(defs, compileInfo.defines, { nodeType: 'text', treeContext: TreeNode.multiContext('element', 'editText') });
-		result.children!.push(defs);
-
-		// Include directories
-		const includes: CompilationInfoTreeNode = {
-			label: 'Includes',
-			nodeType: 'subtree',
-			treeContext: 'array',
-			iconPath: new vscode.ThemeIcon('list-ordered'),
-			objectRef: compileInfo,
-			attr: 'includes'
-		};
-		TreeNode.populateArrayNodeChildren(includes, compileInfo.includes, { nodeType: 'text', treeContext: TreeNode.multiContext('element', 'editText') });
-		result.children!.push(includes);
-
-		return result;
 	}
 }
 
 export class CompilationInfoTreeProvider extends TreeProvider<CompilationInfoTreeNode> {
-	private compilationService: CompilationService;
-
-	constructor(compilationService: CompilationService) {
+	constructor(private readonly compilationService: CompilationService) {
 		super();
-		this.compilationService = compilationService;
 	}
 
-	public getTreeItem(element: CompilationInfoTreeNode): vscode.TreeItem {
+	getTreeItem(element: CompilationInfoTreeNode): vscode.TreeItem {
 		return new TreeItem(element);
 	}
 
-	protected createChildren(element?: CompilationInfoTreeNode) {
-		return element ? element?.children : CompilationInfoTreeNode.build(this.compilationService);
+	protected createChildren(element?: CompilationInfoTreeNode): CompilationInfoTreeNode[] | undefined {
+		return element?.children as CompilationInfoTreeNode[] | undefined
+			?? CompilationInfoTreeNode.build(this.compilationService);
 	}
+}
+
+function makeListNode(label: string, values: readonly string[]): CompilationInfoTreeNode {
+	return {
+		label,
+		description: `${values.length}`,
+		nodeType: 'subtree',
+		iconPath: new vscode.ThemeIcon('list-ordered'),
+		children: values.length
+			? values.map(value => ({ label: value, tooltip: value, nodeType: 'text', treeContext: 'text' }))
+			: [{ label: '(none)', nodeType: 'text' }],
+	};
+}
+
+function makeEnvironmentNode(environment: Readonly<Record<string, string>>): CompilationInfoTreeNode {
+	const entries = Object.entries(environment).sort(([left], [right]) => compareLabels(left, right));
+	return {
+		label: 'Environment overrides',
+		description: `${entries.length}`,
+		nodeType: 'subtree',
+		iconPath: new vscode.ThemeIcon('symbol-variable'),
+		children: entries.length
+			? entries.map(([name, value]) => ({
+				label: name,
+				description: value,
+				tooltip: `${name}=${value}`,
+				nodeType: 'text',
+				treeContext: 'text',
+			}))
+			: [{ label: '(none)', nodeType: 'text' }],
+	};
+}
+
+function groupLabel(variant: CompilationVariant, key: GroupKey): string {
+	switch (key) {
+		case 'project': return variant.project?.trim() || `${variant.provider} project`;
+		case 'target': return variant.target?.trim() || 'Default target';
+		case 'configuration': return variant.configuration?.trim() || 'Default configuration';
+	}
+}
+
+function nextGroupKey(key: GroupKey): GroupKey | undefined {
+	switch (key) {
+		case 'project': return 'target';
+		case 'target': return 'configuration';
+		case 'configuration': return undefined;
+	}
+}
+
+function groupIcon(key: GroupKey): string {
+	switch (key) {
+		case 'project': return 'project';
+		case 'target': return 'target';
+		case 'configuration': return 'settings-gear';
+	}
+}
+
+function externalDisplayPath(filePath: string): string {
+	const parsed = path.parse(filePath);
+	const withoutRoot = filePath.slice(parsed.root.length);
+	return parsed.name ? path.join(parsed.root.replace(/[\\/:]+/g, ''), withoutRoot) : withoutRoot;
+}
+
+function compareLabels(left: string, right: string): number {
+	return left.localeCompare(right, undefined, { sensitivity: 'base', numeric: true });
 }

@@ -10,7 +10,7 @@ export type TreeItemSpecifier = 'checkbox' | 'subtree' | 'text';
  * Specifies the context in which a tree item is used. This will be the value of vscode.TreeItem.contextValue,
  * and can be used to limit commands to specific menu items based on the context.
  */
-export type TreeContextSpecifier = 'array' | 'editText' | 'element' | 'filters' | 'instance' | 'pickCompiler' | 'pickFile' | 'text';
+export type TreeContextSpecifier = 'array' | 'derivedInstance' | 'editText' | 'element' | 'filters' | 'instance' | 'pickCompiler' | 'pickFile' | 'text';
 
 export class TreeNode {
 	/**
@@ -58,6 +58,8 @@ export class TreeNode {
 	 */
 	tooltip?: string;
 
+	description?: string;
+
 	/**
 	 * Creates a context string representing multiple context types. This is used for nodes that can be interacted with in multiple ways.
 	 * @param args The arguments to join together.
@@ -98,11 +100,12 @@ export class TreeItem extends vscode.TreeItem {
 		// Initialize the base class with default empty values. These will be overwritten further down.
 		super('', vscode.TreeItemCollapsibleState.None);
 
-        const { label, nodeType, treeContext, iconPath, objectRef, attr } = node;
+		const { label, nodeType, treeContext, iconPath, objectRef, attr } = node;
 
 		this.label = label;
 		this.iconPath = iconPath;
 		this.tooltip = node.tooltip;
+		this.description = node.description;
 		this.contextValue = treeContext ?? nodeType;
 
 		if (nodeType === 'subtree') {
