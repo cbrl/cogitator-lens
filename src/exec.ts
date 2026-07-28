@@ -28,16 +28,19 @@ export interface ExecResult {
 export interface ExecOptions extends Omit<SpawnOptions, 'shell'> {
 	timeoutMs?: number;
 	maxOutputBytes?: number;
+	terminationGraceMs?: number;
 	cancellationToken?: CancellationLike;
 }
 
 const defaultTimeoutMs = 60_000;
 const defaultMaxOutputBytes = 50 * 1024 * 1024;
+const defaultTerminationGraceMs = 2_000;
 
 export async function execute(command: string, args: readonly string[], options: ExecOptions = {}): Promise<ExecResult> {
 	const {
 		timeoutMs = defaultTimeoutMs,
 		maxOutputBytes = defaultMaxOutputBytes,
+		terminationGraceMs = defaultTerminationGraceMs,
 		cancellationToken,
 		...spawnOptions
 	} = options;
@@ -52,6 +55,9 @@ export async function execute(command: string, args: readonly string[], options:
 		let outputBytes = 0;
 		let failure: ExecError | undefined;
 		let settled = false;
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+		let terminationGrace: ReturnType<typeof setTimeout> | undefined;
+		let cancellation: { dispose(): void } | undefined;
 
 		const process = childProcess.spawn(command, [...args], {
 			...spawnOptions,
@@ -60,12 +66,37 @@ export async function execute(command: string, args: readonly string[], options:
 			windowsHide: true,
 		});
 
+		const finish = (): void => {
+			if (timeout) {
+				clearTimeout(timeout);
+			}
+			if (terminationGrace) {
+				clearTimeout(terminationGrace);
+			}
+			cancellation?.dispose();
+		};
+
+		const rejectFailure = (): void => {
+			if (settled || !failure) {
+				return;
+			}
+			settled = true;
+			finish();
+			reject(failure);
+		};
+
 		const fail = (kind: ExecFailureKind, message: string): void => {
 			if (failure || settled) {
 				return;
 			}
 			failure = new ExecError(kind, message, Buffer.concat(stdout).toString(), Buffer.concat(stderr).toString());
-			killProcessTree(process);
+			terminationGrace = setTimeout(rejectFailure, Math.max(0, terminationGraceMs));
+			terminationGrace.unref();
+			try {
+				killProcessTree(process);
+			} catch {
+				process.kill();
+			}
 		};
 
 		const append = (target: Buffer[], chunk: Buffer | string): void => {
@@ -81,29 +112,26 @@ export async function execute(command: string, args: readonly string[], options:
 		process.stdout?.on('data', chunk => append(stdout, chunk));
 		process.stderr?.on('data', chunk => append(stderr, chunk));
 
-		const timeout = timeoutMs > 0
+		timeout = timeoutMs > 0
 			? setTimeout(() => fail('timeout', `Process timed out after ${timeoutMs} ms`), timeoutMs)
 			: undefined;
 		timeout?.unref();
 
-		const cancellation = cancellationToken?.onCancellationRequested(() => {
+		cancellation = cancellationToken?.onCancellationRequested(() => {
 			fail('cancelled', 'Process execution was cancelled');
 		});
-
-		const finish = (): void => {
-			if (timeout) {
-				clearTimeout(timeout);
-			}
-			cancellation?.dispose();
-		};
 
 		process.once('error', error => {
 			if (settled) {
 				return;
 			}
+			if (failure) {
+				rejectFailure();
+				return;
+			}
 			settled = true;
 			finish();
-			reject(failure ?? new ExecError('spawn', `Failed to start "${command}": ${error.message}`));
+			reject(new ExecError('spawn', `Failed to start "${command}": ${error.message}`));
 		});
 
 		process.once('close', code => {

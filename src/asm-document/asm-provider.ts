@@ -11,6 +11,7 @@ import {
 	Position,
 	ProviderResult,
 	Range,
+	RelativePattern,
 	TabInputText,
 	TextDocument,
 	TextDocumentContentProvider,
@@ -18,7 +19,9 @@ import {
 	window,
 	workspace,
 } from 'vscode';
+import path from 'path';
 import { CompilationService } from '../compilation/index.js';
+import type { IConfigurationService } from '../interfaces/index.js';
 import type { CompileDiagnostic } from '../types/index.js';
 import { equalUri, replaceExtension } from '../utils.js';
 import { UriMap, UriSet } from '../uri-containers.js';
@@ -27,24 +30,32 @@ import { CompiledAssembly } from './compiled-assembly.js';
 import { CompileHandler } from './compile-handler.js';
 import { DecorationStyleManager } from './decorations/decoration-style-manager.js';
 
+const uriComparisonOptions = {
+	ignoreFragment: true,
+	ignorePathCase: process.platform === 'win32',
+} as const;
+
 export class AsmProvider implements TextDocumentContentProvider, Disposable {
 	static readonly scheme = 'assembly';
 
-	private readonly compileHandlers = new UriMap<CompileHandler>();
-	private readonly fileWatchers = new UriMap<Disposable>();
-	private readonly decorators = new UriMap<AsmDecorator>();
-	private readonly compiledAssemblies = new UriMap<CompiledAssembly>();
-	private readonly failedCompilations = new UriSet();
-	private readonly authorizedDirtyCompilations = new UriSet();
-	private readonly sourceToAssembly = new UriMap<Uri>();
-	private readonly pendingRefreshes = new UriMap<ReturnType<typeof setTimeout>>();
-	private readonly diagnosticUrisBySource = new UriMap<readonly Uri[]>();
+	private readonly compileHandlers = new UriMap<CompileHandler>(uriComparisonOptions);
+	private readonly fileWatchers = new UriMap<Disposable>(uriComparisonOptions);
+	private readonly decorators = new UriMap<AsmDecorator>(uriComparisonOptions);
+	private readonly compiledAssemblies = new UriMap<CompiledAssembly>(uriComparisonOptions);
+	private readonly failedCompilations = new UriSet(uriComparisonOptions);
+	private readonly authorizedDirtyCompilations = new UriSet(uriComparisonOptions);
+	private readonly sourceToAssembly = new UriMap<Uri>(uriComparisonOptions);
+	private readonly pendingRefreshes = new UriMap<ReturnType<typeof setTimeout>>(uriComparisonOptions);
+	private readonly diagnosticUrisBySource = new UriMap<readonly Uri[]>(uriComparisonOptions);
 	private readonly styleManager = new DecorationStyleManager();
 	private readonly changeEmitter = new EventEmitter<Uri>();
 	private readonly diagnostics: DiagnosticCollection = languages.createDiagnosticCollection('coglens');
 	private readonly subscriptions: Disposable[];
 
-	constructor(private readonly compilationService: CompilationService) {
+	constructor(
+		private readonly compilationService: CompilationService,
+		private readonly configuration: IConfigurationService,
+	) {
 		this.subscriptions = [
 			workspace.onDidCloseTextDocument(document => this.onCloseTextDocument(document)),
 			compilationService.onVariantsChanged(sources => {
@@ -53,6 +64,11 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 					if (assembly) {
 						this.requestRefresh(assembly);
 					}
+				}
+			}),
+			compilationService.onFiltersChanged(() => {
+				for (const handler of this.compileHandlers.values()) {
+					this.requestRefresh(handler.asmUri);
 				}
 			}),
 			this.changeEmitter,
@@ -76,7 +92,13 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 		if (!this.decorators.has(handler.srcUri)) {
 			this.decorators.set(
 				handler.srcUri,
-				new AsmDecorator(handler.srcUri, handler.asmUri, handler.onDidChange, this.styleManager),
+				new AsmDecorator(
+					handler.srcUri,
+					handler.asmUri,
+					handler.onDidChange,
+					this.styleManager,
+					this.configuration,
+				),
 			);
 		}
 
@@ -91,11 +113,11 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 
 			return assembly.getContent();
 		}).catch((error: unknown) => {
-			this.compiledAssemblies.delete(uri);
 			if (error instanceof CancellationError || token.isCancellationRequested) {
 				return this.compiledAssemblies.get(uri)?.getContent() ?? '';
 			}
 
+			this.compiledAssemblies.delete(uri);
 			this.failedCompilations.add(handler.srcUri);
 			this.authorizedDirtyCompilations.delete(handler.srcUri);
 			const diagnostics = (error as { diagnostics?: readonly CompileDiagnostic[] }).diagnostics ?? [];
@@ -157,7 +179,10 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 			}
 		});
 
-		const watcher = workspace.createFileSystemWatcher(sourceUri.fsPath);
+		const watcher = workspace.createFileSystemWatcher(new RelativePattern(
+			Uri.file(path.dirname(sourceUri.fsPath)),
+			path.basename(sourceUri.fsPath),
+		));
 		const watcherSubscription = watcher.onDidChange(() => this.requestRefresh(assemblyUri));
 		this.fileWatchers.set(assemblyUri, Disposable.from(watcher, watcherSubscription, compileSubscription));
 		this.compileHandlers.set(assemblyUri, handler);
@@ -215,6 +240,10 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 			this.failedCompilations.delete(handler.srcUri);
 			this.authorizedDirtyCompilations.delete(handler.srcUri);
 			this.sourceToAssembly.delete(handler.srcUri);
+			for (const diagnosticUri of this.diagnosticUrisBySource.get(handler.srcUri) ?? []) {
+				this.diagnostics.delete(diagnosticUri);
+			}
+			this.diagnosticUrisBySource.delete(handler.srcUri);
 			handler.dispose();
 			this.compileHandlers.delete(uri);
 		}

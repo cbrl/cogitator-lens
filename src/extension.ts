@@ -18,7 +18,7 @@ const supportedLanguageIds = new Set(['c', 'cpp', 'objective-c', 'objective-cpp'
 export async function activate(context: ExtensionContext): Promise<void> {
 	const configuration = new ConfigurationService();
 	const compilationService = new CompilationService(configuration, context.workspaceState);
-	const assemblyProvider = new AsmProvider(compilationService);
+	const assemblyProvider = new AsmProvider(compilationService, configuration);
 	const definitionProvider = new AsmDefinitionProvider(uri => assemblyProvider.getCompiledAssembly(uri));
 
 	const compilerTree = setup.createCompilerTreeView(context, compilationService.compilerRegistry);

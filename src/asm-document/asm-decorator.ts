@@ -6,7 +6,7 @@ import { equalUri } from '../utils';
 import assert from 'assert';
 import { DecorationStyleManager } from './decorations/decoration-style-manager.js';
 import { EditorTracker } from './decorations/editor-tracker.js';
-import { ConfigurationService } from '../services/configuration-service.js';
+import type { IConfigurationService } from '../interfaces/index.js';
 
 /*
 Nice-to-have features:
@@ -34,13 +34,19 @@ export class AsmDecorator {
 
 	private readonly styleManager: DecorationStyleManager;
 	private readonly editorTracker: EditorTracker;
-	private readonly configService: ConfigurationService;
+	private readonly configService: IConfigurationService;
     private readonly registrations: Disposable;
 
 	private active: boolean = true;
 	private isDisposed: boolean = false;
 
-    constructor(srcUri: Uri, asmUri: Uri, asmEvent: Event<CompiledAssembly | Error>, styleManager: DecorationStyleManager) {
+    constructor(
+		srcUri: Uri,
+		asmUri: Uri,
+		asmEvent: Event<CompiledAssembly | Error>,
+		styleManager: DecorationStyleManager,
+		configService: IConfigurationService,
+	) {
 		this.asmUri = asmUri;
 		this.srcUri = srcUri;
 		this.asmData = new CompiledAssembly(this.srcUri, this.asmUri, []);
@@ -48,7 +54,7 @@ export class AsmDecorator {
 		// Initialize services
 		this.styleManager = styleManager;
 		this.editorTracker = new EditorTracker();
-		this.configService = new ConfigurationService();
+		this.configService = configService;
 
         this.refreshDecorations();
 
@@ -73,7 +79,6 @@ export class AsmDecorator {
 		this.isDisposed = true;
 		this.clearAllDecorations();
         this.registrations.dispose();
-		this.configService.dispose();
     }
 
     public onEditorSelectionChanged(event: TextEditorSelectionChangeEvent): void {

@@ -37,6 +37,7 @@ export interface IConfigurationService {
 export interface ICompilationService extends Disposable {
 	readonly compilerRegistry: ICompilerRegistry;
 	readonly onVariantsChanged: Event<readonly Uri[]>;
+	readonly onFiltersChanged: Event<void>;
 	globalFilterOptions: ParseFiltersAndOutputOptions;
 	getVariants(file: Uri): readonly CompilationVariant[];
 	getSelectedVariant(file: Uri): CompilationVariant | undefined;

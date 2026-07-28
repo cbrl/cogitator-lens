@@ -19,21 +19,21 @@ import type { ParseFiltersAndOutputOptions } from '../parsers/filters.interfaces
 import { CompilerExitError } from '../compiler.js';
 import { CompilerRegistry } from './compiler-registry.js';
 import { CompilationConfigDatabase } from './compilation-config.js';
+import { CompilationSemaphore } from './compilation-semaphore.js';
 import { parseCompilerDiagnostics } from '../diagnostics.js';
 import * as logger from '../logger.js';
 
 export class CompilationService implements ICompilationService {
-	private static readonly maximumConcurrentCompilations = 2;
-
 	readonly compilerRegistry = new CompilerRegistry();
 	private readonly variants = new CompilationConfigDatabase();
 	private readonly changeEmitter = new EventEmitter<readonly Uri[]>();
+	private readonly filterChangeEmitter = new EventEmitter<void>();
 	private readonly subscriptions: Disposable[] = [];
-	private activeCompilations = 0;
-	private readonly queue: Array<() => void> = [];
+	private readonly semaphore = new CompilationSemaphore(2, () => new CancellationError());
 	private filters: ParseFiltersAndOutputOptions;
 
 	readonly onVariantsChanged: Event<readonly Uri[]> = this.changeEmitter.event;
+	readonly onFiltersChanged: Event<void> = this.filterChangeEmitter.event;
 
 	constructor(
 		private readonly configuration: IConfigurationService,
@@ -53,10 +53,13 @@ export class CompilationService implements ICompilationService {
 	}
 
 	set globalFilterOptions(value: ParseFiltersAndOutputOptions) {
+		if (filtersEqual(this.filters, value)) {
+			return;
+		}
 		this.filters = { ...value };
+		this.filterChangeEmitter.fire();
 		const folder = workspace.workspaceFolders?.[0];
 		void this.configuration.updateFilters(this.filters, folder);
-		this.changeEmitter.fire(this.variantsSources());
 	}
 
 	getVariants(file: Uri): readonly CompilationVariant[] {
@@ -101,7 +104,7 @@ export class CompilationService implements ICompilationService {
 	}
 
 	async compile(file: Uri, cancellationToken: CancellationToken): Promise<CompileArtifact> {
-		await this.acquireSlot(cancellationToken);
+		await this.semaphore.acquire(cancellationToken);
 		try {
 			if (cancellationToken.isCancellationRequested) {
 				throw new CancellationError();
@@ -125,14 +128,22 @@ export class CompilationService implements ICompilationService {
 				}, this.filters, cancellationToken);
 				return {
 					result: run.parsed,
-					diagnostics: parseCompilerDiagnostics(`${run.stderr}\n${run.stdout}`, file),
+					diagnostics: parseCompilerDiagnostics(
+						`${run.stderr}\n${run.stdout}`,
+						file,
+						variant.workingDirectory,
+					),
 					durationMs: run.durationMs,
 					command: run.command,
 					truncated: false,
 				};
 			} catch (error) {
 				if (error instanceof CompilerExitError) {
-					const diagnostics = parseCompilerDiagnostics(`${error.stderr}\n${error.stdout}`, file);
+					const diagnostics = parseCompilerDiagnostics(
+						`${error.stderr}\n${error.stdout}`,
+						file,
+						variant.workingDirectory,
+					);
 					Object.assign(error, { diagnostics });
 				} else if (error && typeof error === 'object') {
 					const processError = error as { stderr?: unknown; stdout?: unknown };
@@ -140,19 +151,21 @@ export class CompilationService implements ICompilationService {
 						`${typeof processError.stderr === 'string' ? processError.stderr : ''}\n`
 						+ `${typeof processError.stdout === 'string' ? processError.stdout : ''}`,
 						file,
+						variant.workingDirectory,
 					);
 					Object.assign(error, { diagnostics });
 				}
 				throw error;
 			}
 		} finally {
-			this.releaseSlot();
+			this.semaphore.release();
 		}
 	}
 
 	dispose(): void {
 		this.subscriptions.forEach(subscription => subscription.dispose());
 		this.changeEmitter.dispose();
+		this.filterChangeEmitter.dispose();
 		this.variants.dispose();
 		this.compilerRegistry.dispose();
 	}
@@ -160,7 +173,11 @@ export class CompilationService implements ICompilationService {
 	private reloadUserConfiguration(): void {
 		try {
 			this.compilerRegistry.reconcile('user', this.configuration.getCompilers());
-			this.filters = this.configuration.getFilters();
+			const filters = this.configuration.getFilters();
+			if (!filtersEqual(this.filters, filters)) {
+				this.filters = filters;
+				this.filterChangeEmitter.fire();
+			}
 		} catch (error) {
 			logger.logChannel.error(`Failed to reload Cogitator Lens configuration: ${String(error)}`);
 		}
@@ -189,41 +206,6 @@ export class CompilationService implements ICompilationService {
 		};
 	}
 
-	private acquireSlot(token: CancellationToken): Promise<void> {
-		if (this.activeCompilations < CompilationService.maximumConcurrentCompilations) {
-			this.activeCompilations++;
-			return Promise.resolve();
-		}
-		return new Promise((resolve, reject) => {
-			const resume = (): void => {
-				cancellation.dispose();
-				if (token.isCancellationRequested) {
-					reject(new CancellationError());
-				} else {
-					resolve();
-				}
-			};
-			const cancellation = token.onCancellationRequested(() => {
-				const index = this.queue.indexOf(resume);
-				if (index >= 0) {
-					this.queue.splice(index, 1);
-					cancellation.dispose();
-					reject(new CancellationError());
-				}
-			});
-			this.queue.push(resume);
-		});
-	}
-
-	private releaseSlot(): void {
-		const next = this.queue.shift();
-		if (next) {
-			next();
-		} else {
-			this.activeCompilations--;
-		}
-	}
-
 	private variantsSources(): Uri[] {
 		return [...this.variants.getAllSources()];
 	}
@@ -231,4 +213,20 @@ export class CompilationService implements ICompilationService {
 	private selectionKey(file: Uri): string {
 		return `coglens.variant.${file.toString()}`;
 	}
+}
+
+function filtersEqual(
+	left: ParseFiltersAndOutputOptions,
+	right: ParseFiltersAndOutputOptions,
+): boolean {
+	const keys = new Set([
+		...Object.keys(left),
+		...Object.keys(right),
+	] as Array<keyof ParseFiltersAndOutputOptions>);
+	for (const key of keys) {
+		if (left[key] !== right[key]) {
+			return false;
+		}
+	}
+	return true;
 }
