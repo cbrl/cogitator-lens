@@ -1,100 +1,147 @@
-import vscode from 'vscode';
-import { workspace, window, commands, ExtensionContext, TextDocumentShowOptions, ViewColumn } from 'vscode';
-import { AsmProvider, getAsmUri } from './asm-document/asm-provider';
-import { AsmDefinitionProvider } from './asm-document/asm-definition-provider';
+import vscode, {
+	commands,
+	ExtensionContext,
+	TextDocumentShowOptions,
+	ViewColumn,
+	window,
+	workspace,
+} from 'vscode';
+import { AsmDefinitionProvider } from './asm-document/asm-definition-provider.js';
+import { AsmProvider, getAsmUri } from './asm-document/asm-provider.js';
+import { CmakeMonitor } from './buildsystems/cmake.js';
 import { CompilationService } from './compilation/index.js';
-import { CompilationInfo } from './types/index.js';
 import { ConfigurationService } from './services/configuration-service.js';
-import { CmakeMonitor } from './buildsystems/cmake';
-import { getCompilerByExe } from './compilers/compiler-map';
-import path from 'path';
-import * as logger from './logger';
-import * as setup from './setup';
+import * as setup from './setup.js';
 
-/*
-TODO:
-  - support loading compile info from compile_commands.json
-  - objdump support (is this needed?)
-  - Settings for binary ASM parsing
-*/
+const supportedLanguageIds = new Set(['c', 'cpp', 'objective-c', 'objective-cpp', 'cuda']);
 
 export async function activate(context: ExtensionContext): Promise<void> {
-	const configService = new ConfigurationService();
-	const compileManager = new CompilationService(configService);
-	const asmProvider = new AsmProvider(compileManager);
-	const asmDefProvider = new AsmDefinitionProvider(uri => asmProvider.getCompiledAssembly(uri));
+	const configuration = new ConfigurationService();
+	const compilationService = new CompilationService(configuration, context.workspaceState);
+	const assemblyProvider = new AsmProvider(compilationService);
+	const definitionProvider = new AsmDefinitionProvider(uri => assemblyProvider.getCompiledAssembly(uri));
 
-	const compilerTreeProvider = setup.createCompilerTreeView(context, compileManager.compilerRegistry);
-	const infoTreeProvider = setup.createCompilationInfoTreeView(context, compileManager);
-	const globalOptionsTreeProvider = setup.createGlobalOptionsTreeView(context, compileManager);
+	const compilerTree = setup.createCompilerTreeView(context, compilationService.compilerRegistry);
+	const compilationTree = setup.createCompilationInfoTreeView(context, compilationService);
+	const filterTree = setup.createGlobalOptionsTreeView(context, compilationService);
+	setup.setupCommands(
+		context,
+		compilationService,
+		configuration,
+		compilerTree,
+		compilationTree,
+		filterTree,
+	);
 
-	setup.setupCommands(context, compileManager, compilerTreeProvider, infoTreeProvider, globalOptionsTreeProvider);
-
-	// Use CMake API to fetch build info for each file in the project
 	const cmakeMonitor = new CmakeMonitor();
-	const compileInfoRegistration = cmakeMonitor.onCompilationInfoChanged(infoArray => {
-		for (let [file, prelimInfo] of infoArray) {
-			// Detect compiler type by executable
-			const compiler = getCompilerByExe(prelimInfo.compilerPath.fsPath);
+	const cmakeSubscription = cmakeMonitor.onSnapshot(snapshot =>
+		compilationService.reconcileProviderSnapshot(snapshot));
 
-			if (compiler === undefined) {
-				logger.logAndShowError(`Could not detect compiler type for ${prelimInfo.compilerPath.fsPath} (when processing ${file.fsPath})`);
-				continue;
-			}
+	const contentProvider = workspace.registerTextDocumentContentProvider(AsmProvider.scheme, assemblyProvider);
+	const definitionRegistration = vscode.languages.registerDefinitionProvider(
+		{ scheme: AsmProvider.scheme },
+		definitionProvider,
+	);
 
-			// Add prefix to auto-detected compiler names
-			const compilerName = 'CMake: ' + path.basename(prelimInfo.compilerPath.fsPath);
-
-			// Create compiler if needed
-			if (!compileManager.compilerRegistry.hasCompiler(compilerName)) {
-				const compilerInfo = compiler.baseCompilerInfo(compilerName, prelimInfo.compilerPath.fsPath);
-				compileManager.compilerRegistry.createCompiler(compilerInfo);
-			}
-
-			// Create file compilation info
-			const info: CompilationInfo = {
-				compilerName: compilerName,
-				...prelimInfo,
-			};
-
-			compileManager.setCompilationInfo(file, info);
+	const disassemble = commands.registerTextEditorCommand('coglens.Disassemble', async editor => {
+		if (!isSupportedSourceDocument(editor.document)) {
+			await window.showWarningMessage('Cogitator Lens supports saved, file-backed C and C++ source files.');
+			return;
+		}
+		const dirtyDecision = await resolveDirtyDocument(editor.document);
+		if (dirtyDecision === 'cancel') {
+			return;
+		}
+		if (dirtyDecision === 'saved-version') {
+			assemblyProvider.allowDirtySavedCompilation(editor.document.uri);
+		}
+		if (!await pickVariantIfNeeded(editor.document.uri, compilationService)) {
+			return;
 		}
 
-		compilerTreeProvider.refresh();
-		infoTreeProvider.refresh();
-	});
-
-	cmakeMonitor.initialize();
-
-	// Register content provider for the 'assembly' scheme
-	const asmProviderRegistration = workspace.registerTextDocumentContentProvider(AsmProvider.scheme, asmProvider);
-	const asmDefRegistration = vscode.languages.registerDefinitionProvider({scheme: AsmProvider.scheme}, asmDefProvider);
-
-	// Register main command. This will create a URI with the 'assembly' scheme, open the document,
-	// and display it an an editor to the right.
-	const commandRegistration = commands.registerTextEditorCommand('coglens.Disassemble', srcEditor => {
-		const asmUri = getAsmUri(srcEditor.document.uri);
-
-		// Always trigger a recompile when the command is invoked,
-		// so the user gets fresh output even if the document is already open or was cached from a failed attempt.
-		asmProvider.requestRefresh(asmUri);
-
+		const assemblyUri = getAsmUri(editor.document.uri);
+		assemblyProvider.requestRefresh(assemblyUri);
 		const options: TextDocumentShowOptions = {
 			viewColumn: ViewColumn.Beside,
 			preserveFocus: true,
 			preview: false,
 		};
+		await window.showTextDocument(assemblyUri, options);
+	});
 
-		window.showTextDocument(asmUri, options);
+	const pickVariantCommand = commands.registerTextEditorCommand('coglens.PickCompilationVariant', async editor => {
+		if (!isSupportedSourceDocument(editor.document)) {
+			return;
+		}
+		await pickVariant(editor.document.uri, compilationService);
+		const assemblyUri = getAsmUri(editor.document.uri);
+		assemblyProvider.requestRefresh(assemblyUri);
 	});
 
 	context.subscriptions.push(
-		asmProvider,
-		compileManager,
+		configuration,
+		compilationService,
+		assemblyProvider,
 		cmakeMonitor,
-		compileInfoRegistration,
-		asmProviderRegistration,
-		asmDefRegistration,
-		commandRegistration
+		cmakeSubscription,
+		contentProvider,
+		definitionRegistration,
+		disassemble,
+		pickVariantCommand,
 	);
+
+	await cmakeMonitor.initialize();
+}
+
+function isSupportedSourceDocument(document: vscode.TextDocument): boolean {
+	return document.uri.scheme === 'file' && supportedLanguageIds.has(document.languageId);
+}
+
+type DirtyDocumentDecision = 'current' | 'saved-version' | 'cancel';
+
+async function resolveDirtyDocument(document: vscode.TextDocument): Promise<DirtyDocumentDecision> {
+	if (!document.isDirty) {
+		return 'current';
+	}
+	const choice = await window.showWarningMessage(
+		'This source file has unsaved changes. What should Cogitator Lens compile?',
+		{ modal: true },
+		'Save and Compile',
+		'Compile Saved Version',
+		'Cancel',
+	);
+	if (choice === 'Save and Compile') {
+		return await document.save() ? 'current' : 'cancel';
+	}
+	return choice === 'Compile Saved Version' ? 'saved-version' : 'cancel';
+}
+
+async function pickVariantIfNeeded(source: vscode.Uri, service: CompilationService): Promise<boolean> {
+	const variants = service.getVariants(source);
+	if (variants.length <= 1) {
+		return variants.length === 1;
+	}
+
+	return service.hasExplicitVariantSelection(source) || pickVariant(source, service);
+}
+
+async function pickVariant(source: vscode.Uri, service: CompilationService): Promise<boolean> {
+	const variants = service.getVariants(source);
+	if (variants.length === 0) {
+		await window.showErrorMessage('No compilation variant is available for this file.');
+		return false;
+	}
+
+	const selected = service.getSelectedVariant(source);
+	const choice = await window.showQuickPick(
+		variants.map(variant => ({
+			label: variant.displayLabel,
+			description: variant.id === selected?.id ? 'current' : variant.provider,
+			detail: [variant.project, variant.target, variant.configuration].filter(Boolean).join(' · '),
+			variant,
+		})),
+		{ title: 'Select compilation variant', matchOnDescription: true, matchOnDetail: true },
+	);
+
+	return choice ? service.selectVariant(source, choice.variant.id) : false;
 }
