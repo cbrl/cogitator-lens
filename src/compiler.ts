@@ -1,79 +1,135 @@
 import fs from 'fs';
-import crypto from 'crypto';
-import os from 'os';
 import path from 'path';
+import type { CancellationToken } from 'vscode';
 import { AsmParser } from './parsers/asm-parser.js';
-import * as exec from './exec';
-import { replaceExtension } from './utils.js';
-import { ParseFiltersAndOutputOptions } from './parsers/filters.interfaces.js';
-import { ParsedAsmResult } from './parsers/asmresult.interfaces.js';
+import * as exec from './exec.js';
+import type { ParseFiltersAndOutputOptions } from './parsers/filters.interfaces.js';
+import type { ParsedAsmResult } from './parsers/asmresult.interfaces.js';
 import * as logger from './logger.js';
-import { CompilerInfo, CompileOptions } from './types/index.js';
+import type { CompilerProfile, CompileOptions } from './types/index.js';
+import { redactArguments, sanitizeCompilerArguments } from './compiler-arguments.js';
+import { withTemporaryDirectory } from './temporary-directory.js';
 
-// Re-export types for backwards compatibility
-export type { CompilerInfo, CompileOptions };
+export interface CompilerRunResult {
+	parsed: ParsedAsmResult;
+	stdout: string;
+	stderr: string;
+	durationMs: number;
+	command: {
+		executable: string;
+		arguments: readonly string[];
+		environmentVariableNames: readonly string[];
+		workingDirectory: string;
+	};
+}
+
+export class CompilerExitError extends Error {
+	constructor(
+		message: string,
+		public readonly returnCode: number,
+		public readonly stdout: string,
+		public readonly stderr: string,
+	) {
+		super(message);
+		this.name = 'CompilerExitError';
+	}
+}
 
 export interface ICompiler {
-	info: CompilerInfo;
-	asmParser: AsmParser;
-
-	compile(file: string, options: CompileOptions, filter: ParseFiltersAndOutputOptions): Promise<ParsedAsmResult>;
+	readonly profile: CompilerProfile;
+	compile(
+		file: string,
+		options: CompileOptions,
+		filter: ParseFiltersAndOutputOptions,
+		cancellationToken: CancellationToken,
+	): Promise<CompilerRunResult>;
 }
 
 export abstract class CompilerBase implements ICompiler {
-	info: CompilerInfo;
-	asmParser: AsmParser;
+	readonly profile: CompilerProfile;
+	protected asmParser: AsmParser;
 
-	constructor(info: CompilerInfo) {
-		this.info = info;
+	constructor(profile: CompilerProfile) {
+		this.profile = profile;
 		this.asmParser = new AsmParser();
 	}
 
-	async compile(file: string, options: CompileOptions, filter: ParseFiltersAndOutputOptions): Promise<ParsedAsmResult> {
-		const outputDir = os.tmpdir();
-		const uniqueName = `${path.basename(replaceExtension(file, ''))}-${crypto.randomUUID()}.asm`;
-		const outputFile = path.join(outputDir, uniqueName);
+	async compile(
+		file: string,
+		options: CompileOptions,
+		filter: ParseFiltersAndOutputOptions,
+		cancellationToken: CancellationToken,
+	): Promise<CompilerRunResult> {
+		return withTemporaryDirectory('coglens-', async temporaryDirectory => {
+			const outputFile = path.join(temporaryDirectory, 'output.asm');
+			const workingDirectory = options.workingDirectory ?? path.dirname(file);
 
-		const args = [
-			...(this.info.args ?? []),
-			...(options.args ?? []),
-			...(this.info.includePaths?.map(value => this.info.includeFlag + value) ?? []),
-			...(options.includes?.map(value => this.info.includeFlag + value) ?? []),
-			...(this.info.defines?.map(value => this.info.defineFlag + value) ?? []),
-			...(options.defines?.map(value => this.info.defineFlag + value) ?? []),
-			...this.prepareArgs(outputFile),
-		];
+			const environment = {
+				...process.env,
+				...this.profile.environment,
+				...options.env,
+			};
 
-		const envVars = Object.assign({}, process.env, this.info.envVars ?? {}, options.env ?? {});
+			const providerArguments = sanitizeCompilerArguments([
+				...this.profile.defaultArguments,
+				...(options.args ?? []),
+			], file);
 
-		logger.logChannel.info(`Compiling ${file} with ${this.info.exe}`);
-		logger.logChannel.info(`Arguments: ${args.join(' ')}`);
-		logger.logChannel.debug(`Environment Variables: ${JSON.stringify(envVars, undefined, 2)}`);
+			const argumentsList = [
+				...providerArguments,
+				...this.profile.includes.map(value => `${this.profile.includeFlag}${value}`),
+				...(options.includes ?? []).map(value => `${this.profile.includeFlag}${value}`),
+				...this.profile.defines.map(value => `${this.profile.defineFlag}${value}`),
+				...(options.defines ?? []).map(value => `${this.profile.defineFlag}${value}`),
+				...this.prepareArguments(outputFile),
+				file,
+			];
 
-		const execResult = await this.doCompile(file, args, envVars);
+			const started = performance.now();
+			logger.logChannel.info(`Compiling ${file} with ${this.profile.displayName}`);
+			logger.logChannel.info(`Command: ${this.profile.executable} ${redactArguments(argumentsList).join(' ')}`);
+			const overriddenNames = Object.keys({ ...this.profile.environment, ...options.env }).sort();
+			logger.logChannel.debug(`Environment overrides: ${overriddenNames.join(', ') || '(none)'}`);
 
-		if (execResult.returnCode !== 0) {
-			throw new Error(`Failed to compile ${file}: ${execResult.stderr || execResult.stdout}`);
-		}
-		else {
-			logger.logChannel.info(`Compilation of ${file} succeeded`);
-		}
+			const result = await this.runCompiler(argumentsList, environment, workingDirectory, cancellationToken);
+			if (result.returnCode !== 0) {
+				throw new CompilerExitError(
+					`Compiler exited with code ${result.returnCode}`,
+					result.returnCode,
+					result.stdout,
+					result.stderr,
+				);
+			}
 
-		// TODO: demangle
-
-		try {
-			const asmBytes = await fs.promises.readFile(outputFile);
-			const asmText = new TextDecoder().decode(asmBytes);
-
-			return this.asmParser.process(asmText, filter);
-		} finally {
-			fs.promises.unlink(outputFile).catch(() => {});
-		}
+			const assembly = await fs.promises.readFile(outputFile, 'utf8');
+			return {
+				parsed: this.asmParser.process(assembly, filter),
+				stdout: result.stdout,
+				stderr: result.stderr,
+				durationMs: performance.now() - started,
+				command: {
+					executable: this.profile.executable,
+					arguments: redactArguments(argumentsList),
+					environmentVariableNames: overriddenNames,
+					workingDirectory,
+				},
+			};
+		});
 	}
 
-	protected async doCompile(file: string, args: string[], envVars: Record<string, string>): Promise<exec.ExecResult> {
-		return exec.execute(this.info.exe, [...args, file], { env: envVars });
+	protected runCompiler(
+		args: readonly string[],
+		environment: NodeJS.ProcessEnv,
+		workingDirectory: string,
+		cancellationToken: CancellationToken,
+	): Promise<exec.ExecResult> {
+		return exec.execute(this.profile.executable, args, {
+			cwd: workingDirectory,
+			env: environment,
+			cancellationToken,
+		});
 	}
 
-	protected abstract prepareArgs(outputFile: string): string[];
+	protected abstract prepareArguments(outputFile: string): readonly string[];
+
 }

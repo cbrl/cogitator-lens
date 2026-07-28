@@ -1,23 +1,35 @@
-import * as allCompilers from './all';
-import { keyToTypeMap } from '../utils';
+import path from 'path';
+import { AppleClangCompiler, ClangCompiler, GccCompiler } from './gcc.js';
+import { ClangClCompiler, MsvcCompiler } from './msvc.js';
+import type { CompilerKind, CompilerProfile } from '../types/index.js';
+import type { CompilerBase } from '../compiler.js';
+import { detectCompilerKind } from '../compiler-detection.js';
 
-const compilerMap = keyToTypeMap(allCompilers, 'type');
-
-export function getCompilerByType(type: string): typeof compilerMap[keyof typeof compilerMap] | undefined {
-	if (type in compilerMap) {
-		return compilerMap[type];
-	}
-
-	return undefined;
+export interface CompilerAdapter {
+	readonly type: CompilerKind;
+	new(profile: CompilerProfile): CompilerBase;
+	baseCompilerProfile(displayName: string, executable: string): CompilerProfile;
+	isCompiler(executable: string): boolean;
 }
 
-export function getCompilerByExe(exe: string): typeof compilerMap[keyof typeof compilerMap] | undefined {
-	for (const compiler of Object.values(allCompilers)) {
+const adapters: readonly CompilerAdapter[] = [
+	GccCompiler,
+	ClangClCompiler,
+	MsvcCompiler,
+	ClangCompiler,
+	AppleClangCompiler,
+];
 
-		if (compiler.isCompiler(exe)) {
-			return compiler;
-		}
-	}
+export function getCompilerByType(type: string): CompilerAdapter | undefined {
+	return adapters.find(adapter => adapter.type === type);
+}
 
-	return undefined;
+export function getCompilerByExe(executable: string, versionOutput?: string): CompilerAdapter | undefined {
+	const kind = detectCompilerKind(executable, versionOutput);
+	return kind ? getCompilerByType(kind) : undefined;
+}
+
+export function normalizedExecutableId(executable: string): string {
+	const normalized = path.resolve(executable);
+	return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }

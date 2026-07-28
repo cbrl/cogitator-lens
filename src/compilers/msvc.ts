@@ -1,107 +1,131 @@
-import * as path from 'path';
-import * as fs from 'fs';
-import * as exec from '../exec';
-import { CompilerBase, CompilerInfo } from '../compiler';
-import { VcAsmParser } from '../parsers/asm-parser-vc';
-import { AsmParser } from '../parsers/asm-parser';
-import * as logger from '../logger.js';
+import fs from 'fs';
+import path from 'path';
+import { CompilerBase } from '../compiler.js';
+import * as exec from '../exec.js';
+import type { CancellationToken } from 'vscode';
+import type { CompilerKind, CompilerProfile } from '../types/index.js';
+import { VcAsmParser } from '../parsers/asm-parser-vc.js';
 
-export abstract class WindowsCompilerBase extends CompilerBase {
-	protected override prepareArgs(outputFile: string): string[] {
-		return [
-			'/nologo',
-			'/c',
-			'/FA',
-			`/Fa${outputFile}`,
-			`/Fo${outputFile}.obj`,
-			`/Fd${outputFile}.pdb`
-		];
+abstract class WindowsCompilerBase extends CompilerBase {
+	protected override prepareArguments(outputFile: string): readonly string[] {
+		return ['/nologo', '/c', '/FAcs', `/Fa${outputFile}`, `/Fo${outputFile}.obj`, `/Fd${outputFile}.pdb`];
 	}
 }
 
 export class MsvcCompiler extends WindowsCompilerBase {
-	public static get type(): string {
-		return 'msvc';
+	static readonly type: CompilerKind = 'msvc';
+
+	static baseCompilerProfile(displayName: string, executable: string): CompilerProfile {
+		const demangler = executable.replace(/cl\.exe$/i, 'undname.exe');
+		return makeWindowsProfile(displayName, executable, MsvcCompiler.type, fs.existsSync(demangler) ? demangler : undefined);
 	}
 
-	public static baseCompilerInfo(name: string, exe: string): CompilerInfo {
-		const info: CompilerInfo = {
-			name: name,
-			type: MsvcCompiler.type,
-			exe: exe,
-
-			includeFlag: '/I',
-			defineFlag: '/D',
-
-			supportsDemangle: true,
-			supportsIntel: false,
-			supportsLibraryCodeFilter: true
-		};
-
-		// Try to auto-detect demangler
-		const demangler = exe.replace(/cl\.exe$/, 'undname.exe');
-
-		if (fs.existsSync(demangler)) {
-			info.demangler = fs.realpathSync(demangler);
-		}
-
-		return info;
+	static isCompiler(executable: string): boolean {
+		return /^cl\.exe$/i.test(path.basename(executable));
 	}
 
-	public static isCompiler(exe: string): boolean {
-		const lowerExe = path.basename(exe).toLowerCase();
-		return lowerExe === 'cl.exe';
-	}
-
-	constructor(info: CompilerInfo) {
-		super(info);
+	constructor(profile: CompilerProfile) {
+		super(profile);
 		this.asmParser = new VcAsmParser();
 	}
 
-	protected override async doCompile(file: string, args: string[], envVars: Record<string, string>): Promise<exec.ExecResult> {
-		const parentDir = path.parse(this.info.exe).dir;
-		const arch = path.parse(parentDir).base.replace('x64', 'amd64');
-		const host = path.parse(path.parse(parentDir).dir).base.replace('Host', '').replace('x64', 'amd64');
+	protected override async runCompiler(
+		args: readonly string[],
+		environment: NodeJS.ProcessEnv,
+		workingDirectory: string,
+		cancellationToken: CancellationToken,
+	): Promise<exec.ExecResult> {
+		const visualStudioEnvironment = await this.captureVisualStudioEnvironment(environment, cancellationToken);
+		return exec.execute(this.profile.executable, args, {
+			cwd: workingDirectory,
+			env: visualStudioEnvironment,
+			cancellationToken,
+		});
+	}
 
-		const vcvarsArch = (host === arch) ? arch : `${host}_${arch}`;
-		const vcvarsScript = path.join(parentDir, '../'.repeat(6), 'Auxiliary/Build/vcvarsall.bat');
+	private async captureVisualStudioEnvironment(
+		baseEnvironment: NodeJS.ProcessEnv,
+		cancellationToken: CancellationToken,
+	): Promise<NodeJS.ProcessEnv> {
+		const compilerDirectory = path.dirname(this.profile.executable);
+		const architecture = path.basename(compilerDirectory).replace(/^x64$/i, 'amd64');
+		const hostDirectory = path.basename(path.dirname(compilerDirectory));
+		const host = hostDirectory.replace(/^Host/i, '').replace(/^x64$/i, 'amd64');
 
-		const command = `"${vcvarsScript}" ${vcvarsArch} && cl.exe ${args.join(' ')} "${file}"`;
+		const vcvarsArchitecture = host === architecture ? architecture : `${host}_${architecture}`;
+		if (!/^[a-z0-9_]+$/i.test(vcvarsArchitecture)) {
+			throw new Error(`Unsupported Visual Studio architecture: ${vcvarsArchitecture}`);
+		}
 
-		logger.logChannel.info(`Final compile command: ${command}`);
-		return exec.execute(command, [], {env: envVars, shell: true});
+		const vcvarsScript = path.resolve(compilerDirectory, '..', '..', '..', '..', '..', '..', 'Auxiliary', 'Build', 'vcvarsall.bat');
+		if (!fs.existsSync(vcvarsScript)) {
+			throw new Error(`Visual Studio environment script was not found: ${vcvarsScript}`);
+		}
+		if (/["\r\n%!]/.test(vcvarsScript)) {
+			throw new Error('The Visual Studio environment script path contains characters that cmd.exe cannot safely quote.');
+		}
+
+		const captureCommand = `call "${vcvarsScript}" ${vcvarsArchitecture} >nul && set`;
+		const result = await exec.execute('cmd.exe', ['/d', '/s', '/c', captureCommand], {
+			env: baseEnvironment,
+			cancellationToken,
+		});
+		if (result.returnCode !== 0) {
+			throw new Error(`Visual Studio environment setup failed with code ${result.returnCode}: ${result.stderr}`);
+		}
+
+		const captured: NodeJS.ProcessEnv = { ...baseEnvironment };
+		for (const line of result.stdout.split(/\r?\n/)) {
+			const separator = line.indexOf('=');
+			if (separator > 0) {
+				captured[line.slice(0, separator)] = line.slice(separator + 1);
+			}
+		}
+
+		return captured;
 	}
 }
 
 export class ClangClCompiler extends WindowsCompilerBase {
-	public static get type(): string {
-		return 'clang-cl';
+	static readonly type: CompilerKind = 'clang-cl';
+
+	static baseCompilerProfile(displayName: string, executable: string): CompilerProfile {
+		const demangler = path.join(path.dirname(executable), 'llvm-cxxfilt.exe');
+		return makeWindowsProfile(displayName, executable, ClangClCompiler.type, fs.existsSync(demangler) ? demangler : undefined);
 	}
 
-	protected override prepareArgs(outputFile: string): string[] {
-		// Enable debug info in the object file
-		return ['/Z7', ...super.prepareArgs(outputFile)];
+	static isCompiler(executable: string): boolean {
+		return /^clang-cl(?:\.exe)?$/i.test(path.basename(executable));
 	}
 
-	public static baseCompilerInfo(name: string, exe: string): CompilerInfo {
-		const info = MsvcCompiler.baseCompilerInfo(name, exe);
-		info.type = ClangClCompiler.type;
-		info.supportsIntel = true;
-
-		// Get the demangler from the Clang installation
-		const demangler = path.join(path.dirname(exe), 'llvm-cxxfilt.exe');
-		if (fs.existsSync(demangler)) {
-			info.demangler = fs.realpathSync(demangler);
-		}
-		else {
-			info.demangler = undefined;
-		}
-
-		return info;
+	protected override prepareArguments(outputFile: string): readonly string[] {
+		return ['/Z7', ...super.prepareArguments(outputFile)];
 	}
+}
 
-	public static isCompiler(exe: string): boolean {
-		const lowerExe = path.basename(exe).toLowerCase();
-		return lowerExe === 'clang-cl.exe';
-	}
+function makeWindowsProfile(
+	displayName: string,
+	executable: string,
+	kind: CompilerKind,
+	demangler?: string,
+): CompilerProfile {
+	const normalized = path.normalize(executable);
+	return {
+		id: `detected:${normalized.toLowerCase()}`,
+		displayName,
+		kind,
+		executable: normalized,
+		defaultArguments: [],
+		includes: [],
+		defines: [],
+		environment: {},
+		includeFlag: '/I',
+		defineFlag: '/D',
+		demangler,
+		capabilities: {
+			demangle: demangler !== undefined,
+			intelSyntax: kind === 'clang-cl',
+			libraryCodeFilter: true,
+		},
+	};
 }
