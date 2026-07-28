@@ -1,93 +1,152 @@
-import child_process from 'child_process';
+import childProcess, { type SpawnOptions } from 'child_process';
 
-export type ExecResult = {
-	returnCode: number,
-	stdout: string,
-	stderr: string
-};
+export type ExecFailureKind = 'cancelled' | 'timeout' | 'output-limit' | 'spawn';
 
-export interface ExecOptions extends child_process.SpawnOptions {
-	/** Timeout in milliseconds. Defaults to 60000 (60s). Use 0 for no timeout. */
-	timeout?: number;
-	/** Maximum combined output size in bytes. Defaults to 50MB. Use 0 for no limit. */
-	maxOutputSize?: number;
+export class ExecError extends Error {
+	constructor(
+		public readonly kind: ExecFailureKind,
+		message: string,
+		public readonly stdout = '',
+		public readonly stderr = '',
+	) {
+		super(message);
+		this.name = 'ExecError';
+	}
 }
 
-const DEFAULT_TIMEOUT = 60_000;
-const DEFAULT_MAX_OUTPUT = 50 * 1024 * 1024;
+export interface CancellationLike {
+	readonly isCancellationRequested: boolean;
+	onCancellationRequested(listener: () => void): { dispose(): void };
+}
 
-export function execute(command: string, args: string[], options: ExecOptions = {}): Promise<ExecResult> {
-	const { timeout = DEFAULT_TIMEOUT, maxOutputSize = DEFAULT_MAX_OUTPUT, ...spawnOptions } = options;
+export interface ExecResult {
+	returnCode: number;
+	stdout: string;
+	stderr: string;
+}
 
-	const proc = child_process.spawn(command, args, spawnOptions);
+export interface ExecOptions extends Omit<SpawnOptions, 'shell'> {
+	timeoutMs?: number;
+	maxOutputBytes?: number;
+	cancellationToken?: CancellationLike;
+}
 
-	const stdoutChunks: string[] = [];
-	const stderrChunks: string[] = [];
-	let totalSize = 0;
-	let killed = false;
+const defaultTimeoutMs = 60_000;
+const defaultMaxOutputBytes = 50 * 1024 * 1024;
 
-	const killProcess = (reason: string) => {
-		if (!killed) {
-			killed = true;
-			proc.kill();
-			// Fallback SIGKILL after 5s if process doesn't exit
-			setTimeout(() => { try { proc.kill('SIGKILL'); } catch { /* already dead */ } }, 5000).unref();
-		}
-	};
+export async function execute(command: string, args: readonly string[], options: ExecOptions = {}): Promise<ExecResult> {
+	const {
+		timeoutMs = defaultTimeoutMs,
+		maxOutputBytes = defaultMaxOutputBytes,
+		cancellationToken,
+		...spawnOptions
+	} = options;
 
-	proc.stdout?.on('data', (data: Buffer | string) => {
-		const chunk = String(data);
-		totalSize += chunk.length;
-		if (maxOutputSize > 0 && totalSize > maxOutputSize) {
-			killProcess('output size exceeded');
-			return;
-		}
-		stdoutChunks.push(chunk);
-	});
+	if (cancellationToken?.isCancellationRequested) {
+		throw new ExecError('cancelled', 'Process execution was cancelled before it started');
+	}
 
-	proc.stderr?.on('data', (data: Buffer | string) => {
-		const chunk = String(data);
-		totalSize += chunk.length;
-		if (maxOutputSize > 0 && totalSize > maxOutputSize) {
-			killProcess('output size exceeded');
-			return;
-		}
-		stderrChunks.push(chunk);
-	});
+	return new Promise<ExecResult>((resolve, reject) => {
+		const stdout: Buffer[] = [];
+		const stderr: Buffer[] = [];
+		let outputBytes = 0;
+		let failure: ExecError | undefined;
+		let settled = false;
 
-	return new Promise((resolve, reject) => {
-		let timer: ReturnType<typeof setTimeout> | undefined;
-
-		if (timeout > 0) {
-			timer = setTimeout(() => {
-				killProcess('timeout');
-			}, timeout);
-		}
-
-		proc.on('error', err => {
-			if (timer) { clearTimeout(timer); }
-			reject(err);
+		const process = childProcess.spawn(command, [...args], {
+			...spawnOptions,
+			detached: processPlatformSupportsGroups(),
+			shell: false,
+			windowsHide: true,
 		});
 
-		proc.on('close', code => {
-			if (timer) { clearTimeout(timer); }
-
-			if (killed && code !== 0) {
-				if (maxOutputSize > 0 && totalSize > maxOutputSize) {
-					reject(new Error(`Process output exceeded ${maxOutputSize} bytes limit`));
-					return;
-				}
-				reject(new Error(`Process timed out after ${timeout}ms`));
+		const fail = (kind: ExecFailureKind, message: string): void => {
+			if (failure || settled) {
 				return;
 			}
+			failure = new ExecError(kind, message, Buffer.concat(stdout).toString(), Buffer.concat(stderr).toString());
+			killProcessTree(process);
+		};
 
-			const result: ExecResult = {
+		const append = (target: Buffer[], chunk: Buffer | string): void => {
+			const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+			outputBytes += data.byteLength;
+			if (maxOutputBytes > 0 && outputBytes > maxOutputBytes) {
+				fail('output-limit', `Process output exceeded the ${maxOutputBytes} byte limit`);
+				return;
+			}
+			target.push(data);
+		};
+
+		process.stdout?.on('data', chunk => append(stdout, chunk));
+		process.stderr?.on('data', chunk => append(stderr, chunk));
+
+		const timeout = timeoutMs > 0
+			? setTimeout(() => fail('timeout', `Process timed out after ${timeoutMs} ms`), timeoutMs)
+			: undefined;
+		timeout?.unref();
+
+		const cancellation = cancellationToken?.onCancellationRequested(() => {
+			fail('cancelled', 'Process execution was cancelled');
+		});
+
+		const finish = (): void => {
+			if (timeout) {
+				clearTimeout(timeout);
+			}
+			cancellation?.dispose();
+		};
+
+		process.once('error', error => {
+			if (settled) {
+				return;
+			}
+			settled = true;
+			finish();
+			reject(failure ?? new ExecError('spawn', `Failed to start "${command}": ${error.message}`));
+		});
+
+		process.once('close', code => {
+			if (settled) {
+				return;
+			}
+			settled = true;
+			finish();
+			if (failure) {
+				reject(failure);
+				return;
+			}
+			resolve({
 				returnCode: code ?? -1,
-				stdout: stdoutChunks.join(''),
-				stderr: stderrChunks.join('')
-			};
-
-			resolve(result);
+				stdout: Buffer.concat(stdout).toString(),
+				stderr: Buffer.concat(stderr).toString(),
+			});
 		});
 	});
+}
+
+function processPlatformSupportsGroups(): boolean {
+	return process.platform !== 'win32';
+}
+
+function killProcessTree(processToKill: childProcess.ChildProcess): void {
+	if (!processToKill.pid) {
+		return;
+	}
+
+	if (process.platform === 'win32') {
+		const killer = childProcess.spawn('taskkill.exe', ['/pid', String(processToKill.pid), '/t', '/f'], {
+			shell: false,
+			windowsHide: true,
+			stdio: 'ignore',
+		});
+		killer.on('error', () => processToKill.kill());
+		return;
+	}
+
+	try {
+		globalThis.process.kill(-processToKill.pid, 'SIGKILL');
+	} catch {
+		processToKill.kill('SIGKILL');
+	}
 }

@@ -21,8 +21,8 @@ const defaultFilters: ParseFiltersAndOutputOptions = {
 	labels: true,
 	directives: true,
 	commentOnly: true,
-	libraryCode: false,
-	dontMaskFilenames: true,
+	libraryCode: false, // Enabling this can give counter-intuitive results if part of the user's project is a library
+	dontMaskFilenames: true // Filename masking is part of the Compiler Explorer code, but not very useful in this context
 };
 
 export class ConfigurationService implements IConfigurationService, Disposable {
