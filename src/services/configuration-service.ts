@@ -1,128 +1,99 @@
-/**
- * Configuration service for centralized access to extension settings
- */
+import {
+	ConfigurationTarget,
+	Disposable,
+	Event,
+	EventEmitter,
+	Uri,
+	WorkspaceFolder,
+	workspace,
+} from 'vscode';
+import type { IConfigurationService } from '../interfaces/index.js';
+import type { CompilerProfile, DefaultCompilationSettings } from '../types/index.js';
+import type { ParseFiltersAndOutputOptions } from '../parsers/filters.interfaces.js';
+import * as logger from '../logger.js';
+import {
+	normalizeCompilerSettings,
+	normalizeDefaultCompilationSettings,
+	profileToSettings,
+} from './configuration-normalization.js';
 
-import { Uri, workspace } from 'vscode';
-import { IConfigurationService } from '../interfaces/index.js';
-import { CompilerInfo, CompilationInfo } from '../types/index.js';
+const defaultFilters: ParseFiltersAndOutputOptions = {
+	labels: true,
+	directives: true,
+	commentOnly: true,
+	libraryCode: false,
+	dontMaskFilenames: true,
+};
 
-/**
- * Service that provides access to (and validation for) the extension's configuration settings, such as compilers and
- * compilation info.
- */
-export class ConfigurationService implements IConfigurationService {
-	/**
-	 * Get configured compilers from workspace settings
-	 */
-	getCompilers(): CompilerInfo[] {
-		const scope = workspace.workspaceFolders?.at(0) ?? null;
-		const compilers = workspace.getConfiguration('coglens', scope).get<CompilerInfo[]>('compilers') ?? [];
+export class ConfigurationService implements IConfigurationService, Disposable {
+	private readonly changeEmitter = new EventEmitter<void>();
+	private readonly configurationSubscription: Disposable;
 
-		// Validate all compiler infos
-		return compilers.filter(info => {
-			if (!this.validateCompilerInfo(info)) {
-				console.warn(`Invalid compiler info found in configuration:`, info);
-				return false;
+	readonly onDidChange: Event<void> = this.changeEmitter.event;
+
+	constructor() {
+		this.configurationSubscription = workspace.onDidChangeConfiguration(event => {
+			if (event.affectsConfiguration('coglens')) {
+				this.changeEmitter.fire();
 			}
-			return true;
 		});
 	}
 
-	/**
-	 * Get default compilation info from workspace settings
-	 */
-	getDefaultCompilationInfo(): CompilationInfo | undefined {
-		const scope = workspace.workspaceFolders?.at(0) ?? null;
-		const defaultCompileInfo = workspace.getConfiguration('coglens', scope).get<CompilationInfo>('defaultCompileInfo');
-
-		// VS Code returns an empty object if the config value isn't set
-		// https://github.com/Microsoft/vscode/issues/35451
-		if (defaultCompileInfo !== undefined && Object.keys(defaultCompileInfo).length > 0) {
-			if (this.validateCompilationInfo(defaultCompileInfo)) {
-				return defaultCompileInfo;
+	getCompilers(scope?: Uri): CompilerProfile[] {
+		const raw = workspace.getConfiguration('coglens', scope).get<unknown[]>('compilers', []);
+		const profiles: CompilerProfile[] = [];
+		raw.forEach((item, index) => {
+			const normalized = normalizeCompilerSettings(item, 'user');
+			if (normalized.value) {
+				profiles.push(normalized.value);
+			} else {
+				logger.logChannel.error(`Ignoring invalid coglens.compilers[${index}]: ${normalized.errors.join('; ')}`);
 			}
-			console.warn('Invalid default compilation info found in configuration:', defaultCompileInfo);
-		}
-
-		return undefined;
+		});
+		return profiles;
 	}
 
-	/**
-	 * Get whether to dim unused source lines for a specific file
-	 */
+	getDefaultCompilationSettings(scope?: Uri): DefaultCompilationSettings | undefined {
+		const raw = workspace.getConfiguration('coglens', scope).get<unknown>('defaultCompileInfo');
+		if (!raw || typeof raw !== 'object' || Object.keys(raw).length === 0) {
+			return undefined;
+		}
+		const normalized = normalizeDefaultCompilationSettings(raw);
+		if (!normalized.value) {
+			logger.logChannel.error(`Ignoring invalid coglens.defaultCompileInfo: ${normalized.errors.join('; ')}`);
+		}
+		return normalized.value;
+	}
+
+	getFilters(scope?: Uri): ParseFiltersAndOutputOptions {
+		return {
+			...defaultFilters,
+			...workspace.getConfiguration('coglens', scope).get<ParseFiltersAndOutputOptions>('filters', {}),
+		};
+	}
+
 	getDimUnusedSourceLines(uri: Uri): boolean {
-		const config = workspace.getConfiguration('', uri);
-		return config.get('coglens.dimUnusedSourceLines', true);
+		return workspace.getConfiguration('coglens', uri).get('dimUnusedSourceLines', true);
 	}
 
-	/**
-	 * Validate that an object is a valid CompilerInfo
-	 */
-	validateCompilerInfo(info: unknown): info is CompilerInfo {
-		if (typeof info !== 'object' || info === null) {
-			return false;
-		}
-
-		const obj = info as Record<string, unknown>;
-
-		// Check required fields
-		if (typeof obj.name !== 'string' || obj.name.trim() === '') {
-			return false;
-		}
-		if (typeof obj.type !== 'string' || obj.type.trim() === '') {
-			return false;
-		}
-		if (typeof obj.exe !== 'string' || obj.exe.trim() === '') {
-			return false;
-		}
-		if (typeof obj.includeFlag !== 'string') {
-			return false;
-		}
-		if (typeof obj.defineFlag !== 'string') {
-			return false;
-		}
-
-		// Check optional fields if present
-		if (obj.args !== undefined && !Array.isArray(obj.args)) {
-			return false;
-		}
-		if (obj.includePaths !== undefined && !Array.isArray(obj.includePaths)) {
-			return false;
-		}
-		if (obj.defines !== undefined && !Array.isArray(obj.defines)) {
-			return false;
-		}
-		if (obj.envVars !== undefined && typeof obj.envVars !== 'object') {
-			return false;
-		}
-
-		return true;
+	async updateCompilers(profiles: readonly CompilerProfile[], folder?: WorkspaceFolder): Promise<void> {
+		await workspace.getConfiguration('coglens', folder?.uri).update(
+			'compilers',
+			profiles.map(profileToSettings),
+			ConfigurationTarget.Workspace,
+		);
 	}
 
-	/**
-	 * Validate that an object is a valid CompilationInfo
-	 */
-	validateCompilationInfo(info: unknown): info is CompilationInfo {
-		if (typeof info !== 'object' || info === null) {
-			return false;
-		}
+	async updateFilters(filters: ParseFiltersAndOutputOptions, folder?: WorkspaceFolder): Promise<void> {
+		await workspace.getConfiguration('coglens', folder?.uri).update(
+			'filters',
+			filters,
+			folder ? ConfigurationTarget.WorkspaceFolder : ConfigurationTarget.Workspace,
+		);
+	}
 
-		const obj = info as Record<string, unknown>;
-
-		// Check required fields
-		if (typeof obj.compilerName !== 'string') {
-			return false;
-		}
-		if (!Array.isArray(obj.defines)) {
-			return false;
-		}
-		if (!Array.isArray(obj.includes)) {
-			return false;
-		}
-		if (!Array.isArray(obj.args)) {
-			return false;
-		}
-
-		return true;
+	dispose(): void {
+		this.configurationSubscription.dispose();
+		this.changeEmitter.dispose();
 	}
 }

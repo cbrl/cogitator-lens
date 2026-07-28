@@ -1,85 +1,94 @@
-/**
- * Compiler registry for managing compiler instances
- */
-
+import { Disposable, Event, EventEmitter } from 'vscode';
+import type { ICompilerRegistry } from '../interfaces/index.js';
+import type { CompilerProfile, ReconciliationChange } from '../types/index.js';
 import { CompilerBase } from '../compiler.js';
-import { CompilerInfo } from '../types/index.js';
-import { ICompilerRegistry } from '../interfaces/index.js';
 import { getCompilerByType } from '../compilers/compiler-map.js';
 
-/**
- * Registry that manages compiler instances by name
- */
-export class CompilerRegistry implements ICompilerRegistry {
-	private cache = new Map<string, CompilerBase>();
+export type ConfigurationOrigin = 'user' | 'cmake' | 'compilation-database' | string;
 
-	/**
-	 * Get all registered compiler names
-	 */
-	getCompilerNames(): ReadonlyArray<string> {
-		return Array.from(this.cache.keys());
+interface RegistryEntry {
+	origin: ConfigurationOrigin;
+	profile: CompilerProfile;
+	compiler: CompilerBase;
+}
+
+export class CompilerRegistry implements ICompilerRegistry, Disposable {
+	private readonly entries = new Map<string, RegistryEntry>();
+	private readonly changeEmitter = new EventEmitter<ReconciliationChange<CompilerProfile>>();
+
+	readonly onDidChange: Event<ReconciliationChange<CompilerProfile>> = this.changeEmitter.event;
+
+	getProfiles(origin?: ConfigurationOrigin): readonly CompilerProfile[] {
+		return [...this.entries.values()]
+			.filter(entry => origin === undefined || entry.origin === origin)
+			.map(entry => entry.profile);
 	}
 
-	/**
-	 * Get all registered compilers
-	 */
-	getCompilers(): ReadonlyArray<CompilerBase> {
-		return Array.from(this.cache.values());
+	getCompilerById(id: string): CompilerBase | undefined {
+		return this.entries.get(id)?.compiler;
 	}
 
-	/**
-	 * Check if a compiler with the given name exists
-	 */
-	hasCompiler(name: string): boolean {
-		return this.cache.has(name);
+	findCompilerByDisplayName(displayName: string): CompilerBase | undefined {
+		return [...this.entries.values()]
+			.find(entry => entry.profile.displayName === displayName)
+			?.compiler;
 	}
 
-	/**
-	 * Get a compiler by name
-	 */
-	getCompiler(name: string): CompilerBase | undefined {
-		return this.cache.get(name);
+	getOrigin(id: string): ConfigurationOrigin | undefined {
+		return this.entries.get(id)?.origin;
 	}
 
-	/**
-	 * Create and register a new compiler
-	 * @throws Error if compiler type is unknown or creation fails
-	 */
-	createCompiler(info: CompilerInfo): CompilerBase {
-		try {
-			const compilerType = getCompilerByType(info.type);
-			if (compilerType === undefined) {
-				throw new Error(`Unknown compiler type: ${info.type}`);
+	reconcile(origin: ConfigurationOrigin, profiles: readonly CompilerProfile[]): ReconciliationChange<CompilerProfile> {
+		const next = new Map(profiles.map(profile => [profile.id, profile]));
+		const added: CompilerProfile[] = [];
+		const updated: CompilerProfile[] = [];
+		const removed: CompilerProfile[] = [];
+
+		for (const [id, entry] of this.entries) {
+			if (entry.origin !== origin) {
+				continue;
 			}
-
-			const compiler = new compilerType(info);
-			this.cache.set(info.name, compiler);
-			return compiler;
+			const replacement = next.get(id);
+			if (!replacement) {
+				this.entries.delete(id);
+				removed.push(entry.profile);
+			} else if (!profilesEqual(entry.profile, replacement)) {
+				this.entries.set(id, this.createEntry(origin, replacement));
+				updated.push(replacement);
+			}
+			next.delete(id);
 		}
-		catch (error) {
-			const errorMessage = (error instanceof Error) ? error.message : JSON.stringify(error);
-			throw new Error(`Failed to create compiler: ${errorMessage}`);
+
+		for (const profile of next.values()) {
+			const existing = this.entries.get(profile.id);
+			if (existing && existing.origin !== origin) {
+				throw new Error(`Compiler profile ID "${profile.id}" is already owned by ${existing.origin}`);
+			}
+			this.entries.set(profile.id, this.createEntry(origin, profile));
+			added.push(profile);
 		}
+
+		const change = { added, updated, removed };
+		if (added.length || updated.length || removed.length) {
+			this.changeEmitter.fire(change);
+		}
+		return change;
 	}
 
-	/**
-	 * Create multiple compilers at once
-	 */
-	createCompilers(infos: CompilerInfo[]): CompilerBase[] {
-		return infos.map(info => this.createCompiler(info));
+	dispose(): void {
+		this.changeEmitter.dispose();
+		this.entries.clear();
 	}
 
-	/**
-	 * Get an existing compiler or create a new one if it doesn't exist
-	 */
-	getOrCreateCompiler(info: CompilerInfo): CompilerBase {
-		return this.getCompiler(info.name) ?? this.createCompiler(info);
+	private createEntry(origin: ConfigurationOrigin, profile: CompilerProfile): RegistryEntry {
+		const Adapter = getCompilerByType(profile.kind);
+		if (!Adapter) {
+			throw new Error(`Unsupported compiler kind: ${profile.kind}`);
+		}
+		return { origin, profile, compiler: new Adapter(profile) };
 	}
+}
 
-	/**
-	 * Get or create multiple compilers at once
-	 */
-	getOrCreateCompilers(infos: CompilerInfo[]): CompilerBase[] {
-		return infos.map(info => this.getOrCreateCompiler(info));
-	}
+function profilesEqual(left: CompilerProfile, right: CompilerProfile): boolean {
+	return JSON.stringify(left) === JSON.stringify(right);
 }

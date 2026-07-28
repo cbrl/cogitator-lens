@@ -1,150 +1,53 @@
-/**
- * Core interfaces for the extension
- */
+import type {
+	CancellationToken,
+	Disposable,
+	Event,
+	Uri,
+	WorkspaceFolder,
+} from 'vscode';
+import type { CompilerBase } from '../compiler.js';
+import type {
+	CompilationVariant,
+	CompileArtifact,
+	CompilerProfile,
+	DefaultCompilationSettings,
+	ProviderSnapshot,
+	ReconciliationChange,
+} from '../types/index.js';
+import type { ParseFiltersAndOutputOptions } from '../parsers/filters.interfaces.js';
 
-import { Uri, Event, Disposable } from 'vscode';
-import { CompilerBase } from '../compiler.js';
-import { CompilerInfo, CompilationInfo } from '../types/index.js';
-import { ParsedAsmResult } from '../parsers/asmresult.interfaces.js';
-import { ParseFiltersAndOutputOptions } from '../parsers/filters.interfaces.js';
-
-/**
- * Registry for managing compiler instances
- */
 export interface ICompilerRegistry {
-	/**
-	 * Get all registered compiler names
-	 */
-	getCompilerNames(): ReadonlyArray<string>;
-
-	/**
-	 * Get all registered compilers
-	 */
-	getCompilers(): ReadonlyArray<CompilerBase>;
-
-	/**
-	 * Check if a compiler with the given name exists
-	 */
-	hasCompiler(name: string): boolean;
-
-	/**
-	 * Get a compiler by name
-	 */
-	getCompiler(name: string): CompilerBase | undefined;
-
-	/**
-	 * Create and register a new compiler
-	 */
-	createCompiler(info: CompilerInfo): CompilerBase;
-
-	/**
-	 * Get an existing compiler or create a new one
-	 */
-	getOrCreateCompiler(info: CompilerInfo): CompilerBase;
+	readonly onDidChange: Event<ReconciliationChange<CompilerProfile>>;
+	getProfiles(origin?: string): readonly CompilerProfile[];
+	getCompilerById(id: string): CompilerBase | undefined;
+	findCompilerByDisplayName(displayName: string): CompilerBase | undefined;
+	reconcile(origin: string, profiles: readonly CompilerProfile[]): ReconciliationChange<CompilerProfile>;
 }
 
-/**
- * Service for managing compilation operations
- */
-export interface ICompilationService {
-	/**
-	 * Access to the compiler registry
-	 */
-	readonly compilerRegistry: ICompilerRegistry;
-
-	/**
-	 * Global filter options for all compilations
-	 */
-	globalFilterOptions: ParseFiltersAndOutputOptions;
-
-	/**
-	 * Get compilation info for a file
-	 */
-	getCompilationInfo(file: Uri): CompilationInfo | undefined;
-
-	/**
-	 * Set compilation info for a file
-	 */
-	setCompilationInfo(file: Uri, info: CompilationInfo): void;
-
-	/**
-	 * Get compilation info or the default
-	 */
-	getCompilationInfoOrDefault(file: Uri): [CompilationInfo, boolean];
-
-	/**
-	 * Compile a file
-	 */
-	compile(file: Uri): Promise<ParsedAsmResult>;
-}
-
-/**
- * Configuration service for accessing extension settings
- */
 export interface IConfigurationService {
-	/**
-	 * Get configured compilers
-	 */
-	getCompilers(): CompilerInfo[];
-
-	/**
-	 * Get default compilation info
-	 */
-	getDefaultCompilationInfo(): CompilationInfo | undefined;
-
-	/**
-	 * Get whether to dim unused source lines
-	 */
+	readonly onDidChange: Event<void>;
+	getCompilers(scope?: Uri): CompilerProfile[];
+	getDefaultCompilationSettings(scope?: Uri): DefaultCompilationSettings | undefined;
+	getFilters(scope?: Uri): ParseFiltersAndOutputOptions;
 	getDimUnusedSourceLines(uri: Uri): boolean;
-
-	/**
-	 * Validate compiler info structure
-	 */
-	validateCompilerInfo(info: unknown): info is CompilerInfo;
-
-	/**
-	 * Validate compilation info structure
-	 */
-	validateCompilationInfo(info: unknown): info is CompilationInfo;
+	updateCompilers(profiles: readonly CompilerProfile[], folder?: WorkspaceFolder): Thenable<void>;
+	updateFilters(filters: ParseFiltersAndOutputOptions, folder?: WorkspaceFolder): Thenable<void>;
 }
 
-/**
- * Build system compilation info (without compiler name, uses path instead)
- */
-export type BuildsystemCompileInfo = Omit<CompilationInfo, 'compilerName'> & {
-	compilerPath: Uri;
-};
-
-/**
- * Event describing changes to compilation info
- */
-export interface CompilationInfoChangeEvent {
-	readonly added: ReadonlyMap<Uri, BuildsystemCompileInfo>;
-	readonly updated: ReadonlyMap<Uri, BuildsystemCompileInfo>;
-	readonly removed: ReadonlySet<Uri>;
+export interface ICompilationService extends Disposable {
+	readonly compilerRegistry: ICompilerRegistry;
+	readonly onVariantsChanged: Event<readonly Uri[]>;
+	globalFilterOptions: ParseFiltersAndOutputOptions;
+	getVariants(file: Uri): readonly CompilationVariant[];
+	getSelectedVariant(file: Uri): CompilationVariant | undefined;
+	selectVariant(file: Uri, variantId: string): Promise<boolean>;
+	reconcileProviderSnapshot(snapshot: ProviderSnapshot): void;
+	compile(file: Uri, cancellationToken: CancellationToken): Promise<CompileArtifact>;
 }
 
-/**
- * Monitor for build system changes
- */
 export interface IBuildSystemMonitor extends Disposable {
-	/**
-	 * Name of the build system
-	 */
 	readonly name: string;
-
-	/**
-	 * Initialize the monitor
-	 */
+	readonly onSnapshot: Event<ProviderSnapshot>;
 	initialize(): Promise<void>;
-
-	/**
-	 * Refresh build system information
-	 */
 	refresh(): Promise<void>;
-
-	/**
-	 * Event fired when compilation info changes
-	 */
-	readonly onCompilationInfoChanged: Event<[Uri, BuildsystemCompileInfo][]>;
 }

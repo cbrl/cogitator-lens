@@ -1,21 +1,21 @@
-import { Uri, Event, EventEmitter } from 'vscode';
-import { IBuildSystemMonitor, BuildsystemCompileInfo } from '../interfaces/index.js';
-
-export { BuildsystemCompileInfo };
+import { Event, EventEmitter } from 'vscode';
+import type { IBuildSystemMonitor } from '../interfaces/index.js';
+import type { ProviderSnapshot } from '../types/index.js';
 
 export abstract class BuildsystemMonitor implements IBuildSystemMonitor {
 	abstract readonly name: string;
+	private readonly snapshotEmitter = new EventEmitter<ProviderSnapshot>();
 
-	protected compilationInfoEvent = new EventEmitter<[Uri, BuildsystemCompileInfo][]>();
+	readonly onSnapshot: Event<ProviderSnapshot> = this.snapshotEmitter.event;
 
-	public get onCompilationInfoChanged(): Event<[Uri, BuildsystemCompileInfo][]> {
-		return this.compilationInfoEvent.event;
+	protected publish(snapshot: ProviderSnapshot): void {
+		this.snapshotEmitter.fire(snapshot);
 	}
 
 	abstract initialize(): Promise<void>;
 	abstract refresh(): Promise<void>;
 
 	dispose(): void {
-		this.compilationInfoEvent.dispose();
+		this.snapshotEmitter.dispose();
 	}
 }

@@ -1,152 +1,241 @@
-import { Uri, workspace, Disposable } from 'vscode';
-import { BuildsystemCompileInfo, BuildsystemMonitor } from './buildsystem-monitor';
-import * as cmakeTools from 'vscode-cmake-tools';
-import * as logger from '../logger';
 import path from 'path';
+import { Disposable, Uri, workspace } from 'vscode';
+import * as cmakeTools from 'vscode-cmake-tools';
+import { BuildsystemMonitor } from './buildsystem-monitor.js';
+import type { CompilationVariant, CompilerProfile, ProviderSnapshot } from '../types/index.js';
+import { getCompilerByExe, normalizedExecutableId } from '../compilers/compiler-map.js';
+import { tokenizeCommandLine } from '../tokenize.js';
+import * as logger from '../logger.js';
 
-// Monitors CMake project and outputs a mapping of file URI to compile info
+interface ProjectState {
+	uri: Uri;
+	project: cmakeTools.Project;
+	codeModelSubscription: Disposable;
+}
+
 export class CmakeMonitor extends BuildsystemMonitor {
 	readonly name = 'CMake';
+	private readonly providerId = 'cmake';
+	private api?: cmakeTools.CMakeToolsApi;
+	private readonly projects = new Map<string, ProjectState>();
+	private readonly subscriptions: Disposable[] = [];
+	private refreshGeneration = 0;
+	private readonly projectGenerations = new Map<string, number>();
+	private disposed = false;
 
-	private cmakeApi?: cmakeTools.CMakeToolsApi;
-	private cmakeProject?: cmakeTools.Project;
-	private disposables: Disposable[] = [];
-
-	public async initialize(): Promise<void> {
+	async initialize(): Promise<void> {
 		try {
-			this.cmakeApi = await cmakeTools.getCMakeToolsApi(cmakeTools.Version.latest);
+			this.api = await cmakeTools.getCMakeToolsApi(cmakeTools.Version.latest);
 		} catch (error) {
-			logger.logAndShowWarning(`Failed to initialize CMake Tools API: ${error}`);
+			logger.logChannel.warn(`CMake Tools API could not be initialized: ${String(error)}`);
+			return;
+		}
+		if (!this.api) {
+			logger.logChannel.info('CMake Tools is not installed. CMake discovery is disabled.');
+			this.publish(this.emptySnapshot());
 			return;
 		}
 
-		if (this.cmakeApi === undefined) {
-			logger.logChannel.info('CMake Tools API is not available. CMake integration disabled.');
+		this.subscriptions.push(
+			this.api.onActiveProjectChanged(uri => {
+				if (uri) {
+					void this.attachProject(uri);
+				}
+			}),
+			workspace.onDidChangeWorkspaceFolders(event => {
+				for (const removed of event.removed) {
+					this.detachProject(removed.uri);
+				}
+				for (const added of event.added) {
+					void this.attachProject(added.uri);
+				}
+				void this.refresh();
+			}),
+		);
+
+		await Promise.all((workspace.workspaceFolders ?? []).map(folder => this.attachProject(folder.uri)));
+		await this.refresh();
+	}
+
+	async refresh(): Promise<void> {
+		const generation = ++this.refreshGeneration;
+		const snapshots = await Promise.all([...this.projects.values()].map(state => this.readProject(state)));
+		if (this.disposed || generation !== this.refreshGeneration) {
 			return;
 		}
 
-		const projectRegistration = this.cmakeApi.onActiveProjectChanged(this.onProjectChange, this);
-		this.disposables.push(projectRegistration);
-
-		if (workspace.workspaceFolders !== undefined) {
-			await this.onProjectChange(workspace.workspaceFolders[0].uri);
+		const profiles = new Map<string, CompilerProfile>();
+		const variants: CompilationVariant[] = [];
+		for (const snapshot of snapshots) {
+			snapshot.compilerProfiles.forEach(profile => profiles.set(profile.id, profile));
+			variants.push(...snapshot.variants);
 		}
+
+		this.publish({ provider: this.providerId, compilerProfiles: [...profiles.values()], variants });
 	}
 
-	public async refresh(): Promise<void> {
-		await this.onCodeModelChanged();
-	}
-
-	public dispose(): void {
-		for (const disposable of this.disposables) {
-			disposable.dispose();
-		}
+	override dispose(): void {
+		this.disposed = true;
+		this.subscriptions.forEach(subscription => subscription.dispose());
+		this.projects.forEach(state => state.codeModelSubscription.dispose());
+		this.projects.clear();
+		this.projectGenerations.clear();
 		super.dispose();
 	}
 
-	private async onProjectChange(projectUri?: Uri): Promise<void> {
-		if (projectUri === undefined) {
-			return;
-		}
+	private async attachProject(uri: Uri): Promise<void> {
+		const key = this.projectKey(uri);
+		const generation = (this.projectGenerations.get(key) ?? 0) + 1;
 
+		this.projectGenerations.set(key, generation);
+
+		let project: cmakeTools.Project | undefined;
 		try {
-			this.cmakeProject = await this.cmakeApi?.getProject(projectUri);
+			project = await this.api?.getProject(uri);
 		} catch (error) {
-			logger.logAndShowError(`Failed to get CMake project: ${error}`);
+			logger.logChannel.error(`Failed to inspect CMake project ${uri.fsPath}: ${String(error)}`);
 			return;
 		}
 
-		if (this.cmakeProject !== undefined) {
-			await this.onCodeModelChanged();
-
-			const codeModelRegistration = this.cmakeProject.onCodeModelChanged(this.onCodeModelChanged, this);
-			this.disposables.push(codeModelRegistration);
+		if (this.disposed || this.projectGenerations.get(key) !== generation) {
+			return;
 		}
+
+		if (!project) {
+			this.projects.get(key)?.codeModelSubscription.dispose();
+			this.projects.delete(key);
+			await this.refresh();
+			return;
+		}
+
+		this.projects.get(key)?.codeModelSubscription.dispose();
+		const codeModelSubscription = project.onCodeModelChanged(() => void this.refresh());
+		this.projects.set(key, { uri, project, codeModelSubscription });
+
+		await this.refresh();
 	}
 
-	private async onCodeModelChanged(): Promise<void> {
+	private detachProject(uri: Uri): void {
+		const key = this.projectKey(uri);
+		this.projectGenerations.set(key, (this.projectGenerations.get(key) ?? 0) + 1);
+		this.projects.get(key)?.codeModelSubscription.dispose();
+		this.projects.delete(key);
+	}
+
+	private async readProject(state: ProjectState): Promise<ProviderSnapshot> {
+		const compilerProfiles = new Map<string, CompilerProfile>();
+		const variants: CompilationVariant[] = [];
+		const codeModel = state.project.codeModel;
+		if (!codeModel) {
+			return this.emptySnapshot();
+		}
+
 		let activeBuildType: string | undefined;
-
+		let buildDirectory: string | undefined;
 		try {
-			activeBuildType = await this.cmakeProject?.getActiveBuildType();
+			[activeBuildType, buildDirectory] = await Promise.all([
+				state.project.getActiveBuildType(),
+				state.project.getBuildDirectory(),
+			]);
 		} catch (error) {
-			logger.logAndShowError(`Failed to get active CMake build type: ${error}`);
-			return;
+			logger.logChannel.error(`Failed to read CMake state for ${state.uri.fsPath}: ${String(error)}`);
+			return this.emptySnapshot();
 		}
 
-		if (activeBuildType === undefined) {
-			logger.logChannel.warn('No active CMake build type found.');
-			return;
-		}
+		const configurations = activeBuildType
+			? codeModel.configurations.filter(configuration => configuration.name === activeBuildType)
+			: codeModel.configurations;
 
-		const compilationInfo: [Uri, BuildsystemCompileInfo][] = [];
+		for (const configuration of configurations) {
+			for (const project of configuration.projects) {
+				for (const target of project.targets) {
+					const sourceDirectory = target.sourceDirectory ?? project.sourceDirectory;
+					for (const [groupIndex, fileGroup] of (target.fileGroups ?? []).entries()) {
+						if (!fileGroup.language) {
+							continue;
+						}
 
-		// Get all projects for the active build type
-		const projects = this.cmakeProject?.codeModel?.configurations?.filter(cfg => cfg.name === activeBuildType).flatMap(cfg => cfg.projects) ?? [];
+						const toolchain = codeModel.toolchains?.get(fileGroup.language);
+						if (!toolchain) {
+							continue;
+						}
 
-		for (let project of projects) {
-			for (let target of project.targets) {
-				const sourceDir = target.sourceDirectory ?? project.sourceDirectory;
+						const Adapter = getCompilerByExe(
+							toolchain.path,
+							process.platform === 'darwin' ? 'Apple clang' : undefined,
+						);
+						if (!Adapter) {
+							logger.logChannel.warn(`Unsupported CMake compiler: ${toolchain.path}`);
+							continue;
+						}
 
-				for (let fileGroup of target.fileGroups ?? []) {
-					if (fileGroup.language === undefined) {
-						continue;
-					}
+						const executableId = normalizedExecutableId(toolchain.path);
+						const profileId = `${this.providerId}:${executableId}`;
+						const profile = {
+							...Adapter.baseCompilerProfile(path.basename(toolchain.path), toolchain.path),
+							id: profileId,
+							displayName: `${path.basename(toolchain.path)} — ${toolchain.path}`,
+						};
+						compilerProfiles.set(profileId, profile);
 
-					const compiler = this.cmakeProject?.codeModel?.toolchains?.get(fileGroup.language);
+						const argumentsList = this.tokenizeFragments(fileGroup.compileCommandFragments ?? [], target.name);
+						for (const source of fileGroup.sources) {
+							const sourcePath = path.isAbsolute(source) ? source : path.join(sourceDirectory, source);
+							const sourceUri = Uri.file(path.normalize(sourcePath));
+							const identity = [
+								this.projectKey(state.uri),
+								configuration.name,
+								project.name,
+								target.name,
+								String(groupIndex),
+								sourceUri.toString(),
+							].join('|');
 
-					if (compiler === undefined) {
-						continue;
-					}
-
-					let info: BuildsystemCompileInfo = {
-						compilerPath: Uri.file(compiler.path),
-						defines: fileGroup.defines ?? [],
-						includes: fileGroup.includePath?.map(({ path }, _) => path) ?? [],
-
-					// Split command fragments respecting quoted strings
-					args: fileGroup.compileCommandFragments?.flatMap(str => splitCommandFragment(str)) ?? []
-					};
-
-					for (let source of fileGroup.sources) {
-						const fileUri = Uri.file(path.join(sourceDir, source));
-						compilationInfo.push([fileUri, info]);
+							variants.push({
+								id: `${this.providerId}:${identity}`,
+								provider: this.providerId,
+								project: project.name,
+								target: target.name,
+								configuration: configuration.name,
+								source: sourceUri,
+								compilerProfileId: profileId,
+								workingDirectory: buildDirectory ?? sourceDirectory,
+								arguments: argumentsList,
+								includes: fileGroup.includePath?.map(item => item.path) ?? [],
+								defines: fileGroup.defines ?? [],
+								environment: {},
+								displayLabel: `${target.name} · ${configuration.name}`,
+							});
+						}
 					}
 				}
 			}
 		}
 
-		if (compilationInfo.length > 0) {
-			this.compilationInfoEvent.fire(compilationInfo);
+		return {
+			provider: this.providerId,
+			compilerProfiles: [...compilerProfiles.values()],
+			variants
+		};
+	}
+
+	private emptySnapshot(): ProviderSnapshot {
+		return { provider: this.providerId, compilerProfiles: [], variants: [] };
+	}
+
+	private projectKey(uri: Uri): string {
+		const value = (workspace.getWorkspaceFolder(uri)?.uri ?? uri).toString();
+		return process.platform === 'win32' ? value.toLowerCase() : value;
+	}
+
+	private tokenizeFragments(fragments: readonly string[], targetName: string): string[] {
+		try {
+			return fragments.flatMap(fragment =>
+				tokenizeCommandLine(fragment, process.platform === 'win32' ? 'windows' : 'posix')
+			);
+		} catch (error) {
+			logger.logChannel.error(`Ignoring malformed CMake arguments for target ${targetName}: ${String(error)}`);
+			return [];
 		}
 	}
-}
-
-/**
- * Split a command fragment string into arguments, respecting double-quoted strings.
- */
-function splitCommandFragment(fragment: string): string[] {
-	const args: string[] = [];
-	let current = '';
-	let inQuotes = false;
-
-	for (let i = 0; i < fragment.length; i++) {
-		const ch = fragment[i];
-		if (ch === '"') {
-			inQuotes = !inQuotes;
-		} else if (ch === ' ' && !inQuotes) {
-			if (current.length > 0) {
-				args.push(current);
-				current = '';
-			}
-		} else {
-			current += ch;
-		}
-	}
-
-	if (current.length > 0) {
-		args.push(current);
-	}
-
-	return args;
 }
