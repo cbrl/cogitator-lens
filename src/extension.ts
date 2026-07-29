@@ -8,22 +8,24 @@ import vscode, {
 } from 'vscode';
 import { AsmDefinitionProvider } from './asm-document/asm-definition-provider.js';
 import { AsmProvider, getAsmUri } from './asm-document/asm-provider.js';
-import { CmakeMonitor } from './buildsystems/cmake.js';
-import { CompilationDatabaseMonitor } from './buildsystems/compilation-database.js';
+import { CmakeVariantProvider } from './buildsystems/cmake.js';
+import { CompilationDatabaseVariantProvider } from './buildsystems/compilation-database.js';
 import { CompilationService } from './compilation/index.js';
 import { ConfigurationService } from './services/configuration-service.js';
-import type { IBuildSystemMonitor } from './interfaces/index.js';
+import type { IVariantProvider } from './interfaces/index.js';
 import * as setup from './setup.js';
+import * as logger from './logger.js';
 
 const supportedLanguageIds = new Set(['c', 'cpp', 'objective-c', 'objective-cpp', 'cuda']);
 
 export async function activate(context: ExtensionContext): Promise<void> {
+	await warnAboutRemovedCompilerSetting(context);
 	const configuration = new ConfigurationService();
 	const compilationService = new CompilationService(configuration, context.workspaceState);
 	const assemblyProvider = new AsmProvider(compilationService, configuration);
 	const definitionProvider = new AsmDefinitionProvider(uri => assemblyProvider.getCompiledAssembly(uri));
 
-	setup.createCompilerTreeView(context, compilationService.compilerRegistry);
+	setup.createToolchainTreeView(context, compilationService.toolchainRegistry);
 	setup.createCompilationInfoTreeView(context, compilationService);
 	setup.createGlobalOptionsTreeView(context, compilationService);
 	setup.setupCommands(
@@ -32,12 +34,12 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		configuration,
 	);
 
-	const buildsystemMonitors: IBuildSystemMonitor[] = [
-		new CmakeMonitor(),
-		new CompilationDatabaseMonitor(),
+	const variantProviders: IVariantProvider[] = [
+		new CmakeVariantProvider(),
+		new CompilationDatabaseVariantProvider(),
 	];
-	const monitorSubscriptions = buildsystemMonitors.map(monitor =>
-		monitor.onSnapshot(snapshot => compilationService.reconcileProviderSnapshot(snapshot)));
+	const providerSubscriptions = variantProviders.map(provider =>
+		provider.onSnapshot(snapshot => compilationService.reconcileProviderSnapshot(snapshot)));
 
 	const contentProvider = workspace.registerTextDocumentContentProvider(AsmProvider.scheme, assemblyProvider);
 	const definitionRegistration = vscode.languages.registerDefinitionProvider(
@@ -92,15 +94,46 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		configuration,
 		compilationService,
 		assemblyProvider,
-		...buildsystemMonitors,
-		...monitorSubscriptions,
+		...variantProviders,
+		...providerSubscriptions,
 		contentProvider,
 		definitionRegistration,
 		disassemble,
 		pickVariantCommand,
 	);
 
-	await Promise.all(buildsystemMonitors.map(monitor => monitor.initialize()));
+	await Promise.all(variantProviders.map(provider => provider.initialize()));
+}
+
+async function warnAboutRemovedCompilerSetting(context: ExtensionContext): Promise<void> {
+	const scopes = [
+		workspace.getConfiguration('coglens'),
+		...(workspace.workspaceFolders ?? []).map(folder =>
+			workspace.getConfiguration('coglens', folder.uri)
+		),
+	];
+	const configured = scopes.some(configuration => {
+		const inspection = configuration.inspect<unknown>('compilers');
+		return inspection !== undefined && [
+			inspection.globalValue,
+			inspection.workspaceValue,
+			inspection.workspaceFolderValue,
+			inspection.globalLanguageValue,
+			inspection.workspaceLanguageValue,
+			inspection.workspaceFolderLanguageValue,
+		].some(value => value !== undefined);
+	});
+	if (!configured) {
+		return;
+	}
+	logger.logChannel.warn('The removed coglens.compilers setting is present; use coglens.toolchains instead.');
+	const noticeKey = 'coglens.migration.compilers-to-toolchains';
+	if (!context.globalState.get<boolean>(noticeKey)) {
+		await window.showWarningMessage(
+			'Cogitator Lens renamed “coglens.compilers” to “coglens.toolchains”. Update your settings to keep those profiles active.',
+		);
+		await context.globalState.update(noticeKey, true);
+	}
 }
 
 function isSupportedSourceDocument(document: vscode.TextDocument): boolean {

@@ -1,9 +1,18 @@
 import path from 'path';
 import { Disposable, Uri, workspace } from 'vscode';
 import * as cmakeTools from 'vscode-cmake-tools';
-import { BuildsystemMonitor } from './buildsystem-monitor.js';
-import type { CompilationVariant, CompilerProfile, ProviderSnapshot } from '../types/index.js';
-import { getCompilerByExe, normalizedExecutableId } from '../compilers/compiler-map.js';
+import { VariantProvider } from './variant-provider.js';
+import type {
+	CompilationVariant,
+	ProviderSnapshot,
+	ToolchainProfile,
+} from '../types/index.js';
+import {
+	createToolchainProfile,
+	detectToolchainDefinition,
+	normalizedExecutableLocalId,
+} from '../toolchains/toolchain-map.js';
+import { flattenCmakeArguments } from './cmake-arguments.js';
 import { tokenizeCommandLine } from '../tokenize.js';
 import * as logger from '../logger.js';
 
@@ -13,7 +22,7 @@ interface ProjectState {
 	codeModelSubscription: Disposable;
 }
 
-export class CmakeMonitor extends BuildsystemMonitor {
+export class CmakeVariantProvider extends VariantProvider {
 	readonly name = 'CMake';
 	private readonly providerId = 'cmake';
 	private api?: cmakeTools.CMakeToolsApi;
@@ -64,14 +73,14 @@ export class CmakeMonitor extends BuildsystemMonitor {
 			return;
 		}
 
-		const profiles = new Map<string, CompilerProfile>();
+		const profiles = new Map<string, ToolchainProfile>();
 		const variants: CompilationVariant[] = [];
 		for (const snapshot of snapshots) {
-			snapshot.compilerProfiles.forEach(profile => profiles.set(profile.id, profile));
+			snapshot.toolchainProfiles.forEach(profile => profiles.set(profile.id, profile));
 			variants.push(...snapshot.variants);
 		}
 
-		this.publish({ provider: this.providerId, compilerProfiles: [...profiles.values()], variants });
+		this.publish({ provider: this.providerId, toolchainProfiles: [...profiles.values()], variants });
 	}
 
 	override dispose(): void {
@@ -123,7 +132,7 @@ export class CmakeMonitor extends BuildsystemMonitor {
 	}
 
 	private async readProject(state: ProjectState): Promise<ProviderSnapshot> {
-		const compilerProfiles = new Map<string, CompilerProfile>();
+		const toolchainProfiles = new Map<string, ToolchainProfile>();
 		const variants: CompilationVariant[] = [];
 		const codeModel = state.project.codeModel;
 		if (!codeModel) {
@@ -160,25 +169,31 @@ export class CmakeMonitor extends BuildsystemMonitor {
 							continue;
 						}
 
-						const Adapter = getCompilerByExe(
+						const detected = detectToolchainDefinition(
 							toolchain.path,
 							process.platform === 'darwin' ? 'Apple clang' : undefined,
 						);
-						if (!Adapter) {
+						if (!detected) {
 							logger.logChannel.warn(`Unsupported CMake compiler: ${toolchain.path}`);
 							continue;
 						}
 
-						const executableId = normalizedExecutableId(toolchain.path);
-						const profileId = `${this.providerId}:${executableId}`;
-						const profile = {
-							...Adapter.baseCompilerProfile(path.basename(toolchain.path), toolchain.path),
-							id: profileId,
-							displayName: `${path.basename(toolchain.path)} — ${toolchain.path}`,
-						};
-						compilerProfiles.set(profileId, profile);
+						const executableId = normalizedExecutableLocalId(toolchain.path);
+						const profileId = executableId;
+						const profile = createToolchainProfile(
+							detected.kind,
+							`${path.basename(toolchain.path)} — ${toolchain.path}`,
+							toolchain.path,
+							{ id: profileId },
+						);
+						toolchainProfiles.set(profileId, profile);
 
-						const argumentsList = this.tokenizeFragments(fileGroup.compileCommandFragments ?? [], target.name);
+						const argumentsList = flattenCmakeArguments(
+							this.tokenizeFragments(fileGroup.compileCommandFragments ?? [], target.name),
+							fileGroup.includePath?.map(item => item.path) ?? [],
+							fileGroup.defines ?? [],
+							detected.kind,
+						);
 						for (const source of fileGroup.sources) {
 							const sourcePath = path.isAbsolute(source) ? source : path.join(sourceDirectory, source);
 							const sourceUri = Uri.file(path.normalize(sourcePath));
@@ -198,11 +213,9 @@ export class CmakeMonitor extends BuildsystemMonitor {
 								target: target.name,
 								configuration: configuration.name,
 								source: sourceUri,
-								compilerProfileId: profileId,
+								toolchainProfileId: profileId,
 								workingDirectory: buildDirectory ?? sourceDirectory,
 								arguments: argumentsList,
-								includes: fileGroup.includePath?.map(item => item.path) ?? [],
-								defines: fileGroup.defines ?? [],
 								environment: {},
 								displayLabel: `${target.name} · ${configuration.name}`,
 							});
@@ -214,13 +227,13 @@ export class CmakeMonitor extends BuildsystemMonitor {
 
 		return {
 			provider: this.providerId,
-			compilerProfiles: [...compilerProfiles.values()],
+			toolchainProfiles: [...toolchainProfiles.values()],
 			variants
 		};
 	}
 
 	private emptySnapshot(): ProviderSnapshot {
-		return { provider: this.providerId, compilerProfiles: [], variants: [] };
+		return { provider: this.providerId, toolchainProfiles: [], variants: [] };
 	}
 
 	private projectKey(uri: Uri): string {

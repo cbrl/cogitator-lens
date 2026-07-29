@@ -3,11 +3,11 @@
  */
 
 import { TextEditor, window, Uri, TextDocumentShowOptions } from 'vscode';
-import { UriSet } from '../../uri-containers.js';
-import { equalUri, toComparisonKey } from '../../utils.js';
+import { sourceUriMap, UriSet } from '../../uri-containers.js';
+import { equalUri } from '../../utils.js';
 
 export class EditorTracker {
-	private pendingEditors = new Map<string, Promise<TextEditor>>();
+	private pendingEditors = sourceUriMap<Promise<TextEditor>>();
 
 	/**
 	 * Get all visible editors for the given source URIs
@@ -34,21 +34,20 @@ export class EditorTracker {
 		}
 
 		// Deduplicate concurrent requests for the same URI
-		const key = toComparisonKey(uri);
-		const pending = this.pendingEditors.get(key);
+		const pending = this.pendingEditors.get(uri);
 		if (pending) {
 			return pending;
 		}
 
 		const promise = Promise.resolve(window.showTextDocument(uri, options)).then(editor => {
-			this.pendingEditors.delete(key);
+			this.pendingEditors.delete(uri);
 			return editor;
 		}, err => {
-			this.pendingEditors.delete(key);
+			this.pendingEditors.delete(uri);
 			throw err;
 		});
 
-		this.pendingEditors.set(key, promise);
+		this.pendingEditors.set(uri, promise);
 		return promise;
 	}
 

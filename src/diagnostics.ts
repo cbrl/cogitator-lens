@@ -2,7 +2,7 @@ import { Uri } from 'vscode';
 import path from 'path';
 import type { CompileDiagnostic } from './types/index.js';
 
-export function parseCompilerDiagnostics(
+export function parseToolDiagnostics(
 	output: string,
 	fallbackSource: Uri,
 	workingDirectory = path.dirname(fallbackSource.fsPath),

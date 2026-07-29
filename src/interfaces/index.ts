@@ -4,50 +4,56 @@ import type {
 	Uri,
 	WorkspaceFolder,
 } from 'vscode';
-import type { CompilerBase } from '../compiler.js';
+import type { ToolchainBackend } from '../toolchains/toolchain-backend.js';
 import type {
 	CompilationVariant,
-	CompileArtifact,
-	CompileRequest,
-	CompilerProfile,
+	ArtifactOptions,
+	ArtifactOptionId,
+	RenderedArtifact,
+	ArtifactRequest,
+	ToolchainProfile,
 	DefaultCompilationSettings,
 	ProviderSnapshot,
 	ReconciliationChange,
 } from '../types/index.js';
-import type { ParseFiltersAndOutputOptions } from '../parsers/filters.interfaces.js';
+import type { ConfigurationOrigin } from '../buildsystems/variant-provider.js';
 
-export interface ICompilerRegistry {
-	readonly onDidChange: Event<ReconciliationChange<CompilerProfile>>;
-	getProfiles(origin?: string): readonly CompilerProfile[];
-	getCompilerById(id: string): CompilerBase | undefined;
-	findCompilerByDisplayName(displayName: string): CompilerBase | undefined;
-	reconcile(origin: string, profiles: readonly CompilerProfile[]): ReconciliationChange<CompilerProfile>;
+export interface IToolchainRegistry {
+	readonly onDidChange: Event<ReconciliationChange<ToolchainProfile>>;
+	getProfiles(origin?: ConfigurationOrigin): readonly ToolchainProfile[];
+	getToolchainById(id: string): ToolchainBackend | undefined;
+	findToolchainByDisplayName(displayName: string): ToolchainBackend | undefined;
+	reconcile(
+		origin: ConfigurationOrigin,
+		profiles: readonly ToolchainProfile[],
+	): ReconciliationChange<ToolchainProfile>;
 }
 
 export interface IConfigurationService {
 	readonly onDidChange: Event<void>;
-	getCompilers(scope?: Uri): CompilerProfile[];
+	getToolchains(scope?: Uri): ToolchainProfile[];
 	getDefaultCompilationSettings(scope?: Uri): DefaultCompilationSettings | undefined;
-	getFilters(scope?: Uri): ParseFiltersAndOutputOptions;
+	getArtifactOptions(scope?: Uri): ArtifactOptions;
 	getDimUnusedSourceLines(uri: Uri): boolean;
-	updateCompilers(profiles: readonly CompilerProfile[], folder?: WorkspaceFolder): Thenable<void>;
-	updateFilters(filters: ParseFiltersAndOutputOptions, folder?: WorkspaceFolder): Thenable<void>;
+	updateToolchains(profiles: readonly ToolchainProfile[], folder?: WorkspaceFolder): Thenable<void>;
+	updateArtifactOptions(options: ArtifactOptions, folder?: WorkspaceFolder): Thenable<void>;
 }
 
 export interface ICompilationService extends Disposable {
-	readonly compilerRegistry: ICompilerRegistry;
+	readonly toolchainRegistry: IToolchainRegistry;
 	readonly onVariantsChanged: Event<readonly Uri[]>;
-	readonly onFiltersChanged: Event<void>;
-	globalFilterOptions: ParseFiltersAndOutputOptions;
+	readonly onArtifactOptionsChanged: Event<void>;
+	readonly artifactOptions: ArtifactOptions;
+	setArtifactOption(id: ArtifactOptionId, value: boolean): void;
 	getVariants(file: Uri): readonly CompilationVariant[];
 	getAllSources(): readonly Uri[];
 	getSelectedVariant(file: Uri): CompilationVariant | undefined;
 	selectVariant(file: Uri, variantId: string): Promise<boolean>;
 	reconcileProviderSnapshot(snapshot: ProviderSnapshot): void;
-	compile(request: CompileRequest): Promise<CompileArtifact>;
+	compile(request: ArtifactRequest): Promise<RenderedArtifact>;
 }
 
-export interface IBuildSystemMonitor extends Disposable {
+export interface IVariantProvider extends Disposable {
 	readonly name: string;
 	readonly onSnapshot: Event<ProviderSnapshot>;
 	initialize(): Promise<void>;

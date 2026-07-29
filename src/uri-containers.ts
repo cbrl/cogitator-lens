@@ -135,3 +135,16 @@ export class UriSet {
 		return toComparisonKey(uri, this.ignoreFragment, this.ignorePathCase);
 	}
 }
+
+const sourceIdentityOptions = {
+	ignoreFragment: true,
+	ignorePathCase: process.platform === 'win32',
+} as const;
+
+export function sourceUriMap<T>(): UriMap<T> {
+	return new UriMap<T>(sourceIdentityOptions);
+}
+
+export function sourceUriSet(): UriSet {
+	return new UriSet(sourceIdentityOptions);
+}

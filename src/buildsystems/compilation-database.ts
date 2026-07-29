@@ -7,14 +7,14 @@ import {
 	WorkspaceFolder,
 	workspace,
 } from 'vscode';
-import { BuildsystemMonitor } from './buildsystem-monitor.js';
+import { VariantProvider } from './variant-provider.js';
 import {
 	compilationDatabaseProviderId,
 	parseCompilationDatabase,
 } from './compilation-database-parser.js';
 import type {
 	CompilationVariant,
-	CompilerProfile,
+	ToolchainProfile,
 	ProviderSnapshot,
 } from '../types/index.js';
 import * as logger from '../logger.js';
@@ -29,7 +29,7 @@ interface DatabaseFile {
 	readonly filePath: string;
 }
 
-export class CompilationDatabaseMonitor extends BuildsystemMonitor {
+export class CompilationDatabaseVariantProvider extends VariantProvider {
 	readonly name = 'Compilation Database';
 	readonly providerId = compilationDatabaseProviderId;
 	private readonly subscriptions: Disposable[] = [];
@@ -57,15 +57,15 @@ export class CompilationDatabaseMonitor extends BuildsystemMonitor {
 			return;
 		}
 
-		const profiles = new Map<string, CompilerProfile>();
+		const profiles = new Map<string, ToolchainProfile>();
 		const variants: CompilationVariant[] = [];
 		for (const snapshot of snapshots) {
-			snapshot.compilerProfiles.forEach(profile => profiles.set(profile.id, profile));
+			snapshot.toolchainProfiles.forEach(profile => profiles.set(profile.id, profile));
 			variants.push(...snapshot.variants);
 		}
 		this.publish({
 			provider: this.providerId,
-			compilerProfiles: [...profiles.values()],
+			toolchainProfiles: [...profiles.values()],
 			variants,
 		});
 	}
@@ -148,13 +148,13 @@ export class CompilationDatabaseMonitor extends BuildsystemMonitor {
 				`Ignoring malformed compilation database ${database.filePath} ${message}`,
 			),
 		);
-		const profiles = new Map<string, CompilerProfile>();
+		const profiles = new Map<string, ToolchainProfile>();
 		const variants: CompilationVariant[] = [];
 		const databaseLabel = relativeDatabaseLabel(database);
 		const databaseIdentity = normalizeIdentity(database.filePath);
 
 		for (const entry of entries) {
-			profiles.set(entry.compilerProfile.id, entry.compilerProfile);
+			profiles.set(entry.toolchainProfile.id, entry.toolchainProfile);
 			const source = Uri.file(entry.sourceFile);
 			const outputLabel = entry.output ? ` · ${path.basename(entry.output)}` : '';
 			variants.push({
@@ -164,25 +164,23 @@ export class CompilationDatabaseMonitor extends BuildsystemMonitor {
 				target: entry.output ? path.basename(entry.output) : undefined,
 				configuration: databaseLabel,
 				source,
-				compilerProfileId: entry.compilerProfile.id,
+				toolchainProfileId: entry.toolchainProfile.id,
 				workingDirectory: entry.workingDirectory,
 				arguments: entry.arguments,
-				includes: [],
-				defines: [],
 				environment: {},
-				displayLabel: `${path.basename(entry.compilerProfile.executable)} · ${databaseLabel}${outputLabel}`,
+				displayLabel: `${path.basename(entry.toolchainProfile.executable)} · ${databaseLabel}${outputLabel}`,
 			});
 		}
 
 		return {
 			provider: this.providerId,
-			compilerProfiles: [...profiles.values()],
+			toolchainProfiles: [...profiles.values()],
 			variants,
 		};
 	}
 
 	private emptySnapshot(): ProviderSnapshot {
-		return { provider: this.providerId, compilerProfiles: [], variants: [] };
+		return { provider: this.providerId, toolchainProfiles: [], variants: [] };
 	}
 }
 

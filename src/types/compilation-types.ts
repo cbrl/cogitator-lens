@@ -1,12 +1,11 @@
 /**
- * Compilation contracts shared by configuration providers and the compiler
+ * Compilation contracts shared by configuration providers and the toolchain
  * execution layer.
  */
 
 import type { CancellationToken, Uri } from 'vscode';
 import type { ParsedAsmResult } from '../parsers/asmresult.interfaces.js';
-import type { CompilerOutputOptions } from '../parsers/filters.interfaces.js';
-import type { DisplayAssemblyFilters } from './filter-options.js';
+import type { ArtifactOptions } from './artifact-options.js';
 
 export interface CompilationVariant {
 	id: string;
@@ -15,22 +14,19 @@ export interface CompilationVariant {
 	target?: string;
 	configuration?: string;
 	source: Uri;
-	compilerProfileId: string;
+	toolchainProfileId: string;
 	workingDirectory: string;
 	arguments: readonly string[];
-	includes: readonly string[];
-	defines: readonly string[];
 	environment: Readonly<Record<string, string>>;
 	displayLabel: string;
 }
 
 export type CompilationOutputMode = 'assembly';
 
-export interface CompileRequest {
+export interface ArtifactRequest {
 	variant: CompilationVariant;
 	outputMode: CompilationOutputMode;
-	outputOptions: CompilerOutputOptions;
-	filters: DisplayAssemblyFilters;
+	options: ArtifactOptions;
 	cancellationToken: CancellationToken;
 }
 
@@ -42,7 +38,7 @@ export interface CompileDiagnostic {
 	message: string;
 }
 
-export interface CompileArtifact {
+export interface RenderedArtifact {
 	result: ParsedAsmResult;
 	rawAssembly: string;
 	diagnostics: readonly CompileDiagnostic[];
@@ -68,19 +64,17 @@ export class CompilationError extends Error {
 	}
 }
 
-/** Canonical default compilation settings, matching package.json exactly. */
+/** Canonical default compilation settings after public configuration normalization. */
 export interface DefaultCompilationSettings {
-	compiler: string;
-	defines: string[];
-	includes: string[];
+	toolchain: string;
 	args: string[];
 	env?: Record<string, string>;
 	workingDirectory?: string;
 }
 
 export interface ProviderSnapshot {
-	provider: string;
-	compilerProfiles: readonly import('./compiler-types.js').CompilerProfile[];
+	provider: import('../buildsystems/variant-provider.js').ConfigurationOrigin;
+	toolchainProfiles: readonly import('./toolchain-types.js').ToolchainProfile[];
 	variants: readonly CompilationVariant[];
 }
 

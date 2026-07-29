@@ -1,18 +1,21 @@
 import fs from 'fs';
 import path from 'path';
 import type { CancellationToken } from 'vscode';
-import { AsmParser } from './parsers/asm-parser.js';
-import * as exec from './exec.js';
+import { AsmParser } from '../parsers/asm-parser.js';
+import * as exec from '../exec.js';
+import type { ParseFiltersAndOutputOptions } from '../parsers/filters.interfaces.js';
+import type { ParsedAsmResult } from '../parsers/asmresult.interfaces.js';
 import type {
-	CompilerOutputOptions,
-	ParseFiltersAndOutputOptions,
-} from './parsers/filters.interfaces.js';
-import type { ParsedAsmResult } from './parsers/asmresult.interfaces.js';
-import type { CompilerProfile, CompileOptions } from './types/index.js';
-import { redactArguments, sanitizeCompilerArguments } from './compiler-arguments.js';
-import { withTemporaryDirectory } from './temporary-directory.js';
+	ToolchainProfile,
+	ToolchainCapabilities,
+	CompileOptions,
+	DisplayOptions,
+	ProductionOptions,
+} from '../types/index.js';
+import { redactArguments, sanitizeToolchainArguments } from '../toolchain-arguments.js';
+import { withTemporaryDirectory } from '../temporary-directory.js';
 
-export interface CompilerRunResult {
+export interface ToolchainRunResult {
 	rawAssembly: string;
 	stdout: string;
 	stderr: string;
@@ -26,7 +29,7 @@ export interface CompilerRunResult {
 	};
 }
 
-export class CompilerExitError extends Error {
+export class ToolExitError extends Error {
 	constructor(
 		message: string,
 		public readonly returnCode: number,
@@ -34,26 +37,28 @@ export class CompilerExitError extends Error {
 		public readonly stderr: string,
 	) {
 		super(message);
-		this.name = 'CompilerExitError';
+		this.name = 'ToolExitError';
 	}
 }
 
-export interface ICompiler {
-	readonly profile: CompilerProfile;
+export interface IToolchainBackend {
+	readonly profile: ToolchainProfile;
 	compile(
 		file: string,
 		options: CompileOptions,
 		cancellationToken: CancellationToken,
-	): Promise<CompilerRunResult>;
-	parseAssembly(rawAssembly: string, filters: ParseFiltersAndOutputOptions): ParsedAsmResult;
+	): Promise<ToolchainRunResult>;
+	parseAssembly(rawAssembly: string, options: DisplayOptions): ParsedAsmResult;
 }
 
-export abstract class CompilerBase implements ICompiler {
-	readonly profile: CompilerProfile;
+export abstract class ToolchainBackend implements IToolchainBackend {
+	readonly profile: ToolchainProfile;
 	protected asmParser: AsmParser;
+	protected readonly capabilities: ToolchainCapabilities;
 
-	constructor(profile: CompilerProfile) {
+	constructor(profile: ToolchainProfile, capabilities: ToolchainCapabilities) {
 		this.profile = profile;
+		this.capabilities = capabilities;
 		this.asmParser = new AsmParser();
 	}
 
@@ -61,7 +66,7 @@ export abstract class CompilerBase implements ICompiler {
 		file: string,
 		options: CompileOptions,
 		cancellationToken: CancellationToken,
-	): Promise<CompilerRunResult> {
+	): Promise<ToolchainRunResult> {
 		return withTemporaryDirectory('coglens-', async temporaryDirectory => {
 			const outputFile = path.join(temporaryDirectory, 'output.asm');
 			const workingDirectory = options.workingDirectory ?? path.dirname(file);
@@ -72,25 +77,19 @@ export abstract class CompilerBase implements ICompiler {
 				...options.env,
 			};
 
-			const providerArguments = sanitizeCompilerArguments([
+			const providerArguments = sanitizeToolchainArguments([
 				...this.profile.defaultArguments,
 				...(options.args ?? []),
 			], file, workingDirectory);
-			const outputOptions = options.outputOptions ?? {};
-
 			const argumentsList = [
 				...providerArguments,
-				...this.profile.includes.map(value => `${this.profile.includeFlag}${value}`),
-				...(options.includes ?? []).map(value => `${this.profile.includeFlag}${value}`),
-				...this.profile.defines.map(value => `${this.profile.defineFlag}${value}`),
-				...(options.defines ?? []).map(value => `${this.profile.defineFlag}${value}`),
-				...this.outputOptionArguments(outputOptions),
+				...this.outputOptionArguments(options.productionOptions),
 				...this.prepareArguments(outputFile),
 				file,
 			];
 
 			const started = performance.now();
-			const { logChannel } = await import('./logger.js');
+			const { logChannel } = await import('../logger.js');
 			logChannel.info(`Compiling ${file} with ${this.profile.displayName}`);
 			logChannel.info(`Command: ${this.profile.executable} ${redactArguments(argumentsList).join(' ')}`);
 			const overriddenNames = Object.keys({ ...this.profile.environment, ...options.env }).sort();
@@ -98,8 +97,8 @@ export abstract class CompilerBase implements ICompiler {
 
 			const result = await this.runCompiler(argumentsList, environment, workingDirectory, cancellationToken);
 			if (result.returnCode !== 0) {
-				throw new CompilerExitError(
-					`Compiler exited with code ${result.returnCode}`,
+				throw new ToolExitError(
+					`Toolchain exited with code ${result.returnCode}`,
 					result.returnCode,
 					result.stdout,
 					result.stderr,
@@ -109,7 +108,7 @@ export abstract class CompilerBase implements ICompiler {
 			const assembly = await fs.promises.readFile(outputFile, 'utf8');
 			const postProcessedAssembly = await this.postProcessAssembly(
 				assembly,
-				outputOptions,
+				options.productionOptions,
 				environment,
 				workingDirectory,
 				cancellationToken,
@@ -130,8 +129,14 @@ export abstract class CompilerBase implements ICompiler {
 		});
 	}
 
-	parseAssembly(rawAssembly: string, filters: ParseFiltersAndOutputOptions): ParsedAsmResult {
-		return this.asmParser.process(rawAssembly, filters);
+	parseAssembly(rawAssembly: string, options: DisplayOptions): ParsedAsmResult {
+		const filters: ParseFiltersAndOutputOptions = { ...options };
+		return this.asmParser.process(rawAssembly, {
+			...filters,
+			libraryCode: this.capabilities.libraryCodeFilter
+				? filters.libraryCode
+				: false,
+		});
 	}
 
 	protected runCompiler(
@@ -149,29 +154,33 @@ export abstract class CompilerBase implements ICompiler {
 
 	protected abstract prepareArguments(outputFile: string): readonly string[];
 
-	protected outputOptionArguments(_options: CompilerOutputOptions): readonly string[] {
+	protected outputOptionArguments(_options: ProductionOptions): readonly string[] {
 		return [];
 	}
 
 	protected async postProcessAssembly(
 		rawAssembly: string,
-		options: CompilerOutputOptions,
+		options: ProductionOptions,
 		environment: NodeJS.ProcessEnv,
 		workingDirectory: string,
 		cancellationToken: CancellationToken,
 	): Promise<string> {
-		if (!options.demangle || !this.profile.capabilities.demangle || !this.profile.demangler) {
+		if (
+			!options.demangle
+			|| !this.capabilities.demangle
+			|| !this.profile.tools.demangler
+		) {
 			return rawAssembly;
 		}
 
-		const result = await exec.execute(this.profile.demangler, [], {
+		const result = await exec.execute(this.profile.tools.demangler, [], {
 			cwd: workingDirectory,
 			env: environment,
 			cancellationToken,
 			stdin: rawAssembly,
 		});
 		if (result.returnCode !== 0) {
-			throw new CompilerExitError(
+			throw new ToolExitError(
 				`Demangler exited with code ${result.returnCode}`,
 				result.returnCode,
 				result.stdout,

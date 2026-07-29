@@ -8,22 +8,19 @@ import {
 	workspace,
 } from 'vscode';
 import type { IConfigurationService } from '../interfaces/index.js';
-import type { CompilerProfile, DefaultCompilationSettings } from '../types/index.js';
-import type { ParseFiltersAndOutputOptions } from '../parsers/filters.interfaces.js';
+import type {
+	ArtifactOptions,
+	DefaultCompilationSettings,
+	ToolchainProfile,
+} from '../types/index.js';
+import { defaultArtifactOptions } from '../types/index.js';
 import * as logger from '../logger.js';
 import {
-	normalizeCompilerSettings,
+	normalizeToolchainSettings,
+	normalizeArtifactOptions,
 	normalizeDefaultCompilationSettings,
-	profileToSettings,
+	toolchainProfileToSettings,
 } from './configuration-normalization.js';
-
-const defaultFilters: ParseFiltersAndOutputOptions = {
-	labels: true,
-	directives: true,
-	commentOnly: true,
-	libraryCode: false, // Enabling this can give counter-intuitive results if part of the user's project is a library
-	dontMaskFilenames: true // Filename masking is part of the Compiler Explorer code, but not very useful in this context
-};
 
 export class ConfigurationService implements IConfigurationService, Disposable {
 	private readonly changeEmitter = new EventEmitter<void>();
@@ -39,15 +36,21 @@ export class ConfigurationService implements IConfigurationService, Disposable {
 		});
 	}
 
-	getCompilers(scope?: Uri): CompilerProfile[] {
-		const raw = workspace.getConfiguration('coglens', scope).get<unknown[]>('compilers', []);
-		const profiles: CompilerProfile[] = [];
+	getToolchains(scope?: Uri): ToolchainProfile[] {
+		const raw = workspace.getConfiguration('coglens', scope).get<unknown>('toolchains', []);
+		if (!Array.isArray(raw)) {
+			logger.logChannel.error('Ignoring invalid coglens.toolchains: expected an array');
+			return [];
+		}
+		const profiles: ToolchainProfile[] = [];
 		raw.forEach((item, index) => {
-			const normalized = normalizeCompilerSettings(item, 'user');
-			if (normalized.value) {
+			const normalized = normalizeToolchainSettings(item);
+			if (normalized.ok) {
 				profiles.push(normalized.value);
 			} else {
-				logger.logChannel.error(`Ignoring invalid coglens.compilers[${index}]: ${normalized.errors.join('; ')}`);
+				logger.logChannel.error(
+					`Ignoring invalid coglens.toolchains[${index}]: ${normalized.errors.join('; ')}`,
+				);
 			}
 		});
 		return profiles;
@@ -59,35 +62,39 @@ export class ConfigurationService implements IConfigurationService, Disposable {
 			return undefined;
 		}
 		const normalized = normalizeDefaultCompilationSettings(raw);
-		if (!normalized.value) {
+		if (!normalized.ok) {
 			logger.logChannel.error(`Ignoring invalid coglens.defaultCompileInfo: ${normalized.errors.join('; ')}`);
+			return undefined;
 		}
 		return normalized.value;
 	}
 
-	getFilters(scope?: Uri): ParseFiltersAndOutputOptions {
-		return {
-			...defaultFilters,
-			...workspace.getConfiguration('coglens', scope).get<ParseFiltersAndOutputOptions>('filters', {}),
-		};
+	getArtifactOptions(scope?: Uri): ArtifactOptions {
+		const raw = workspace.getConfiguration('coglens', scope).get<unknown>('filters', {});
+		const normalized = normalizeArtifactOptions(raw);
+		if (!normalized.ok) {
+			logger.logChannel.error(`Ignoring invalid coglens.filters: ${normalized.errors.join('; ')}`);
+			return defaultArtifactOptions;
+		}
+		return normalized.value;
 	}
 
 	getDimUnusedSourceLines(uri: Uri): boolean {
 		return workspace.getConfiguration('coglens', uri).get('dimUnusedSourceLines', true);
 	}
 
-	async updateCompilers(profiles: readonly CompilerProfile[], folder?: WorkspaceFolder): Promise<void> {
+	async updateToolchains(profiles: readonly ToolchainProfile[], folder?: WorkspaceFolder): Promise<void> {
 		await workspace.getConfiguration('coglens', folder?.uri).update(
-			'compilers',
-			profiles.map(profileToSettings),
+			'toolchains',
+			profiles.map(toolchainProfileToSettings),
 			ConfigurationTarget.Workspace,
 		);
 	}
 
-	async updateFilters(filters: ParseFiltersAndOutputOptions, folder?: WorkspaceFolder): Promise<void> {
+	async updateArtifactOptions(options: ArtifactOptions, folder?: WorkspaceFolder): Promise<void> {
 		await workspace.getConfiguration('coglens', folder?.uri).update(
 			'filters',
-			filters,
+			{ ...options.production, ...options.display },
 			folder ? ConfigurationTarget.WorkspaceFolder : ConfigurationTarget.Workspace,
 		);
 	}

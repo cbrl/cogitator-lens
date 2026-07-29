@@ -1,5 +1,5 @@
-import assert from "assert";
 import vscode from "vscode";
+import type { ArtifactOptionId } from '../types/index.js';
 
 /**
  * Specifies the type of item in the tree view.
@@ -41,12 +41,8 @@ export class TreeNode {
 	/**
 	 * If the node refers to a value stored in some object, this will be a reference to the containing object.
 	 */
-	objectRef?: any;
-
-	/**
-	 * If the node refers to a value stored in some object, this will be the name or index of the attribute within the object.
-	 */
-	attr?: string | number;
+	optionId?: ArtifactOptionId;
+	checked?: boolean;
 
 	/**
 	 * A reference to the tree that owns this node. Automatically set by the tree.
@@ -69,7 +65,7 @@ export class TreeItem extends vscode.TreeItem {
 		// Initialize the base class with default empty values. These will be overwritten further down.
 		super('', vscode.TreeItemCollapsibleState.None);
 
-		const { label, nodeType, treeContext, iconPath, objectRef, attr } = node;
+		const { label, nodeType, treeContext, iconPath } = node;
 
 		this.label = label;
 		this.iconPath = iconPath;
@@ -81,12 +77,7 @@ export class TreeItem extends vscode.TreeItem {
 			this.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
 		}
 		else if (nodeType === 'checkbox' && !node.disabled) {
-			assert(objectRef !== undefined && attr !== undefined);
-
-			// While the object and attribute identifier can't be undefined, the actual attribute can be.
-            const value = (objectRef[attr] as boolean) ?? false;
-
-			this.checkboxState = value
+			this.checkboxState = node.checked
 				? vscode.TreeItemCheckboxState.Checked
 				: vscode.TreeItemCheckboxState.Unchecked;
         }

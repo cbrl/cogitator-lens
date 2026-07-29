@@ -26,7 +26,12 @@ import { CompilationService } from '../compilation/index.js';
 import type { IConfigurationService } from '../interfaces/index.js';
 import { CompilationError, type CompileDiagnostic } from '../types/index.js';
 import { equalUri } from '../utils.js';
-import { UriMap, UriSet } from '../uri-containers.js';
+import {
+	sourceUriMap,
+	sourceUriSet,
+	UriMap,
+	UriSet,
+} from '../uri-containers.js';
 import { assemblyScheme, getAsmUri, parseAsmUri } from './asm-uri.js';
 import { AsmDecorator } from './asm-decorator.js';
 import { CompiledAssembly } from './compiled-assembly.js';
@@ -46,8 +51,8 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 	private readonly fileWatchers = new UriMap<Disposable>(uriComparisonOptions);
 	private readonly decorators = new UriMap<AsmDecorator>(uriComparisonOptions);
 	private readonly compiledAssemblies = new UriMap<CompiledAssembly>(uriComparisonOptions);
-	private readonly authorizedDirtyCompilations = new UriSet(uriComparisonOptions);
-	private readonly sourceToAssembly = new UriMap<UriSet>(uriComparisonOptions);
+	private readonly authorizedDirtyCompilations = sourceUriSet();
+	private readonly sourceToAssembly = sourceUriMap<UriSet>();
 	private readonly pendingRefreshes = new UriMap<ReturnType<typeof setTimeout>>(uriComparisonOptions);
 	private readonly diagnosticsByAssembly = new UriMap<readonly CompileDiagnostic[]>(uriComparisonOptions);
 	private readonly styleManager = new DecorationStyleManager();
@@ -69,7 +74,7 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 					}
 				}
 			}),
-			compilationService.onFiltersChanged(() => {
+			compilationService.onArtifactOptionsChanged(() => {
 				for (const handler of this.compileHandlers.values()) {
 					this.requestRefresh(handler.asmUri);
 				}
@@ -188,12 +193,12 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 		);
 		let assemblyUris = this.sourceToAssembly.get(identity.source);
 		if (!assemblyUris) {
-			assemblyUris = new UriSet(uriComparisonOptions);
+			assemblyUris = sourceUriSet();
 			this.sourceToAssembly.set(identity.source, assemblyUris);
 		}
 		assemblyUris.add(assemblyUri);
 		const compileSubscription = handler.onDidChange(status => {
-			if (status.state === 'successful' && status.assembly) {
+			if (status.state === 'successful') {
 				this.compiledAssemblies.set(assemblyUri, status.assembly);
 			} else if (status.state === 'failed') {
 				this.compiledAssemblies.delete(assemblyUri);
@@ -278,8 +283,9 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 					: `$(check) Cogitator Lens: Ready ${sourceName}`;
 				break;
 		}
-		this.statusBar.tooltip = status.error?.message
-			?? `Assembly state: ${status.state}`;
+		this.statusBar.tooltip = status.state === 'failed'
+			? status.error.message
+			: `Assembly state: ${status.state}`;
 		this.statusBar.show();
 	}
 

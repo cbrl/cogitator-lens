@@ -12,61 +12,73 @@ import path from 'path';
 import type { ICompilationService, IConfigurationService } from '../interfaces/index.js';
 import type {
 	CompilationVariant,
-	CompileArtifact,
-	CompileRequest,
+	RenderedArtifact,
+	ArtifactRequest,
+	ArtifactOptionId,
+	ArtifactOptions,
 	ProviderSnapshot,
 } from '../types/index.js';
-import { CompilationError } from '../types/index.js';
-import type { ParseFiltersAndOutputOptions } from '../parsers/filters.interfaces.js';
-import { CompilerExitError, type CompilerRunResult } from '../compiler.js';
+import {
+	artifactOptionsEqual,
+	CompilationError,
+	immutableArtifactOptions,
+} from '../types/index.js';
+import { ToolExitError, type ToolchainRunResult } from '../toolchains/toolchain-backend.js';
 import { ExecError } from '../exec.js';
-import { CompilerRegistry } from './compiler-registry.js';
+import { ToolchainRegistry } from './toolchain-registry.js';
 import { CompilationConfigDatabase } from './compilation-config.js';
 import { CompilationSemaphore } from './compilation-semaphore.js';
-import { parseCompilerDiagnostics } from '../diagnostics.js';
+import { parseToolDiagnostics } from '../diagnostics.js';
 import * as logger from '../logger.js';
 
 export class CompilationService implements ICompilationService {
-	readonly compilerRegistry = new CompilerRegistry();
+	readonly toolchainRegistry = new ToolchainRegistry();
 	private readonly variants = new CompilationConfigDatabase();
 	private readonly changeEmitter = new EventEmitter<readonly Uri[]>();
-	private readonly filterChangeEmitter = new EventEmitter<void>();
+	private readonly artifactOptionsChangeEmitter = new EventEmitter<void>();
 	private readonly subscriptions: Disposable[] = [];
 	private readonly semaphore = new CompilationSemaphore(2, () => new CancellationError());
 	private readonly rawAssemblyCache = new Map<string, {
 		signature: string;
-		run: CompilerRunResult;
+		run: ToolchainRunResult;
 	}>();
-	private filters: ParseFiltersAndOutputOptions;
+	private currentArtifactOptions: ArtifactOptions;
 
 	readonly onVariantsChanged: Event<readonly Uri[]> = this.changeEmitter.event;
-	readonly onFiltersChanged: Event<void> = this.filterChangeEmitter.event;
+	readonly onArtifactOptionsChanged: Event<void> = this.artifactOptionsChangeEmitter.event;
 
 	constructor(
 		private readonly configuration: IConfigurationService,
 		private readonly workspaceState?: Memento,
 	) {
-		this.filters = configuration.getFilters();
+		this.currentArtifactOptions = configuration.getArtifactOptions();
 		this.reloadUserConfiguration();
 		this.subscriptions.push(
 			configuration.onDidChange(() => this.reloadUserConfiguration()),
 			this.variants.onDidChange(change => this.changeEmitter.fire(change.affectedSources)),
-			this.compilerRegistry.onDidChange(() => this.changeEmitter.fire(this.variantsSources())),
+			this.toolchainRegistry.onDidChange(() => this.changeEmitter.fire(this.variantsSources())),
 		);
 	}
 
-	get globalFilterOptions(): ParseFiltersAndOutputOptions {
-		return { ...this.filters };
+	get artifactOptions(): ArtifactOptions {
+		return this.currentArtifactOptions;
 	}
 
-	set globalFilterOptions(value: ParseFiltersAndOutputOptions) {
-		if (filtersEqual(this.filters, value)) {
+	setArtifactOption(id: ArtifactOptionId, value: boolean): void {
+		const production = Object.hasOwn(this.currentArtifactOptions.production, id)
+			? { ...this.currentArtifactOptions.production, [id]: value }
+			: this.currentArtifactOptions.production;
+		const display = Object.hasOwn(this.currentArtifactOptions.display, id)
+			? { ...this.currentArtifactOptions.display, [id]: value }
+			: this.currentArtifactOptions.display;
+		const options = immutableArtifactOptions({ production, display });
+		if (artifactOptionsEqual(this.currentArtifactOptions, options)) {
 			return;
 		}
-		this.filters = { ...value };
-		this.filterChangeEmitter.fire();
+		this.currentArtifactOptions = options;
+		this.artifactOptionsChangeEmitter.fire();
 		const folder = workspace.workspaceFolders?.[0];
-		void this.configuration.updateFilters(this.filters, folder);
+		void this.configuration.updateArtifactOptions(options, folder);
 	}
 
 	getVariants(file: Uri): readonly CompilationVariant[] {
@@ -99,8 +111,11 @@ export class CompilationService implements ICompilationService {
 	}
 
 	reconcileProviderSnapshot(snapshot: ProviderSnapshot): void {
-		this.compilerRegistry.reconcile(snapshot.provider, snapshot.compilerProfiles);
-		this.variants.reconcile(snapshot.provider, snapshot.variants);
+		this.toolchainRegistry.reconcile(snapshot.provider, snapshot.toolchainProfiles);
+		this.variants.reconcile(snapshot.provider, snapshot.variants.map(variant => ({
+			...variant,
+			toolchainProfileId: ToolchainRegistry.profileId(snapshot.provider, variant.toolchainProfileId),
+		})));
 		const sources = new Map(snapshot.variants.map(variant => [variant.source.toString(), variant.source]));
 		for (const source of sources.values()) {
 			const persisted = this.workspaceState?.get<string>(this.selectionKey(source));
@@ -110,8 +125,8 @@ export class CompilationService implements ICompilationService {
 		}
 	}
 
-	async compile(request: CompileRequest): Promise<CompileArtifact> {
-		const { variant, outputMode, outputOptions, filters, cancellationToken } = request;
+	async compile(request: ArtifactRequest): Promise<RenderedArtifact> {
+		const { variant, outputMode, options, cancellationToken } = request;
 		const file = variant.source;
 		if (cancellationToken.isCancellationRequested) {
 			throw new CancellationError();
@@ -119,16 +134,16 @@ export class CompilationService implements ICompilationService {
 		if (outputMode !== 'assembly') {
 			throw new CompilationError(`Unsupported compilation output mode: ${outputMode as string}`);
 		}
-		const compiler = this.compilerRegistry.getCompilerById(variant.compilerProfileId);
-		if (!compiler) {
-			throw new CompilationError(`Compiler profile not found: ${variant.compilerProfileId}`);
+		const backend = this.toolchainRegistry.getToolchainById(variant.toolchainProfileId);
+		if (!backend) {
+			throw new CompilationError(`Toolchain profile not found: ${variant.toolchainProfileId}`);
 		}
 
 		const cacheKey = `${file.toString()}\0${variant.id}\0${outputMode}`;
-		const signature = await this.compileSignature(variant, compiler.profile, outputOptions);
+		const signature = await this.compileSignature(variant, backend.profile, options.production);
 		const cached = this.rawAssemblyCache.get(cacheKey);
 		if (cached?.signature === signature) {
-			return this.createArtifact(compiler, cached.run, variant, filters);
+			return this.createArtifact(backend, cached.run, variant, options.display);
 		}
 
 		await this.semaphore.acquire(cancellationToken);
@@ -138,16 +153,14 @@ export class CompilationService implements ICompilationService {
 			}
 
 			try {
-				const run = await compiler.compile(file.fsPath, {
+				const run = await backend.compile(file.fsPath, {
 					args: variant.arguments,
-					defines: variant.defines,
-					includes: variant.includes,
 					env: variant.environment,
 					workingDirectory: variant.workingDirectory,
-					outputOptions,
+					productionOptions: options.production,
 				}, cancellationToken);
 				this.rawAssemblyCache.set(cacheKey, { signature, run });
-				return this.createArtifact(compiler, run, variant, filters);
+				return this.createArtifact(backend, run, variant, options.display);
 			} catch (error: unknown) {
 				if (error instanceof CancellationError || cancellationToken.isCancellationRequested) {
 					throw new CancellationError();
@@ -155,8 +168,8 @@ export class CompilationService implements ICompilationService {
 				if (error instanceof CompilationError) {
 					throw error;
 				}
-				const output = compilerErrorOutput(error);
-				const diagnostics = parseCompilerDiagnostics(
+				const output = toolErrorOutput(error);
+				const diagnostics = parseToolDiagnostics(
 					`${output.stderr}\n${output.stdout}`,
 					file,
 					variant.workingDirectory,
@@ -177,21 +190,21 @@ export class CompilationService implements ICompilationService {
 	dispose(): void {
 		this.subscriptions.forEach(subscription => subscription.dispose());
 		this.changeEmitter.dispose();
-		this.filterChangeEmitter.dispose();
+		this.artifactOptionsChangeEmitter.dispose();
 		this.variants.dispose();
-		this.compilerRegistry.dispose();
+		this.toolchainRegistry.dispose();
 		this.rawAssemblyCache.clear();
 	}
 
 	private createArtifact(
-		compiler: import('../compiler.js').CompilerBase,
-		run: CompilerRunResult,
+		backend: import('../toolchains/toolchain-backend.js').ToolchainBackend,
+		run: ToolchainRunResult,
 		variant: CompilationVariant,
-		filters: ParseFiltersAndOutputOptions,
-	): CompileArtifact {
+		options: import('../types/index.js').DisplayOptions,
+	): RenderedArtifact {
 		let result;
 		try {
-			result = compiler.parseAssembly(run.rawAssembly, filters);
+			result = backend.parseAssembly(run.rawAssembly, options);
 		} catch (error: unknown) {
 			throw new CompilationError(
 				error instanceof Error ? error.message : String(error),
@@ -203,7 +216,7 @@ export class CompilationService implements ICompilationService {
 		return {
 			result,
 			rawAssembly: run.rawAssembly,
-			diagnostics: parseCompilerDiagnostics(
+			diagnostics: parseToolDiagnostics(
 				`${run.stderr}\n${run.stdout}`,
 				variant.source,
 				variant.workingDirectory,
@@ -217,8 +230,8 @@ export class CompilationService implements ICompilationService {
 
 	private async compileSignature(
 		variant: CompilationVariant,
-		profile: import('../types/index.js').CompilerProfile,
-		outputOptions: import('../parsers/filters.interfaces.js').CompilerOutputOptions,
+		profile: import('../types/index.js').ToolchainProfile,
+		productionOptions: import('../types/index.js').ProductionOptions,
 	): Promise<string> {
 		let sourceState: { size: number; mtimeMs: number };
 		try {
@@ -227,16 +240,16 @@ export class CompilationService implements ICompilationService {
 		} catch {
 			sourceState = { size: -1, mtimeMs: -1 };
 		}
-		return JSON.stringify({ variant, profile, outputOptions, sourceState });
+		return JSON.stringify({ variant, profile, productionOptions, sourceState });
 	}
 
 	private reloadUserConfiguration(): void {
 		try {
-			this.compilerRegistry.reconcile('user', this.configuration.getCompilers());
-			const filters = this.configuration.getFilters();
-			if (!filtersEqual(this.filters, filters)) {
-				this.filters = filters;
-				this.filterChangeEmitter.fire();
+			this.toolchainRegistry.reconcile('user', this.configuration.getToolchains());
+			const options = this.configuration.getArtifactOptions();
+			if (!artifactOptionsEqual(this.currentArtifactOptions, options)) {
+				this.currentArtifactOptions = options;
+				this.artifactOptionsChangeEmitter.fire();
 			}
 		} catch (error) {
 			logger.logChannel.error(`Failed to reload Cogitator Lens configuration: ${String(error)}`);
@@ -248,21 +261,19 @@ export class CompilationService implements ICompilationService {
 		if (!info) {
 			return undefined;
 		}
-		const compiler = this.compilerRegistry.findCompilerByDisplayName(info.compiler);
-		if (!compiler) {
+		const backend = this.toolchainRegistry.findToolchainByDisplayName(info.toolchain);
+		if (!backend) {
 			return undefined;
 		}
 		return {
 			id: `default:${file.toString()}`,
 			provider: 'default',
 			source: file,
-			compilerProfileId: compiler.profile.id,
+			toolchainProfileId: backend.profile.id,
 			workingDirectory: info.workingDirectory ?? workspace.getWorkspaceFolder(file)?.uri.fsPath ?? path.dirname(file.fsPath),
 			arguments: info.args,
-			includes: info.includes,
-			defines: info.defines,
 			environment: info.env ?? {},
-			displayLabel: `Default (${compiler.profile.displayName})`,
+			displayLabel: `Default (${backend.profile.displayName})`,
 		};
 	}
 
@@ -275,8 +286,8 @@ export class CompilationService implements ICompilationService {
 	}
 }
 
-function compilerErrorOutput(error: unknown): { stdout: string; stderr: string } {
-	if (error instanceof CompilerExitError) {
+function toolErrorOutput(error: unknown): { stdout: string; stderr: string } {
+	if (error instanceof ToolExitError) {
 		return { stdout: error.stdout, stderr: error.stderr };
 	}
 	if (error && typeof error === 'object') {
@@ -287,20 +298,4 @@ function compilerErrorOutput(error: unknown): { stdout: string; stderr: string }
 		};
 	}
 	return { stdout: '', stderr: '' };
-}
-
-function filtersEqual(
-	left: ParseFiltersAndOutputOptions,
-	right: ParseFiltersAndOutputOptions,
-): boolean {
-	const keys = new Set([
-		...Object.keys(left),
-		...Object.keys(right),
-	] as Array<keyof ParseFiltersAndOutputOptions>);
-	for (const key of keys) {
-		if (left[key] !== right[key]) {
-			return false;
-		}
-	}
-	return true;
 }

@@ -1,6 +1,6 @@
 import { Uri } from 'vscode';
 import { ParsedAsmResultLine } from '../parsers/asmresult.interfaces';
-import { UriMap, UriSet } from '../uri-containers';
+import { sourceUriMap, sourceUriSet, UriSet } from '../uri-containers';
 import path from 'path';
 
 /**
@@ -14,12 +14,12 @@ export class CompiledAssembly {
 	/**
 	 * Set of all source documents referenced by this assembly
 	 */
-	public readonly allReferencedSrcUris: UriSet = new UriSet({ ignorePathCase: process.platform === 'win32' });
+	public readonly allReferencedSrcUris: UriSet = sourceUriSet();
 
     public readonly lines: ParsedAsmResultLine[] = [];
 
     // Mapping of source line to assembly line for each source file: file -> (source line -> ASM line)
-    private readonly mappings = new UriMap<Map<number, number[]>>({ ignorePathCase: process.platform === 'win32' });
+    private readonly mappings = sourceUriMap<Map<number, number[]>>();
 
     constructor(srcUri: Uri, asmUri: Uri, lines: ParsedAsmResultLine[]) {
         this.srcUri = srcUri;

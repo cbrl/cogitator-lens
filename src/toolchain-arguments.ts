@@ -15,7 +15,7 @@ const extensionOwnedFlags = new Set([
 	'/FAcs',
 ]);
 
-export function sanitizeCompilerArguments(
+export function sanitizeToolchainArguments(
 	args: readonly string[],
 	sourceFile: string,
 	workingDirectory?: string,

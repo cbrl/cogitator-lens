@@ -1,20 +1,14 @@
 import { Disposable, Event, EventEmitter, Uri } from 'vscode';
 import type { CompilationVariant, ReconciliationChange } from '../types/index.js';
-import { UriMap } from '../uri-containers.js';
+import { sourceUriMap } from '../uri-containers.js';
 
 export interface VariantChange extends ReconciliationChange<CompilationVariant> {
 	affectedSources: readonly Uri[];
 }
 
 export class CompilationConfigDatabase implements Disposable {
-	private readonly bySource = new UriMap<Map<string, CompilationVariant>>({
-		ignoreFragment: true,
-		ignorePathCase: process.platform === 'win32',
-	});
-	private readonly selectedVariant = new UriMap<string>({
-		ignoreFragment: true,
-		ignorePathCase: process.platform === 'win32',
-	});
+	private readonly bySource = sourceUriMap<Map<string, CompilationVariant>>();
+	private readonly selectedVariant = sourceUriMap<string>();
 	private readonly changeEmitter = new EventEmitter<VariantChange>();
 
 	readonly onDidChange: Event<VariantChange> = this.changeEmitter.event;
@@ -64,7 +58,7 @@ export class CompilationConfigDatabase implements Disposable {
 		const added: CompilationVariant[] = [];
 		const updated: CompilationVariant[] = [];
 		const removed: CompilationVariant[] = [];
-		const affected = new UriMap<Uri>({ ignoreFragment: true, ignorePathCase: process.platform === 'win32' });
+		const affected = sourceUriMap<Uri>();
 
 		for (const [id, previous] of existing) {
 			const replacement = incoming.get(id);

@@ -151,7 +151,7 @@ export class CompilationInfoTreeNode extends TreeNode {
 		variant: CompilationVariant,
 		compilationService: CompilationService,
 	): CompilationInfoTreeNode {
-		const compiler = compilationService.compilerRegistry.getCompilerById(variant.compilerProfileId);
+		const backend = compilationService.toolchainRegistry.getToolchainById(variant.toolchainProfileId);
 		return {
 			label: variant.displayLabel,
 			description: variant.provider,
@@ -162,9 +162,9 @@ export class CompilationInfoTreeNode extends TreeNode {
 			variant,
 			children: [
 				{
-					label: 'Compiler',
-					description: compiler?.profile.displayName ?? variant.compilerProfileId,
-					tooltip: compiler?.profile.executable,
+					label: 'Toolchain',
+					description: backend?.profile.displayName ?? variant.toolchainProfileId,
+					tooltip: backend?.profile.executable,
 					nodeType: 'text',
 					iconPath: new vscode.ThemeIcon('chip'),
 					treeContext: 'text',
@@ -178,8 +178,6 @@ export class CompilationInfoTreeNode extends TreeNode {
 					treeContext: 'text',
 				},
 				makeListNode('Arguments', variant.arguments),
-				makeListNode('Defines', variant.defines),
-				makeListNode('Include directories', variant.includes),
 				makeEnvironmentNode(variant.environment),
 			],
 		};

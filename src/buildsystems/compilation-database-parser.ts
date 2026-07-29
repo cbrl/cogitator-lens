@@ -1,12 +1,12 @@
 import path from 'path';
-import { sanitizeCompilerArguments } from '../compiler-arguments.js';
-import { detectCompilerKind } from '../compiler-detection.js';
+import { sanitizeToolchainArguments } from '../toolchain-arguments.js';
+import { detectToolchainKind } from '../toolchain-detection.js';
 import {
-	getCompilerByType,
-	normalizedExecutableId,
-} from '../compilers/compiler-map.js';
+	createToolchainProfile,
+	normalizedExecutableLocalId,
+} from '../toolchains/toolchain-map.js';
 import { tokenizeCommandLine } from '../tokenize.js';
-import type { CompilerProfile } from '../types/index.js';
+import type { ToolchainProfile } from '../types/index.js';
 
 export const compilationDatabaseProviderId = 'compilation-database';
 
@@ -16,7 +16,7 @@ export interface ParsedCompilationDatabaseEntry {
 	readonly workingDirectory: string;
 	readonly arguments: readonly string[];
 	readonly output?: string;
-	readonly compilerProfile: CompilerProfile;
+	readonly toolchainProfile: ToolchainProfile;
 }
 
 type ReportMalformedEntry = (message: string) => void;
@@ -107,27 +107,27 @@ function parseEntry(
 		? path.normalize(value.file)
 		: path.resolve(workingDirectory, value.file);
 	const executable = resolveExecutable(commandArguments[0], workingDirectory);
-	const compilerKind = detectCompilerKind(executable, '', platform);
-	const Adapter = compilerKind ? getCompilerByType(compilerKind) : undefined;
-	if (!Adapter) {
+	const compilerKind = detectToolchainKind(executable, '', platform);
+	if (!compilerKind) {
 		return fail(`unsupported compiler executable "${commandArguments[0]}"`);
 	}
 
 	const executableName = path.basename(executable);
-	const profileId = `${compilationDatabaseProviderId}:${normalizedExecutableId(executable)}`;
-	const compilerProfile = {
-		...Adapter.baseCompilerProfile(executableName, executable),
-		id: profileId,
-		displayName: `${executableName} — ${executable}`,
-	};
+	const profileId = normalizedExecutableLocalId(executable);
+	const toolchainProfile = createToolchainProfile(
+		compilerKind,
+		`${executableName} — ${executable}`,
+		executable,
+		{ id: profileId },
+	);
 
 	return {
 		entryIndex,
 		sourceFile,
 		workingDirectory,
-		arguments: sanitizeCompilerArguments(commandArguments.slice(1), sourceFile, workingDirectory),
+		arguments: sanitizeToolchainArguments(commandArguments.slice(1), sourceFile, workingDirectory),
 		output: value.output,
-		compilerProfile,
+		toolchainProfile,
 	};
 }
 

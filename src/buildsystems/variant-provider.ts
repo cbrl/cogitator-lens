@@ -1,8 +1,16 @@
 import { Event, EventEmitter } from 'vscode';
-import type { IBuildSystemMonitor } from '../interfaces/index.js';
+import type { IVariantProvider } from '../interfaces/index.js';
 import type { ProviderSnapshot } from '../types/index.js';
 
-export abstract class BuildsystemMonitor implements IBuildSystemMonitor {
+export const variantProviderDefinitions = {
+	user: { label: 'Workspace' },
+	cmake: { label: 'CMake' },
+	'compilation-database': { label: 'Compilation database' },
+} as const satisfies Record<string, { readonly label: string }>;
+
+export type ConfigurationOrigin = keyof typeof variantProviderDefinitions;
+
+export abstract class VariantProvider implements IVariantProvider {
 	abstract readonly name: string;
 	private readonly snapshotEmitter = new EventEmitter<ProviderSnapshot>();
 

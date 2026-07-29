@@ -11,27 +11,42 @@ import { CompilationService } from '../compilation/index.js';
 import type {
 	CompilationOutputMode,
 	CompilationVariant,
-	CompileArtifact,
+	RenderedArtifact,
 } from '../types/index.js';
 import { CompilationError } from '../types/index.js';
 import { CompiledAssembly } from './compiled-assembly.js';
 import * as logger from '../logger.js';
-import { partitionFilters } from '../types/filter-options.js';
 
-export interface CompileHandlerResult {
+export interface ArtifactHandlerResult {
 	assembly: CompiledAssembly;
-	artifact: CompileArtifact;
+	artifact: RenderedArtifact;
 }
 
-export type CompilationDocumentState = 'compiling' | 'stale' | 'failed' | 'successful';
-
-export interface CompileHandlerStatus {
-	readonly state: CompilationDocumentState;
+interface RetainedArtifactStatus {
 	readonly assembly?: CompiledAssembly;
-	readonly artifact?: CompileArtifact;
-	readonly error?: Error;
+	readonly artifact?: RenderedArtifact;
+	readonly error?: never;
 	readonly truncated: boolean;
 }
+
+export type CompileHandlerStatus =
+	| ({ readonly state: 'compiling' | 'stale' } & RetainedArtifactStatus)
+	| {
+		readonly state: 'failed';
+		readonly error: Error;
+		readonly assembly?: never;
+		readonly artifact?: never;
+		readonly truncated: boolean;
+	}
+	| {
+		readonly state: 'successful';
+		readonly assembly: CompiledAssembly;
+		readonly artifact: RenderedArtifact;
+		readonly error?: never;
+		readonly truncated: boolean;
+	};
+
+export type CompilationDocumentState = CompileHandlerStatus['state'];
 
 export class CompileHandler implements Disposable {
 	readonly srcUri: Uri;
@@ -55,7 +70,7 @@ export class CompileHandler implements Disposable {
 		this.asmUri = asmUri;
 	}
 
-	async update(externalToken: CancellationToken): Promise<CompileHandlerResult> {
+	async update(externalToken: CancellationToken): Promise<ArtifactHandlerResult> {
 		const generation = ++this.generation;
 		this.cancellation?.cancel();
 		this.cancellation?.dispose();
@@ -70,14 +85,10 @@ export class CompileHandler implements Disposable {
 		});
 
 		try {
-			const { outputOptions, displayFilters } = partitionFilters(
-				this.compilationService.globalFilterOptions,
-			);
 			const artifact = await this.compilationService.compile({
 				variant: this.variant,
 				outputMode: this.outputMode,
-				outputOptions,
-				filters: displayFilters,
+				options: this.compilationService.artifactOptions,
 				cancellationToken: cancellation.token,
 			});
 			if (generation !== this.generation || cancellation.token.isCancellationRequested) {
@@ -86,7 +97,7 @@ export class CompileHandler implements Disposable {
 
 			const lines = artifact.truncated
 				&& !artifact.result.asm.some(line => line.text.includes('[truncated;'))
-				? [...artifact.result.asm, { text: '[truncated; compiler output was limited]' }]
+				? [...artifact.result.asm, { text: '[truncated; toolchain output was limited]' }]
 				: artifact.result.asm;
 			const assembly = new CompiledAssembly(this.srcUri, this.asmUri, lines);
 			this.setStatus({

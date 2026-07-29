@@ -1,12 +1,15 @@
 import fs from 'fs';
 import path from 'path';
-import { CompilerBase, CompilerExitError } from '../compiler.js';
+import { ToolchainBackend, ToolExitError } from '../toolchains/toolchain-backend.js';
 import * as exec from '../exec.js';
 import type { CancellationToken } from 'vscode';
-import type { CompilerKind, CompilerProfile } from '../types/index.js';
 import { VcAsmParser } from '../parsers/asm-parser-vc.js';
-import type { CompilerOutputOptions } from '../parsers/filters.interfaces.js';
 import { withTemporaryDirectory } from '../temporary-directory.js';
+import type {
+	ToolchainProfile,
+	ToolchainCapabilities,
+	ProductionOptions,
+} from '../types/index.js';
 
 export const visualStudioDiscoveryArguments = [
 	'-latest',
@@ -34,7 +37,7 @@ export function visualStudioEnvironmentCandidates(executable: string): readonly 
 	}
 }
 
-abstract class WindowsCompilerBase extends CompilerBase {
+abstract class WindowsToolchainBackend extends ToolchainBackend {
 	private static readonly environmentCache = new Map<string, Promise<NodeJS.ProcessEnv>>();
 
 	protected override prepareArguments(outputFile: string): readonly string[] {
@@ -49,17 +52,17 @@ abstract class WindowsCompilerBase extends CompilerBase {
 	): Promise<exec.ExecResult> {
 		const architecture = vcvarsArchitecture(this.profile.executable);
 		const cacheKey = `${path.normalize(this.profile.executable).toLowerCase()}\0${architecture}`;
-		let environmentPromise = WindowsCompilerBase.environmentCache.get(cacheKey);
+		let environmentPromise = WindowsToolchainBackend.environmentCache.get(cacheKey);
 		if (!environmentPromise) {
 			environmentPromise = this.captureVisualStudioEnvironment(
 				{ ...process.env },
 				architecture,
 				cancellationToken,
 			);
-			WindowsCompilerBase.environmentCache.set(cacheKey, environmentPromise);
+			WindowsToolchainBackend.environmentCache.set(cacheKey, environmentPromise);
 			void environmentPromise.catch(() => {
-				if (WindowsCompilerBase.environmentCache.get(cacheKey) === environmentPromise) {
-					WindowsCompilerBase.environmentCache.delete(cacheKey);
+				if (WindowsToolchainBackend.environmentCache.get(cacheKey) === environmentPromise) {
+					WindowsToolchainBackend.environmentCache.delete(cacheKey);
 				}
 			});
 		}
@@ -78,16 +81,16 @@ abstract class WindowsCompilerBase extends CompilerBase {
 
 	protected override async postProcessAssembly(
 		rawAssembly: string,
-		options: CompilerOutputOptions,
+		options: ProductionOptions,
 		environment: NodeJS.ProcessEnv,
 		workingDirectory: string,
 		cancellationToken: CancellationToken,
 	): Promise<string> {
 		if (
 			!options.demangle
-			|| !this.profile.capabilities.demangle
-			|| !this.profile.demangler
-			|| !/^undname(?:\.exe)?$/i.test(path.basename(this.profile.demangler))
+			|| !this.capabilities.demangle
+			|| !this.profile.tools.demangler
+			|| !/^undname(?:\.exe)?$/i.test(path.basename(this.profile.tools.demangler))
 		) {
 			return super.postProcessAssembly(
 				rawAssembly,
@@ -101,13 +104,13 @@ abstract class WindowsCompilerBase extends CompilerBase {
 		return withTemporaryDirectory('coglens-undname-', async temporaryDirectory => {
 			const inputFile = path.join(temporaryDirectory, 'assembly.txt');
 			await fs.promises.writeFile(inputFile, rawAssembly, 'utf8');
-			const result = await exec.execute(this.profile.demangler!, [inputFile], {
+			const result = await exec.execute(this.profile.tools.demangler, [inputFile], {
 				cwd: workingDirectory,
 				env: environment,
 				cancellationToken,
 			});
 			if (result.returnCode !== 0) {
-				throw new CompilerExitError(
+				throw new ToolExitError(
 					`Demangler exited with code ${result.returnCode}`,
 					result.returnCode,
 					result.stdout,
@@ -200,66 +203,17 @@ abstract class WindowsCompilerBase extends CompilerBase {
 	}
 }
 
-export class MsvcCompiler extends WindowsCompilerBase {
-	static readonly type: CompilerKind = 'msvc';
-
-	static baseCompilerProfile(displayName: string, executable: string): CompilerProfile {
-		const demangler = executable.replace(/cl\.exe$/i, 'undname.exe');
-		return makeWindowsProfile(displayName, executable, MsvcCompiler.type, fs.existsSync(demangler) ? demangler : undefined);
-	}
-
-	static isCompiler(executable: string): boolean {
-		return /^cl\.exe$/i.test(path.basename(executable));
-	}
-
-	constructor(profile: CompilerProfile) {
-		super(profile);
+export class MsvcCompiler extends WindowsToolchainBackend {
+	constructor(profile: ToolchainProfile, capabilities: ToolchainCapabilities) {
+		super(profile, capabilities);
 		this.asmParser = new VcAsmParser();
 	}
 }
 
-export class ClangClCompiler extends WindowsCompilerBase {
-	static readonly type: CompilerKind = 'clang-cl';
-
-	static baseCompilerProfile(displayName: string, executable: string): CompilerProfile {
-		const demangler = path.join(path.dirname(executable), 'llvm-cxxfilt.exe');
-		return makeWindowsProfile(displayName, executable, ClangClCompiler.type, fs.existsSync(demangler) ? demangler : undefined);
-	}
-
-	static isCompiler(executable: string): boolean {
-		return /^clang-cl(?:\.exe)?$/i.test(path.basename(executable));
-	}
-
+export class ClangClCompiler extends WindowsToolchainBackend {
 	protected override prepareArguments(outputFile: string): readonly string[] {
 		return ['/Z7', ...super.prepareArguments(outputFile)];
 	}
-}
-
-function makeWindowsProfile(
-	displayName: string,
-	executable: string,
-	kind: CompilerKind,
-	demangler?: string,
-): CompilerProfile {
-	const normalized = path.normalize(executable);
-	return {
-		id: `detected:${normalized.toLowerCase()}`,
-		displayName,
-		kind,
-		executable: normalized,
-		defaultArguments: [],
-		includes: [],
-		defines: [],
-		environment: {},
-		includeFlag: '/I',
-		defineFlag: '/D',
-		demangler,
-		capabilities: {
-			demangle: demangler !== undefined,
-			intelSyntax: false,
-			libraryCodeFilter: true,
-		},
-	};
 }
 
 function vcvarsArchitecture(executable: string): string {

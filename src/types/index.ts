@@ -2,6 +2,6 @@
  * Centralized type exports
  */
 
-export * from './compiler-types.js';
+export * from './toolchain-types.js';
 export * from './compilation-types.js';
-export * from './filter-options.js';
+export * from './artifact-options.js';

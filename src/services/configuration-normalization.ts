@@ -1,19 +1,27 @@
 import path from 'path';
 import type {
-	CompilerKind,
-	CompilerProfile,
-	CompilerSettings,
+	ArtifactOptions,
 	DefaultCompilationSettings,
+	ToolchainKind,
+	ToolchainProfile,
+	ToolchainSettings,
 } from '../types/index.js';
-import { getCompilerByType, supportedCompilerKinds } from '../compilers/compiler-map.js';
+import {
+	defaultArtifactOptions,
+	immutableArtifactOptions,
+} from '../types/index.js';
+import {
+	createToolchainProfile,
+	supportedToolchainKinds,
+	toolchainDefinitions,
+} from '../toolchains/toolchain-map.js';
 
-export interface NormalizationResult<T> {
-	value?: T;
-	errors: readonly string[];
-}
+export type Normalized<T> =
+	| { readonly ok: true; readonly value: T }
+	| { readonly ok: false; readonly errors: readonly [string, ...string[]] };
 
-const compilerKinds = new Set<CompilerKind>(supportedCompilerKinds);
-const compilerKeys = new Set([
+const toolchainKinds = new Set<ToolchainKind>(supportedToolchainKinds);
+const toolchainKeys = new Set([
 	'name',
 	'type',
 	'exe',
@@ -21,21 +29,25 @@ const compilerKeys = new Set([
 	'includes',
 	'defines',
 	'env',
-	'includeFlag',
-	'defineFlag',
-	'supportsDemangle',
-	'demangler',
-	'supportsIntel',
-	'supportsLibraryCodeFilter',
+	'tools',
 ]);
 const defaultCompilationKeys = new Set([
 	'compiler',
 	'args',
-	'includes',
-	'defines',
 	'env',
 	'workingDirectory',
 ]);
+const artifactOptionKeys = new Set([
+	...Object.keys(defaultArtifactOptions.production),
+	...Object.keys(defaultArtifactOptions.display),
+]);
+
+function failure<T>(errors: string[]): Normalized<T> {
+	if (errors.length === 0) {
+		throw new Error('A failed normalization must contain at least one error');
+	}
+	return { ok: false, errors: errors as [string, ...string[]] };
+}
 
 function stringArray(value: unknown, field: string, errors: string[]): string[] {
 	if (value === undefined) {
@@ -76,108 +88,131 @@ function rejectUnknownKeys(value: Record<string, unknown>, allowed: ReadonlySet<
 	}
 }
 
-function defaultFlags(kind: CompilerKind): { includeFlag: string; defineFlag: string } {
-	const adapter = getCompilerByType(kind);
-	if (!adapter) {
-		return { includeFlag: '-I', defineFlag: '-D' };
-	}
-	const profile = adapter.baseCompilerProfile('', '');
-	return { includeFlag: profile.includeFlag, defineFlag: profile.defineFlag };
-}
-
-export function normalizeCompilerSettings(raw: unknown, origin = 'user'): NormalizationResult<CompilerProfile> {
+export function normalizeToolchainSettings(raw: unknown): Normalized<ToolchainProfile> {
 	const errors: string[] = [];
 	if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-		return { errors: ['compiler must be an object'] };
+		return failure(['toolchain must be an object']);
 	}
 
 	const value = raw as Record<string, unknown>;
-	rejectUnknownKeys(value, compilerKeys, errors);
+	rejectUnknownKeys(value, toolchainKeys, errors);
 
 	const name = typeof value.name === 'string' ? value.name.trim() : '';
 	const executable = typeof value.exe === 'string' ? value.exe.trim() : '';
 	const kind = value.type;
-
 	if (!name) {
 		errors.push('name must be a non-empty string');
 	}
 	if (!executable) {
 		errors.push('exe must be a non-empty string');
 	}
-	if (typeof kind !== 'string' || !compilerKinds.has(kind as CompilerKind)) {
-		errors.push(`type must be one of: ${[...compilerKinds].join(', ')}`);
+	if (typeof kind !== 'string' || !toolchainKinds.has(kind as ToolchainKind)) {
+		errors.push(`type must be one of: ${[...toolchainKinds].join(', ')}`);
 	}
 
-	const compilerKind = compilerKinds.has(kind as CompilerKind) ? kind as CompilerKind : 'gcc';
-	const flags = defaultFlags(compilerKind);
-	const normalizedExecutable = executable ? path.normalize(executable) : executable;
+	const args = stringArray(value.args, 'args', errors);
+	const includes = stringArray(value.includes, 'includes', errors);
+	const defines = stringArray(value.defines, 'defines', errors);
+	const environment = stringRecord(value.env, 'env', errors);
+	const tools = stringRecord(value.tools, 'tools', errors);
+	if (errors.length > 0) {
+		return failure(errors);
+	}
 
-	const profile: CompilerProfile = {
-		id: origin === 'user'
-			? `user:${name}`
-			: `${origin}:${process.platform === 'win32' ? normalizedExecutable.toLowerCase() : normalizedExecutable}`,
-		displayName: name,
-		kind: compilerKind,
-		executable: normalizedExecutable,
-		defaultArguments: stringArray(value.args, 'args', errors),
-		includes: stringArray(value.includes, 'includes', errors),
-		defines: stringArray(value.defines, 'defines', errors),
-		environment: stringRecord(value.env, 'env', errors),
-		includeFlag: typeof value.includeFlag === 'string' ? value.includeFlag : flags.includeFlag,
-		defineFlag: typeof value.defineFlag === 'string' ? value.defineFlag : flags.defineFlag,
-		demangler: typeof value.demangler === 'string' ? value.demangler : undefined,
-		capabilities: {
-			demangle: value.supportsDemangle === true,
-			intelSyntax: compilerKind !== 'msvc'
-				&& compilerKind !== 'clang-cl'
-				&& value.supportsIntel === true,
-			libraryCodeFilter: value.supportsLibraryCodeFilter === true,
-		},
+	const toolchainKind = kind as ToolchainKind;
+	const definition = toolchainDefinitions[toolchainKind];
+	return {
+		ok: true,
+		value: createToolchainProfile(toolchainKind, name, path.normalize(executable), {
+			id: name,
+			defaultArguments: [
+				...args,
+				...includes.map(item => `${definition.includeFlag}${item}`),
+				...defines.map(item => `${definition.defineFlag}${item}`),
+			],
+			environment,
+			tools,
+		}),
 	};
-
-	return { value: errors.length === 0 ? profile : undefined, errors };
 }
 
-export function profileToSettings(profile: CompilerProfile): CompilerSettings {
+export function toolchainProfileToSettings(profile: ToolchainProfile): ToolchainSettings {
 	return {
 		name: profile.displayName,
 		type: profile.kind,
 		exe: profile.executable,
 		args: [...profile.defaultArguments],
-		includes: [...profile.includes],
-		defines: [...profile.defines],
 		env: { ...profile.environment },
-		includeFlag: profile.includeFlag,
-		defineFlag: profile.defineFlag,
-		supportsDemangle: profile.capabilities.demangle,
-		demangler: profile.demangler,
-		supportsIntel: profile.capabilities.intelSyntax,
-		supportsLibraryCodeFilter: profile.capabilities.libraryCodeFilter,
+		tools: { ...profile.tools },
 	};
 }
 
-export function normalizeDefaultCompilationSettings(
-	raw: unknown,
-): NormalizationResult<DefaultCompilationSettings> {
+export function normalizeDefaultCompilationSettings(raw: unknown): Normalized<DefaultCompilationSettings> {
 	const errors: string[] = [];
 	if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-		return { errors: ['defaultCompileInfo must be an object'] };
+		return failure(['defaultCompileInfo must be an object']);
 	}
 
 	const value = raw as Record<string, unknown>;
 	rejectUnknownKeys(value, defaultCompilationKeys, errors);
-	if (typeof value.compiler !== 'string' || value.compiler.trim() === '') {
+	const toolchain = typeof value.compiler === 'string' ? value.compiler.trim() : '';
+	if (!toolchain) {
 		errors.push('compiler must be a non-empty string');
 	}
+	const args = stringArray(value.args, 'args', errors);
+	const environment = stringRecord(value.env, 'env', errors);
+	if (value.workingDirectory !== undefined && typeof value.workingDirectory !== 'string') {
+		errors.push('workingDirectory must be a string');
+	}
+	if (errors.length > 0) {
+		return failure(errors);
+	}
 
-	const settings: DefaultCompilationSettings = {
-		compiler: typeof value.compiler === 'string' ? value.compiler.trim() : '',
-		args: stringArray(value.args, 'args', errors),
-		includes: stringArray(value.includes, 'includes', errors),
-		defines: stringArray(value.defines, 'defines', errors),
-		env: stringRecord(value.env, 'env', errors),
-		workingDirectory: typeof value.workingDirectory === 'string' ? value.workingDirectory : undefined,
+	return {
+		ok: true,
+		value: {
+			toolchain,
+			args,
+			env: environment,
+			workingDirectory: value.workingDirectory as string | undefined,
+		},
 	};
+}
 
-	return { value: errors.length === 0 ? settings : undefined, errors };
+export function normalizeArtifactOptions(raw: unknown): Normalized<ArtifactOptions> {
+	const errors: string[] = [];
+	if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+		return failure(['filters must be an object']);
+	}
+	const value = raw as Record<string, unknown>;
+	rejectUnknownKeys(value, artifactOptionKeys, errors);
+	for (const [name, option] of Object.entries(value)) {
+		if (typeof option !== 'boolean') {
+			errors.push(`${name} must be a boolean`);
+		}
+	}
+	if (errors.length > 0) {
+		return failure(errors);
+	}
+
+	return {
+		ok: true,
+		value: immutableArtifactOptions({
+			production: {
+				...defaultArtifactOptions.production,
+				intel: value.intel as boolean | undefined ?? defaultArtifactOptions.production.intel,
+				demangle: value.demangle as boolean | undefined ?? defaultArtifactOptions.production.demangle,
+			},
+			display: {
+				...defaultArtifactOptions.display,
+				labels: value.labels as boolean | undefined ?? defaultArtifactOptions.display.labels,
+				libraryCode: value.libraryCode as boolean | undefined ?? defaultArtifactOptions.display.libraryCode,
+				directives: value.directives as boolean | undefined ?? defaultArtifactOptions.display.directives,
+				commentOnly: value.commentOnly as boolean | undefined ?? defaultArtifactOptions.display.commentOnly,
+				trim: value.trim as boolean | undefined ?? defaultArtifactOptions.display.trim,
+				dontMaskFilenames: value.dontMaskFilenames as boolean | undefined
+					?? defaultArtifactOptions.display.dontMaskFilenames,
+			},
+		}),
+	};
 }

@@ -1,9 +1,12 @@
 import path from 'path';
 import * as vscode from 'vscode';
-import { CompilationService, CompilerRegistry } from './compilation/index.js';
+import { CompilationService, ToolchainRegistry } from './compilation/index.js';
 import { ConfigurationService } from './services/configuration-service.js';
-import { getCompilerByExe } from './compilers/compiler-map.js';
-import { CompilerTreeNode, CompilerTreeProvider } from './tree/compiler-tree.js';
+import {
+	createToolchainProfile,
+	detectToolchainDefinition,
+} from './toolchains/toolchain-map.js';
+import { ToolchainTreeNode, ToolchainTreeProvider } from './tree/toolchain-tree.js';
 import { CompilationInfoTreeProvider } from './tree/compilation-info-tree.js';
 import { GlobalOptionsTreeProvider } from './tree/global-options-tree.js';
 import { TreeNode } from './tree/treedata.js';
@@ -20,13 +23,13 @@ export function setupCommands(
 		}
 	});
 
-	const openCompilerSettings = vscode.commands.registerCommand('coglens.AddDefaultCompileInfo', async () => {
+	const openToolchainSettings = vscode.commands.registerCommand('coglens.AddDefaultCompileInfo', async () => {
 		await vscode.commands.executeCommand('workbench.action.openSettings', 'coglens.defaultCompileInfo');
 	});
 
-	const addCompiler = vscode.commands.registerCommand('coglens.AddCompiler', async () => {
+	const addToolchain = vscode.commands.registerCommand('coglens.AddToolchain', async () => {
 		const selection = await vscode.window.showOpenDialog({
-			title: 'Select Compiler Executable',
+			title: 'Select Toolchain Executable',
 			canSelectMany: false,
 			canSelectFiles: true,
 			canSelectFolders: false,
@@ -34,61 +37,62 @@ export function setupCommands(
 		if (!selection?.[0]) {
 			return;
 		}
-		const Adapter = getCompilerByExe(selection[0].fsPath, process.platform === 'darwin' ? 'Apple clang' : undefined);
-		if (!Adapter) {
-			await vscode.window.showErrorMessage(`Unsupported compiler executable: ${selection[0].fsPath}`);
+		const detected = detectToolchainDefinition(
+			selection[0].fsPath,
+			process.platform === 'darwin' ? 'Apple clang' : undefined,
+		);
+		if (!detected) {
+			await vscode.window.showErrorMessage(`Unsupported toolchain executable: ${selection[0].fsPath}`);
 			return;
 		}
 
 		const proposedName = path.basename(selection[0].fsPath, path.extname(selection[0].fsPath));
 		const name = (await vscode.window.showInputBox({
-			title: 'Compiler profile name',
+			title: 'Toolchain profile name',
 			value: proposedName,
 			validateInput: value => value.trim() ? undefined : 'A name is required',
 		}))?.trim();
 		if (!name) {
 			return;
 		}
-		if (compilationService.compilerRegistry.getProfiles('user').some(profile => profile.displayName === name)) {
-			await vscode.window.showWarningMessage(`A user compiler named "${name}" already exists.`);
+		if (compilationService.toolchainRegistry.getProfiles('user').some(profile => profile.displayName === name)) {
+			await vscode.window.showWarningMessage(`A user toolchain named "${name}" already exists.`);
 			return;
 		}
 
-		const profile = {
-			...Adapter.baseCompilerProfile(name, selection[0].fsPath),
-			id: `user:${name}`,
-			displayName: name,
-		};
-		await configuration.updateCompilers([
-			...compilationService.compilerRegistry.getProfiles('user'),
+		const profile = createToolchainProfile(detected.kind, name, selection[0].fsPath, {
+			id: name,
+		});
+		await configuration.updateToolchains([
+			...compilationService.toolchainRegistry.getProfiles('user'),
 			profile,
 		], vscode.workspace.getWorkspaceFolder(selection[0]));
 	});
 
-	const createOverride = vscode.commands.registerCommand('coglens.CreateWorkspaceOverride', async (node?: CompilerTreeNode) => {
+	const createOverride = vscode.commands.registerCommand('coglens.CreateWorkspaceOverride', async (node?: ToolchainTreeNode) => {
 		if (!node?.profile || node.origin === 'user') {
 			return;
 		}
 		const name = (await vscode.window.showInputBox({
-			title: 'Workspace compiler override name',
+			title: 'Workspace toolchain override name',
 			value: path.basename(node.profile.executable, path.extname(node.profile.executable)),
 		}))?.trim();
 		if (!name) {
 			return;
 		}
-		await configuration.updateCompilers([
-			...compilationService.compilerRegistry.getProfiles('user'),
-			{ ...node.profile, id: `user:${name}`, displayName: name },
+		await configuration.updateToolchains([
+			...compilationService.toolchainRegistry.getProfiles('user'),
+			{ ...node.profile, id: name, displayName: name },
 		], vscode.workspace.workspaceFolders?.[0]);
-		logger.logChannel.info(`Created workspace compiler override "${name}".`);
+		logger.logChannel.info(`Created workspace toolchain override "${name}".`);
 	});
 
-	context.subscriptions.push(copyText, openCompilerSettings, addCompiler, createOverride);
+	context.subscriptions.push(copyText, openToolchainSettings, addToolchain, createOverride);
 }
 
-export function createCompilerTreeView(context: vscode.ExtensionContext, registry: CompilerRegistry): CompilerTreeProvider {
-	const provider = new CompilerTreeProvider(registry);
-	const view = vscode.window.createTreeView('coglens.compilers', { treeDataProvider: provider });
+export function createToolchainTreeView(context: vscode.ExtensionContext, registry: ToolchainRegistry): ToolchainTreeProvider {
+	const provider = new ToolchainTreeProvider(registry);
+	const view = vscode.window.createTreeView('coglens.toolchains', { treeDataProvider: provider });
 	context.subscriptions.push(view, registry.onDidChange(() => provider.refresh()));
 
 	return provider;
@@ -116,18 +120,17 @@ export function createGlobalOptionsTreeView(
 		view,
 		vscode.window.onDidChangeActiveTextEditor(() => provider.refresh()),
 		compilationService.onVariantsChanged(() => provider.refresh()),
-		compilationService.onFiltersChanged(() => provider.refresh()),
-		compilationService.compilerRegistry.onDidChange(() => provider.refresh()),
+		compilationService.onArtifactOptionsChanged(() => provider.refresh()),
+		compilationService.toolchainRegistry.onDidChange(() => provider.refresh()),
 		view.onDidChangeCheckboxState(event => {
-			const [node] = event.items[0] ?? [];
-			if (!node || typeof node.attr !== 'string') {
+			const [node, state] = event.items[0] ?? [];
+			if (!node?.optionId) {
 				return;
 			}
-			const filters = compilationService.globalFilterOptions as Record<string, unknown>;
-			compilationService.globalFilterOptions = {
-				...compilationService.globalFilterOptions,
-				[node.attr]: !(filters[node.attr] ?? false),
-			};
+			compilationService.setArtifactOption(
+				node.optionId,
+				state === vscode.TreeItemCheckboxState.Checked,
+			);
 			provider.refresh();
 		}),
 	);
