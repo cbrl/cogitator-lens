@@ -7,6 +7,7 @@ import assert from 'assert';
 import { DecorationStyleManager } from './decorations/decoration-style-manager.js';
 import { EditorTracker } from './decorations/editor-tracker.js';
 import type { IConfigurationService } from '../interfaces/index.js';
+import type { CompileHandlerStatus, CompilationDocumentState } from './compile-handler.js';
 
 /*
 Nice-to-have features:
@@ -31,6 +32,8 @@ export class AsmDecorator {
 	private readonly asmUri: Uri;
 
     private asmData: CompiledAssembly | Error;
+	private compilationState: CompilationDocumentState = 'stale';
+	private truncated = false;
 
 	private readonly styleManager: DecorationStyleManager;
 	private readonly editorTracker: EditorTracker;
@@ -43,7 +46,7 @@ export class AsmDecorator {
     constructor(
 		srcUri: Uri,
 		asmUri: Uri,
-		asmEvent: Event<CompiledAssembly | Error>,
+		asmEvent: Event<CompileHandlerStatus>,
 		styleManager: DecorationStyleManager,
 		configService: IConfigurationService,
 	) {
@@ -59,8 +62,14 @@ export class AsmDecorator {
         this.refreshDecorations();
 
         // Rebuild mapping and decorations on asm document change
-        const providerEventRegistration = asmEvent((resultOrError) => {
-			this.asmData = resultOrError;
+        const providerEventRegistration = asmEvent(status => {
+			this.compilationState = status.state;
+			this.truncated = status.truncated;
+			if (status.assembly) {
+				this.asmData = status.assembly;
+			} else if (status.error) {
+				this.asmData = status.error;
+			}
 			this.refreshDecorations();
         });
 
@@ -106,30 +115,30 @@ export class AsmDecorator {
     private refreshDecorations() {
 		this.clearAllDecorations();
 
-		// If the ASM document failed to compile, then don't decorate anything.
-		if (this.asmData instanceof Error) {
-			return;
+		if (!(this.asmData instanceof Error)) {
+			// Recalculate active state now that asmData may have changed
+			this.updateActiveState();
+			this.dimUnusedSourceLines();
 		}
-
-		// Recalculate active state now that asmData may have changed
-		this.updateActiveState();
-
-		this.dimUnusedSourceLines();
 
 		// Treat as if the user selected the current line of the first editor (only highlights the line, doesn't scroll)
 		// TODO: use active editor instead of the first visible source editor?
-		if (this.asmData.lines.length > 0) {
+		if (!(this.asmData instanceof Error) && this.asmData.lines.length > 0) {
 			const sourceEditor = this.getAllSourceEditors()[0];
 			if (sourceEditor) {
 				this.onSrcLineSelected(sourceEditor, true);
 			}
 		}
 
-		// If the ASM document is empty, show a loading decoration.
-		// TODO: detect compile state instead of just checking line count
-		if (this.asmData.lines.length === 0) {
+		const stateText = this.stateDecorationText();
+		if (stateText) {
 			const asmEditor = this.editorTracker.getAsmEditor(this.asmUri);
-			asmEditor?.setDecorations(this.styleManager.loadingDecoration, [new Range(0, 0, 0, 0)]);
+			asmEditor?.setDecorations(this.styleManager.stateDecoration, [{
+				range: new Range(0, 0, 0, 0),
+				renderOptions: {
+					after: { contentText: ` ${stateText}` },
+				},
+			}]);
 		}
 	}
 
@@ -141,7 +150,7 @@ export class AsmDecorator {
 	private clearDecorations(editor: TextEditor) {
 		editor.setDecorations(this.styleManager.selectedLineDecoration, []);
 		editor.setDecorations(this.styleManager.unusedLineDecoration, []);
-		editor.setDecorations(this.styleManager.loadingDecoration, []);
+		editor.setDecorations(this.styleManager.stateDecoration, []);
 	}
 
 	private clearAllDecorations() {
@@ -300,6 +309,7 @@ export class AsmDecorator {
 	}
 
 	private onChangeVisibleEditors(): void {
+		this.refreshDecorations();
 		this.updateActiveState();
 
 		if (this.active) {
@@ -327,5 +337,20 @@ export class AsmDecorator {
 		}
 
 		return this.editorTracker.getSourceEditors(this.asmData.allReferencedSrcUris);
+	}
+
+	private stateDecorationText(): string | undefined {
+		switch (this.compilationState) {
+			case 'compiling':
+				return 'Compiling…';
+			case 'stale':
+				return 'Assembly is stale. Refresh pending.';
+			case 'failed':
+				return this.truncated
+					? 'Compilation failed because process output was truncated.'
+					: 'Compilation failed.';
+			case 'successful':
+				return this.truncated ? 'Assembly output was truncated.' : undefined;
+		}
 	}
 }

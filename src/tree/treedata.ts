@@ -10,7 +10,7 @@ export type TreeItemSpecifier = 'checkbox' | 'subtree' | 'text';
  * Specifies the context in which a tree item is used. This will be the value of vscode.TreeItem.contextValue,
  * and can be used to limit commands to specific menu items based on the context.
  */
-export type TreeContextSpecifier = 'derivedInstance' | 'filters' | 'instance' | 'text';
+export type TreeContextSpecifier = 'derivedInstance' | 'disabled' | 'filters' | 'instance' | 'text';
 
 export class TreeNode {
 	/**
@@ -60,6 +60,8 @@ export class TreeNode {
 
 	description?: string;
 
+	disabled?: boolean;
+
 }
 
 export class TreeItem extends vscode.TreeItem {
@@ -78,7 +80,7 @@ export class TreeItem extends vscode.TreeItem {
 		if (nodeType === 'subtree') {
 			this.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
 		}
-		else if (nodeType === 'checkbox') {
+		else if (nodeType === 'checkbox' && !node.disabled) {
 			assert(objectRef !== undefined && attr !== undefined);
 
 			// While the object and attribute identifier can't be undefined, the actual attribute can be.
@@ -88,6 +90,10 @@ export class TreeItem extends vscode.TreeItem {
 				? vscode.TreeItemCheckboxState.Checked
 				: vscode.TreeItemCheckboxState.Unchecked;
         }
+		else if (node.disabled) {
+			this.contextValue = 'disabled';
+			this.iconPath ??= new vscode.ThemeIcon('circle-slash');
+		}
 
     }
 }

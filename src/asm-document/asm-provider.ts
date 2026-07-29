@@ -12,6 +12,8 @@ import {
 	ProviderResult,
 	Range,
 	RelativePattern,
+	StatusBarAlignment,
+	StatusBarItem,
 	TabInputText,
 	TextDocument,
 	TextDocumentContentProvider,
@@ -29,6 +31,7 @@ import { assemblyScheme, getAsmUri, parseAsmUri } from './asm-uri.js';
 import { AsmDecorator } from './asm-decorator.js';
 import { CompiledAssembly } from './compiled-assembly.js';
 import { CompileHandler } from './compile-handler.js';
+import type { CompileHandlerStatus } from './compile-handler.js';
 import { DecorationStyleManager } from './decorations/decoration-style-manager.js';
 
 const uriComparisonOptions = {
@@ -50,6 +53,7 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 	private readonly styleManager = new DecorationStyleManager();
 	private readonly changeEmitter = new EventEmitter<Uri>();
 	private readonly diagnostics: DiagnosticCollection = languages.createDiagnosticCollection('coglens');
+	private readonly statusBar: StatusBarItem = window.createStatusBarItem(StatusBarAlignment.Right, 1000);
 	private readonly subscriptions: Disposable[];
 
 	constructor(
@@ -72,6 +76,7 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 			}),
 			this.changeEmitter,
 			this.diagnostics,
+			this.statusBar,
 		];
 	}
 
@@ -102,7 +107,6 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 		}
 
 		const compilation = handler.update(token);
-		window.setStatusBarMessage(`$(sync~spin) Compiling ${handler.srcUri.path.split('/').at(-1) ?? 'source'}`, compilation);
 
 		return compilation.then(({ assembly, artifact }) => {
 			this.compiledAssemblies.set(uri, assembly);
@@ -120,7 +124,10 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 			const diagnostics = error instanceof CompilationError ? error.diagnostics : [];
 			this.setDiagnostics(uri, diagnostics);
 
-			return error instanceof Error ? error.message : String(error);
+			const message = error instanceof Error ? error.message : String(error);
+			return error instanceof CompilationError && error.truncated
+				? `[truncated; process output limit exceeded]\n\n${message}`
+				: message;
 		});
 	}
 
@@ -133,6 +140,7 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 	}
 
 	requestRefresh(assemblyUri: Uri): void {
+		this.compileHandlers.get(assemblyUri)?.markStale();
 		const previous = this.pendingRefreshes.get(assemblyUri);
 		if (previous) {
 			clearTimeout(previous);
@@ -184,12 +192,13 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 			this.sourceToAssembly.set(identity.source, assemblyUris);
 		}
 		assemblyUris.add(assemblyUri);
-		const compileSubscription = handler.onDidChange(result => {
-			if (result instanceof CompiledAssembly) {
-				this.compiledAssemblies.set(assemblyUri, result);
-			} else {
+		const compileSubscription = handler.onDidChange(status => {
+			if (status.state === 'successful' && status.assembly) {
+				this.compiledAssemblies.set(assemblyUri, status.assembly);
+			} else if (status.state === 'failed') {
 				this.compiledAssemblies.delete(assemblyUri);
 			}
+			this.updateStatusBar(handler, status);
 		});
 
 		const watcher = workspace.createFileSystemWatcher(new RelativePattern(
@@ -244,6 +253,34 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 		this.fileWatchers.get(uri)?.dispose();
 		this.fileWatchers.delete(uri);
 		this.compiledAssemblies.delete(uri);
+		if (this.compileHandlers.size === 0) {
+			this.statusBar.hide();
+		}
+	}
+
+	private updateStatusBar(handler: CompileHandler, status: CompileHandlerStatus): void {
+		const sourceName = path.basename(handler.srcUri.fsPath);
+		switch (status.state) {
+			case 'compiling':
+				this.statusBar.text = `$(sync~spin) Cogitator Lens: Compiling ${sourceName}`;
+				break;
+			case 'stale':
+				this.statusBar.text = `$(history) Cogitator Lens: Stale ${sourceName}`;
+				break;
+			case 'failed':
+				this.statusBar.text = status.truncated
+					? `$(warning) Cogitator Lens: Truncated ${sourceName}`
+					: `$(error) Cogitator Lens: Failed ${sourceName}`;
+				break;
+			case 'successful':
+				this.statusBar.text = status.truncated
+					? `$(warning) Cogitator Lens: Truncated ${sourceName}`
+					: `$(check) Cogitator Lens: Ready ${sourceName}`;
+				break;
+		}
+		this.statusBar.tooltip = status.error?.message
+			?? `Assembly state: ${status.state}`;
+		this.statusBar.show();
 	}
 
 	private rebuildDiagnostics(): void {

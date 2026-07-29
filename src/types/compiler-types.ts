@@ -49,4 +49,5 @@ export interface CompileOptions {
 	includes?: readonly string[];
 	env?: Readonly<Record<string, string>>;
 	workingDirectory?: string;
+	outputOptions?: import('../parsers/filters.interfaces.js').CompilerOutputOptions;
 }

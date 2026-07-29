@@ -4,3 +4,4 @@
 
 export * from './compiler-types.js';
 export * from './compilation-types.js';
+export * from './filter-options.js';

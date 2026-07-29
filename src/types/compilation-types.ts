@@ -5,10 +5,8 @@
 
 import type { CancellationToken, Uri } from 'vscode';
 import type { ParsedAsmResult } from '../parsers/asmresult.interfaces.js';
-import type {
-	CompilerOutputOptions,
-	DisplayAssemblyFilters,
-} from '../parsers/filters.interfaces.js';
+import type { CompilerOutputOptions } from '../parsers/filters.interfaces.js';
+import type { DisplayAssemblyFilters } from './filter-options.js';
 
 export interface CompilationVariant {
 	id: string;
@@ -62,6 +60,7 @@ export class CompilationError extends Error {
 	constructor(
 		message: string,
 		public readonly diagnostics: readonly CompileDiagnostic[] = [],
+		public readonly truncated = false,
 		options?: ErrorOptions,
 	) {
 		super(message, options);

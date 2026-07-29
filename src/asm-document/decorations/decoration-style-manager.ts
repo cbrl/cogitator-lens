@@ -7,7 +7,7 @@ import { window, TextEditorDecorationType, ThemeColor } from 'vscode';
 export class DecorationStyleManager {
 	public readonly selectedLineDecoration: TextEditorDecorationType;
 	public readonly unusedLineDecoration: TextEditorDecorationType;
-	public readonly loadingDecoration: TextEditorDecorationType;
+	public readonly stateDecoration: TextEditorDecorationType;
 
 	constructor() {
 		this.selectedLineDecoration = window.createTextEditorDecorationType({
@@ -20,9 +20,8 @@ export class DecorationStyleManager {
 			opacity: '0.5'
 		});
 
-		this.loadingDecoration = window.createTextEditorDecorationType({
+		this.stateDecoration = window.createTextEditorDecorationType({
 			after: {
-				contentText: ' ⏳ Compiling...',
 				color: 'gray'
 			}
 		});
@@ -31,6 +30,6 @@ export class DecorationStyleManager {
 	public dispose(): void {
 		this.selectedLineDecoration.dispose();
 		this.unusedLineDecoration.dispose();
-		this.loadingDecoration.dispose();
+		this.stateDecoration.dispose();
 	}
 }

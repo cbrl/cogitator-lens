@@ -13,21 +13,36 @@ import type {
 	CompilationVariant,
 	CompileArtifact,
 } from '../types/index.js';
+import { CompilationError } from '../types/index.js';
 import { CompiledAssembly } from './compiled-assembly.js';
 import * as logger from '../logger.js';
-import { partitionFilters } from '../parsers/filters.interfaces.js';
+import { partitionFilters } from '../types/filter-options.js';
 
 export interface CompileHandlerResult {
 	assembly: CompiledAssembly;
 	artifact: CompileArtifact;
 }
 
+export type CompilationDocumentState = 'compiling' | 'stale' | 'failed' | 'successful';
+
+export interface CompileHandlerStatus {
+	readonly state: CompilationDocumentState;
+	readonly assembly?: CompiledAssembly;
+	readonly artifact?: CompileArtifact;
+	readonly error?: Error;
+	readonly truncated: boolean;
+}
+
 export class CompileHandler implements Disposable {
 	readonly srcUri: Uri;
 	readonly asmUri: Uri;
-	private readonly compileEvent = new EventEmitter<CompiledAssembly | Error>();
+	private readonly statusEvent = new EventEmitter<CompileHandlerStatus>();
 	private cancellation?: CancellationTokenSource;
 	private generation = 0;
+	private currentStatus: CompileHandlerStatus = {
+		state: 'stale',
+		truncated: false,
+	};
 
 	constructor(
 		srcUri: Uri,
@@ -47,6 +62,12 @@ export class CompileHandler implements Disposable {
 		const cancellation = new CancellationTokenSource();
 		this.cancellation = cancellation;
 		const externalSubscription = externalToken.onCancellationRequested(() => cancellation.cancel());
+		this.setStatus({
+			state: 'compiling',
+			assembly: this.currentStatus.assembly,
+			artifact: this.currentStatus.artifact,
+			truncated: this.currentStatus.truncated,
+		});
 
 		try {
 			const { outputOptions, displayFilters } = partitionFilters(
@@ -63,15 +84,35 @@ export class CompileHandler implements Disposable {
 				throw new CancellationError();
 			}
 
-			const assembly = new CompiledAssembly(this.srcUri, this.asmUri, artifact.result.asm);
-			this.compileEvent.fire(assembly);
+			const lines = artifact.truncated
+				&& !artifact.result.asm.some(line => line.text.includes('[truncated;'))
+				? [...artifact.result.asm, { text: '[truncated; compiler output was limited]' }]
+				: artifact.result.asm;
+			const assembly = new CompiledAssembly(this.srcUri, this.asmUri, lines);
+			this.setStatus({
+				state: 'successful',
+				assembly,
+				artifact,
+				truncated: artifact.truncated,
+			});
 
 			return { assembly, artifact };
 		} catch (error) {
 			if (generation === this.generation && !(error instanceof CancellationError)) {
 				const normalized = error instanceof Error ? error : new Error(String(error));
 				logger.logChannel.error(`Compilation failed for ${this.srcUri.fsPath}: ${normalized.stack ?? normalized.message}`);
-				this.compileEvent.fire(normalized);
+				this.setStatus({
+					state: 'failed',
+					error: normalized,
+					truncated: error instanceof CompilationError && error.truncated,
+				});
+			} else if (generation === this.generation) {
+				this.setStatus({
+					state: 'stale',
+					assembly: this.currentStatus.assembly,
+					artifact: this.currentStatus.artifact,
+					truncated: this.currentStatus.truncated,
+				});
 			}
 
 			throw error;
@@ -84,14 +125,34 @@ export class CompileHandler implements Disposable {
 		}
 	}
 
-	get onDidChange(): Event<CompiledAssembly | Error> {
-		return this.compileEvent.event;
+	get onDidChange(): Event<CompileHandlerStatus> {
+		return this.statusEvent.event;
+	}
+
+	get status(): CompileHandlerStatus {
+		return this.currentStatus;
+	}
+
+	markStale(): void {
+		if (this.currentStatus.state !== 'stale') {
+			this.setStatus({
+				state: 'stale',
+				assembly: this.currentStatus.assembly,
+				artifact: this.currentStatus.artifact,
+				truncated: this.currentStatus.truncated,
+			});
+		}
 	}
 
 	dispose(): void {
 		this.generation++;
 		this.cancellation?.cancel();
 		this.cancellation?.dispose();
-		this.compileEvent.dispose();
+		this.statusEvent.dispose();
+	}
+
+	private setStatus(status: CompileHandlerStatus): void {
+		this.currentStatus = status;
+		this.statusEvent.fire(status);
 	}
 }
