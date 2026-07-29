@@ -30,6 +30,7 @@ export interface ExecOptions extends Omit<SpawnOptions, 'shell'> {
 	maxOutputBytes?: number;
 	terminationGraceMs?: number;
 	cancellationToken?: CancellationLike;
+	stdin?: string | Buffer;
 }
 
 const defaultTimeoutMs = 60_000;
@@ -42,6 +43,7 @@ export async function execute(command: string, args: readonly string[], options:
 		maxOutputBytes = defaultMaxOutputBytes,
 		terminationGraceMs = defaultTerminationGraceMs,
 		cancellationToken,
+		stdin,
 		...spawnOptions
 	} = options;
 
@@ -111,6 +113,12 @@ export async function execute(command: string, args: readonly string[], options:
 
 		process.stdout?.on('data', chunk => append(stdout, chunk));
 		process.stderr?.on('data', chunk => append(stderr, chunk));
+		process.stdin?.on('error', error => {
+			if ((error as NodeJS.ErrnoException).code !== 'EPIPE') {
+				fail('spawn', `Failed to write process input: ${error.message}`);
+			}
+		});
+		process.stdin?.end(stdin);
 
 		timeout = timeoutMs > 0
 			? setTimeout(() => fail('timeout', `Process timed out after ${timeoutMs} ms`), timeoutMs)
