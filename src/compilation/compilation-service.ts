@@ -19,6 +19,7 @@ import type {
 import { CompilationError } from '../types/index.js';
 import type { ParseFiltersAndOutputOptions } from '../parsers/filters.interfaces.js';
 import { CompilerExitError, type CompilerRunResult } from '../compiler.js';
+import { ExecError } from '../exec.js';
 import { CompilerRegistry } from './compiler-registry.js';
 import { CompilationConfigDatabase } from './compilation-config.js';
 import { CompilationSemaphore } from './compilation-semaphore.js';
@@ -143,6 +144,7 @@ export class CompilationService implements ICompilationService {
 					includes: variant.includes,
 					env: variant.environment,
 					workingDirectory: variant.workingDirectory,
+					outputOptions,
 				}, cancellationToken);
 				this.rawAssemblyCache.set(cacheKey, { signature, run });
 				return this.createArtifact(compiler, run, variant, filters);
@@ -160,9 +162,12 @@ export class CompilationService implements ICompilationService {
 					variant.workingDirectory,
 				);
 				const message = error instanceof Error ? error.message : String(error);
-				throw new CompilationError(message, diagnostics, {
-					cause: error instanceof Error ? error : undefined,
-				});
+				throw new CompilationError(
+					message,
+					diagnostics,
+					error instanceof ExecError && error.kind === 'output-limit',
+					{ cause: error instanceof Error ? error : undefined },
+				);
 			}
 		} finally {
 			this.semaphore.release();
@@ -191,6 +196,7 @@ export class CompilationService implements ICompilationService {
 			throw new CompilationError(
 				error instanceof Error ? error.message : String(error),
 				[],
+				false,
 				{ cause: error instanceof Error ? error : undefined },
 			);
 		}
@@ -204,7 +210,8 @@ export class CompilationService implements ICompilationService {
 			),
 			durationMs: run.durationMs,
 			command: run.command,
-			truncated: false,
+			truncated: run.truncated || result.asm.some(line =>
+				line.text.includes('[truncated; too many lines]')),
 		};
 	}
 

@@ -1,10 +1,12 @@
 import fs from 'fs';
 import path from 'path';
-import { CompilerBase } from '../compiler.js';
+import { CompilerBase, CompilerExitError } from '../compiler.js';
 import * as exec from '../exec.js';
 import type { CancellationToken } from 'vscode';
 import type { CompilerKind, CompilerProfile } from '../types/index.js';
 import { VcAsmParser } from '../parsers/asm-parser-vc.js';
+import type { CompilerOutputOptions } from '../parsers/filters.interfaces.js';
+import { withTemporaryDirectory } from '../temporary-directory.js';
 
 export const visualStudioDiscoveryArguments = [
 	'-latest',
@@ -71,6 +73,48 @@ abstract class WindowsCompilerBase extends CompilerBase {
 			cwd: workingDirectory,
 			env: visualStudioEnvironment,
 			cancellationToken,
+		});
+	}
+
+	protected override async postProcessAssembly(
+		rawAssembly: string,
+		options: CompilerOutputOptions,
+		environment: NodeJS.ProcessEnv,
+		workingDirectory: string,
+		cancellationToken: CancellationToken,
+	): Promise<string> {
+		if (
+			!options.demangle
+			|| !this.profile.capabilities.demangle
+			|| !this.profile.demangler
+			|| !/^undname(?:\.exe)?$/i.test(path.basename(this.profile.demangler))
+		) {
+			return super.postProcessAssembly(
+				rawAssembly,
+				options,
+				environment,
+				workingDirectory,
+				cancellationToken,
+			);
+		}
+
+		return withTemporaryDirectory('coglens-undname-', async temporaryDirectory => {
+			const inputFile = path.join(temporaryDirectory, 'assembly.txt');
+			await fs.promises.writeFile(inputFile, rawAssembly, 'utf8');
+			const result = await exec.execute(this.profile.demangler!, [inputFile], {
+				cwd: workingDirectory,
+				env: environment,
+				cancellationToken,
+			});
+			if (result.returnCode !== 0) {
+				throw new CompilerExitError(
+					`Demangler exited with code ${result.returnCode}`,
+					result.returnCode,
+					result.stdout,
+					result.stderr,
+				);
+			}
+			return result.stdout;
 		});
 	}
 
@@ -212,7 +256,7 @@ function makeWindowsProfile(
 		demangler,
 		capabilities: {
 			demangle: demangler !== undefined,
-			intelSyntax: kind === 'clang-cl',
+			intelSyntax: false,
 			libraryCodeFilter: true,
 		},
 	};

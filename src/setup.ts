@@ -114,6 +114,10 @@ export function createGlobalOptionsTreeView(
 
 	context.subscriptions.push(
 		view,
+		vscode.window.onDidChangeActiveTextEditor(() => provider.refresh()),
+		compilationService.onVariantsChanged(() => provider.refresh()),
+		compilationService.onFiltersChanged(() => provider.refresh()),
+		compilationService.compilerRegistry.onDidChange(() => provider.refresh()),
 		view.onDidChangeCheckboxState(event => {
 			const [node] = event.items[0] ?? [];
 			if (!node || typeof node.attr !== 'string') {

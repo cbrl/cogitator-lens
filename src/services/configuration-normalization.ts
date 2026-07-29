@@ -128,7 +128,9 @@ export function normalizeCompilerSettings(raw: unknown, origin = 'user'): Normal
 		demangler: typeof value.demangler === 'string' ? value.demangler : undefined,
 		capabilities: {
 			demangle: value.supportsDemangle === true,
-			intelSyntax: value.supportsIntel === true,
+			intelSyntax: compilerKind !== 'msvc'
+				&& compilerKind !== 'clang-cl'
+				&& value.supportsIntel === true,
 			libraryCodeFilter: value.supportsLibraryCodeFilter === true,
 		},
 	};

@@ -2,20 +2,28 @@ import fs from 'fs';
 import path from 'path';
 import { CompilerBase } from '../compiler.js';
 import type { CompilerKind, CompilerProfile } from '../types/index.js';
+import type { CompilerOutputOptions } from '../parsers/filters.interfaces.js';
 
-abstract class GnuStyleCompiler extends CompilerBase {
+export abstract class GnuStyleCompiler extends CompilerBase {
 	protected override prepareArguments(outputFile: string): readonly string[] {
 		return ['-S', ...this.lineTableArguments(), '-o', outputFile];
 	}
 
 	protected abstract lineTableArguments(): readonly string[];
+
+	protected override outputOptionArguments(options: CompilerOutputOptions): readonly string[] {
+		return options.intel ? ['-masm=intel'] : [];
+	}
 }
 
 export class GccCompiler extends GnuStyleCompiler {
 	static readonly type: CompilerKind = 'gcc';
 
 	static baseCompilerProfile(displayName: string, executable: string): CompilerProfile {
-		const demanglerCandidate = executable.replace(/(?:gcc|g\+\+)(?:-\d+(?:\.\d+)*)?(?:\.exe)?$/i, 'c++filt');
+		const demanglerCandidate = executable.replace(
+			/(?:gcc|g\+\+)(?:-\d+(?:\.\d+)*)?(?:\.exe)?$/i,
+			process.platform === 'win32' ? 'c++filt.exe' : 'c++filt',
+		);
 		return makeProfile(displayName, executable, GccCompiler.type, fs.existsSync(demanglerCandidate) ? demanglerCandidate : undefined);
 	}
 

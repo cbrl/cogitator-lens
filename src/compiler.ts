@@ -3,7 +3,10 @@ import path from 'path';
 import type { CancellationToken } from 'vscode';
 import { AsmParser } from './parsers/asm-parser.js';
 import * as exec from './exec.js';
-import type { ParseFiltersAndOutputOptions } from './parsers/filters.interfaces.js';
+import type {
+	CompilerOutputOptions,
+	ParseFiltersAndOutputOptions,
+} from './parsers/filters.interfaces.js';
 import type { ParsedAsmResult } from './parsers/asmresult.interfaces.js';
 import type { CompilerProfile, CompileOptions } from './types/index.js';
 import { redactArguments, sanitizeCompilerArguments } from './compiler-arguments.js';
@@ -14,6 +17,7 @@ export interface CompilerRunResult {
 	stdout: string;
 	stderr: string;
 	durationMs: number;
+	truncated: boolean;
 	command: {
 		executable: string;
 		arguments: readonly string[];
@@ -72,6 +76,7 @@ export abstract class CompilerBase implements ICompiler {
 				...this.profile.defaultArguments,
 				...(options.args ?? []),
 			], file);
+			const outputOptions = options.outputOptions ?? {};
 
 			const argumentsList = [
 				...providerArguments,
@@ -79,6 +84,7 @@ export abstract class CompilerBase implements ICompiler {
 				...(options.includes ?? []).map(value => `${this.profile.includeFlag}${value}`),
 				...this.profile.defines.map(value => `${this.profile.defineFlag}${value}`),
 				...(options.defines ?? []).map(value => `${this.profile.defineFlag}${value}`),
+				...this.outputOptionArguments(outputOptions),
 				...this.prepareArguments(outputFile),
 				file,
 			];
@@ -101,11 +107,19 @@ export abstract class CompilerBase implements ICompiler {
 			}
 
 			const assembly = await fs.promises.readFile(outputFile, 'utf8');
+			const postProcessedAssembly = await this.postProcessAssembly(
+				assembly,
+				outputOptions,
+				environment,
+				workingDirectory,
+				cancellationToken,
+			);
 			return {
-				rawAssembly: assembly,
+				rawAssembly: postProcessedAssembly,
 				stdout: result.stdout,
 				stderr: result.stderr,
 				durationMs: performance.now() - started,
+				truncated: false,
 				command: {
 					executable: this.profile.executable,
 					arguments: redactArguments(argumentsList),
@@ -135,4 +149,35 @@ export abstract class CompilerBase implements ICompiler {
 
 	protected abstract prepareArguments(outputFile: string): readonly string[];
 
+	protected outputOptionArguments(_options: CompilerOutputOptions): readonly string[] {
+		return [];
+	}
+
+	protected async postProcessAssembly(
+		rawAssembly: string,
+		options: CompilerOutputOptions,
+		environment: NodeJS.ProcessEnv,
+		workingDirectory: string,
+		cancellationToken: CancellationToken,
+	): Promise<string> {
+		if (!options.demangle || !this.profile.capabilities.demangle || !this.profile.demangler) {
+			return rawAssembly;
+		}
+
+		const result = await exec.execute(this.profile.demangler, [], {
+			cwd: workingDirectory,
+			env: environment,
+			cancellationToken,
+			stdin: rawAssembly,
+		});
+		if (result.returnCode !== 0) {
+			throw new CompilerExitError(
+				`Demangler exited with code ${result.returnCode}`,
+				result.returnCode,
+				result.stdout,
+				result.stderr,
+			);
+		}
+		return result.stdout;
+	}
 }

@@ -37,42 +37,17 @@ export type CompilerOutputOptions = Partial<{
 }>;
 
 export type preProcessLinesFunc = (lines: string[]) => string[];
-export type DisplayAssemblyFilters = Partial<{
-    labels: boolean;
-    libraryCode: boolean;
-    directives: boolean;
-    commentOnly: boolean;
-    trim: boolean;
-    debugCalls?: boolean;
-    dontMaskFilenames?: boolean;
-    optOutput: boolean;
-    preProcessLines?: preProcessLinesFunc;
-    preProcessBinaryAsmLines?: preProcessLinesFunc;
-}>;
-
-export type ParseFiltersAndOutputOptions = DisplayAssemblyFilters & CompilerOutputOptions;
-
-const compileOptionNames = new Set<keyof CompilerOutputOptions>([
-    'binary',
-    'binaryObject',
-    'execute',
-    'demangle',
-    'intel',
-    'verboseDemangling',
-]);
-
-export function partitionFilters(options: ParseFiltersAndOutputOptions): {
-    outputOptions: CompilerOutputOptions;
-    displayFilters: DisplayAssemblyFilters;
-} {
-    const outputOptions: CompilerOutputOptions = {};
-    const displayFilters: DisplayAssemblyFilters = {};
-    for (const [name, value] of Object.entries(options)) {
-        if (compileOptionNames.has(name as keyof CompilerOutputOptions)) {
-            Object.assign(outputOptions, { [name]: value });
-        } else {
-            Object.assign(displayFilters, { [name]: value });
-        }
-    }
-    return { outputOptions, displayFilters };
-}
+export type ParseFiltersAndOutputOptions = Partial<
+    {
+        labels: boolean;
+        libraryCode: boolean;
+        directives: boolean;
+        commentOnly: boolean;
+        trim: boolean;
+        debugCalls?: boolean;
+        dontMaskFilenames?: boolean;
+        optOutput: boolean;
+        preProcessLines?: preProcessLinesFunc;
+        preProcessBinaryAsmLines?: preProcessLinesFunc;
+    } & CompilerOutputOptions
+>;
