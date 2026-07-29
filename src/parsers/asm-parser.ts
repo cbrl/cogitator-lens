@@ -29,7 +29,7 @@ import {
     ParsedAsmResultLine,
 } from './asmresult.interfaces.js';
 import {ParseFiltersAndOutputOptions} from './filters.interfaces.js';
-import {assert} from '../assert.js';
+import assert from 'assert';
 import * as utils from '../ce-utils.js';
 
 import {IAsmParser} from './asm-parser.interfaces.js';

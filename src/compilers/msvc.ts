@@ -6,6 +6,32 @@ import type { CancellationToken } from 'vscode';
 import type { CompilerKind, CompilerProfile } from '../types/index.js';
 import { VcAsmParser } from '../parsers/asm-parser-vc.js';
 
+export const visualStudioDiscoveryArguments = [
+	'-latest',
+	'-prerelease',
+	'-products',
+	'*',
+	'-requires',
+	'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
+	'-property',
+	'installationPath',
+] as const;
+
+export function visualStudioEnvironmentCandidates(executable: string): readonly string[] {
+	const candidates: string[] = [];
+	let directory = path.win32.dirname(executable);
+	while (true) {
+		if (path.win32.basename(directory).toLowerCase() === 'vc') {
+			candidates.push(path.win32.join(directory, 'Auxiliary', 'Build', 'vcvarsall.bat'));
+		}
+		const parent = path.win32.dirname(directory);
+		if (parent === directory) {
+			return candidates;
+		}
+		directory = parent;
+	}
+}
+
 abstract class WindowsCompilerBase extends CompilerBase {
 	private static readonly environmentCache = new Map<string, Promise<NodeJS.ProcessEnv>>();
 
@@ -66,6 +92,7 @@ abstract class WindowsCompilerBase extends CompilerBase {
 		const result = await exec.execute('cmd.exe', ['/d', '/s', '/c', captureCommand], {
 			env: baseEnvironment,
 			cancellationToken,
+			windowsVerbatimArguments: true,
 		});
 		if (result.returnCode !== 0) {
 			throw new Error(`Visual Studio environment setup failed with code ${result.returnCode}: ${result.stderr}`);
@@ -91,15 +118,7 @@ abstract class WindowsCompilerBase extends CompilerBase {
 			const vswhere = path.join(programFilesX86, 'Microsoft Visual Studio', 'Installer', 'vswhere.exe');
 			if (fs.existsSync(vswhere)) {
 				try {
-					const result = await exec.execute(vswhere, [
-						'-latest',
-						'-products',
-						'*',
-						'-requires',
-						'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
-						'-property',
-						'installationPath',
-					], {
+					const result = await exec.execute(vswhere, visualStudioDiscoveryArguments, {
 						env: baseEnvironment,
 						cancellationToken,
 					});
@@ -126,21 +145,10 @@ abstract class WindowsCompilerBase extends CompilerBase {
 			}
 		}
 
-		const compilerDirectory = path.dirname(this.profile.executable);
-		const fallback = path.resolve(
-			compilerDirectory,
-			'..',
-			'..',
-			'..',
-			'..',
-			'..',
-			'..',
-			'Auxiliary',
-			'Build',
-			'vcvarsall.bat',
-		);
-		if (fs.existsSync(fallback)) {
-			return fallback;
+		for (const candidate of visualStudioEnvironmentCandidates(this.profile.executable)) {
+			if (fs.existsSync(candidate)) {
+				return candidate;
+			}
 		}
 		throw new Error(
 			`Visual Studio environment script was not found through vswhere or relative to ${this.profile.executable}`,

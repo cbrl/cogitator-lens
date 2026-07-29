@@ -5,13 +5,12 @@ import { AsmParser } from './parsers/asm-parser.js';
 import * as exec from './exec.js';
 import type { ParseFiltersAndOutputOptions } from './parsers/filters.interfaces.js';
 import type { ParsedAsmResult } from './parsers/asmresult.interfaces.js';
-import * as logger from './logger.js';
 import type { CompilerProfile, CompileOptions } from './types/index.js';
 import { redactArguments, sanitizeCompilerArguments } from './compiler-arguments.js';
 import { withTemporaryDirectory } from './temporary-directory.js';
 
 export interface CompilerRunResult {
-	parsed: ParsedAsmResult;
+	rawAssembly: string;
 	stdout: string;
 	stderr: string;
 	durationMs: number;
@@ -40,9 +39,9 @@ export interface ICompiler {
 	compile(
 		file: string,
 		options: CompileOptions,
-		filter: ParseFiltersAndOutputOptions,
 		cancellationToken: CancellationToken,
 	): Promise<CompilerRunResult>;
+	parseAssembly(rawAssembly: string, filters: ParseFiltersAndOutputOptions): ParsedAsmResult;
 }
 
 export abstract class CompilerBase implements ICompiler {
@@ -57,7 +56,6 @@ export abstract class CompilerBase implements ICompiler {
 	async compile(
 		file: string,
 		options: CompileOptions,
-		filter: ParseFiltersAndOutputOptions,
 		cancellationToken: CancellationToken,
 	): Promise<CompilerRunResult> {
 		return withTemporaryDirectory('coglens-', async temporaryDirectory => {
@@ -86,10 +84,11 @@ export abstract class CompilerBase implements ICompiler {
 			];
 
 			const started = performance.now();
-			logger.logChannel.info(`Compiling ${file} with ${this.profile.displayName}`);
-			logger.logChannel.info(`Command: ${this.profile.executable} ${redactArguments(argumentsList).join(' ')}`);
+			const { logChannel } = await import('./logger.js');
+			logChannel.info(`Compiling ${file} with ${this.profile.displayName}`);
+			logChannel.info(`Command: ${this.profile.executable} ${redactArguments(argumentsList).join(' ')}`);
 			const overriddenNames = Object.keys({ ...this.profile.environment, ...options.env }).sort();
-			logger.logChannel.debug(`Environment overrides: ${overriddenNames.join(', ') || '(none)'}`);
+			logChannel.debug(`Environment overrides: ${overriddenNames.join(', ') || '(none)'}`);
 
 			const result = await this.runCompiler(argumentsList, environment, workingDirectory, cancellationToken);
 			if (result.returnCode !== 0) {
@@ -103,7 +102,7 @@ export abstract class CompilerBase implements ICompiler {
 
 			const assembly = await fs.promises.readFile(outputFile, 'utf8');
 			return {
-				parsed: this.asmParser.process(assembly, filter),
+				rawAssembly: assembly,
 				stdout: result.stdout,
 				stderr: result.stderr,
 				durationMs: performance.now() - started,
@@ -115,6 +114,10 @@ export abstract class CompilerBase implements ICompiler {
 				},
 			};
 		});
+	}
+
+	parseAssembly(rawAssembly: string, filters: ParseFiltersAndOutputOptions): ParsedAsmResult {
+		return this.asmParser.process(rawAssembly, filters);
 	}
 
 	protected runCompiler(

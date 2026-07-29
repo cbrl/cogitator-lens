@@ -1,6 +1,5 @@
 import {
 	CancellationError,
-	CancellationToken,
 	Disposable,
 	Event,
 	EventEmitter,
@@ -8,15 +7,18 @@ import {
 	Uri,
 	workspace,
 } from 'vscode';
+import fs from 'fs';
 import path from 'path';
 import type { ICompilationService, IConfigurationService } from '../interfaces/index.js';
 import type {
 	CompilationVariant,
 	CompileArtifact,
+	CompileRequest,
 	ProviderSnapshot,
 } from '../types/index.js';
+import { CompilationError } from '../types/index.js';
 import type { ParseFiltersAndOutputOptions } from '../parsers/filters.interfaces.js';
-import { CompilerExitError } from '../compiler.js';
+import { CompilerExitError, type CompilerRunResult } from '../compiler.js';
 import { CompilerRegistry } from './compiler-registry.js';
 import { CompilationConfigDatabase } from './compilation-config.js';
 import { CompilationSemaphore } from './compilation-semaphore.js';
@@ -30,6 +32,10 @@ export class CompilationService implements ICompilationService {
 	private readonly filterChangeEmitter = new EventEmitter<void>();
 	private readonly subscriptions: Disposable[] = [];
 	private readonly semaphore = new CompilationSemaphore(2, () => new CancellationError());
+	private readonly rawAssemblyCache = new Map<string, {
+		signature: string;
+		run: CompilerRunResult;
+	}>();
 	private filters: ParseFiltersAndOutputOptions;
 
 	readonly onVariantsChanged: Event<readonly Uri[]> = this.changeEmitter.event;
@@ -103,19 +109,31 @@ export class CompilationService implements ICompilationService {
 		}
 	}
 
-	async compile(file: Uri, cancellationToken: CancellationToken): Promise<CompileArtifact> {
+	async compile(request: CompileRequest): Promise<CompileArtifact> {
+		const { variant, outputMode, outputOptions, filters, cancellationToken } = request;
+		const file = variant.source;
+		if (cancellationToken.isCancellationRequested) {
+			throw new CancellationError();
+		}
+		if (outputMode !== 'assembly') {
+			throw new CompilationError(`Unsupported compilation output mode: ${outputMode as string}`);
+		}
+		const compiler = this.compilerRegistry.getCompilerById(variant.compilerProfileId);
+		if (!compiler) {
+			throw new CompilationError(`Compiler profile not found: ${variant.compilerProfileId}`);
+		}
+
+		const cacheKey = `${file.toString()}\0${variant.id}\0${outputMode}`;
+		const signature = await this.compileSignature(variant, compiler.profile, outputOptions);
+		const cached = this.rawAssemblyCache.get(cacheKey);
+		if (cached?.signature === signature) {
+			return this.createArtifact(compiler, cached.run, variant, filters);
+		}
+
 		await this.semaphore.acquire(cancellationToken);
 		try {
 			if (cancellationToken.isCancellationRequested) {
 				throw new CancellationError();
-			}
-			const variant = this.getSelectedVariant(file);
-			if (!variant) {
-				throw new Error(`No compilation variant is configured for ${file.fsPath}`);
-			}
-			const compiler = this.compilerRegistry.getCompilerById(variant.compilerProfileId);
-			if (!compiler) {
-				throw new Error(`Compiler profile not found: ${variant.compilerProfileId}`);
 			}
 
 			try {
@@ -125,37 +143,26 @@ export class CompilationService implements ICompilationService {
 					includes: variant.includes,
 					env: variant.environment,
 					workingDirectory: variant.workingDirectory,
-				}, this.filters, cancellationToken);
-				return {
-					result: run.parsed,
-					diagnostics: parseCompilerDiagnostics(
-						`${run.stderr}\n${run.stdout}`,
-						file,
-						variant.workingDirectory,
-					),
-					durationMs: run.durationMs,
-					command: run.command,
-					truncated: false,
-				};
-			} catch (error) {
-				if (error instanceof CompilerExitError) {
-					const diagnostics = parseCompilerDiagnostics(
-						`${error.stderr}\n${error.stdout}`,
-						file,
-						variant.workingDirectory,
-					);
-					Object.assign(error, { diagnostics });
-				} else if (error && typeof error === 'object') {
-					const processError = error as { stderr?: unknown; stdout?: unknown };
-					const diagnostics = parseCompilerDiagnostics(
-						`${typeof processError.stderr === 'string' ? processError.stderr : ''}\n`
-						+ `${typeof processError.stdout === 'string' ? processError.stdout : ''}`,
-						file,
-						variant.workingDirectory,
-					);
-					Object.assign(error, { diagnostics });
+				}, cancellationToken);
+				this.rawAssemblyCache.set(cacheKey, { signature, run });
+				return this.createArtifact(compiler, run, variant, filters);
+			} catch (error: unknown) {
+				if (error instanceof CancellationError || cancellationToken.isCancellationRequested) {
+					throw new CancellationError();
 				}
-				throw error;
+				if (error instanceof CompilationError) {
+					throw error;
+				}
+				const output = compilerErrorOutput(error);
+				const diagnostics = parseCompilerDiagnostics(
+					`${output.stderr}\n${output.stdout}`,
+					file,
+					variant.workingDirectory,
+				);
+				const message = error instanceof Error ? error.message : String(error);
+				throw new CompilationError(message, diagnostics, {
+					cause: error instanceof Error ? error : undefined,
+				});
 			}
 		} finally {
 			this.semaphore.release();
@@ -168,6 +175,52 @@ export class CompilationService implements ICompilationService {
 		this.filterChangeEmitter.dispose();
 		this.variants.dispose();
 		this.compilerRegistry.dispose();
+		this.rawAssemblyCache.clear();
+	}
+
+	private createArtifact(
+		compiler: import('../compiler.js').CompilerBase,
+		run: CompilerRunResult,
+		variant: CompilationVariant,
+		filters: ParseFiltersAndOutputOptions,
+	): CompileArtifact {
+		let result;
+		try {
+			result = compiler.parseAssembly(run.rawAssembly, filters);
+		} catch (error: unknown) {
+			throw new CompilationError(
+				error instanceof Error ? error.message : String(error),
+				[],
+				{ cause: error instanceof Error ? error : undefined },
+			);
+		}
+		return {
+			result,
+			rawAssembly: run.rawAssembly,
+			diagnostics: parseCompilerDiagnostics(
+				`${run.stderr}\n${run.stdout}`,
+				variant.source,
+				variant.workingDirectory,
+			),
+			durationMs: run.durationMs,
+			command: run.command,
+			truncated: false,
+		};
+	}
+
+	private async compileSignature(
+		variant: CompilationVariant,
+		profile: import('../types/index.js').CompilerProfile,
+		outputOptions: import('../parsers/filters.interfaces.js').CompilerOutputOptions,
+	): Promise<string> {
+		let sourceState: { size: number; mtimeMs: number };
+		try {
+			const stat = await fs.promises.stat(variant.source.fsPath);
+			sourceState = { size: stat.size, mtimeMs: stat.mtimeMs };
+		} catch {
+			sourceState = { size: -1, mtimeMs: -1 };
+		}
+		return JSON.stringify({ variant, profile, outputOptions, sourceState });
 	}
 
 	private reloadUserConfiguration(): void {
@@ -213,6 +266,20 @@ export class CompilationService implements ICompilationService {
 	private selectionKey(file: Uri): string {
 		return `coglens.variant.${file.toString()}`;
 	}
+}
+
+function compilerErrorOutput(error: unknown): { stdout: string; stderr: string } {
+	if (error instanceof CompilerExitError) {
+		return { stdout: error.stdout, stderr: error.stderr };
+	}
+	if (error && typeof error === 'object') {
+		const processError = error as { stderr?: unknown; stdout?: unknown };
+		return {
+			stdout: typeof processError.stdout === 'string' ? processError.stdout : '',
+			stderr: typeof processError.stderr === 'string' ? processError.stderr : '',
+		};
+	}
+	return { stdout: '', stderr: '' };
 }
 
 function filtersEqual(

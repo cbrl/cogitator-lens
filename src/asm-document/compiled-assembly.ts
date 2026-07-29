@@ -32,9 +32,6 @@ export class CompiledAssembly {
      * Gets the textual content of the assembly document.
      */
     public getContent(): string {
-        if (this.lines instanceof Error) {
-            return this.lines.message;
-        }
         return this.lines.map(line => line.text).join('\n');
     }
 
@@ -42,15 +39,11 @@ export class CompiledAssembly {
 		return this.mappings.get(file);
 	}
 
-	public getSourceLinesForAsmLine(file: Uri, asmLineIndex: number): number[] | undefined {
-		return this.mappings.get(file)?.get(asmLineIndex);
+	public getAsmLinesForSourceLine(file: Uri, sourceLineIndex: number): number[] | undefined {
+		return this.mappings.get(file)?.get(sourceLineIndex);
 	}
 
 	private mapLines() {
-		if (this.lines instanceof Error) {
-			return;
-		}
-
 		this.lines.forEach((line, index) => {
 			if (!this.asmLineHasSource(line)) {
 				return;

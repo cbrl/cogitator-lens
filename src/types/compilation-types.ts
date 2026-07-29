@@ -5,7 +5,10 @@
 
 import type { CancellationToken, Uri } from 'vscode';
 import type { ParsedAsmResult } from '../parsers/asmresult.interfaces.js';
-import type { ParseFiltersAndOutputOptions } from '../parsers/filters.interfaces.js';
+import type {
+	CompilerOutputOptions,
+	DisplayAssemblyFilters,
+} from '../parsers/filters.interfaces.js';
 
 export interface CompilationVariant {
 	id: string;
@@ -28,7 +31,8 @@ export type CompilationOutputMode = 'assembly';
 export interface CompileRequest {
 	variant: CompilationVariant;
 	outputMode: CompilationOutputMode;
-	filters: ParseFiltersAndOutputOptions;
+	outputOptions: CompilerOutputOptions;
+	filters: DisplayAssemblyFilters;
 	cancellationToken: CancellationToken;
 }
 
@@ -42,6 +46,7 @@ export interface CompileDiagnostic {
 
 export interface CompileArtifact {
 	result: ParsedAsmResult;
+	rawAssembly: string;
 	diagnostics: readonly CompileDiagnostic[];
 	durationMs: number;
 	command: {
@@ -51,6 +56,17 @@ export interface CompileArtifact {
 		workingDirectory: string;
 	};
 	truncated: boolean;
+}
+
+export class CompilationError extends Error {
+	constructor(
+		message: string,
+		public readonly diagnostics: readonly CompileDiagnostic[] = [],
+		options?: ErrorOptions,
+	) {
+		super(message, options);
+		this.name = 'CompilationError';
+	}
 }
 
 /** Canonical default compilation settings, matching package.json exactly. */

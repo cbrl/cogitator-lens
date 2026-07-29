@@ -13,9 +13,6 @@ export function setupCommands(
 	context: vscode.ExtensionContext,
 	compilationService: CompilationService,
 	configuration: ConfigurationService,
-	compilerTree: CompilerTreeProvider,
-	compilationTree: CompilationInfoTreeProvider,
-	filterTree: GlobalOptionsTreeProvider,
 ): void {
 	const copyText = vscode.commands.registerCommand('coglens.CopyText', async (node?: TreeNode) => {
 		if (node?.label) {
@@ -87,9 +84,6 @@ export function setupCommands(
 	});
 
 	context.subscriptions.push(copyText, openCompilerSettings, addCompiler, createOverride);
-	void compilerTree;
-	void compilationTree;
-	void filterTree;
 }
 
 export function createCompilerTreeView(context: vscode.ExtensionContext, registry: CompilerRegistry): CompilerTreeProvider {

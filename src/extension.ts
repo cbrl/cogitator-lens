@@ -21,16 +21,13 @@ export async function activate(context: ExtensionContext): Promise<void> {
 	const assemblyProvider = new AsmProvider(compilationService, configuration);
 	const definitionProvider = new AsmDefinitionProvider(uri => assemblyProvider.getCompiledAssembly(uri));
 
-	const compilerTree = setup.createCompilerTreeView(context, compilationService.compilerRegistry);
-	const compilationTree = setup.createCompilationInfoTreeView(context, compilationService);
-	const filterTree = setup.createGlobalOptionsTreeView(context, compilationService);
+	setup.createCompilerTreeView(context, compilationService.compilerRegistry);
+	setup.createCompilationInfoTreeView(context, compilationService);
+	setup.createGlobalOptionsTreeView(context, compilationService);
 	setup.setupCommands(
 		context,
 		compilationService,
 		configuration,
-		compilerTree,
-		compilationTree,
-		filterTree,
 	);
 
 	const cmakeMonitor = new CmakeMonitor();
@@ -58,8 +55,13 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		if (!await pickVariantIfNeeded(editor.document.uri, compilationService)) {
 			return;
 		}
+		const variant = compilationService.getSelectedVariant(editor.document.uri);
+		if (!variant) {
+			await window.showErrorMessage('No compilation variant is available for this file.');
+			return;
+		}
 
-		const assemblyUri = getAsmUri(editor.document.uri);
+		const assemblyUri = getAsmUri(editor.document.uri, variant);
 		assemblyProvider.requestRefresh(assemblyUri);
 		const options: TextDocumentShowOptions = {
 			viewColumn: ViewColumn.Beside,
@@ -73,9 +75,12 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		if (!isSupportedSourceDocument(editor.document)) {
 			return;
 		}
-		await pickVariant(editor.document.uri, compilationService);
-		const assemblyUri = getAsmUri(editor.document.uri);
-		assemblyProvider.requestRefresh(assemblyUri);
+		if (await pickVariant(editor.document.uri, compilationService)) {
+			const variant = compilationService.getSelectedVariant(editor.document.uri);
+			if (variant) {
+				assemblyProvider.requestRefresh(getAsmUri(editor.document.uri, variant));
+			}
+		}
 	});
 
 	context.subscriptions.push(

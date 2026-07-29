@@ -8,9 +8,14 @@ import {
 	Uri,
 } from 'vscode';
 import { CompilationService } from '../compilation/index.js';
-import type { CompileArtifact } from '../types/index.js';
+import type {
+	CompilationOutputMode,
+	CompilationVariant,
+	CompileArtifact,
+} from '../types/index.js';
 import { CompiledAssembly } from './compiled-assembly.js';
 import * as logger from '../logger.js';
+import { partitionFilters } from '../parsers/filters.interfaces.js';
 
 export interface CompileHandlerResult {
 	assembly: CompiledAssembly;
@@ -27,6 +32,8 @@ export class CompileHandler implements Disposable {
 	constructor(
 		srcUri: Uri,
 		asmUri: Uri,
+		private readonly variant: CompilationVariant,
+		private readonly outputMode: CompilationOutputMode,
 		private readonly compilationService: CompilationService,
 	) {
 		this.srcUri = srcUri;
@@ -42,7 +49,16 @@ export class CompileHandler implements Disposable {
 		const externalSubscription = externalToken.onCancellationRequested(() => cancellation.cancel());
 
 		try {
-			const artifact = await this.compilationService.compile(this.srcUri, cancellation.token);
+			const { outputOptions, displayFilters } = partitionFilters(
+				this.compilationService.globalFilterOptions,
+			);
+			const artifact = await this.compilationService.compile({
+				variant: this.variant,
+				outputMode: this.outputMode,
+				outputOptions,
+				filters: displayFilters,
+				cancellationToken: cancellation.token,
+			});
 			if (generation !== this.generation || cancellation.token.isCancellationRequested) {
 				throw new CancellationError();
 			}

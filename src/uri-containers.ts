@@ -88,6 +88,10 @@ export class UriSet {
 		this.ignorePathCase = options?.ignorePathCase ?? false;
 	}
 
+	public get size(): number {
+		return this.set.size;
+	}
+
 	public add(uri: vscode.Uri): this {
 		this.set.add(this.getKey(uri));
 		return this;

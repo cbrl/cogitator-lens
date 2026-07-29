@@ -199,7 +199,7 @@ export class AsmDecorator {
 			assert(this.asmData instanceof CompiledAssembly);
 
 			const asmLinesRanges: Range[] = [];
-			const mapped = this.asmData.getSourceLinesForAsmLine(srcFile, line);
+			const mapped = this.asmData.getAsmLinesForSourceLine(srcFile, line);
 
 			if (mapped !== undefined) {
 				for (let line of mapped) {

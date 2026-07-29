@@ -24,8 +24,7 @@
 
 import {ParsedAsmResult, ParsedAsmResultLine} from './asmresult.interfaces.js';
 import {ParseFiltersAndOutputOptions} from './filters.interfaces.js';
-import {assert} from '../assert.js';
-import * as logger from '../logger.js';
+import assert from 'assert';
 import * as utils from '../ce-utils.js';
 
 import {AsmParser} from './asm-parser.js';
@@ -218,7 +217,7 @@ export class VcAsmParser extends AsmParser {
                 const lineNum = getLineNumberFromComment(line);
                 if (lineNum !== null) {
                     if (currentFile === undefined) {
-                        logger.logChannel.error('Somehow, we have a line number comment without a file comment: %s', line);
+                        logParserError('Somehow, we have a line number comment without a file comment', line);
                     }
                     assert(currentFunction);
                     if (currentFunction.initialLine === undefined) {
@@ -228,7 +227,7 @@ export class VcAsmParser extends AsmParser {
                 }
             } else {
                 if (currentFunction === null) {
-                    logger.logChannel.error('We have a file comment outside of a function: %s', line);
+                    logParserError('We have a file comment outside of a function', line);
                 }
                 // if the file is the "main file", give it the file `null`
                 if (stdInLooking.test(fileName)) {
@@ -383,4 +382,10 @@ export class VcAsmParser extends AsmParser {
             asm: result,
         };
     }
+}
+
+function logParserError(message: string, line: string): void {
+    void import('../logger.js')
+        .then(({logChannel}) => logChannel.error(`${message}: ${line}`))
+        .catch(() => undefined);
 }

@@ -1,5 +1,4 @@
 import type {
-	CancellationToken,
 	Disposable,
 	Event,
 	Uri,
@@ -9,6 +8,7 @@ import type { CompilerBase } from '../compiler.js';
 import type {
 	CompilationVariant,
 	CompileArtifact,
+	CompileRequest,
 	CompilerProfile,
 	DefaultCompilationSettings,
 	ProviderSnapshot,
@@ -40,10 +40,11 @@ export interface ICompilationService extends Disposable {
 	readonly onFiltersChanged: Event<void>;
 	globalFilterOptions: ParseFiltersAndOutputOptions;
 	getVariants(file: Uri): readonly CompilationVariant[];
+	getAllSources(): readonly Uri[];
 	getSelectedVariant(file: Uri): CompilationVariant | undefined;
 	selectVariant(file: Uri, variantId: string): Promise<boolean>;
 	reconcileProviderSnapshot(snapshot: ProviderSnapshot): void;
-	compile(file: Uri, cancellationToken: CancellationToken): Promise<CompileArtifact>;
+	compile(request: CompileRequest): Promise<CompileArtifact>;
 }
 
 export interface IBuildSystemMonitor extends Disposable {

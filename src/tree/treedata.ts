@@ -10,7 +10,7 @@ export type TreeItemSpecifier = 'checkbox' | 'subtree' | 'text';
  * Specifies the context in which a tree item is used. This will be the value of vscode.TreeItem.contextValue,
  * and can be used to limit commands to specific menu items based on the context.
  */
-export type TreeContextSpecifier = 'array' | 'derivedInstance' | 'editText' | 'element' | 'filters' | 'instance' | 'pickCompiler' | 'pickFile' | 'text';
+export type TreeContextSpecifier = 'derivedInstance' | 'filters' | 'instance' | 'text';
 
 export class TreeNode {
 	/**
@@ -60,39 +60,6 @@ export class TreeNode {
 
 	description?: string;
 
-	/**
-	 * Creates a context string representing multiple context types. This is used for nodes that can be interacted with in multiple ways.
-	 * @param args The arguments to join together.
-	 * @returns The joined context string.
-	 */
-	static multiContext(...args: string[]): string {
-		return args.join('&');
-	}
-
-	/**
-	 * Populates the children of a node representing an array of values. Each child node will
-	 * represent an element in the array, and will be labeled with its index and value.
-	 *
-	 * @param node The node to populate with children.
-	 * @param array The array of values to use as children.
-	 * @param options Additional options for the child nodes.
-	 */
-	static populateArrayNodeChildren(node: TreeNode, array: any[], options: { nodeType: TreeItemSpecifier, [key: string]: any }): void {
-		if (node.children === undefined) {
-			node.children = [];
-		}
-
-		array.forEach((value, index) => {
-			const child = Object.assign(new TreeNode(), {
-				label: `[${index}]: ${value}`,
-				treeContext: 'element',
-				objectRef: array,
-				attr: index
-			}, options);
-
-			node.children!.push(child);
-		});
-	}
 }
 
 export class TreeItem extends vscode.TreeItem {

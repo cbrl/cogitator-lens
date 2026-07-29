@@ -5,13 +5,14 @@ import type {
 	CompilerSettings,
 	DefaultCompilationSettings,
 } from '../types/index.js';
+import { getCompilerByType, supportedCompilerKinds } from '../compilers/compiler-map.js';
 
 export interface NormalizationResult<T> {
 	value?: T;
 	errors: readonly string[];
 }
 
-const compilerKinds = new Set<CompilerKind>(['gcc', 'clang', 'apple-clang', 'msvc', 'clang-cl']);
+const compilerKinds = new Set<CompilerKind>(supportedCompilerKinds);
 const compilerKeys = new Set([
 	'name',
 	'type',
@@ -76,9 +77,12 @@ function rejectUnknownKeys(value: Record<string, unknown>, allowed: ReadonlySet<
 }
 
 function defaultFlags(kind: CompilerKind): { includeFlag: string; defineFlag: string } {
-	return kind === 'msvc' || kind === 'clang-cl'
-		? { includeFlag: '/I', defineFlag: '/D' }
-		: { includeFlag: '-I', defineFlag: '-D' };
+	const adapter = getCompilerByType(kind);
+	if (!adapter) {
+		return { includeFlag: '-I', defineFlag: '-D' };
+	}
+	const profile = adapter.baseCompilerProfile('', '');
+	return { includeFlag: profile.includeFlag, defineFlag: profile.defineFlag };
 }
 
 export function normalizeCompilerSettings(raw: unknown, origin = 'user'): NormalizationResult<CompilerProfile> {
