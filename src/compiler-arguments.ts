@@ -15,11 +15,15 @@ const extensionOwnedFlags = new Set([
 	'/FAcs',
 ]);
 
-export function sanitizeCompilerArguments(args: readonly string[], sourceFile: string): string[] {
+export function sanitizeCompilerArguments(
+	args: readonly string[],
+	sourceFile: string,
+	workingDirectory?: string,
+): string[] {
 	const result: string[] = [];
 	for (let index = 0; index < args.length; index++) {
 		const argument = args[index];
-		if (samePath(argument, sourceFile) || extensionOwnedFlags.has(argument)) {
+		if (samePath(argument, sourceFile, workingDirectory) || extensionOwnedFlags.has(argument)) {
 			continue;
 		}
 		if (flagsWithSeparateValues.has(argument)) {
@@ -46,13 +50,19 @@ export function redactArguments(args: readonly string[]): string[] {
 	});
 }
 
-function samePath(left: string, right: string): boolean {
+function samePath(left: string, right: string, workingDirectory?: string): boolean {
 	if (!left || !right) {
 		return false;
 	}
-	const normalizedLeft = path.normalize(left);
-	const normalizedRight = path.normalize(right);
+	const normalizedLeft = normalizePath(left, workingDirectory);
+	const normalizedRight = normalizePath(right, workingDirectory);
 	return process.platform === 'win32'
 		? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
 		: normalizedLeft === normalizedRight;
+}
+
+function normalizePath(value: string, workingDirectory?: string): string {
+	return workingDirectory && !path.isAbsolute(value)
+		? path.resolve(workingDirectory, value)
+		: path.normalize(value);
 }

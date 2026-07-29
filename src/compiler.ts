@@ -75,7 +75,7 @@ export abstract class CompilerBase implements ICompiler {
 			const providerArguments = sanitizeCompilerArguments([
 				...this.profile.defaultArguments,
 				...(options.args ?? []),
-			], file);
+			], file, workingDirectory);
 			const outputOptions = options.outputOptions ?? {};
 
 			const argumentsList = [

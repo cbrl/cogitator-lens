@@ -9,8 +9,10 @@ import vscode, {
 import { AsmDefinitionProvider } from './asm-document/asm-definition-provider.js';
 import { AsmProvider, getAsmUri } from './asm-document/asm-provider.js';
 import { CmakeMonitor } from './buildsystems/cmake.js';
+import { CompilationDatabaseMonitor } from './buildsystems/compilation-database.js';
 import { CompilationService } from './compilation/index.js';
 import { ConfigurationService } from './services/configuration-service.js';
+import type { IBuildSystemMonitor } from './interfaces/index.js';
 import * as setup from './setup.js';
 
 const supportedLanguageIds = new Set(['c', 'cpp', 'objective-c', 'objective-cpp', 'cuda']);
@@ -30,9 +32,12 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		configuration,
 	);
 
-	const cmakeMonitor = new CmakeMonitor();
-	const cmakeSubscription = cmakeMonitor.onSnapshot(snapshot =>
-		compilationService.reconcileProviderSnapshot(snapshot));
+	const buildsystemMonitors: IBuildSystemMonitor[] = [
+		new CmakeMonitor(),
+		new CompilationDatabaseMonitor(),
+	];
+	const monitorSubscriptions = buildsystemMonitors.map(monitor =>
+		monitor.onSnapshot(snapshot => compilationService.reconcileProviderSnapshot(snapshot)));
 
 	const contentProvider = workspace.registerTextDocumentContentProvider(AsmProvider.scheme, assemblyProvider);
 	const definitionRegistration = vscode.languages.registerDefinitionProvider(
@@ -87,15 +92,15 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		configuration,
 		compilationService,
 		assemblyProvider,
-		cmakeMonitor,
-		cmakeSubscription,
+		...buildsystemMonitors,
+		...monitorSubscriptions,
 		contentProvider,
 		definitionRegistration,
 		disassemble,
 		pickVariantCommand,
 	);
 
-	await cmakeMonitor.initialize();
+	await Promise.all(buildsystemMonitors.map(monitor => monitor.initialize()));
 }
 
 function isSupportedSourceDocument(document: vscode.TextDocument): boolean {
