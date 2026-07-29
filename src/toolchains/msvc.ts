@@ -1,7 +1,6 @@
 import fs from 'fs';
 import path from 'path';
 import { ToolchainBackend, ToolExitError } from '../toolchains/toolchain-backend.js';
-import * as exec from '../exec.js';
 import type { CancellationToken } from 'vscode';
 import { VcAsmParser } from '../parsers/asm-parser-vc.js';
 import { withTemporaryDirectory } from '../temporary-directory.js';
@@ -10,6 +9,11 @@ import type {
 	ToolchainCapabilities,
 	ProductionOptions,
 } from '../types/index.js';
+import {
+	ExecError,
+	ToolExecutionGate,
+	type ExecResult,
+} from '../tool-execution.js';
 
 export const visualStudioDiscoveryArguments = [
 	'-latest',
@@ -49,7 +53,7 @@ abstract class WindowsToolchainBackend extends ToolchainBackend {
 		environment: NodeJS.ProcessEnv,
 		workingDirectory: string,
 		cancellationToken: CancellationToken,
-	): Promise<exec.ExecResult> {
+	): Promise<ExecResult> {
 		const architecture = vcvarsArchitecture(this.profile.executable);
 		const cacheKey = `${path.normalize(this.profile.executable).toLowerCase()}\0${architecture}`;
 		let environmentPromise = WindowsToolchainBackend.environmentCache.get(cacheKey);
@@ -72,7 +76,7 @@ abstract class WindowsToolchainBackend extends ToolchainBackend {
 				visualStudioEnvironment[name] = value;
 			}
 		}
-		return exec.execute(this.profile.executable, args, {
+		return this.execution.execute(this.profile.executable, args, {
 			cwd: workingDirectory,
 			env: visualStudioEnvironment,
 			cancellationToken,
@@ -104,7 +108,7 @@ abstract class WindowsToolchainBackend extends ToolchainBackend {
 		return withTemporaryDirectory('coglens-undname-', async temporaryDirectory => {
 			const inputFile = path.join(temporaryDirectory, 'assembly.txt');
 			await fs.promises.writeFile(inputFile, rawAssembly, 'utf8');
-			const result = await exec.execute(this.profile.tools.demangler, [inputFile], {
+			const result = await this.execution.execute(this.profile.tools.demangler, [inputFile], {
 				cwd: workingDirectory,
 				env: environment,
 				cancellationToken,
@@ -136,7 +140,7 @@ abstract class WindowsToolchainBackend extends ToolchainBackend {
 		}
 
 		const captureCommand = `call "${vcvarsScript}" ${vcvarsArchitecture} >nul && set`;
-		const result = await exec.execute('cmd.exe', ['/d', '/s', '/c', captureCommand], {
+		const result = await this.execution.execute('cmd.exe', ['/d', '/s', '/c', captureCommand], {
 			env: baseEnvironment,
 			cancellationToken,
 			windowsVerbatimArguments: true,
@@ -165,7 +169,7 @@ abstract class WindowsToolchainBackend extends ToolchainBackend {
 			const vswhere = path.join(programFilesX86, 'Microsoft Visual Studio', 'Installer', 'vswhere.exe');
 			if (fs.existsSync(vswhere)) {
 				try {
-					const result = await exec.execute(vswhere, visualStudioDiscoveryArguments, {
+					const result = await this.execution.execute(vswhere, visualStudioDiscoveryArguments, {
 						env: baseEnvironment,
 						cancellationToken,
 					});
@@ -185,7 +189,7 @@ abstract class WindowsToolchainBackend extends ToolchainBackend {
 						}
 					}
 				} catch (error) {
-					if (error instanceof exec.ExecError && error.kind === 'cancelled') {
+					if (error instanceof ExecError && error.kind === 'cancelled') {
 						throw error;
 					}
 				}
@@ -204,8 +208,12 @@ abstract class WindowsToolchainBackend extends ToolchainBackend {
 }
 
 export class MsvcCompiler extends WindowsToolchainBackend {
-	constructor(profile: ToolchainProfile, capabilities: ToolchainCapabilities) {
-		super(profile, capabilities);
+	constructor(
+		profile: ToolchainProfile,
+		capabilities: ToolchainCapabilities,
+		execution?: ToolExecutionGate,
+	) {
+		super(profile, capabilities, execution);
 		this.asmParser = new VcAsmParser();
 	}
 }

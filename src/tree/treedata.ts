@@ -10,7 +10,7 @@ export type TreeItemSpecifier = 'checkbox' | 'subtree' | 'text';
  * Specifies the context in which a tree item is used. This will be the value of vscode.TreeItem.contextValue,
  * and can be used to limit commands to specific menu items based on the context.
  */
-export type TreeContextSpecifier = 'derivedInstance' | 'disabled' | 'filters' | 'instance' | 'text';
+export type TreeContextSpecifier = 'derivedInstance' | 'disabled' | 'instance' | 'options' | 'text';
 
 export class TreeNode {
 	/**

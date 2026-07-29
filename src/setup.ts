@@ -23,8 +23,8 @@ export function setupCommands(
 		}
 	});
 
-	const openToolchainSettings = vscode.commands.registerCommand('coglens.AddDefaultCompileInfo', async () => {
-		await vscode.commands.executeCommand('workbench.action.openSettings', 'coglens.defaultCompileInfo');
+	const openToolchainSettings = vscode.commands.registerCommand('coglens.AddDefaultInvocation', async () => {
+		await vscode.commands.executeCommand('workbench.action.openSettings', 'coglens.defaultInvocation');
 	});
 
 	const addToolchain = vscode.commands.registerCommand('coglens.AddToolchain', async () => {
@@ -114,7 +114,7 @@ export function createGlobalOptionsTreeView(
 	compilationService: CompilationService,
 ): GlobalOptionsTreeProvider {
 	const provider = new GlobalOptionsTreeProvider(compilationService);
-	const view = vscode.window.createTreeView('coglens.globalOptions', { treeDataProvider: provider });
+	const view = vscode.window.createTreeView('coglens.artifactOptions', { treeDataProvider: provider });
 
 	context.subscriptions.push(
 		view,
@@ -124,10 +124,11 @@ export function createGlobalOptionsTreeView(
 		compilationService.toolchainRegistry.onDidChange(() => provider.refresh()),
 		view.onDidChangeCheckboxState(event => {
 			const [node, state] = event.items[0] ?? [];
-			if (!node?.optionId) {
+			if (!node?.optionId || !node.artifactKind) {
 				return;
 			}
 			compilationService.setArtifactOption(
+				node.artifactKind,
 				node.optionId,
 				state === vscode.TreeItemCheckboxState.Checked,
 			);

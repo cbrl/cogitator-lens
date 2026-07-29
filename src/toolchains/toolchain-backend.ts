@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import type { CancellationToken } from 'vscode';
 import { AsmParser } from '../parsers/asm-parser.js';
-import * as exec from '../exec.js';
 import type { ParseFiltersAndOutputOptions } from '../parsers/filters.interfaces.js';
 import type { ParsedAsmResult } from '../parsers/asmresult.interfaces.js';
 import type {
@@ -11,23 +10,16 @@ import type {
 	CompileOptions,
 	DisplayOptions,
 	ProductionOptions,
+	RawArtifact,
 } from '../types/index.js';
-import { redactArguments, sanitizeToolchainArguments } from '../toolchain-arguments.js';
+import { redactArguments } from '../toolchain-arguments.js';
+import { sanitizeAssemblyArguments } from '../artifacts/assembly-producer.js';
+import {
+	ToolExecutionGate,
+	trustedToolExecution,
+	type ExecResult,
+} from '../tool-execution.js';
 import { withTemporaryDirectory } from '../temporary-directory.js';
-
-export interface ToolchainRunResult {
-	rawAssembly: string;
-	stdout: string;
-	stderr: string;
-	durationMs: number;
-	truncated: boolean;
-	command: {
-		executable: string;
-		arguments: readonly string[];
-		environmentVariableNames: readonly string[];
-		workingDirectory: string;
-	};
-}
 
 export class ToolExitError extends Error {
 	constructor(
@@ -41,13 +33,18 @@ export class ToolExitError extends Error {
 	}
 }
 
+export interface AssemblyToolOutput extends RawArtifact {
+	readonly stdout: string;
+	readonly stderr: string;
+}
+
 export interface IToolchainBackend {
 	readonly profile: ToolchainProfile;
-	compile(
+	produceAssembly(
 		file: string,
 		options: CompileOptions,
 		cancellationToken: CancellationToken,
-	): Promise<ToolchainRunResult>;
+	): Promise<AssemblyToolOutput>;
 	parseAssembly(rawAssembly: string, options: DisplayOptions): ParsedAsmResult;
 }
 
@@ -56,17 +53,21 @@ export abstract class ToolchainBackend implements IToolchainBackend {
 	protected asmParser: AsmParser;
 	protected readonly capabilities: ToolchainCapabilities;
 
-	constructor(profile: ToolchainProfile, capabilities: ToolchainCapabilities) {
+	constructor(
+		profile: ToolchainProfile,
+		capabilities: ToolchainCapabilities,
+		protected readonly execution: ToolExecutionGate = trustedToolExecution,
+	) {
 		this.profile = profile;
 		this.capabilities = capabilities;
 		this.asmParser = new AsmParser();
 	}
 
-	async compile(
+	async produceAssembly(
 		file: string,
 		options: CompileOptions,
 		cancellationToken: CancellationToken,
-	): Promise<ToolchainRunResult> {
+	): Promise<AssemblyToolOutput> {
 		return withTemporaryDirectory('coglens-', async temporaryDirectory => {
 			const outputFile = path.join(temporaryDirectory, 'output.asm');
 			const workingDirectory = options.workingDirectory ?? path.dirname(file);
@@ -77,7 +78,7 @@ export abstract class ToolchainBackend implements IToolchainBackend {
 				...options.env,
 			};
 
-			const providerArguments = sanitizeToolchainArguments([
+			const providerArguments = sanitizeAssemblyArguments([
 				...this.profile.defaultArguments,
 				...(options.args ?? []),
 			], file, workingDirectory);
@@ -114,7 +115,9 @@ export abstract class ToolchainBackend implements IToolchainBackend {
 				cancellationToken,
 			);
 			return {
-				rawAssembly: postProcessedAssembly,
+				kind: 'assembly',
+				text: postProcessedAssembly,
+				diagnostics: [],
 				stdout: result.stdout,
 				stderr: result.stderr,
 				durationMs: performance.now() - started,
@@ -144,8 +147,8 @@ export abstract class ToolchainBackend implements IToolchainBackend {
 		environment: NodeJS.ProcessEnv,
 		workingDirectory: string,
 		cancellationToken: CancellationToken,
-	): Promise<exec.ExecResult> {
-		return exec.execute(this.profile.executable, args, {
+	): Promise<ExecResult> {
+		return this.execution.execute(this.profile.executable, args, {
 			cwd: workingDirectory,
 			env: environment,
 			cancellationToken,
@@ -173,7 +176,7 @@ export abstract class ToolchainBackend implements IToolchainBackend {
 			return rawAssembly;
 		}
 
-		const result = await exec.execute(this.profile.tools.demangler, [], {
+		const result = await this.execution.execute(this.profile.tools.demangler, [], {
 			cwd: workingDirectory,
 			env: environment,
 			cancellationToken,

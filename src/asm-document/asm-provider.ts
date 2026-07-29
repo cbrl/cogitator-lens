@@ -32,7 +32,11 @@ import {
 	UriMap,
 	UriSet,
 } from '../uri-containers.js';
-import { assemblyScheme, getAsmUri, parseAsmUri } from './asm-uri.js';
+import {
+	artifactScheme,
+	getArtifactUri,
+	parseArtifactUri,
+} from './artifact-uri.js';
 import { AsmDecorator } from './asm-decorator.js';
 import { CompiledAssembly } from './compiled-assembly.js';
 import { CompileHandler } from './compile-handler.js';
@@ -45,7 +49,7 @@ const uriComparisonOptions = {
 } as const;
 
 export class AsmProvider implements TextDocumentContentProvider, Disposable {
-	static readonly scheme = assemblyScheme;
+	static readonly scheme = artifactScheme;
 
 	private readonly compileHandlers = new UriMap<CompileHandler>(uriComparisonOptions);
 	private readonly fileWatchers = new UriMap<Disposable>(uriComparisonOptions);
@@ -96,7 +100,7 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 
 		if (sourceDocument?.isDirty && !this.authorizedDirtyCompilations.has(handler.srcUri)) {
 			return this.compiledAssemblies.get(uri)?.getContent()
-				?? 'Source has unsaved changes. Run “Disassemble Current File” to choose which version to compile.';
+				?? 'Source has unsaved changes. Run “Open Artifact” to choose which version to use.';
 		}
 		if (!this.decorators.has(uri)) {
 			this.decorators.set(
@@ -178,7 +182,10 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 			return handler;
 		}
 
-		const identity = parseAsmUri(assemblyUri);
+		const identity = parseArtifactUri(assemblyUri);
+		if (!identity) {
+			throw new CompilationError(`Invalid artifact document URI: ${assemblyUri.toString()}`);
+		}
 		const variant = this.compilationService.getVariants(identity.source)
 			.find(candidate => candidate.id === identity.variantId);
 		if (!variant) {
@@ -188,7 +195,8 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 			identity.source,
 			assemblyUri,
 			variant,
-			identity.outputMode,
+			identity.artifactKind,
+			identity.presetId,
 			this.compilationService,
 		);
 		let assemblyUris = this.sourceToAssembly.get(identity.source);
@@ -310,7 +318,7 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 	}
 }
 
-export { getAsmUri, parseAsmUri } from './asm-uri.js';
+export { getArtifactUri, parseArtifactUri } from './artifact-uri.js';
 
 function toDiagnosticSeverity(severity: CompileDiagnostic['severity']): DiagnosticSeverity {
 	switch (severity) {

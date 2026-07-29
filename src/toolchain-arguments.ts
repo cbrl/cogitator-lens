@@ -1,41 +1,11 @@
 import path from 'path';
 
-const flagsWithSeparateValues = new Set(['-o', '-MF', '-MT', '-MQ', '/Fo', '/Fa', '/Fd']);
-const extensionOwnedFlags = new Set([
-	'-S',
-	'-c',
-	'-M',
-	'-MM',
-	'-MD',
-	'-MMD',
-	'/c',
-	'/FA',
-	'/FAc',
-	'/FAs',
-	'/FAcs',
-]);
-
-export function sanitizeToolchainArguments(
+export function removeSourceArgument(
 	args: readonly string[],
 	sourceFile: string,
 	workingDirectory?: string,
 ): string[] {
-	const result: string[] = [];
-	for (let index = 0; index < args.length; index++) {
-		const argument = args[index];
-		if (samePath(argument, sourceFile, workingDirectory) || extensionOwnedFlags.has(argument)) {
-			continue;
-		}
-		if (flagsWithSeparateValues.has(argument)) {
-			index++;
-			continue;
-		}
-		if (/^(?:-o|-MF|-MT|-MQ|\/Fo|\/Fa|\/Fd).+/.test(argument)) {
-			continue;
-		}
-		result.push(argument);
-	}
-	return result;
+	return args.filter(argument => !samePath(argument, sourceFile, workingDirectory));
 }
 
 export function redactArguments(args: readonly string[]): string[] {
@@ -54,15 +24,13 @@ function samePath(left: string, right: string, workingDirectory?: string): boole
 	if (!left || !right) {
 		return false;
 	}
-	const normalizedLeft = normalizePath(left, workingDirectory);
-	const normalizedRight = normalizePath(right, workingDirectory);
+	const normalizedLeft = workingDirectory && !path.isAbsolute(left)
+		? path.resolve(workingDirectory, left)
+		: path.normalize(left);
+	const normalizedRight = workingDirectory && !path.isAbsolute(right)
+		? path.resolve(workingDirectory, right)
+		: path.normalize(right);
 	return process.platform === 'win32'
 		? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
 		: normalizedLeft === normalizedRight;
-}
-
-function normalizePath(value: string, workingDirectory?: string): string {
-	return workingDirectory && !path.isAbsolute(value)
-		? path.resolve(workingDirectory, value)
-		: path.normalize(value);
 }

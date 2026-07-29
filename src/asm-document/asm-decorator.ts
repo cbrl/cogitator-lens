@@ -1,6 +1,6 @@
 import { TextEditor, window, Range, Event, Uri, Disposable, TextEditorRevealType, TextDocument, TextEditorSelectionChangeEvent } from 'vscode';
 import { CompiledAssembly } from './compiled-assembly';
-import { ParsedAsmResultLine } from '../parsers/asmresult.interfaces';
+import type { RenderedArtifactLine } from '../types/index.js';
 import path from 'path';
 import { equalUri } from '../utils';
 import assert from 'assert';
@@ -142,7 +142,7 @@ export class AsmDecorator {
 		}
 	}
 
-    private asmLineHasSource(asmLine: ParsedAsmResultLine) {
+    private asmLineHasSource(asmLine: RenderedArtifactLine) {
         // eslint-disable-next-line eqeqeq
         return (asmLine.source?.file != null && asmLine.source?.line != null); //checks null or undefined
     }

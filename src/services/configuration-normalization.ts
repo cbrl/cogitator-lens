@@ -1,6 +1,7 @@
 import path from 'path';
 import type {
 	ArtifactOptions,
+	ArtifactKind,
 	DefaultCompilationSettings,
 	ToolchainKind,
 	ToolchainProfile,
@@ -13,35 +14,19 @@ import {
 import {
 	createToolchainProfile,
 	supportedToolchainKinds,
-	toolchainDefinitions,
 } from '../toolchains/toolchain-map.js';
+import {
+	artifactOptionKeysByKind,
+	artifactSettingKeys,
+	defaultInvocationKeys,
+	toolchainSettingKeys,
+} from './settings-descriptors.js';
 
 export type Normalized<T> =
 	| { readonly ok: true; readonly value: T }
 	| { readonly ok: false; readonly errors: readonly [string, ...string[]] };
 
 const toolchainKinds = new Set<ToolchainKind>(supportedToolchainKinds);
-const toolchainKeys = new Set([
-	'name',
-	'type',
-	'exe',
-	'args',
-	'includes',
-	'defines',
-	'env',
-	'tools',
-]);
-const defaultCompilationKeys = new Set([
-	'compiler',
-	'args',
-	'env',
-	'workingDirectory',
-]);
-const artifactOptionKeys = new Set([
-	...Object.keys(defaultArtifactOptions.production),
-	...Object.keys(defaultArtifactOptions.display),
-]);
-
 function failure<T>(errors: string[]): Normalized<T> {
 	if (errors.length === 0) {
 		throw new Error('A failed normalization must contain at least one error');
@@ -95,7 +80,7 @@ export function normalizeToolchainSettings(raw: unknown): Normalized<ToolchainPr
 	}
 
 	const value = raw as Record<string, unknown>;
-	rejectUnknownKeys(value, toolchainKeys, errors);
+	rejectUnknownKeys(value, toolchainSettingKeys, errors);
 
 	const name = typeof value.name === 'string' ? value.name.trim() : '';
 	const executable = typeof value.exe === 'string' ? value.exe.trim() : '';
@@ -111,8 +96,6 @@ export function normalizeToolchainSettings(raw: unknown): Normalized<ToolchainPr
 	}
 
 	const args = stringArray(value.args, 'args', errors);
-	const includes = stringArray(value.includes, 'includes', errors);
-	const defines = stringArray(value.defines, 'defines', errors);
 	const environment = stringRecord(value.env, 'env', errors);
 	const tools = stringRecord(value.tools, 'tools', errors);
 	if (errors.length > 0) {
@@ -120,16 +103,11 @@ export function normalizeToolchainSettings(raw: unknown): Normalized<ToolchainPr
 	}
 
 	const toolchainKind = kind as ToolchainKind;
-	const definition = toolchainDefinitions[toolchainKind];
 	return {
 		ok: true,
 		value: createToolchainProfile(toolchainKind, name, path.normalize(executable), {
 			id: name,
-			defaultArguments: [
-				...args,
-				...includes.map(item => `${definition.includeFlag}${item}`),
-				...defines.map(item => `${definition.defineFlag}${item}`),
-			],
+			defaultArguments: args,
 			environment,
 			tools,
 		}),
@@ -150,14 +128,14 @@ export function toolchainProfileToSettings(profile: ToolchainProfile): Toolchain
 export function normalizeDefaultCompilationSettings(raw: unknown): Normalized<DefaultCompilationSettings> {
 	const errors: string[] = [];
 	if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-		return failure(['defaultCompileInfo must be an object']);
+		return failure(['defaultInvocation must be an object']);
 	}
 
 	const value = raw as Record<string, unknown>;
-	rejectUnknownKeys(value, defaultCompilationKeys, errors);
-	const toolchain = typeof value.compiler === 'string' ? value.compiler.trim() : '';
+	rejectUnknownKeys(value, defaultInvocationKeys, errors);
+	const toolchain = typeof value.toolchain === 'string' ? value.toolchain.trim() : '';
 	if (!toolchain) {
-		errors.push('compiler must be a non-empty string');
+		errors.push('toolchain must be a non-empty string');
 	}
 	const args = stringArray(value.args, 'args', errors);
 	const environment = stringRecord(value.env, 'env', errors);
@@ -179,13 +157,24 @@ export function normalizeDefaultCompilationSettings(raw: unknown): Normalized<De
 	};
 }
 
-export function normalizeArtifactOptions(raw: unknown): Normalized<ArtifactOptions> {
+export function normalizeArtifactOptions(
+	raw: unknown,
+	kind: ArtifactKind,
+): Normalized<ArtifactOptions> {
 	const errors: string[] = [];
 	if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-		return failure(['filters must be an object']);
+		return failure(['artifactOptions must be an object keyed by artifact kind']);
 	}
-	const value = raw as Record<string, unknown>;
-	rejectUnknownKeys(value, artifactOptionKeys, errors);
+	const settings = raw as Record<string, unknown>;
+	rejectUnknownKeys(settings, artifactSettingKeys, errors);
+	const selected = settings[kind] ?? {};
+	if (typeof selected !== 'object' || selected === null || Array.isArray(selected)) {
+		errors.push(`${kind} must be an object`);
+	}
+	const value = typeof selected === 'object' && selected !== null && !Array.isArray(selected)
+		? selected as Record<string, unknown>
+		: {};
+	rejectUnknownKeys(value, artifactOptionKeysByKind[kind], errors);
 	for (const [name, option] of Object.entries(value)) {
 		if (typeof option !== 'boolean') {
 			errors.push(`${name} must be a boolean`);

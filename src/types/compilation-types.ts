@@ -4,8 +4,9 @@
  */
 
 import type { CancellationToken, Uri } from 'vscode';
-import type { ParsedAsmResult } from '../parsers/asmresult.interfaces.js';
 import type { ArtifactOptions } from './artifact-options.js';
+import type { ToolchainProfile } from './toolchain-types.js';
+import type { ArtifactKind } from '../artifacts/artifact-definitions.js';
 
 export interface CompilationVariant {
 	id: string;
@@ -21,11 +22,12 @@ export interface CompilationVariant {
 	displayLabel: string;
 }
 
-export type CompilationOutputMode = 'assembly';
-
 export interface ArtifactRequest {
 	variant: CompilationVariant;
-	outputMode: CompilationOutputMode;
+	toolchain: ToolchainProfile;
+	artifactKind: ArtifactKind;
+	presetId: string;
+	extraArguments: readonly string[];
 	options: ArtifactOptions;
 	cancellationToken: CancellationToken;
 }
@@ -38,18 +40,100 @@ export interface CompileDiagnostic {
 	message: string;
 }
 
-export interface RenderedArtifact {
-	result: ParsedAsmResult;
-	rawAssembly: string;
+export interface ArtifactCommand {
+	executable: string;
+	arguments: readonly string[];
+	environmentVariableNames: readonly string[];
+	workingDirectory: string;
+}
+
+export interface RawArtifact {
+	kind: ArtifactKind;
+	text: string;
 	diagnostics: readonly CompileDiagnostic[];
 	durationMs: number;
-	command: {
-		executable: string;
-		arguments: readonly string[];
-		environmentVariableNames: readonly string[];
-		workingDirectory: string;
-	};
+	command: ArtifactCommand;
 	truncated: boolean;
+}
+
+export interface ArtifactSourceLocation {
+	readonly line: number;
+	readonly uri: string;
+	readonly sourceLine: number;
+}
+
+export interface RenderedArtifactLineSource {
+	readonly file: string | null;
+	readonly line: number | null;
+	readonly column?: number;
+	readonly mainSource?: boolean;
+}
+
+export interface RenderedArtifactLine {
+	readonly text: string;
+	readonly opcodes?: readonly string[];
+	readonly address?: number;
+	readonly disassembly?: string;
+	readonly source?: RenderedArtifactLineSource | null;
+}
+
+export interface ArtifactLink {
+	readonly line: number;
+	readonly startCharacter: number;
+	readonly endCharacter: number;
+	readonly targetLine: number;
+}
+
+export interface ArtifactFold {
+	readonly startLine: number;
+	readonly endLine: number;
+}
+
+export interface ArtifactSymbol {
+	readonly name: string;
+	readonly line: number;
+}
+
+export interface RenderedArtifact {
+	readonly kind: ArtifactKind;
+	readonly lines: readonly RenderedArtifactLine[];
+	readonly sourceLocations: readonly ArtifactSourceLocation[];
+	readonly links: readonly ArtifactLink[];
+	readonly folds: readonly ArtifactFold[];
+	readonly symbols: readonly ArtifactSymbol[];
+	readonly metrics: Readonly<Record<string, unknown>>;
+	readonly raw: RawArtifact;
+	readonly diagnostics: readonly CompileDiagnostic[];
+	readonly durationMs: number;
+	readonly command: ArtifactCommand;
+	readonly truncated: boolean;
+}
+
+export type ArtifactProductionResult =
+	| { readonly status: 'available'; readonly artifact: RenderedArtifact }
+	| { readonly status: 'unavailable' | 'unsupported'; readonly explanation: string };
+
+export interface SourceState {
+	readonly size: number;
+	readonly mtimeMs: number;
+}
+
+export type ProductionKey = string & { readonly brand: unique symbol };
+
+export function productionKey(
+	request: ArtifactRequest,
+	source: SourceState,
+): ProductionKey {
+	const {
+		cancellationToken: _cancellationToken,
+		options,
+		...productionInputs
+	} = request;
+	return JSON.stringify({
+		...productionInputs,
+		options: { production: options.production },
+		source,
+	}) as ProductionKey;
 }
 
 export class CompilationError extends Error {

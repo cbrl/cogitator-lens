@@ -9,7 +9,9 @@ import type {
 	CompilationVariant,
 	ArtifactOptions,
 	ArtifactOptionId,
-	RenderedArtifact,
+	ArtifactKind,
+	ArtifactProductionResult,
+	ArtifactOptionAvailability,
 	ArtifactRequest,
 	ToolchainProfile,
 	DefaultCompilationSettings,
@@ -23,6 +25,7 @@ export interface IToolchainRegistry {
 	getProfiles(origin?: ConfigurationOrigin): readonly ToolchainProfile[];
 	getToolchainById(id: string): ToolchainBackend | undefined;
 	findToolchainByDisplayName(displayName: string): ToolchainBackend | undefined;
+	getArtifactAvailability(id: string, kind: ArtifactKind): ArtifactOptionAvailability;
 	reconcile(
 		origin: ConfigurationOrigin,
 		profiles: readonly ToolchainProfile[],
@@ -33,24 +36,28 @@ export interface IConfigurationService {
 	readonly onDidChange: Event<void>;
 	getToolchains(scope?: Uri): ToolchainProfile[];
 	getDefaultCompilationSettings(scope?: Uri): DefaultCompilationSettings | undefined;
-	getArtifactOptions(scope?: Uri): ArtifactOptions;
+	getArtifactOptions(kind: ArtifactKind, scope?: Uri): ArtifactOptions;
 	getDimUnusedSourceLines(uri: Uri): boolean;
 	updateToolchains(profiles: readonly ToolchainProfile[], folder?: WorkspaceFolder): Thenable<void>;
-	updateArtifactOptions(options: ArtifactOptions, folder?: WorkspaceFolder): Thenable<void>;
+	updateArtifactOptions(
+		kind: ArtifactKind,
+		options: ArtifactOptions,
+		folder?: WorkspaceFolder,
+	): Thenable<void>;
 }
 
 export interface ICompilationService extends Disposable {
 	readonly toolchainRegistry: IToolchainRegistry;
 	readonly onVariantsChanged: Event<readonly Uri[]>;
-	readonly onArtifactOptionsChanged: Event<void>;
-	readonly artifactOptions: ArtifactOptions;
-	setArtifactOption(id: ArtifactOptionId, value: boolean): void;
+	readonly onArtifactOptionsChanged: Event<ArtifactKind>;
+	getArtifactOptions(kind: ArtifactKind): ArtifactOptions;
+	setArtifactOption(kind: ArtifactKind, id: ArtifactOptionId, value: boolean): void;
 	getVariants(file: Uri): readonly CompilationVariant[];
 	getAllSources(): readonly Uri[];
 	getSelectedVariant(file: Uri): CompilationVariant | undefined;
 	selectVariant(file: Uri, variantId: string): Promise<boolean>;
 	reconcileProviderSnapshot(snapshot: ProviderSnapshot): void;
-	compile(request: ArtifactRequest): Promise<RenderedArtifact>;
+	compile(request: ArtifactRequest): Promise<ArtifactProductionResult>;
 }
 
 export interface IVariantProvider extends Disposable {

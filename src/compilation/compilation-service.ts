@@ -11,20 +11,31 @@ import fs from 'fs';
 import path from 'path';
 import type { ICompilationService, IConfigurationService } from '../interfaces/index.js';
 import type {
-	CompilationVariant,
-	RenderedArtifact,
-	ArtifactRequest,
+	ArtifactKind,
 	ArtifactOptionId,
 	ArtifactOptions,
+	ArtifactProductionResult,
+	ArtifactRequest,
+	CompilationVariant,
 	ProviderSnapshot,
+	RawArtifact,
+	RenderedArtifact,
+	SourceState,
 } from '../types/index.js';
 import {
 	artifactOptionsEqual,
 	CompilationError,
 	immutableArtifactOptions,
+	productionKey,
 } from '../types/index.js';
-import { ToolExitError, type ToolchainRunResult } from '../toolchains/toolchain-backend.js';
-import { ExecError } from '../exec.js';
+import { ToolExitError } from '../toolchains/toolchain-backend.js';
+import { ExecError, ToolExecutionGate } from '../tool-execution.js';
+import {
+	artifactDefinitions,
+	defaultOptionsFor,
+	supportedArtifactKinds,
+} from '../artifacts/artifact-definitions.js';
+import { resolveArtifactAvailability } from '../toolchains/toolchain-map.js';
 import { ToolchainRegistry } from './toolchain-registry.js';
 import { CompilationConfigDatabase } from './compilation-config.js';
 import { CompilationSemaphore } from './compilation-semaphore.js';
@@ -32,53 +43,59 @@ import { parseToolDiagnostics } from '../diagnostics.js';
 import * as logger from '../logger.js';
 
 export class CompilationService implements ICompilationService {
-	readonly toolchainRegistry = new ToolchainRegistry();
+	readonly toolchainRegistry: ToolchainRegistry;
 	private readonly variants = new CompilationConfigDatabase();
 	private readonly changeEmitter = new EventEmitter<readonly Uri[]>();
-	private readonly artifactOptionsChangeEmitter = new EventEmitter<void>();
+	private readonly artifactOptionsChangeEmitter = new EventEmitter<ArtifactKind>();
 	private readonly subscriptions: Disposable[] = [];
 	private readonly semaphore = new CompilationSemaphore(2, () => new CancellationError());
-	private readonly rawAssemblyCache = new Map<string, {
-		signature: string;
-		run: ToolchainRunResult;
-	}>();
-	private currentArtifactOptions: ArtifactOptions;
+	private readonly rawArtifactCache = new Map<string, RawArtifact>();
+	private readonly currentArtifactOptions = new Map<ArtifactKind, ArtifactOptions>();
 
 	readonly onVariantsChanged: Event<readonly Uri[]> = this.changeEmitter.event;
-	readonly onArtifactOptionsChanged: Event<void> = this.artifactOptionsChangeEmitter.event;
+	readonly onArtifactOptionsChanged: Event<ArtifactKind> = this.artifactOptionsChangeEmitter.event;
 
 	constructor(
 		private readonly configuration: IConfigurationService,
 		private readonly workspaceState?: Memento,
+		execution?: ToolExecutionGate,
 	) {
-		this.currentArtifactOptions = configuration.getArtifactOptions();
+		this.toolchainRegistry = new ToolchainRegistry(execution);
+		for (const kind of supportedArtifactKinds) {
+			this.currentArtifactOptions.set(kind, configuration.getArtifactOptions(kind));
+		}
 		this.reloadUserConfiguration();
 		this.subscriptions.push(
 			configuration.onDidChange(() => this.reloadUserConfiguration()),
 			this.variants.onDidChange(change => this.changeEmitter.fire(change.affectedSources)),
-			this.toolchainRegistry.onDidChange(() => this.changeEmitter.fire(this.variantsSources())),
+			this.toolchainRegistry.onDidChange(() => {
+				this.rawArtifactCache.clear();
+				this.changeEmitter.fire(this.variantsSources());
+			}),
 		);
 	}
 
-	get artifactOptions(): ArtifactOptions {
-		return this.currentArtifactOptions;
+	getArtifactOptions(kind: ArtifactKind): ArtifactOptions {
+		return this.currentArtifactOptions.get(kind)
+			?? immutableArtifactOptions(defaultOptionsFor(kind));
 	}
 
-	setArtifactOption(id: ArtifactOptionId, value: boolean): void {
-		const production = Object.hasOwn(this.currentArtifactOptions.production, id)
-			? { ...this.currentArtifactOptions.production, [id]: value }
-			: this.currentArtifactOptions.production;
-		const display = Object.hasOwn(this.currentArtifactOptions.display, id)
-			? { ...this.currentArtifactOptions.display, [id]: value }
-			: this.currentArtifactOptions.display;
+	setArtifactOption(kind: ArtifactKind, id: ArtifactOptionId, value: boolean): void {
+		const current = this.getArtifactOptions(kind);
+		const production = Object.hasOwn(current.production, id)
+			? { ...current.production, [id]: value }
+			: current.production;
+		const display = Object.hasOwn(current.display, id)
+			? { ...current.display, [id]: value }
+			: current.display;
 		const options = immutableArtifactOptions({ production, display });
-		if (artifactOptionsEqual(this.currentArtifactOptions, options)) {
+		if (artifactOptionsEqual(current, options)) {
 			return;
 		}
-		this.currentArtifactOptions = options;
-		this.artifactOptionsChangeEmitter.fire();
+		this.currentArtifactOptions.set(kind, options);
+		this.artifactOptionsChangeEmitter.fire(kind);
 		const folder = workspace.workspaceFolders?.[0];
-		void this.configuration.updateArtifactOptions(options, folder);
+		void this.configuration.updateArtifactOptions(kind, options, folder);
 	}
 
 	getVariants(file: Uri): readonly CompilationVariant[] {
@@ -125,25 +142,45 @@ export class CompilationService implements ICompilationService {
 		}
 	}
 
-	async compile(request: ArtifactRequest): Promise<RenderedArtifact> {
-		const { variant, outputMode, options, cancellationToken } = request;
-		const file = variant.source;
+	async compile(request: ArtifactRequest): Promise<ArtifactProductionResult> {
+		const { variant, artifactKind, options, cancellationToken } = request;
 		if (cancellationToken.isCancellationRequested) {
 			throw new CancellationError();
 		}
-		if (outputMode !== 'assembly') {
-			throw new CompilationError(`Unsupported compilation output mode: ${outputMode as string}`);
-		}
-		const backend = this.toolchainRegistry.getToolchainById(variant.toolchainProfileId);
-		if (!backend) {
-			throw new CompilationError(`Toolchain profile not found: ${variant.toolchainProfileId}`);
+
+		const source = await readSourceState(variant.source);
+		if (!source.ok) {
+			return {
+				status: 'unavailable',
+				explanation: source.explanation,
+			};
 		}
 
-		const cacheKey = `${file.toString()}\0${variant.id}\0${outputMode}`;
-		const signature = await this.compileSignature(variant, backend.profile, options.production);
-		const cached = this.rawAssemblyCache.get(cacheKey);
-		if (cached?.signature === signature) {
-			return this.createArtifact(backend, cached.run, variant, options.display);
+		const backend = this.toolchainRegistry.getToolchainById(variant.toolchainProfileId);
+		if (!backend) {
+			return {
+				status: 'unavailable',
+				explanation: `Toolchain profile not found: ${variant.toolchainProfileId}`,
+			};
+		}
+		if (JSON.stringify(request.toolchain) !== JSON.stringify(backend.profile)) {
+			return {
+				status: 'unavailable',
+				explanation: `Toolchain profile changed while preparing the ${artifactKind} request.`,
+			};
+		}
+		const cell = resolveArtifactAvailability(backend.profile, artifactKind);
+		if (cell.status !== 'available') {
+			return cell;
+		}
+
+		const key = productionKey(request, source.value);
+		const cached = this.rawArtifactCache.get(key);
+		if (cached) {
+			return {
+				status: 'available',
+				artifact: this.renderArtifact(backend, cached, options),
+			};
 		}
 
 		await this.semaphore.acquire(cancellationToken);
@@ -152,15 +189,31 @@ export class CompilationService implements ICompilationService {
 				throw new CancellationError();
 			}
 
+			const afterWait = this.rawArtifactCache.get(key);
+			if (afterWait) {
+				return {
+					status: 'available',
+					artifact: this.renderArtifact(backend, afterWait, options),
+				};
+			}
+
 			try {
-				const run = await backend.compile(file.fsPath, {
-					args: variant.arguments,
-					env: variant.environment,
-					workingDirectory: variant.workingDirectory,
-					productionOptions: options.production,
-				}, cancellationToken);
-				this.rawAssemblyCache.set(cacheKey, { signature, run });
-				return this.createArtifact(backend, run, variant, options.display);
+				const raw = await cell.producer(
+					backend,
+					variant.source,
+					{
+						args: [...variant.arguments, ...request.extraArguments],
+						env: variant.environment,
+						workingDirectory: variant.workingDirectory,
+						productionOptions: options.production,
+					},
+					cancellationToken,
+				);
+				this.rawArtifactCache.set(key, raw);
+				return {
+					status: 'available',
+					artifact: this.renderArtifact(backend, raw, options),
+				};
 			} catch (error: unknown) {
 				if (error instanceof CancellationError || cancellationToken.isCancellationRequested) {
 					throw new CancellationError();
@@ -171,7 +224,7 @@ export class CompilationService implements ICompilationService {
 				const output = toolErrorOutput(error);
 				const diagnostics = parseToolDiagnostics(
 					`${output.stderr}\n${output.stdout}`,
-					file,
+					variant.source,
 					variant.workingDirectory,
 				);
 				const message = error instanceof Error ? error.message : String(error);
@@ -193,18 +246,16 @@ export class CompilationService implements ICompilationService {
 		this.artifactOptionsChangeEmitter.dispose();
 		this.variants.dispose();
 		this.toolchainRegistry.dispose();
-		this.rawAssemblyCache.clear();
+		this.rawArtifactCache.clear();
 	}
 
-	private createArtifact(
+	private renderArtifact(
 		backend: import('../toolchains/toolchain-backend.js').ToolchainBackend,
-		run: ToolchainRunResult,
-		variant: CompilationVariant,
-		options: import('../types/index.js').DisplayOptions,
+		raw: RawArtifact,
+		options: ArtifactOptions,
 	): RenderedArtifact {
-		let result;
 		try {
-			result = backend.parseAssembly(run.rawAssembly, options);
+			return artifactDefinitions[raw.kind].renderer(raw, options.display, backend);
 		} catch (error: unknown) {
 			throw new CompilationError(
 				error instanceof Error ? error.message : String(error),
@@ -213,43 +264,17 @@ export class CompilationService implements ICompilationService {
 				{ cause: error instanceof Error ? error : undefined },
 			);
 		}
-		return {
-			result,
-			rawAssembly: run.rawAssembly,
-			diagnostics: parseToolDiagnostics(
-				`${run.stderr}\n${run.stdout}`,
-				variant.source,
-				variant.workingDirectory,
-			),
-			durationMs: run.durationMs,
-			command: run.command,
-			truncated: run.truncated || result.asm.some(line =>
-				line.text.includes('[truncated; too many lines]')),
-		};
-	}
-
-	private async compileSignature(
-		variant: CompilationVariant,
-		profile: import('../types/index.js').ToolchainProfile,
-		productionOptions: import('../types/index.js').ProductionOptions,
-	): Promise<string> {
-		let sourceState: { size: number; mtimeMs: number };
-		try {
-			const stat = await fs.promises.stat(variant.source.fsPath);
-			sourceState = { size: stat.size, mtimeMs: stat.mtimeMs };
-		} catch {
-			sourceState = { size: -1, mtimeMs: -1 };
-		}
-		return JSON.stringify({ variant, profile, productionOptions, sourceState });
 	}
 
 	private reloadUserConfiguration(): void {
 		try {
 			this.toolchainRegistry.reconcile('user', this.configuration.getToolchains());
-			const options = this.configuration.getArtifactOptions();
-			if (!artifactOptionsEqual(this.currentArtifactOptions, options)) {
-				this.currentArtifactOptions = options;
-				this.artifactOptionsChangeEmitter.fire();
+			for (const kind of supportedArtifactKinds) {
+				const options = this.configuration.getArtifactOptions(kind);
+				if (!artifactOptionsEqual(this.getArtifactOptions(kind), options)) {
+					this.currentArtifactOptions.set(kind, options);
+					this.artifactOptionsChangeEmitter.fire(kind);
+				}
 			}
 		} catch (error) {
 			logger.logChannel.error(`Failed to reload Cogitator Lens configuration: ${String(error)}`);
@@ -270,7 +295,9 @@ export class CompilationService implements ICompilationService {
 			provider: 'default',
 			source: file,
 			toolchainProfileId: backend.profile.id,
-			workingDirectory: info.workingDirectory ?? workspace.getWorkspaceFolder(file)?.uri.fsPath ?? path.dirname(file.fsPath),
+			workingDirectory: info.workingDirectory
+				?? workspace.getWorkspaceFolder(file)?.uri.fsPath
+				?? path.dirname(file.fsPath),
 			arguments: info.args,
 			environment: info.env ?? {},
 			displayLabel: `Default (${backend.profile.displayName})`,
@@ -283,6 +310,34 @@ export class CompilationService implements ICompilationService {
 
 	private selectionKey(file: Uri): string {
 		return `coglens.variant.${file.toString()}`;
+	}
+}
+
+async function readSourceState(
+	source: Uri,
+): Promise<
+	| { readonly ok: true; readonly value: SourceState }
+	| { readonly ok: false; readonly explanation: string }
+> {
+	try {
+		await fs.promises.access(source.fsPath, fs.constants.R_OK);
+		const stat = await fs.promises.stat(source.fsPath);
+		if (!stat.isFile()) {
+			return {
+				ok: false,
+				explanation: `Source is unavailable because it is not a readable file: ${source.fsPath}`,
+			};
+		}
+		return {
+			ok: true,
+			value: { size: stat.size, mtimeMs: stat.mtimeMs },
+		};
+	} catch (error) {
+		const reason = error instanceof Error ? error.message : String(error);
+		return {
+			ok: false,
+			explanation: `Source is unavailable or unreadable: ${source.fsPath} (${reason})`,
+		};
 	}
 }
 

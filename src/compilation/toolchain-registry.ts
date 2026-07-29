@@ -1,9 +1,21 @@
 import { Disposable, Event, EventEmitter } from 'vscode';
 import type { IToolchainRegistry } from '../interfaces/index.js';
-import type { ToolchainProfile, ReconciliationChange } from '../types/index.js';
+import type {
+	ArtifactKind,
+	ArtifactOptionAvailability,
+	ToolchainProfile,
+	ReconciliationChange,
+} from '../types/index.js';
 import { ToolchainBackend } from '../toolchains/toolchain-backend.js';
-import { getToolchainDefinition } from '../toolchains/toolchain-map.js';
+import {
+	getToolchainDefinition,
+	resolveArtifactAvailability,
+} from '../toolchains/toolchain-map.js';
 import type { ConfigurationOrigin } from '../buildsystems/variant-provider.js';
+import {
+	ToolExecutionGate,
+	trustedToolExecution,
+} from '../tool-execution.js';
 
 interface RegistryEntry {
 	origin: ConfigurationOrigin;
@@ -16,6 +28,8 @@ export class ToolchainRegistry implements IToolchainRegistry, Disposable {
 	private readonly changeEmitter = new EventEmitter<ReconciliationChange<ToolchainProfile>>();
 
 	readonly onDidChange: Event<ReconciliationChange<ToolchainProfile>> = this.changeEmitter.event;
+
+	constructor(private readonly execution: ToolExecutionGate = trustedToolExecution) {}
 
 	getProfiles(origin?: ConfigurationOrigin): readonly ToolchainProfile[] {
 		return [...this.entries.values()]
@@ -31,6 +45,18 @@ export class ToolchainRegistry implements IToolchainRegistry, Disposable {
 		return [...this.entries.values()]
 			.find(entry => entry.profile.displayName === displayName)
 			?.backend;
+	}
+
+	getArtifactAvailability(id: string, kind: ArtifactKind): ArtifactOptionAvailability {
+		const backend = this.getToolchainById(id);
+		if (!backend) {
+			return {
+				status: 'unavailable',
+				explanation: `Toolchain profile not found: ${id}`,
+			};
+		}
+		const cell = resolveArtifactAvailability(backend.profile, kind);
+		return cell.status === 'available' ? { status: 'available' } : cell;
 	}
 
 	getOrigin(id: string): ConfigurationOrigin | undefined {
@@ -91,7 +117,7 @@ export class ToolchainRegistry implements IToolchainRegistry, Disposable {
 		return {
 			origin,
 			profile,
-			backend: new definition.Adapter(profile, definition.capabilities),
+			backend: new definition.Adapter(profile, definition.capabilities, this.execution),
 		};
 	}
 }

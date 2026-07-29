@@ -1,95 +1,82 @@
 import vscode from 'vscode';
 import { CompilationService } from '../compilation/index.js';
 import type {
+	ArtifactKind,
 	ArtifactOptionId,
 	ArtifactOptions,
 	ToolchainProfile,
 } from '../types/index.js';
-import { parseAsmUri } from '../asm-document/asm-uri.js';
+import { parseArtifactUri } from '../asm-document/artifact-uri.js';
 import { TreeItem, TreeNode, TreeProvider } from './treedata.js';
-import { resolveToolchainCapabilities } from '../toolchains/toolchain-map.js';
+import {
+	resolveArtifactAvailability,
+	resolveArtifactOptionAvailability,
+} from '../toolchains/toolchain-map.js';
+import { artifactDefinitions } from '../artifacts/artifact-definitions.js';
 
-interface OptionCapability {
-	readonly enabled: boolean;
-	readonly explanation?: string;
-	readonly description?: string;
+interface SelectedArtifact {
+	readonly profile?: ToolchainProfile;
+	readonly kind: ArtifactKind;
 }
 
 export class GlobalOptionsNode extends TreeNode {
+	artifactKind?: ArtifactKind;
+
 	static createFilterTree(
 		options: ArtifactOptions,
 		profile?: ToolchainProfile,
+		kind: ArtifactKind = 'assembly',
 	): GlobalOptionsNode[] {
-		const displayDefinitions: Array<{
-			label: string;
-			id: ArtifactOptionId;
-			tooltip: string;
-			capability?: OptionCapability;
-		}> = [
-			{ label: 'Hide unused labels', id: 'labels', tooltip: 'Remove labels that are not referenced' },
-			{
-				label: 'Hide library code',
-				id: 'libraryCode',
-				tooltip: 'Hide code from system libraries',
-				capability: libraryCodeCapability(profile),
-			},
-			{ label: 'Hide directives', id: 'directives', tooltip: 'Hide assembler directives' },
-			{ label: 'Hide comment-only lines', id: 'commentOnly', tooltip: 'Remove comment-only lines' },
-			{ label: 'Trim horizontal whitespace', id: 'trim', tooltip: 'Remove excessive horizontal whitespace' },
-			{
-				label: 'Show full filenames',
-				id: 'dontMaskFilenames',
-				tooltip: 'Keep source filenames visible in parsed assembly',
-			},
-		];
-		const outputDefinitions: Array<{
-			label: string;
-			id: ArtifactOptionId;
-			tooltip: string;
-			capability: OptionCapability;
-		}> = [
-			{
-				label: 'Intel syntax',
-				id: 'intel',
-				tooltip: 'Emit Intel syntax when supported by the selected toolchain',
-				capability: intelCapability(profile),
-			},
-			{
-				label: 'Demangle symbols',
-				id: 'demangle',
-				tooltip: 'Run the configured demangler before parsing assembly',
-				capability: demangleCapability(profile),
-			},
-		];
+		if (!profile) {
+			return [{
+				label: 'No toolchain selected',
+				description: 'Open a supported source file',
+				tooltip: 'Open a source file with a compilation variant to configure artifact options.',
+				nodeType: 'text',
+				disabled: true,
+			}];
+		}
 
-		return [
-			{
-				label: 'Output Options',
+		const availability = resolveArtifactAvailability(profile, kind);
+		if (availability.status !== 'available') {
+			return [{
+				label: artifactDefinitions[kind].label,
+				description: availability.status === 'unsupported' ? 'Unsupported' : 'Unavailable',
+				tooltip: availability.explanation,
+				nodeType: 'text',
+				disabled: true,
+			}];
+		}
+
+		const descriptors = artifactDefinitions[kind].options;
+		const production = descriptors.filter(descriptor => descriptor.group === 'production');
+		const display = descriptors.filter(descriptor => descriptor.group === 'display');
+		const groups: GlobalOptionsNode[] = [];
+		if (production.length) {
+			groups.push({
+				label: 'Production Options',
 				nodeType: 'subtree',
 				iconPath: new vscode.ThemeIcon('settings-gear'),
-				children: outputDefinitions.map(definition => optionNode(options, definition)),
-			},
-			{
-				label: 'Output Filters',
+				children: production.map(descriptor =>
+					optionNode(options, profile, kind, descriptor)),
+			});
+		}
+		if (display.length) {
+			groups.push({
+				label: 'Display Options',
 				nodeType: 'subtree',
 				iconPath: new vscode.ThemeIcon('filter'),
-				children: displayDefinitions.map(definition =>
-					definition.capability
-						? optionNode(options, {
-							...definition,
-							capability: definition.capability,
-						})
-						: {
-							label: definition.label,
-							nodeType: 'checkbox',
-							treeContext: 'filters',
-							optionId: definition.id,
-							checked: optionValue(options, definition.id),
-							tooltip: definition.tooltip,
-						}
-				),
-			},
-		];
+				children: display.map(descriptor =>
+					optionNode(options, profile, kind, descriptor)),
+			});
+		}
+		return groups.length
+			? groups
+			: [{
+				label: 'No options',
+				description: artifactDefinitions[kind].label,
+				nodeType: 'text',
+			}];
 	}
 }
 
@@ -103,114 +90,70 @@ export class GlobalOptionsTreeProvider extends TreeProvider<GlobalOptionsNode> {
 	}
 
 	protected createChildren(element?: GlobalOptionsNode): GlobalOptionsNode[] | undefined {
-		return element?.children as GlobalOptionsNode[] | undefined
-			?? GlobalOptionsNode.createFilterTree(
-				this.compilationService.artifactOptions,
-				this.selectedToolchainProfile(),
-			);
+		if (element?.children) {
+			return element.children as GlobalOptionsNode[];
+		}
+		const selected = this.selectedArtifact();
+		return GlobalOptionsNode.createFilterTree(
+			this.compilationService.getArtifactOptions(selected.kind),
+			selected.profile,
+			selected.kind,
+		);
 	}
 
-	private selectedToolchainProfile(): ToolchainProfile | undefined {
+	get activeArtifactKind(): ArtifactKind {
+		return this.selectedArtifact().kind;
+	}
+
+	private selectedArtifact(): SelectedArtifact {
 		let source = vscode.window.activeTextEditor?.document.uri;
-		if (source?.scheme === 'assembly') {
-			try {
-				source = parseAsmUri(source).source;
-			} catch {
-				source = undefined;
-			}
+		let kind: ArtifactKind = 'assembly';
+		const identity = source ? parseArtifactUri(source) : undefined;
+		if (identity) {
+			source = identity.source;
+			kind = identity.artifactKind;
 		}
 		if (!source || source.scheme !== 'file') {
 			source = vscode.window.visibleTextEditors.find(editor =>
 				editor.document.uri.scheme === 'file')?.document.uri;
 		}
 		const variant = source ? this.compilationService.getSelectedVariant(source) : undefined;
-		return variant
-			? this.compilationService.toolchainRegistry.getToolchainById(variant.toolchainProfileId)?.profile
-			: undefined;
+		return {
+			kind,
+			profile: variant
+				? this.compilationService.toolchainRegistry
+					.getToolchainById(variant.toolchainProfileId)?.profile
+				: undefined,
+		};
 	}
 }
 
 function optionNode(
 	options: ArtifactOptions,
-	definition: {
-		label: string;
-		id: ArtifactOptionId;
-		tooltip: string;
-		capability: OptionCapability;
-	},
+	profile: ToolchainProfile,
+	kind: ArtifactKind,
+	descriptor: (typeof artifactDefinitions)[ArtifactKind]['options'][number],
 ): GlobalOptionsNode {
+	const capability = resolveArtifactOptionAvailability(profile, kind, descriptor.id);
 	return {
-		label: definition.label,
+		label: descriptor.label,
 		nodeType: 'checkbox',
-		treeContext: 'filters',
-		optionId: definition.id,
-		checked: optionValue(options, definition.id),
-		tooltip: definition.capability.explanation ?? definition.tooltip,
-		description: definition.capability.description,
-		disabled: !definition.capability.enabled,
+		treeContext: 'options',
+		artifactKind: kind,
+		optionId: descriptor.id,
+		checked: optionValue(options, descriptor.id),
+		tooltip: capability.status === 'available'
+			? descriptor.description
+			: capability.explanation,
+		description: capability.status === 'available'
+			? undefined
+			: capability.status === 'unsupported'
+				? 'Unsupported'
+				: descriptor.id === 'intel' && capability.explanation.includes('already emits')
+					? 'Inherent'
+					: 'Unavailable',
+		disabled: capability.status !== 'available',
 	};
-}
-
-function intelCapability(profile?: ToolchainProfile): OptionCapability {
-	if (!profile) {
-		return {
-			enabled: false,
-			description: 'No toolchain selected',
-			explanation: 'Open a source file with a compilation variant to configure Intel syntax.',
-		};
-	}
-	const capability = resolveToolchainCapabilities(profile).intelSyntax;
-	if (capability === 'inherent') {
-		return {
-			enabled: false,
-			description: 'Inherent',
-			explanation: `${profile.displayName} already emits Intel syntax; no output option is required.`,
-		};
-	}
-	return capability === 'selectable'
-		? { enabled: true }
-		: {
-			enabled: false,
-			description: 'Unsupported',
-			explanation: `${profile.displayName} does not support selectable Intel syntax.`,
-		};
-}
-
-function demangleCapability(profile?: ToolchainProfile): OptionCapability {
-	if (!profile) {
-		return {
-			enabled: false,
-			description: 'No toolchain selected',
-			explanation: 'Open a source file with a compilation variant to configure demangling.',
-		};
-	}
-	const capability = resolveToolchainCapabilities(profile).demangle;
-	return capability === 'available'
-		? { enabled: true }
-		: {
-			enabled: false,
-			description: capability === 'unsupported' ? 'Unsupported' : 'Unavailable',
-			explanation: capability === 'unsupported'
-				? `${profile.displayName} does not support symbol demangling.`
-				: `No demangler was detected or configured for ${profile.displayName}.`,
-		};
-}
-
-function libraryCodeCapability(profile?: ToolchainProfile): OptionCapability {
-	if (!profile) {
-		return {
-			enabled: false,
-			description: 'No toolchain selected',
-			explanation: 'Open a source file with a compilation variant to configure library-code filtering.',
-		};
-	}
-	return resolveToolchainCapabilities(profile).libraryCodeFilter === 'available'
-		? { enabled: true }
-		: {
-			enabled: false,
-			description: 'Unsupported',
-			explanation: `${profile.displayName} does not support library-code filtering.`,
-		};
 }
 
 function optionValue(options: ArtifactOptions, id: ArtifactOptionId): boolean {

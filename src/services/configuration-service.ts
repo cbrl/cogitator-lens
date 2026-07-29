@@ -10,10 +10,12 @@ import {
 import type { IConfigurationService } from '../interfaces/index.js';
 import type {
 	ArtifactOptions,
+	ArtifactKind,
 	DefaultCompilationSettings,
 	ToolchainProfile,
 } from '../types/index.js';
 import { defaultArtifactOptions } from '../types/index.js';
+import { artifactDefinitions } from '../artifacts/artifact-definitions.js';
 import * as logger from '../logger.js';
 import {
 	normalizeToolchainSettings,
@@ -57,23 +59,23 @@ export class ConfigurationService implements IConfigurationService, Disposable {
 	}
 
 	getDefaultCompilationSettings(scope?: Uri): DefaultCompilationSettings | undefined {
-		const raw = workspace.getConfiguration('coglens', scope).get<unknown>('defaultCompileInfo');
+		const raw = workspace.getConfiguration('coglens', scope).get<unknown>('defaultInvocation');
 		if (!raw || typeof raw !== 'object' || Object.keys(raw).length === 0) {
 			return undefined;
 		}
 		const normalized = normalizeDefaultCompilationSettings(raw);
 		if (!normalized.ok) {
-			logger.logChannel.error(`Ignoring invalid coglens.defaultCompileInfo: ${normalized.errors.join('; ')}`);
+			logger.logChannel.error(`Ignoring invalid coglens.defaultInvocation: ${normalized.errors.join('; ')}`);
 			return undefined;
 		}
 		return normalized.value;
 	}
 
-	getArtifactOptions(scope?: Uri): ArtifactOptions {
-		const raw = workspace.getConfiguration('coglens', scope).get<unknown>('filters', {});
-		const normalized = normalizeArtifactOptions(raw);
+	getArtifactOptions(kind: ArtifactKind, scope?: Uri): ArtifactOptions {
+		const raw = workspace.getConfiguration('coglens', scope).get<unknown>('artifactOptions', {});
+		const normalized = normalizeArtifactOptions(raw, kind);
 		if (!normalized.ok) {
-			logger.logChannel.error(`Ignoring invalid coglens.filters: ${normalized.errors.join('; ')}`);
+			logger.logChannel.error(`Ignoring invalid coglens.artifactOptions: ${normalized.errors.join('; ')}`);
 			return defaultArtifactOptions;
 		}
 		return normalized.value;
@@ -91,10 +93,26 @@ export class ConfigurationService implements IConfigurationService, Disposable {
 		);
 	}
 
-	async updateArtifactOptions(options: ArtifactOptions, folder?: WorkspaceFolder): Promise<void> {
-		await workspace.getConfiguration('coglens', folder?.uri).update(
-			'filters',
-			{ ...options.production, ...options.display },
+	async updateArtifactOptions(
+		kind: ArtifactKind,
+		options: ArtifactOptions,
+		folder?: WorkspaceFolder,
+	): Promise<void> {
+		const configuration = workspace.getConfiguration('coglens', folder?.uri);
+		const current = configuration.get<Record<string, unknown>>('artifactOptions', {});
+		const flat = { ...options.production, ...options.display };
+		const serialized = Object.fromEntries(
+			artifactDefinitions[kind].options.map(descriptor => [
+				descriptor.id,
+				flat[descriptor.id],
+			]),
+		);
+		await configuration.update(
+			'artifactOptions',
+			{
+				...current,
+				[kind]: serialized,
+			},
 			folder ? ConfigurationTarget.WorkspaceFolder : ConfigurationTarget.Workspace,
 		);
 	}

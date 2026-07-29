@@ -1,5 +1,5 @@
 import { Uri } from 'vscode';
-import { ParsedAsmResultLine } from '../parsers/asmresult.interfaces';
+import type { RenderedArtifactLine } from '../types/index.js';
 import { sourceUriMap, sourceUriSet, UriSet } from '../uri-containers';
 import path from 'path';
 
@@ -16,12 +16,12 @@ export class CompiledAssembly {
 	 */
 	public readonly allReferencedSrcUris: UriSet = sourceUriSet();
 
-    public readonly lines: ParsedAsmResultLine[] = [];
+    public readonly lines: RenderedArtifactLine[] = [];
 
     // Mapping of source line to assembly line for each source file: file -> (source line -> ASM line)
     private readonly mappings = sourceUriMap<Map<number, number[]>>();
 
-    constructor(srcUri: Uri, asmUri: Uri, lines: ParsedAsmResultLine[]) {
+    constructor(srcUri: Uri, asmUri: Uri, lines: RenderedArtifactLine[]) {
         this.srcUri = srcUri;
         this.asmUri = asmUri;
         this.lines = lines;
@@ -66,7 +66,7 @@ export class CompiledAssembly {
 		});
 	}
 
-    private asmLineHasSource(asmLine: ParsedAsmResultLine) {
+    private asmLineHasSource(asmLine: RenderedArtifactLine) {
         // eslint-disable-next-line eqeqeq
         return (asmLine.source?.file != null && asmLine.source?.line != null); //checks null or undefined
     }

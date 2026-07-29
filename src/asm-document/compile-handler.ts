@@ -9,7 +9,7 @@ import {
 } from 'vscode';
 import { CompilationService } from '../compilation/index.js';
 import type {
-	CompilationOutputMode,
+	ArtifactKind,
 	CompilationVariant,
 	RenderedArtifact,
 } from '../types/index.js';
@@ -63,7 +63,8 @@ export class CompileHandler implements Disposable {
 		srcUri: Uri,
 		asmUri: Uri,
 		private readonly variant: CompilationVariant,
-		private readonly outputMode: CompilationOutputMode,
+		private readonly artifactKind: ArtifactKind,
+		private readonly presetId: string,
 		private readonly compilationService: CompilationService,
 	) {
 		this.srcUri = srcUri;
@@ -85,29 +86,43 @@ export class CompileHandler implements Disposable {
 		});
 
 		try {
+			const backend = this.compilationService.toolchainRegistry
+				.getToolchainById(this.variant.toolchainProfileId);
+			if (!backend) {
+				throw new CompilationError(
+					`Toolchain profile not found: ${this.variant.toolchainProfileId}`,
+				);
+			}
 			const artifact = await this.compilationService.compile({
 				variant: this.variant,
-				outputMode: this.outputMode,
-				options: this.compilationService.artifactOptions,
+				toolchain: backend.profile,
+				artifactKind: this.artifactKind,
+				presetId: this.presetId,
+				extraArguments: [],
+				options: this.compilationService.getArtifactOptions(this.artifactKind),
 				cancellationToken: cancellation.token,
 			});
+			if (artifact.status !== 'available') {
+				throw new CompilationError(artifact.explanation);
+			}
 			if (generation !== this.generation || cancellation.token.isCancellationRequested) {
 				throw new CancellationError();
 			}
 
-			const lines = artifact.truncated
-				&& !artifact.result.asm.some(line => line.text.includes('[truncated;'))
-				? [...artifact.result.asm, { text: '[truncated; toolchain output was limited]' }]
-				: artifact.result.asm;
+			const rendered = artifact.artifact;
+			const lines = rendered.truncated
+				&& !rendered.lines.some(line => line.text.includes('[truncated;'))
+				? [...rendered.lines, { text: '[truncated; toolchain output was limited]' }]
+				: [...rendered.lines];
 			const assembly = new CompiledAssembly(this.srcUri, this.asmUri, lines);
 			this.setStatus({
 				state: 'successful',
 				assembly,
-				artifact,
-				truncated: artifact.truncated,
+				artifact: rendered,
+				truncated: rendered.truncated,
 			});
 
-			return { assembly, artifact };
+			return { assembly, artifact: rendered };
 		} catch (error) {
 			if (generation === this.generation && !(error instanceof CancellationError)) {
 				const normalized = error instanceof Error ? error : new Error(String(error));

@@ -1,5 +1,5 @@
 import path from 'path';
-import { sanitizeToolchainArguments } from '../toolchain-arguments.js';
+import { removeSourceArgument } from '../toolchain-arguments.js';
 import { detectToolchainKind } from '../toolchain-detection.js';
 import {
 	createToolchainProfile,
@@ -125,7 +125,7 @@ function parseEntry(
 		entryIndex,
 		sourceFile,
 		workingDirectory,
-		arguments: sanitizeToolchainArguments(commandArguments.slice(1), sourceFile, workingDirectory),
+		arguments: removeSourceArgument(commandArguments.slice(1), sourceFile, workingDirectory),
 		output: value.output,
 		toolchainProfile,
 	};
