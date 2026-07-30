@@ -22,6 +22,7 @@ import type {
 	RenderedArtifact,
 	SourceState,
 } from '../types/index.js';
+import type { ArtifactRenderContext } from '../artifacts/artifact-definitions.js';
 import {
 	artifactOptionsEqual,
 	CompilationError,
@@ -151,7 +152,7 @@ export class CompilationService {
 			throw new CancellationError();
 		}
 
-		const source = await readSourceState(variant.source);
+		const source = await readSourceSnapshot(variant.source);
 		if (!source.ok) {
 			return {
 				status: 'unavailable',
@@ -171,12 +172,19 @@ export class CompilationService {
 			return cell;
 		}
 
-		const key = productionKey(request, source.value);
+		const key = productionKey(request, source.value.state);
+		const renderContext: ArtifactRenderContext = {
+			backend,
+			source: {
+				uri: variant.source,
+				text: source.value.text,
+			},
+		};
 		const cached = this.rawArtifactCache.get(key);
 		if (cached) {
 			return {
 				status: 'available',
-				artifact: await this.renderArtifact(backend, cached, options),
+				artifact: await this.renderArtifact(cached, options, renderContext),
 			};
 		}
 
@@ -195,7 +203,7 @@ export class CompilationService {
 			this.rawArtifactCache.set(key, raw);
 			return {
 				status: 'available',
-				artifact: await this.renderArtifact(backend, raw, options),
+				artifact: await this.renderArtifact(raw, options, renderContext),
 			};
 		} catch (error: unknown) {
 			if (error instanceof CancellationError || cancellationToken.isCancellationRequested) {
@@ -230,11 +238,11 @@ export class CompilationService {
 	}
 
 	private async renderArtifact(
-		backend: import('../toolchains/toolchain-backend.js').ToolchainBackend,
 		raw: RawArtifact,
 		options: ArtifactOptions,
+		context: ArtifactRenderContext,
 	): Promise<RenderedArtifact> {
-		return await artifactDefinitions[raw.kind].renderer(raw, options.display, backend);
+		return await artifactDefinitions[raw.kind].renderer(raw, options.display, context);
 	}
 
 	private reloadUserConfiguration(): void {
@@ -280,14 +288,23 @@ export class CompilationService {
 	}
 }
 
-async function readSourceState(
+async function readSourceSnapshot(
 	source: Uri,
 ): Promise<
-	| { readonly ok: true; readonly value: SourceState }
+	| {
+		readonly ok: true;
+		readonly value: {
+			readonly state: SourceState;
+			readonly text: string;
+		};
+	}
 	| { readonly ok: false; readonly explanation: string }
 > {
 	try {
-		const stat = await fs.promises.stat(source.fsPath);
+		const [stat, text] = await Promise.all([
+			fs.promises.stat(source.fsPath),
+			fs.promises.readFile(source.fsPath, 'utf8'),
+		]);
 		if (!stat.isFile()) {
 			return {
 				ok: false,
@@ -296,7 +313,10 @@ async function readSourceState(
 		}
 		return {
 			ok: true,
-			value: { size: stat.size, mtimeMs: stat.mtimeMs },
+			value: {
+				state: { size: stat.size, mtimeMs: stat.mtimeMs },
+				text,
+			},
 		};
 	} catch (error) {
 		const reason = error instanceof Error ? error.message : String(error);

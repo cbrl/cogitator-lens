@@ -5,7 +5,7 @@ import type {
 	RenderedArtifact,
 	RenderedArtifactLine,
 } from '../types/index.js';
-import type { ToolchainBackend } from '../toolchains/toolchain-backend.js';
+import type { ArtifactRenderContext } from './artifact-definitions.js';
 import { LLVMIRDemangler } from '../vendor/lib/demangler/llvm.js';
 import { LlvmIrParser } from '../vendor/lib/llvm-ir.js';
 import { noopPropertyGetter } from '../vendor/compiler-props.js';
@@ -16,7 +16,7 @@ const llvmIrParser = new LlvmIrParser(noopPropertyGetter, new LLVMIRDemangler())
 export async function renderLlvmIr(
 	raw: RawArtifact,
 	_options: DisplayOptions,
-	_backend: ToolchainBackend,
+	_context: ArtifactRenderContext,
 ): Promise<RenderedArtifact> {
 	const parsed = await llvmIrParser.process(raw.text, {
 		filterDebugInfo: false,

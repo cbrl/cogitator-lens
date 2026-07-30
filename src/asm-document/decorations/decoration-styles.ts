@@ -2,7 +2,12 @@
  * Text editor decoration styles shared by every AsmDecorator instance.
  */
 
-import { window, ThemeColor } from 'vscode';
+import {
+	OverviewRulerLane,
+	window,
+	ThemeColor,
+} from 'vscode';
+import type { OptimizationRemarkCategory } from '../../types/index.js';
 
 export const selectedLineDecoration = window.createTextEditorDecorationType({
 	isWholeLine: true,
@@ -17,3 +22,21 @@ export const unusedLineDecoration = window.createTextEditorDecorationType({
 export const stateDecoration = window.createTextEditorDecorationType({
 	after: { color: 'gray' },
 });
+
+function optimizationRemarkDecoration(category: OptimizationRemarkCategory) {
+	const background = new ThemeColor(
+		`coglens.optimizationRemarks.${category}Background`,
+	);
+	return window.createTextEditorDecorationType({
+		isWholeLine: true,
+		backgroundColor: background,
+		overviewRulerColor: background,
+		overviewRulerLane: OverviewRulerLane.Right,
+	});
+}
+
+export const optimizationRemarkDecorations = {
+	passed: optimizationRemarkDecoration('passed'),
+	missed: optimizationRemarkDecoration('missed'),
+	analysis: optimizationRemarkDecoration('analysis'),
+} as const;

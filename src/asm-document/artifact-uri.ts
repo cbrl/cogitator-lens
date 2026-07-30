@@ -1,4 +1,5 @@
 import { Uri } from 'vscode';
+import path from 'path';
 import type {
 	ArtifactKind,
 	CompilationVariant,
@@ -32,10 +33,21 @@ export function getArtifactUri(
 	});
 	return source.with({
 		scheme: artifactScheme,
-		path: replaceExtension(source.path, artifactDefinitions[artifactKind].filenameExtension),
+		path: artifactPath(source.path, artifactKind),
 		query: query.toString(),
 		fragment: '',
 	});
+}
+
+function artifactPath(sourcePath: string, artifactKind: ArtifactKind): string {
+	const definition = artifactDefinitions[artifactKind];
+	const sourceExtension = definition.documentLanguage === 'source'
+		? path.extname(sourcePath)
+		: '';
+	return replaceExtension(
+		sourcePath,
+		`${definition.filenameExtension}${sourceExtension}`,
+	);
 }
 
 export function parseArtifactUri(uri: Uri): ArtifactUriIdentity | undefined {

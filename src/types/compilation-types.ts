@@ -67,12 +67,23 @@ export interface RenderedArtifactLineSource {
 	readonly mainSource?: boolean;
 }
 
+export type OptimizationRemarkCategory =
+	| 'passed'
+	| 'missed'
+	| 'analysis';
+
+export interface OptimizationRemarkLineAnnotation {
+	readonly kind: 'optimization-remark';
+	readonly category: OptimizationRemarkCategory;
+}
+
 export interface RenderedArtifactLine {
 	readonly text: string;
 	readonly opcodes?: readonly string[];
 	readonly address?: number;
 	readonly disassembly?: string;
 	readonly source?: RenderedArtifactLineSource | null;
+	readonly annotation?: OptimizationRemarkLineAnnotation;
 }
 
 export interface ArtifactLink {

@@ -1,8 +1,24 @@
-import { TextEditor, window, Range, Event, Uri, Disposable, TextEditorRevealType, TextDocument, TextEditorSelectionChangeEvent } from 'vscode';
+import {
+	Disposable,
+	Event,
+	Range,
+	TextDocument,
+	TextEditor,
+	TextEditorRevealType,
+	TextEditorSelectionChangeEvent,
+	Uri,
+	window,
+	workspace,
+} from 'vscode';
 import { asmLineHasSource, type CompiledAssembly } from './compiled-assembly.js';
 import path from 'path';
 import { equalUri } from '../utils.js';
-import { selectedLineDecoration, stateDecoration, unusedLineDecoration } from './decorations/decoration-styles.js';
+import {
+	optimizationRemarkDecorations,
+	selectedLineDecoration,
+	stateDecoration,
+	unusedLineDecoration,
+} from './decorations/decoration-styles.js';
 import { EditorTracker } from './decorations/editor-tracker.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
 import type { CompileHandlerStatus, CompilationDocumentState } from './compile-handler.js';
@@ -69,10 +85,17 @@ export class AsmDecorator {
 
 		const selectionChangeRegistration = window.onDidChangeTextEditorSelection(this.onEditorSelectionChanged.bind(this));
 
+		const documentChangeRegistration = workspace.onDidChangeTextDocument(event => {
+			if (equalUri(event.document.uri, this.asmUri)) {
+				this.refreshDecorations();
+			}
+		});
+
         this.registrations = Disposable.from(
             providerEventRegistration,
 			visibilityChangeRegistration,
-            selectionChangeRegistration
+            selectionChangeRegistration,
+			documentChangeRegistration,
         );
     }
 
@@ -111,6 +134,7 @@ export class AsmDecorator {
 			// Recalculate active state now that asmData may have changed
 			this.updateActiveState();
 			this.dimUnusedSourceLines();
+			this.decorateOptimizationRemarks();
 		}
 
 		// Treat as if the user selected the current line of the first editor (only highlights the line, doesn't scroll)
@@ -138,6 +162,9 @@ export class AsmDecorator {
 		editor.setDecorations(selectedLineDecoration, []);
 		editor.setDecorations(unusedLineDecoration, []);
 		editor.setDecorations(stateDecoration, []);
+		for (const decoration of Object.values(optimizationRemarkDecorations)) {
+			editor.setDecorations(decoration, []);
+		}
 	}
 
 	private clearAllDecorations() {
@@ -294,6 +321,25 @@ export class AsmDecorator {
 		const hasAnySourceEditor = editors.some(e => srcUris.has(e.document.uri));
 
 		this.active = hasAsmEditor && hasAnySourceEditor;
+	}
+
+	private decorateOptimizationRemarks(): void {
+		if (!this.asmData || this.asmData instanceof Error) {
+			return;
+		}
+		const editor = this.editorTracker.getAsmEditor(this.asmUri);
+		if (!editor) {
+			return;
+		}
+		for (const [category, decoration] of Object.entries(optimizationRemarkDecorations)) {
+			const ranges = this.asmData.lines.flatMap((line, index) =>
+				line.annotation?.kind === 'optimization-remark'
+					&& line.annotation.category === category
+					&& index < editor.document.lineCount
+					? [editor.document.lineAt(index).range]
+					: []);
+			editor.setDecorations(decoration, ranges);
+		}
 	}
 
 	private onChangeVisibleEditors(): void {

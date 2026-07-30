@@ -11,4 +11,5 @@ export type {
 	ArtifactOptionDescriptor,
 	ArtifactNavigationFeatures,
 	ArtifactOptionAvailability,
+	ArtifactRenderContext,
 } from '../artifacts/artifact-definitions.js';

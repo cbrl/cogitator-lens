@@ -6,6 +6,7 @@ import type {
 	RenderedArtifact,
 } from '../types/index.js';
 import type { ToolchainBackend } from '../toolchains/toolchain-backend.js';
+import type { Uri } from 'vscode';
 import type { ParsedAsmResultLine } from '../vendor/types/asmresult/asmresult.interfaces.js';
 import type { ParsedAsmResult } from '../vendor/types/asmresult/asmresult.interfaces.js';
 import { renderLlvmIr } from './llvm-ir-renderer.js';
@@ -27,14 +28,23 @@ export interface ArtifactNavigationFeatures {
 	readonly symbols: boolean;
 }
 
+export interface ArtifactRenderContext {
+	readonly backend: ToolchainBackend;
+	readonly source: {
+		readonly uri: Uri;
+		readonly text: string;
+	};
+}
+
 interface ArtifactDefinitionShape {
 	readonly label: string;
 	readonly filenameExtension: string;
+	readonly documentLanguage: 'artifact' | 'source';
 	readonly options: readonly ArtifactOptionDescriptor[];
 	readonly renderer: (
 		raw: RawArtifact,
 		options: DisplayOptions,
-		backend: ToolchainBackend,
+		context: ArtifactRenderContext,
 	) => RenderedArtifact | Promise<RenderedArtifact>;
 	readonly navigation: ArtifactNavigationFeatures;
 }
@@ -106,6 +116,7 @@ export const artifactDefinitions = {
 	assembly: {
 		label: 'Assembly',
 		filenameExtension: '.asm',
+		documentLanguage: 'artifact',
 		options: assemblyOptions,
 		renderer: renderAssembly,
 		navigation: {
@@ -119,6 +130,7 @@ export const artifactDefinitions = {
 	'binary-disassembly': {
 		label: 'Binary disassembly',
 		filenameExtension: '.disasm',
+		documentLanguage: 'artifact',
 		options: binaryDisassemblyOptions,
 		renderer: renderBinaryDisassembly,
 		navigation: {
@@ -132,6 +144,7 @@ export const artifactDefinitions = {
 	'llvm-ir': {
 		label: 'LLVM IR',
 		filenameExtension: '.ll',
+		documentLanguage: 'artifact',
 		options: [],
 		renderer: renderLlvmIr,
 		navigation: {
@@ -145,6 +158,7 @@ export const artifactDefinitions = {
 	'optimization-remarks': {
 		label: 'Optimization remarks',
 		filenameExtension: '.opt',
+		documentLanguage: 'source',
 		options: [],
 		renderer: renderOptimizationRemarks,
 		navigation: {
@@ -173,9 +187,9 @@ export function getArtifactDefinition(kind: string): ArtifactDefinition | undefi
 function renderAssembly(
 	raw: RawArtifact,
 	options: DisplayOptions,
-	backend: ToolchainBackend,
+	context: ArtifactRenderContext,
 ): RenderedArtifact {
-	const parsed = backend.parseAssembly(raw.text, options);
+	const parsed = context.backend.parseAssembly(raw.text, options);
 	const lines = parsed.asm.map(parsedLine);
 	return withLabelNavigation(renderedArtifact(raw, lines, {
 		labelDefinitions: parsed.labelDefinitions,
@@ -185,9 +199,9 @@ function renderAssembly(
 function renderBinaryDisassembly(
 	raw: RawArtifact,
 	options: DisplayOptions,
-	backend: ToolchainBackend,
+	context: ArtifactRenderContext,
 ): RenderedArtifact {
-	const parsed = backend.parseBinaryDisassembly(raw.text, options);
+	const parsed = context.backend.parseBinaryDisassembly(raw.text, options);
 	const lines = parsed.asm.map(parsedLine);
 	return withLabelNavigation(renderedArtifact(raw, lines, {
 			codeSizeBytes: parsed.asm.reduce(

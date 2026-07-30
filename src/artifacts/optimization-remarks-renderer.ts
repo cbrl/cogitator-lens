@@ -1,21 +1,18 @@
 import path from 'path';
 import type {
 	DisplayOptions,
+	OptimizationRemarkCategory,
 	RawArtifact,
 	RenderedArtifact,
+	RenderedArtifactLine,
 } from '../types/index.js';
-import type { ToolchainBackend } from '../toolchains/toolchain-backend.js';
 import {
 	processRawGccOptRemarks,
 	processRawLlvmOptRemarks,
 } from '../vendor/lib/optimization-remarks.js';
 import type { OptRemark } from '../vendor/static/panes/opt-view.interfaces.js';
+import type { ArtifactRenderContext } from './artifact-definitions.js';
 import { renderedArtifact } from './rendered-artifact.js';
-
-export type OptimizationRemarkCategory =
-	| 'passed'
-	| 'missed'
-	| 'analysis';
 
 export interface OptimizationRemark {
 	readonly file?: string;
@@ -29,37 +26,60 @@ export interface OptimizationRemark {
 export function renderOptimizationRemarks(
 	raw: RawArtifact,
 	_options: DisplayOptions,
-	backend: ToolchainBackend,
+	context: ArtifactRenderContext,
 ): RenderedArtifact {
-	const remarks = backend.profile.kind === 'gcc'
+	const remarks = context.backend.profile.kind === 'gcc'
 		? parseGccOptimizationRemarks(raw.text, raw.command.workingDirectory)
 		: parseClangOptimizationRemarks(raw.text, raw.command.workingDirectory);
-	const lines = remarks.map(remark => {
-		const hasLocation = remark.file !== undefined
-			&& remark.line !== undefined
-			&& remark.column !== undefined;
-		return {
-			text: `${hasLocation ? `${remark.file}:${remark.line}:${remark.column} ` : ''}`
-				+ `[${remark.category}] ${remark.pass}: ${remark.message}`,
-			source: hasLocation
-				? {
-					file: remark.file!,
-					line: remark.line!,
-					column: Math.max(0, remark.column! - 1),
-				}
-				: undefined,
-		};
+	const sourceFile = path.normalize(context.source.uri.fsPath);
+	const sourceLines = splitSourceLines(context.source.text);
+	const mappedRemarks = remarks.filter(remark =>
+		remark.file !== undefined
+		&& remark.line !== undefined
+		&& remark.line >= 1
+		&& remark.line <= sourceLines.length
+		&& sameSourcePath(remark.file, sourceFile));
+	const remarksByLine = new Map<number, OptimizationRemark[]>();
+	for (const remark of mappedRemarks) {
+		const lineRemarks = remarksByLine.get(remark.line!) ?? [];
+		lineRemarks.push(remark);
+		remarksByLine.set(remark.line!, lineRemarks);
+	}
+
+	const lines: RenderedArtifactLine[] = sourceLines.flatMap((text, index) => {
+		const sourceLine = index + 1;
+		const source = {
+			file: sourceFile,
+			line: sourceLine,
+			column: 0,
+			mainSource: true,
+		} as const;
+		return [
+			...(remarksByLine.get(sourceLine) ?? []).map(remark => ({
+				text: `[${remark.category}] ${remark.pass}: ${remark.message}`,
+				source: {
+					...source,
+					column: Math.max(0, (remark.column ?? 1) - 1),
+				},
+				annotation: {
+					kind: 'optimization-remark' as const,
+					category: remark.category,
+				},
+			})),
+			{ text, source },
+		];
 	});
 	const categories = Object.fromEntries(
-		[...new Set(remarks.map(remark => remark.category))]
+		[...new Set(mappedRemarks.map(remark => remark.category))]
 			.sort()
 			.map(category => [
 				category,
-				remarks.filter(remark => remark.category === category).length,
+				mappedRemarks.filter(remark => remark.category === category).length,
 			]),
 	);
 	return renderedArtifact(raw, lines, {
-		remarkCount: remarks.length,
+		remarkCount: mappedRemarks.length,
+		omittedRemarkCount: remarks.length - mappedRemarks.length,
 		categories,
 	});
 }
@@ -124,4 +144,16 @@ function sourcePath(filename: string, workingDirectory: string): string {
 	return path.normalize(path.isAbsolute(filename)
 		? filename
 		: path.resolve(workingDirectory, filename));
+}
+
+function splitSourceLines(text: string): string[] {
+	return text.split(/\r\n|\n|\r/);
+}
+
+function sameSourcePath(left: string, right: string): boolean {
+	const normalizedLeft = path.resolve(left);
+	const normalizedRight = path.resolve(right);
+	return process.platform === 'win32'
+		? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
+		: normalizedLeft === normalizedRight;
 }
