@@ -1,73 +1,57 @@
 import { Uri } from 'vscode';
-import type { RenderedArtifactLine } from '../types/index.js';
-import { sourceUriMap, sourceUriSet, UriSet } from '../uri-containers';
 import path from 'path';
+import type { RenderedArtifactLine } from '../types/index.js';
+import { sourceUriMap, sourceUriSet, UriMap, UriSet } from '../uri-containers.js';
 
 /**
- * Represents the compiled assembly for a source document. Includes mappings between source and assembly lines
- * and the set of all source documents referenced by the assembly.
+ * The compiled assembly for a source document: its rendered lines, the set of
+ * all source documents it references, and the source-line -> assembly-line
+ * mapping used to highlight and dim lines in each direction.
  */
-export class CompiledAssembly {
-    public readonly srcUri: Uri;
-    public readonly asmUri: Uri;
+export interface CompiledAssembly {
+	readonly srcUri: Uri;
+	readonly asmUri: Uri;
+	readonly lines: readonly RenderedArtifactLine[];
+	readonly allReferencedSrcUris: UriSet;
+	readonly sourceLineMappings: UriMap<Map<number, number[]>>;
+}
 
-	/**
-	 * Set of all source documents referenced by this assembly
-	 */
-	public readonly allReferencedSrcUris: UriSet = sourceUriSet();
+export function asmLineHasSource(line: RenderedArtifactLine): boolean {
+	// eslint-disable-next-line eqeqeq
+	return line.source?.file != null && line.source?.line != null;
+}
 
-    public readonly lines: RenderedArtifactLine[] = [];
+export function getContent(assembly: CompiledAssembly): string {
+	return assembly.lines.map(line => line.text).join('\n');
+}
 
-    // Mapping of source line to assembly line for each source file: file -> (source line -> ASM line)
-    private readonly mappings = sourceUriMap<Map<number, number[]>>();
+export function buildCompiledAssembly(
+	srcUri: Uri,
+	asmUri: Uri,
+	lines: readonly RenderedArtifactLine[],
+): CompiledAssembly {
+	const allReferencedSrcUris = sourceUriSet();
+	const sourceLineMappings = sourceUriMap<Map<number, number[]>>();
 
-    constructor(srcUri: Uri, asmUri: Uri, lines: RenderedArtifactLine[]) {
-        this.srcUri = srcUri;
-        this.asmUri = asmUri;
-        this.lines = lines;
-        this.mapLines();
-    }
+	lines.forEach((line, index) => {
+		if (!asmLineHasSource(line)) {
+			return;
+		}
 
-    /**
-     * Gets the textual content of the assembly document.
-     */
-    public getContent(): string {
-        return this.lines.map(line => line.text).join('\n');
-    }
+		const sourceUri = Uri.file(path.normalize(line.source!.file!));
+		const sourceLine = line.source!.line! - 1;
 
-	public getSourceToAsmLineMapping(file: Uri): Map<number, number[]> | undefined {
-		return this.mappings.get(file);
-	}
+		allReferencedSrcUris.add(sourceUri);
 
-	public getAsmLinesForSourceLine(file: Uri, sourceLineIndex: number): number[] | undefined {
-		return this.mappings.get(file)?.get(sourceLineIndex);
-	}
+		let lineMap = sourceLineMappings.get(sourceUri);
+		if (!lineMap) {
+			lineMap = new Map();
+			sourceLineMappings.set(sourceUri, lineMap);
+		}
+		const asmLines = lineMap.get(sourceLine) ?? [];
+		asmLines.push(index);
+		lineMap.set(sourceLine, asmLines);
+	});
 
-	private mapLines() {
-		this.lines.forEach((line, index) => {
-			if (!this.asmLineHasSource(line)) {
-				return;
-			}
-
-			const sourceUri = Uri.file(path.normalize(line.source!.file!));
-			const sourceLine = line.source!.line! - 1;
-
-			this.allReferencedSrcUris.add(sourceUri);
-
-			let lineMap = this.mappings.get(sourceUri);
-			if (lineMap === undefined) {
-				lineMap = new Map();
-				this.mappings.set(sourceUri, lineMap);
-			}
-			if (lineMap.get(sourceLine) === undefined) {
-				lineMap.set(sourceLine, []);
-			}
-			lineMap.get(sourceLine)!.push(index);
-		});
-	}
-
-    private asmLineHasSource(asmLine: RenderedArtifactLine) {
-        // eslint-disable-next-line eqeqeq
-        return (asmLine.source?.file != null && asmLine.source?.line != null); //checks null or undefined
-    }
+	return { srcUri, asmUri, lines, allReferencedSrcUris, sourceLineMappings };
 }

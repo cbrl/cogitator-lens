@@ -23,43 +23,38 @@ import {
 } from 'vscode';
 import path from 'path';
 import { CompilationService } from '../compilation/index.js';
-import type { IConfigurationService } from '../interfaces/index.js';
+import type { ConfigurationService } from '../services/configuration-service.js';
 import { CompilationError, type CompileDiagnostic } from '../types/index.js';
-import { equalUri } from '../utils.js';
-import {
-	sourceUriMap,
-	sourceUriSet,
-	UriMap,
-	UriSet,
-} from '../uri-containers.js';
+import { toComparisonKey } from '../utils.js';
+import { sourceUriMap, sourceUriSet, UriSet } from '../uri-containers.js';
 import {
 	artifactScheme,
 	getArtifactUri,
 	parseArtifactUri,
 } from './artifact-uri.js';
 import { AsmDecorator } from './asm-decorator.js';
-import { CompiledAssembly } from './compiled-assembly.js';
+import { getContent, type CompiledAssembly } from './compiled-assembly.js';
 import { CompileHandler } from './compile-handler.js';
 import type { CompileHandlerStatus } from './compile-handler.js';
-import { DecorationStyleManager } from './decorations/decoration-style-manager.js';
 
-const uriComparisonOptions = {
-	ignoreFragment: true,
-	ignorePathCase: process.platform === 'win32',
-} as const;
+interface ArtifactDocument {
+	readonly handler: CompileHandler;
+	readonly watcher: Disposable;
+	decorator?: AsmDecorator;
+	assembly?: CompiledAssembly;
+	pendingRefresh?: ReturnType<typeof setTimeout>;
+	diagnostics: readonly CompileDiagnostic[];
+}
+
+function documentKey(uri: Uri): string {
+	return toComparisonKey(uri, true, process.platform === 'win32');
+}
 
 export class AsmProvider implements TextDocumentContentProvider, Disposable {
 	static readonly scheme = artifactScheme;
 
-	private readonly compileHandlers = new UriMap<CompileHandler>(uriComparisonOptions);
-	private readonly fileWatchers = new UriMap<Disposable>(uriComparisonOptions);
-	private readonly decorators = new UriMap<AsmDecorator>(uriComparisonOptions);
-	private readonly compiledAssemblies = new UriMap<CompiledAssembly>(uriComparisonOptions);
-	private readonly authorizedDirtyCompilations = sourceUriSet();
+	private readonly documents = new Map<string, ArtifactDocument>();
 	private readonly sourceToAssembly = sourceUriMap<UriSet>();
-	private readonly pendingRefreshes = new UriMap<ReturnType<typeof setTimeout>>(uriComparisonOptions);
-	private readonly diagnosticsByAssembly = new UriMap<readonly CompileDiagnostic[]>(uriComparisonOptions);
-	private readonly styleManager = new DecorationStyleManager();
 	private readonly changeEmitter = new EventEmitter<Uri>();
 	private readonly diagnostics: DiagnosticCollection = languages.createDiagnosticCollection('coglens');
 	private readonly statusBar: StatusBarItem = window.createStatusBarItem(StatusBarAlignment.Right, 1000);
@@ -67,7 +62,7 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 
 	constructor(
 		private readonly compilationService: CompilationService,
-		private readonly configuration: IConfigurationService,
+		private readonly configuration: ConfigurationService,
 	) {
 		this.subscriptions = [
 			workspace.onDidCloseTextDocument(document => this.onCloseTextDocument(document)),
@@ -79,8 +74,8 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 				}
 			}),
 			compilationService.onArtifactOptionsChanged(() => {
-				for (const handler of this.compileHandlers.values()) {
-					this.requestRefresh(handler.asmUri);
+				for (const document of this.documents.values()) {
+					this.requestRefresh(document.handler.asmUri);
 				}
 			}),
 			this.changeEmitter,
@@ -93,45 +88,33 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 	// Uri when onDidChange(Uri) is fired. onDidChange will be fired when a source document changes and is recompiled
 	// (or fails to recompile).
 	provideTextDocumentContent(uri: Uri, token: CancellationToken): ProviderResult<string> {
-		const handler = this.getCompileHandler(uri);
-		const sourceDocument = workspace.textDocuments.find(document =>
-			equalUri(document.uri, handler.srcUri, true, process.platform === 'win32')
-		);
+		const document = this.getOrCreateDocument(uri);
+		const handler = document.handler;
 
-		if (sourceDocument?.isDirty && !this.authorizedDirtyCompilations.has(handler.srcUri)) {
-			return this.compiledAssemblies.get(uri)?.getContent()
-				?? 'Source has unsaved changes. Run “Open Artifact” to choose which version to use.';
-		}
-		if (!this.decorators.has(uri)) {
-			this.decorators.set(
-				uri,
-				new AsmDecorator(
-					handler.srcUri,
-					handler.asmUri,
-					handler.onDidChange,
-					this.styleManager,
-					this.configuration,
-				),
+		if (!document.decorator) {
+			document.decorator = new AsmDecorator(
+				handler.srcUri,
+				handler.asmUri,
+				handler.onDidChange,
+				this.configuration,
 			);
 		}
 
 		const compilation = handler.update(token);
 
 		return compilation.then(({ assembly, artifact }) => {
-			this.compiledAssemblies.set(uri, assembly);
-			this.authorizedDirtyCompilations.delete(handler.srcUri);
-			this.setDiagnostics(uri, artifact.diagnostics);
+			document.assembly = assembly;
+			this.setDiagnostics(document, artifact.raw.diagnostics);
 
-			return assembly.getContent();
+			return getContent(assembly);
 		}).catch((error: unknown) => {
 			if (error instanceof CancellationError || token.isCancellationRequested) {
-				return this.compiledAssemblies.get(uri)?.getContent() ?? '';
+				return document.assembly ? getContent(document.assembly) : '';
 			}
 
-			this.compiledAssemblies.delete(uri);
-			this.authorizedDirtyCompilations.delete(handler.srcUri);
+			document.assembly = undefined;
 			const diagnostics = error instanceof CompilationError ? error.diagnostics : [];
-			this.setDiagnostics(uri, diagnostics);
+			this.setDiagnostics(document, diagnostics);
 
 			const message = error instanceof Error ? error.message : String(error);
 			return error instanceof CompilationError && error.truncated
@@ -145,41 +128,42 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 	}
 
 	getCompiledAssembly(uri: Uri): CompiledAssembly | undefined {
-		return this.compiledAssemblies.get(uri);
+		return this.documents.get(documentKey(uri))?.assembly;
 	}
 
 	requestRefresh(assemblyUri: Uri): void {
-		this.compileHandlers.get(assemblyUri)?.markStale();
-		const previous = this.pendingRefreshes.get(assemblyUri);
-		if (previous) {
-			clearTimeout(previous);
+		const document = this.documents.get(documentKey(assemblyUri));
+		if (!document) {
+			return;
 		}
-
-		const timer = setTimeout(() => {
-			this.pendingRefreshes.delete(assemblyUri);
+		document.handler.markStale();
+		if (document.pendingRefresh) {
+			clearTimeout(document.pendingRefresh);
+		}
+		document.pendingRefresh = setTimeout(() => {
+			document.pendingRefresh = undefined;
 			this.changeEmitter.fire(assemblyUri);
 		}, 50);
-		this.pendingRefreshes.set(assemblyUri, timer);
-	}
-
-	allowDirtySavedCompilation(sourceUri: Uri): void {
-		this.authorizedDirtyCompilations.add(sourceUri);
 	}
 
 	dispose(): void {
 		this.subscriptions.forEach(subscription => subscription.dispose());
-		this.pendingRefreshes.forEach(timer => clearTimeout(timer));
-		this.fileWatchers.forEach(disposable => disposable.dispose());
-		this.decorators.forEach(decorator => decorator.dispose());
-		this.compileHandlers.forEach(handler => handler.dispose());
-		this.styleManager.dispose();
-		this.compileHandlers.clear();
+		for (const document of this.documents.values()) {
+			if (document.pendingRefresh) {
+				clearTimeout(document.pendingRefresh);
+			}
+			document.watcher.dispose();
+			document.decorator?.dispose();
+			document.handler.dispose();
+		}
+		this.documents.clear();
 	}
 
-	private getCompileHandler(assemblyUri: Uri): CompileHandler {
-		let handler = this.compileHandlers.get(assemblyUri);
-		if (handler) {
-			return handler;
+	private getOrCreateDocument(assemblyUri: Uri): ArtifactDocument {
+		const key = documentKey(assemblyUri);
+		const existing = this.documents.get(key);
+		if (existing) {
+			return existing;
 		}
 
 		const identity = parseArtifactUri(assemblyUri);
@@ -191,7 +175,7 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 		if (!variant) {
 			throw new CompilationError(`Compilation variant is no longer available: ${identity.variantId}`);
 		}
-		handler = new CompileHandler(
+		const handler = new CompileHandler(
 			identity.source,
 			assemblyUri,
 			variant,
@@ -199,39 +183,52 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 			identity.presetId,
 			this.compilationService,
 		);
+
 		let assemblyUris = this.sourceToAssembly.get(identity.source);
 		if (!assemblyUris) {
 			assemblyUris = sourceUriSet();
 			this.sourceToAssembly.set(identity.source, assemblyUris);
 		}
 		assemblyUris.add(assemblyUri);
-		const compileSubscription = handler.onDidChange(status => {
-			if (status.state === 'successful') {
-				this.compiledAssemblies.set(assemblyUri, status.assembly);
-			} else if (status.state === 'failed') {
-				this.compiledAssemblies.delete(assemblyUri);
-			}
-			this.updateStatusBar(handler, status);
-		});
 
 		const watcher = workspace.createFileSystemWatcher(new RelativePattern(
 			Uri.file(path.dirname(identity.source.fsPath)),
 			path.basename(identity.source.fsPath),
 		));
-		const watcherSubscription = watcher.onDidChange(() => this.requestRefresh(assemblyUri));
-		this.fileWatchers.set(assemblyUri, Disposable.from(watcher, watcherSubscription, compileSubscription));
-		this.compileHandlers.set(assemblyUri, handler);
+		const document: ArtifactDocument = {
+			handler,
+			watcher: Disposable.from(
+				watcher,
+				watcher.onDidChange(() => this.requestRefresh(assemblyUri)),
+				handler.onDidChange(status => this.onHandlerStatus(assemblyUri, status)),
+			),
+			diagnostics: [],
+		};
+		this.documents.set(key, document);
 
-		return handler;
+		return document;
 	}
 
-	private setDiagnostics(assemblyUri: Uri, items: readonly CompileDiagnostic[]): void {
-		this.diagnosticsByAssembly.set(assemblyUri, items);
+	private onHandlerStatus(assemblyUri: Uri, status: CompileHandlerStatus): void {
+		const document = this.documents.get(documentKey(assemblyUri));
+		if (!document) {
+			return;
+		}
+		if (status.state === 'successful') {
+			document.assembly = status.assembly;
+		} else if (status.state === 'failed') {
+			document.assembly = undefined;
+		}
+		this.updateStatusBar(document.handler, status);
+	}
+
+	private setDiagnostics(document: ArtifactDocument, items: readonly CompileDiagnostic[]): void {
+		document.diagnostics = items;
 		this.rebuildDiagnostics();
 	}
 
 	private onCloseTextDocument(document: TextDocument): void {
-		if (!this.compileHandlers.has(document.uri)) {
+		if (!this.documents.has(documentKey(document.uri))) {
 			return;
 		}
 
@@ -247,26 +244,28 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 	}
 
 	private unregisterDocument(uri: Uri): void {
-		const handler = this.compileHandlers.get(uri);
-		if (handler) {
-			this.decorators.get(uri)?.dispose();
-			this.decorators.delete(uri);
-			this.authorizedDirtyCompilations.delete(handler.srcUri);
-			const assemblyUris = this.sourceToAssembly.get(handler.srcUri);
-			assemblyUris?.delete(uri);
-			if (assemblyUris?.size === 0) {
-				this.sourceToAssembly.delete(handler.srcUri);
-			}
-			this.diagnosticsByAssembly.delete(uri);
-			this.rebuildDiagnostics();
-			handler.dispose();
-			this.compileHandlers.delete(uri);
+		const key = documentKey(uri);
+		const document = this.documents.get(key);
+		if (!document) {
+			return;
 		}
 
-		this.fileWatchers.get(uri)?.dispose();
-		this.fileWatchers.delete(uri);
-		this.compiledAssemblies.delete(uri);
-		if (this.compileHandlers.size === 0) {
+		if (document.pendingRefresh) {
+			clearTimeout(document.pendingRefresh);
+		}
+		document.watcher.dispose();
+		document.decorator?.dispose();
+
+		const assemblyUris = this.sourceToAssembly.get(document.handler.srcUri);
+		assemblyUris?.delete(uri);
+		if (assemblyUris?.size === 0) {
+			this.sourceToAssembly.delete(document.handler.srcUri);
+		}
+
+		document.handler.dispose();
+		this.documents.delete(key);
+		this.rebuildDiagnostics();
+		if (this.documents.size === 0) {
 			this.statusBar.hide();
 		}
 	}
@@ -300,8 +299,8 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 	private rebuildDiagnostics(): void {
 		this.diagnostics.clear();
 		const grouped = new Map<string, { uri: Uri; diagnostics: Diagnostic[] }>();
-		for (const items of this.diagnosticsByAssembly.values()) {
-			for (const item of items) {
+		for (const document of this.documents.values()) {
+			for (const item of document.diagnostics) {
 				const key = item.uri.toString();
 				const group = grouped.get(key) ?? { uri: item.uri, diagnostics: [] };
 				group.diagnostics.push(new Diagnostic(

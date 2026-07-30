@@ -1,17 +1,14 @@
 import { Disposable, Event, EventEmitter, Uri } from 'vscode';
-import type { CompilationVariant, ReconciliationChange } from '../types/index.js';
-import { sourceUriMap } from '../uri-containers.js';
-
-export interface VariantChange extends ReconciliationChange<CompilationVariant> {
-	affectedSources: readonly Uri[];
-}
+import type { CompilationVariant } from '../types/index.js';
+import { sourceUriMap, sourceUriSet } from '../uri-containers.js';
+import { structurallyEqual } from '../utils.js';
 
 export class CompilationConfigDatabase implements Disposable {
 	private readonly bySource = sourceUriMap<Map<string, CompilationVariant>>();
 	private readonly selectedVariant = sourceUriMap<string>();
-	private readonly changeEmitter = new EventEmitter<VariantChange>();
+	private readonly changeEmitter = new EventEmitter<readonly Uri[]>();
 
-	readonly onDidChange: Event<VariantChange> = this.changeEmitter.event;
+	readonly onDidChange: Event<readonly Uri[]> = this.changeEmitter.event;
 
 	getVariants(source: Uri): readonly CompilationVariant[] {
 		return [...(this.bySource.get(source)?.values() ?? [])];
@@ -40,11 +37,11 @@ export class CompilationConfigDatabase implements Disposable {
 			return false;
 		}
 		this.selectedVariant.set(source, variantId);
-		this.changeEmitter.fire({ added: [], updated: [], removed: [], affectedSources: [source] });
+		this.changeEmitter.fire([source]);
 		return true;
 	}
 
-	reconcile(provider: string, snapshot: readonly CompilationVariant[]): VariantChange {
+	reconcile(provider: string, snapshot: readonly CompilationVariant[]): void {
 		const existing = new Map<string, CompilationVariant>();
 		for (const [, variants] of this.bySource) {
 			for (const variant of variants.values()) {
@@ -55,23 +52,21 @@ export class CompilationConfigDatabase implements Disposable {
 		}
 
 		const incoming = new Map(snapshot.map(variant => [variant.id, variant]));
-		const added: CompilationVariant[] = [];
-		const updated: CompilationVariant[] = [];
-		const removed: CompilationVariant[] = [];
-		const affected = sourceUriMap<Uri>();
+		const affected = sourceUriSet();
+		let changed = false;
 
 		for (const [id, previous] of existing) {
 			const replacement = incoming.get(id);
 
 			if (!replacement) {
 				this.bySource.get(previous.source)?.delete(id);
-				removed.push(previous);
-				affected.set(previous.source, previous.source);
+				affected.add(previous.source);
+				changed = true;
 			} else {
-				if (JSON.stringify(previous) !== JSON.stringify(replacement)) {
+				if (!structurallyEqual(previous, replacement)) {
 					this.setVariant(replacement);
-					updated.push(replacement);
-					affected.set(replacement.source, replacement.source);
+					affected.add(replacement.source);
+					changed = true;
 				}
 
 				incoming.delete(id);
@@ -80,8 +75,8 @@ export class CompilationConfigDatabase implements Disposable {
 
 		for (const variant of incoming.values()) {
 			this.setVariant(variant);
-			added.push(variant);
-			affected.set(variant.source, variant.source);
+			affected.add(variant.source);
+			changed = true;
 		}
 
 		for (const [source, variants] of [...this.bySource]) {
@@ -96,12 +91,9 @@ export class CompilationConfigDatabase implements Disposable {
 			}
 		}
 
-		const change = { added, updated, removed, affectedSources: [...affected.values()] };
-		if (added.length || updated.length || removed.length) {
-			this.changeEmitter.fire(change);
+		if (changed) {
+			this.changeEmitter.fire([...affected.values()]);
 		}
-
-		return change;
 	}
 
 	dispose(): void {

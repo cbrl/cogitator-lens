@@ -1,5 +1,4 @@
 import { Event, EventEmitter } from 'vscode';
-import type { IVariantProvider } from '../interfaces/index.js';
 import type { ProviderSnapshot } from '../types/index.js';
 
 export const variantProviderDefinitions = {
@@ -10,7 +9,7 @@ export const variantProviderDefinitions = {
 
 export type ConfigurationOrigin = keyof typeof variantProviderDefinitions;
 
-export abstract class VariantProvider implements IVariantProvider {
+export abstract class VariantProvider {
 	abstract readonly name: string;
 	private readonly snapshotEmitter = new EventEmitter<ProviderSnapshot>();
 

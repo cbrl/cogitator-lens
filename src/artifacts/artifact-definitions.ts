@@ -4,10 +4,9 @@ import type {
 	RawArtifact,
 	RenderedArtifactLine,
 	RenderedArtifact,
-	ToolchainProfile,
 } from '../types/index.js';
 import type { ToolchainBackend } from '../toolchains/toolchain-backend.js';
-import { defaultArtifactOptions } from '../types/artifact-options.js';
+import type { ParsedAsmResultLine } from '../vendor/types/asmresult/asmresult.interfaces.js';
 
 export interface ArtifactOptionDescriptor {
 	readonly id: keyof ArtifactOptions['production'] | keyof ArtifactOptions['display'];
@@ -36,6 +35,27 @@ interface ArtifactDefinitionShape {
 	readonly navigation: ArtifactNavigationFeatures;
 }
 
+const displayOptionDescriptors = {
+	labels: {
+		id: 'labels',
+		group: 'display',
+		label: 'Hide unused labels',
+		description: 'Remove labels that are not referenced',
+	},
+	libraryCode: {
+		id: 'libraryCode',
+		group: 'display',
+		label: 'Hide library code',
+		description: 'Hide code from system libraries',
+	},
+	dontMaskFilenames: {
+		id: 'dontMaskFilenames',
+		group: 'display',
+		label: 'Show full filenames',
+		description: 'Keep source filenames visible in rendered output',
+	},
+} as const satisfies Record<string, ArtifactOptionDescriptor>;
+
 const assemblyOptions = [
 	{
 		id: 'intel',
@@ -49,18 +69,8 @@ const assemblyOptions = [
 		label: 'Demangle symbols',
 		description: 'Run the configured demangler before rendering assembly',
 	},
-	{
-		id: 'labels',
-		group: 'display',
-		label: 'Hide unused labels',
-		description: 'Remove labels that are not referenced',
-	},
-	{
-		id: 'libraryCode',
-		group: 'display',
-		label: 'Hide library code',
-		description: 'Hide code from system libraries',
-	},
+	displayOptionDescriptors.labels,
+	displayOptionDescriptors.libraryCode,
 	{
 		id: 'directives',
 		group: 'display',
@@ -79,12 +89,13 @@ const assemblyOptions = [
 		label: 'Trim horizontal whitespace',
 		description: 'Remove excessive horizontal whitespace',
 	},
-	{
-		id: 'dontMaskFilenames',
-		group: 'display',
-		label: 'Show full filenames',
-		description: 'Keep source filenames visible in rendered output',
-	},
+	displayOptionDescriptors.dontMaskFilenames,
+] as const satisfies readonly ArtifactOptionDescriptor[];
+
+const binaryDisassemblyOptions = [
+	displayOptionDescriptors.labels,
+	displayOptionDescriptors.libraryCode,
+	displayOptionDescriptors.dontMaskFilenames,
 ] as const satisfies readonly ArtifactOptionDescriptor[];
 
 const noNavigation: ArtifactNavigationFeatures = Object.freeze({
@@ -112,9 +123,15 @@ export const artifactDefinitions = {
 	'binary-disassembly': {
 		label: 'Binary disassembly',
 		filenameExtension: '.disasm',
-		options: [],
-		renderer: renderPlainText,
-		navigation: noNavigation,
+		options: binaryDisassemblyOptions,
+		renderer: renderBinaryDisassembly,
+		navigation: {
+			definitions: true,
+			sourceLocations: true,
+			links: true,
+			folds: false,
+			symbols: true,
+		},
 	},
 	'llvm-ir': {
 		label: 'LLVM IR',
@@ -151,11 +168,55 @@ function renderAssembly(
 	backend: ToolchainBackend,
 ): RenderedArtifact {
 	const parsed = backend.parseAssembly(raw.text, options);
-	const lines: RenderedArtifactLine[] = parsed.asm.map(line => ({
+	const lines = parsed.asm.map(parsedLine);
+	return renderedArtifact(raw, lines, {
+		labelDefinitions: parsed.labelDefinitions,
+	});
+}
+
+function renderBinaryDisassembly(
+	raw: RawArtifact,
+	options: DisplayOptions,
+	backend: ToolchainBackend,
+): RenderedArtifact {
+	const parsed = backend.parseBinaryDisassembly(raw.text, options);
+	const lines = parsed.asm.map(parsedLine);
+	const links = parsed.asm.flatMap((line, lineIndex) =>
+		(line.labels ?? []).flatMap(label => {
+			const targetLine = parsed.labelDefinitions?.[label.name];
+			return targetLine === undefined
+				? []
+				: [{
+					line: lineIndex,
+					startCharacter: label.range.startCol,
+					endCharacter: label.range.endCol,
+					targetLine,
+				}];
+		}),
+	);
+	const symbols = Object.entries(parsed.labelDefinitions ?? {}).map(([name, line]) => ({
+		name,
+		line,
+	}));
+	return {
+		...renderedArtifact(raw, lines, {
+			codeSizeBytes: parsed.asm.reduce(
+				(total, line) => total + (line.opcodes?.length ?? 0),
+				0,
+			),
+			instructionCount: parsed.asm.filter(line => line.opcodes?.length).length,
+		}),
+		links,
+		symbols,
+	};
+}
+
+function parsedLine(line: ParsedAsmResultLine): RenderedArtifactLine {
+	return {
 		text: line.text,
 		opcodes: line.opcodes ? [...line.opcodes] : undefined,
 		address: line.address,
-		disassembly: line.disassembly,
+		disassembly: line.disassembly ?? (line.opcodes ? line.text.trimStart() : undefined),
 		source: line.source
 			? {
 				file: line.source.file,
@@ -164,10 +225,7 @@ function renderAssembly(
 				mainSource: line.source.mainsource,
 			}
 			: line.source,
-	}));
-	return renderedArtifact(raw, lines, {
-		labelDefinitions: parsed.labelDefinitions,
-	});
+	};
 }
 
 function renderPlainText(
@@ -204,27 +262,16 @@ function renderedArtifact(
 		symbols: [],
 		metrics,
 		raw,
-		diagnostics: raw.diagnostics,
-		durationMs: raw.durationMs,
-		command: raw.command,
 		truncated: raw.truncated || lines.some(line =>
 			line.text.includes('[truncated; too many lines]')),
 	};
 }
 
-export function optionDescriptorsFor(kind: ArtifactKind): readonly ArtifactOptionDescriptor[] {
-	return artifactDefinitions[kind].options;
-}
-
-export function defaultOptionsFor(_kind: ArtifactKind): ArtifactOptions {
-	return defaultArtifactOptions;
-}
-
 export type ArtifactOptionAvailability =
 	| { readonly status: 'available' }
-	| { readonly status: 'unavailable' | 'unsupported'; readonly explanation: string };
-
-export interface ArtifactAvailabilityContext {
-	readonly profile: ToolchainProfile;
-	readonly kind: ArtifactKind;
-}
+	| {
+		readonly status: 'unavailable' | 'unsupported';
+		readonly explanation: string;
+		/** Machine-readable reason code for statuses a caller needs to branch on directly. */
+		readonly reason?: 'inherent';
+	};

@@ -1,10 +1,8 @@
 import { Disposable, Event, EventEmitter } from 'vscode';
-import type { IToolchainRegistry } from '../interfaces/index.js';
 import type {
 	ArtifactKind,
 	ArtifactOptionAvailability,
 	ToolchainProfile,
-	ReconciliationChange,
 } from '../types/index.js';
 import { ToolchainBackend } from '../toolchains/toolchain-backend.js';
 import {
@@ -12,10 +10,7 @@ import {
 	resolveArtifactAvailability,
 } from '../toolchains/toolchain-map.js';
 import type { ConfigurationOrigin } from '../buildsystems/variant-provider.js';
-import {
-	ToolExecutionGate,
-	trustedToolExecution,
-} from '../tool-execution.js';
+import { structurallyEqual } from '../utils.js';
 
 interface RegistryEntry {
 	origin: ConfigurationOrigin;
@@ -23,13 +18,11 @@ interface RegistryEntry {
 	backend: ToolchainBackend;
 }
 
-export class ToolchainRegistry implements IToolchainRegistry, Disposable {
+export class ToolchainRegistry implements Disposable {
 	private readonly entries = new Map<string, RegistryEntry>();
-	private readonly changeEmitter = new EventEmitter<ReconciliationChange<ToolchainProfile>>();
+	private readonly changeEmitter = new EventEmitter<void>();
 
-	readonly onDidChange: Event<ReconciliationChange<ToolchainProfile>> = this.changeEmitter.event;
-
-	constructor(private readonly execution: ToolExecutionGate = trustedToolExecution) {}
+	readonly onDidChange: Event<void> = this.changeEmitter.event;
 
 	getProfiles(origin?: ConfigurationOrigin): readonly ToolchainProfile[] {
 		return [...this.entries.values()]
@@ -63,15 +56,13 @@ export class ToolchainRegistry implements IToolchainRegistry, Disposable {
 		return this.entries.get(id)?.origin;
 	}
 
-	reconcile(origin: ConfigurationOrigin, profiles: readonly ToolchainProfile[]): ReconciliationChange<ToolchainProfile> {
+	reconcile(origin: ConfigurationOrigin, profiles: readonly ToolchainProfile[]): boolean {
 		const canonicalProfiles = profiles.map(profile => ({
 			...profile,
 			id: ToolchainRegistry.profileId(origin, profile.id),
 		}));
 		const next = new Map(canonicalProfiles.map(profile => [profile.id, profile]));
-		const added: ToolchainProfile[] = [];
-		const updated: ToolchainProfile[] = [];
-		const removed: ToolchainProfile[] = [];
+		let changed = false;
 
 		for (const [id, entry] of this.entries) {
 			if (entry.origin !== origin) {
@@ -80,24 +71,23 @@ export class ToolchainRegistry implements IToolchainRegistry, Disposable {
 			const replacement = next.get(id);
 			if (!replacement) {
 				this.entries.delete(id);
-				removed.push(entry.profile);
-			} else if (!profilesEqual(entry.profile, replacement)) {
+				changed = true;
+			} else if (!structurallyEqual(entry.profile, replacement)) {
 				this.entries.set(id, this.createEntry(origin, replacement));
-				updated.push(replacement);
+				changed = true;
 			}
 			next.delete(id);
 		}
 
 		for (const profile of next.values()) {
 			this.entries.set(profile.id, this.createEntry(origin, profile));
-			added.push(profile);
+			changed = true;
 		}
 
-		const change = { added, updated, removed };
-		if (added.length || updated.length || removed.length) {
-			this.changeEmitter.fire(change);
+		if (changed) {
+			this.changeEmitter.fire();
 		}
-		return change;
+		return changed;
 	}
 
 	dispose(): void {
@@ -111,17 +101,10 @@ export class ToolchainRegistry implements IToolchainRegistry, Disposable {
 
 	private createEntry(origin: ConfigurationOrigin, profile: ToolchainProfile): RegistryEntry {
 		const definition = getToolchainDefinition(profile.kind);
-		if (!definition) {
-			throw new Error(`Unsupported toolchain kind: ${profile.kind}`);
-		}
 		return {
 			origin,
 			profile,
-			backend: new definition.Adapter(profile, definition.capabilities, this.execution),
+			backend: new ToolchainBackend(profile, definition),
 		};
 	}
-}
-
-function profilesEqual(left: ToolchainProfile, right: ToolchainProfile): boolean {
-	return JSON.stringify(left) === JSON.stringify(right);
 }

@@ -14,7 +14,7 @@ import type {
 	RenderedArtifact,
 } from '../types/index.js';
 import { CompilationError } from '../types/index.js';
-import { CompiledAssembly } from './compiled-assembly.js';
+import { buildCompiledAssembly, type CompiledAssembly } from './compiled-assembly.js';
 import * as logger from '../logger.js';
 
 export interface ArtifactHandlerResult {
@@ -53,7 +53,6 @@ export class CompileHandler implements Disposable {
 	readonly asmUri: Uri;
 	private readonly statusEvent = new EventEmitter<CompileHandlerStatus>();
 	private cancellation?: CancellationTokenSource;
-	private generation = 0;
 	private currentStatus: CompileHandlerStatus = {
 		state: 'stale',
 		truncated: false,
@@ -72,11 +71,14 @@ export class CompileHandler implements Disposable {
 	}
 
 	async update(externalToken: CancellationToken): Promise<ArtifactHandlerResult> {
-		const generation = ++this.generation;
 		this.cancellation?.cancel();
 		this.cancellation?.dispose();
 		const cancellation = new CancellationTokenSource();
 		this.cancellation = cancellation;
+		// A newer call to update() cancels and replaces `this.cancellation` before doing
+		// anything else, so comparing identity against it is a complete staleness check —
+		// no separate generation counter is needed alongside the token source.
+		const isCurrent = (): boolean => this.cancellation === cancellation;
 		const externalSubscription = externalToken.onCancellationRequested(() => cancellation.cancel());
 		this.setStatus({
 			state: 'compiling',
@@ -86,16 +88,8 @@ export class CompileHandler implements Disposable {
 		});
 
 		try {
-			const backend = this.compilationService.toolchainRegistry
-				.getToolchainById(this.variant.toolchainProfileId);
-			if (!backend) {
-				throw new CompilationError(
-					`Toolchain profile not found: ${this.variant.toolchainProfileId}`,
-				);
-			}
 			const artifact = await this.compilationService.compile({
 				variant: this.variant,
-				toolchain: backend.profile,
 				artifactKind: this.artifactKind,
 				presetId: this.presetId,
 				extraArguments: [],
@@ -105,16 +99,15 @@ export class CompileHandler implements Disposable {
 			if (artifact.status !== 'available') {
 				throw new CompilationError(artifact.explanation);
 			}
-			if (generation !== this.generation || cancellation.token.isCancellationRequested) {
+			if (!isCurrent() || cancellation.token.isCancellationRequested) {
 				throw new CancellationError();
 			}
 
 			const rendered = artifact.artifact;
-			const lines = rendered.truncated
-				&& !rendered.lines.some(line => line.text.includes('[truncated;'))
+			const lines = rendered.raw.truncated
 				? [...rendered.lines, { text: '[truncated; toolchain output was limited]' }]
-				: [...rendered.lines];
-			const assembly = new CompiledAssembly(this.srcUri, this.asmUri, lines);
+				: rendered.lines;
+			const assembly = buildCompiledAssembly(this.srcUri, this.asmUri, lines);
 			this.setStatus({
 				state: 'successful',
 				assembly,
@@ -124,7 +117,7 @@ export class CompileHandler implements Disposable {
 
 			return { assembly, artifact: rendered };
 		} catch (error) {
-			if (generation === this.generation && !(error instanceof CancellationError)) {
+			if (isCurrent() && !(error instanceof CancellationError)) {
 				const normalized = error instanceof Error ? error : new Error(String(error));
 				logger.logChannel.error(`Compilation failed for ${this.srcUri.fsPath}: ${normalized.stack ?? normalized.message}`);
 				this.setStatus({
@@ -132,7 +125,7 @@ export class CompileHandler implements Disposable {
 					error: normalized,
 					truncated: error instanceof CompilationError && error.truncated,
 				});
-			} else if (generation === this.generation) {
+			} else if (isCurrent()) {
 				this.setStatus({
 					state: 'stale',
 					assembly: this.currentStatus.assembly,
@@ -144,7 +137,7 @@ export class CompileHandler implements Disposable {
 			throw error;
 		} finally {
 			externalSubscription.dispose();
-			if (generation === this.generation) {
+			if (isCurrent()) {
 				cancellation.dispose();
 				this.cancellation = undefined;
 			}
@@ -171,9 +164,9 @@ export class CompileHandler implements Disposable {
 	}
 
 	dispose(): void {
-		this.generation++;
 		this.cancellation?.cancel();
 		this.cancellation?.dispose();
+		this.cancellation = undefined;
 		this.statusEvent.dispose();
 	}
 

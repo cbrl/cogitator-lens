@@ -1,4 +1,4 @@
-// Copyright (c) 2018, Compiler Explorer Authors
+// Copyright (c) 2022, Compiler Explorer Authors
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -22,32 +22,9 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import {ParseFiltersAndOutputOptions} from './filters.interfaces.js';
-import * as utils from '../ce-utils.js';
+import {ParsedAsmResult} from '../../types/asmresult/asmresult.interfaces.js';
+import {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces.js';
 
-const findQuotes = /(.*?)("(?:[^"\\]|\\.)*")(.*)/;
-
-export class AsmRegex {
-    protected labelDef: RegExp;
-
-    constructor() {
-        this.labelDef = /^(?:.proc\s+)?([\w$.@]+|"[\w$.@]+"):/i;
-    }
-
-    static squashHorizontalWhitespace(line: string, atStart: boolean): string {
-        const quotes = line.match(findQuotes);
-        if (quotes) {
-            return (
-                AsmRegex.squashHorizontalWhitespace(quotes[1], atStart) +
-                quotes[2] +
-                AsmRegex.squashHorizontalWhitespace(quotes[3], false)
-            );
-        }
-        return utils.squashHorizontalWhitespace(line, atStart);
-    }
-
-    static filterAsmLine(line: string, filters: ParseFiltersAndOutputOptions): string {
-        if (!filters.trim) return line;
-        return AsmRegex.squashHorizontalWhitespace(line, true);
-    }
+export interface IAsmParser {
+    process(asm: string, filters: ParseFiltersAndOutputOptions): ParsedAsmResult;
 }

@@ -8,6 +8,9 @@ export function parseToolDiagnostics(
 	workingDirectory = path.dirname(fallbackSource.fsPath),
 ): CompileDiagnostic[] {
 	const diagnostics: CompileDiagnostic[] = [];
+	let pendingRustDiagnostic:
+		| { severity: 'error' | 'warning' | 'information'; message: string }
+		| undefined;
 	for (const line of output.split(/\r?\n/)) {
 		const gcc = /^(.*?):(\d+):(\d+):\s*(?:fatal\s+)?(error|warning|note):\s*(.*)$/.exec(line);
 		if (gcc) {
@@ -18,6 +21,7 @@ export function parseToolDiagnostics(
 				severity: gcc[4] === 'note' ? 'information' : gcc[4] as 'error' | 'warning',
 				message: gcc[5],
 			});
+			pendingRustDiagnostic = undefined;
 			continue;
 		}
 
@@ -30,6 +34,31 @@ export function parseToolDiagnostics(
 				severity: msvc[4].toLowerCase() === 'warning' ? 'warning' : 'error',
 				message: msvc[6],
 			});
+			pendingRustDiagnostic = undefined;
+			continue;
+		}
+
+		const rustLocation = /^\s*-->\s+(.*):(\d+):(\d+)\s*$/.exec(line);
+		if (rustLocation && pendingRustDiagnostic) {
+			diagnostics.push({
+				uri: diagnosticUri(rustLocation[1], fallbackSource, workingDirectory),
+				line: Math.max(0, Number(rustLocation[2]) - 1),
+				column: Math.max(0, Number(rustLocation[3]) - 1),
+				severity: pendingRustDiagnostic.severity,
+				message: pendingRustDiagnostic.message,
+			});
+			pendingRustDiagnostic = undefined;
+			continue;
+		}
+
+		const rust = /^(error|warning|note)(\[[^\]]+\])?:\s*(.*)$/.exec(line);
+		if (rust) {
+			pendingRustDiagnostic = {
+				severity: rust[1] === 'note'
+					? 'information'
+					: rust[1] as 'error' | 'warning',
+				message: `${rust[2] ? `${rust[2]} ` : ''}${rust[3]}`,
+			};
 		}
 	}
 	return diagnostics;

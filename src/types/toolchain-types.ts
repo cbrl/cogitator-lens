@@ -5,18 +5,12 @@ export type ToolchainKind = keyof typeof toolchainDefinitions;
 
 export type IntelSyntaxSupport = 'selectable' | 'inherent' | 'unsupported';
 
-export interface ToolchainCapabilities {
-	readonly demangle: boolean;
-	readonly intelSyntax: IntelSyntaxSupport;
-	readonly libraryCodeFilter: boolean;
-}
-
 export interface ToolchainSettings {
-	name: string;
-	type: ToolchainKind;
-	exe: string;
-	args?: string[];
-	env?: Record<string, string>;
+	displayName: string;
+	kind: ToolchainKind;
+	executable: string;
+	defaultArguments?: string[];
+	environment?: Record<string, string>;
 	tools?: Record<string, string>;
 }
 

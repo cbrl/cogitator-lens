@@ -7,24 +7,22 @@ import {
 	WorkspaceFolder,
 	workspace,
 } from 'vscode';
-import type { IConfigurationService } from '../interfaces/index.js';
 import type {
 	ArtifactOptions,
 	ArtifactKind,
 	DefaultCompilationSettings,
 	ToolchainProfile,
+	ToolchainSettings,
 } from '../types/index.js';
-import { defaultArtifactOptions } from '../types/index.js';
 import { artifactDefinitions } from '../artifacts/artifact-definitions.js';
 import * as logger from '../logger.js';
 import {
-	normalizeToolchainSettings,
-	normalizeArtifactOptions,
-	normalizeDefaultCompilationSettings,
-	toolchainProfileToSettings,
+	parseArtifactOptions,
+	parseDefaultCompilationSettings,
+	parseToolchainSettings,
 } from './configuration-normalization.js';
 
-export class ConfigurationService implements IConfigurationService, Disposable {
+export class ConfigurationService implements Disposable {
 	private readonly changeEmitter = new EventEmitter<void>();
 	private readonly configurationSubscription: Disposable;
 
@@ -40,19 +38,14 @@ export class ConfigurationService implements IConfigurationService, Disposable {
 
 	getToolchains(scope?: Uri): ToolchainProfile[] {
 		const raw = workspace.getConfiguration('coglens', scope).get<unknown>('toolchains', []);
-		if (!Array.isArray(raw)) {
-			logger.logChannel.error('Ignoring invalid coglens.toolchains: expected an array');
-			return [];
-		}
+		const entries = Array.isArray(raw) ? raw : [];
 		const profiles: ToolchainProfile[] = [];
-		raw.forEach((item, index) => {
-			const normalized = normalizeToolchainSettings(item);
-			if (normalized.ok) {
-				profiles.push(normalized.value);
+		entries.forEach((entry, index) => {
+			const profile = parseToolchainSettings(entry);
+			if (profile) {
+				profiles.push(profile);
 			} else {
-				logger.logChannel.error(
-					`Ignoring invalid coglens.toolchains[${index}]: ${normalized.errors.join('; ')}`,
-				);
+				logger.logChannel.error(`Ignoring coglens.toolchains[${index}]: unrecognized toolchain kind`);
 			}
 		});
 		return profiles;
@@ -63,32 +56,34 @@ export class ConfigurationService implements IConfigurationService, Disposable {
 		if (!raw || typeof raw !== 'object' || Object.keys(raw).length === 0) {
 			return undefined;
 		}
-		const normalized = normalizeDefaultCompilationSettings(raw);
-		if (!normalized.ok) {
-			logger.logChannel.error(`Ignoring invalid coglens.defaultInvocation: ${normalized.errors.join('; ')}`);
-			return undefined;
-		}
-		return normalized.value;
+		return parseDefaultCompilationSettings(raw);
 	}
 
 	getArtifactOptions(kind: ArtifactKind, scope?: Uri): ArtifactOptions {
 		const raw = workspace.getConfiguration('coglens', scope).get<unknown>('artifactOptions', {});
-		const normalized = normalizeArtifactOptions(raw, kind);
-		if (!normalized.ok) {
-			logger.logChannel.error(`Ignoring invalid coglens.artifactOptions: ${normalized.errors.join('; ')}`);
-			return defaultArtifactOptions;
-		}
-		return normalized.value;
+		return parseArtifactOptions(raw, kind);
 	}
 
 	getDimUnusedSourceLines(uri: Uri): boolean {
 		return workspace.getConfiguration('coglens', uri).get('dimUnusedSourceLines', true);
 	}
 
+	getCompilationDatabases(scope?: Uri): readonly string[] {
+		return workspace.getConfiguration('coglens', scope).get<string[]>('compilationDatabases', []);
+	}
+
 	async updateToolchains(profiles: readonly ToolchainProfile[], folder?: WorkspaceFolder): Promise<void> {
+		const settings: ToolchainSettings[] = profiles.map(profile => ({
+			displayName: profile.displayName,
+			kind: profile.kind,
+			executable: profile.executable,
+			defaultArguments: [...profile.defaultArguments],
+			environment: { ...profile.environment },
+			tools: { ...profile.tools },
+		}));
 		await workspace.getConfiguration('coglens', folder?.uri).update(
 			'toolchains',
-			profiles.map(toolchainProfileToSettings),
+			settings,
 			ConfigurationTarget.Workspace,
 		);
 	}

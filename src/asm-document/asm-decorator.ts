@@ -1,12 +1,10 @@
 import { TextEditor, window, Range, Event, Uri, Disposable, TextEditorRevealType, TextDocument, TextEditorSelectionChangeEvent } from 'vscode';
-import { CompiledAssembly } from './compiled-assembly';
-import type { RenderedArtifactLine } from '../types/index.js';
+import { asmLineHasSource, type CompiledAssembly } from './compiled-assembly.js';
 import path from 'path';
-import { equalUri } from '../utils';
-import assert from 'assert';
-import { DecorationStyleManager } from './decorations/decoration-style-manager.js';
+import { equalUri } from '../utils.js';
+import { selectedLineDecoration, stateDecoration, unusedLineDecoration } from './decorations/decoration-styles.js';
 import { EditorTracker } from './decorations/editor-tracker.js';
-import type { IConfigurationService } from '../interfaces/index.js';
+import type { ConfigurationService } from '../services/configuration-service.js';
 import type { CompileHandlerStatus, CompilationDocumentState } from './compile-handler.js';
 
 /*
@@ -31,13 +29,12 @@ export class AsmDecorator {
 	private readonly srcUri: Uri;
 	private readonly asmUri: Uri;
 
-    private asmData: CompiledAssembly | Error;
+	private asmData: CompiledAssembly | Error | undefined;
 	private compilationState: CompilationDocumentState = 'stale';
 	private truncated = false;
 
-	private readonly styleManager: DecorationStyleManager;
 	private readonly editorTracker: EditorTracker;
-	private readonly configService: IConfigurationService;
+	private readonly configService: ConfigurationService;
     private readonly registrations: Disposable;
 
 	private active: boolean = true;
@@ -47,15 +44,10 @@ export class AsmDecorator {
 		srcUri: Uri,
 		asmUri: Uri,
 		asmEvent: Event<CompileHandlerStatus>,
-		styleManager: DecorationStyleManager,
-		configService: IConfigurationService,
+		configService: ConfigurationService,
 	) {
 		this.asmUri = asmUri;
 		this.srcUri = srcUri;
-		this.asmData = new CompiledAssembly(this.srcUri, this.asmUri, []);
-
-		// Initialize services
-		this.styleManager = styleManager;
 		this.editorTracker = new EditorTracker();
 		this.configService = configService;
 
@@ -100,7 +92,7 @@ export class AsmDecorator {
 			return;
 		}
 
-		if (this.asmData instanceof Error) {
+		if (!this.asmData || this.asmData instanceof Error) {
 			return;
 		}
 
@@ -115,7 +107,7 @@ export class AsmDecorator {
     private refreshDecorations() {
 		this.clearAllDecorations();
 
-		if (!(this.asmData instanceof Error)) {
+		if (this.asmData && !(this.asmData instanceof Error)) {
 			// Recalculate active state now that asmData may have changed
 			this.updateActiveState();
 			this.dimUnusedSourceLines();
@@ -123,7 +115,7 @@ export class AsmDecorator {
 
 		// Treat as if the user selected the current line of the first editor (only highlights the line, doesn't scroll)
 		// TODO: use active editor instead of the first visible source editor?
-		if (!(this.asmData instanceof Error) && this.asmData.lines.length > 0) {
+		if (this.asmData && !(this.asmData instanceof Error) && this.asmData.lines.length > 0) {
 			const sourceEditor = this.getAllSourceEditors()[0];
 			if (sourceEditor) {
 				this.onSrcLineSelected(sourceEditor, true);
@@ -133,7 +125,7 @@ export class AsmDecorator {
 		const stateText = this.stateDecorationText();
 		if (stateText) {
 			const asmEditor = this.editorTracker.getAsmEditor(this.asmUri);
-			asmEditor?.setDecorations(this.styleManager.stateDecoration, [{
+			asmEditor?.setDecorations(stateDecoration, [{
 				range: new Range(0, 0, 0, 0),
 				renderOptions: {
 					after: { contentText: ` ${stateText}` },
@@ -142,15 +134,10 @@ export class AsmDecorator {
 		}
 	}
 
-    private asmLineHasSource(asmLine: RenderedArtifactLine) {
-        // eslint-disable-next-line eqeqeq
-        return (asmLine.source?.file != null && asmLine.source?.line != null); //checks null or undefined
-    }
-
 	private clearDecorations(editor: TextEditor) {
-		editor.setDecorations(this.styleManager.selectedLineDecoration, []);
-		editor.setDecorations(this.styleManager.unusedLineDecoration, []);
-		editor.setDecorations(this.styleManager.stateDecoration, []);
+		editor.setDecorations(selectedLineDecoration, []);
+		editor.setDecorations(unusedLineDecoration, []);
+		editor.setDecorations(stateDecoration, []);
 	}
 
 	private clearAllDecorations() {
@@ -165,12 +152,14 @@ export class AsmDecorator {
 	}
 
     private dimUnusedSourceLines() {
+		if (!this.asmData || this.asmData instanceof Error) {
+			return;
+		}
+		const asmData = this.asmData;
 		const getUnusedLines = (document: TextDocument) => {
-			assert(this.asmData instanceof CompiledAssembly);
-
 			const unusedLines: Range[] = [];
 
-			const map = this.asmData.getSourceToAsmLineMapping(document.uri);
+			const map = asmData.sourceLineMappings.get(document.uri);
 			if (map === undefined) {
 				return unusedLines;
 			}
@@ -188,13 +177,13 @@ export class AsmDecorator {
 			const dimUnused = this.configService.getDimUnusedSourceLines(editor.document.uri);
 
 			if (dimUnused) {
-				editor.setDecorations(this.styleManager.unusedLineDecoration, getUnusedLines(editor.document));
+				editor.setDecorations(unusedLineDecoration, getUnusedLines(editor.document));
 			}
 		}
     }
 
     private onSrcLineSelected(selectedEditor: TextEditor, highlightOnly: boolean = false): void {
-		if (this.asmData instanceof Error) {
+		if (!this.asmData || this.asmData instanceof Error) {
 			return;
 		}
 
@@ -204,11 +193,10 @@ export class AsmDecorator {
 			return;
 		}
 
+		const asmData = this.asmData;
 		const getSelectedLines = (srcFile: Uri, line: number) => {
-			assert(this.asmData instanceof CompiledAssembly);
-
 			const asmLinesRanges: Range[] = [];
-			const mapped = this.asmData.getAsmLinesForSourceLine(srcFile, line);
+			const mapped = asmData.sourceLineMappings.get(srcFile)?.get(line);
 
 			if (mapped !== undefined) {
 				for (let line of mapped) {
@@ -224,7 +212,7 @@ export class AsmDecorator {
 
 		// Highlight selected line in source editor
         const srcLineRange = selectedEditor.document.lineAt(selectedEditor.selection.start.line).range;
-        selectedEditor.setDecorations(this.styleManager.selectedLineDecoration, [srcLineRange]);
+        selectedEditor.setDecorations(selectedLineDecoration, [srcLineRange]);
 
 		// Highlight associated lines in ASM editor
 		const asmLines: Range[] = getSelectedLines(selectedEditor.document.uri, selectedEditor.selection.start.line);
@@ -235,7 +223,7 @@ export class AsmDecorator {
 			}
 		}
 
-        asmEditor.setDecorations(this.styleManager.selectedLineDecoration, asmLines);
+        asmEditor.setDecorations(selectedLineDecoration, asmLines);
 
         if (asmLines.length > 0 && !highlightOnly) {
 			// First line will be from the editor that actually had its selection changed (the editor passed to this function)
@@ -244,7 +232,7 @@ export class AsmDecorator {
     }
 
     private onAsmLineSelected(asmEditor: TextEditor, highlightOnly: boolean = false): void {
-		if (this.asmData instanceof Error) {
+		if (!this.asmData || this.asmData instanceof Error) {
 			return;
 		}
 
@@ -256,10 +244,10 @@ export class AsmDecorator {
 
 		// Highlight selected line in ASM editor
         const asmLineRange = asmEditor.document.lineAt(line).range;
-        asmEditor.setDecorations(this.styleManager.selectedLineDecoration, [asmLineRange]);
+        asmEditor.setDecorations(selectedLineDecoration, [asmLineRange]);
 
 		// Highlight associated lines in source editor
-        if (this.asmLineHasSource(asmLine)) {
+        if (asmLineHasSource(asmLine)) {
 			const srcUri = Uri.file(path.normalize(asmLine.source!.file!));
 
 			// Open the correct source document if this line of assembly refers to a different file
@@ -275,7 +263,7 @@ export class AsmDecorator {
 
 				const srcLineRange = targetEditor.document.lineAt(srcLineIndex).range;
 
-				targetEditor.setDecorations(this.styleManager.selectedLineDecoration, [srcLineRange]);
+				targetEditor.setDecorations(selectedLineDecoration, [srcLineRange]);
 
 				if (!highlightOnly) {
 					targetEditor.revealRange(srcLineRange, TextEditorRevealType.InCenterIfOutsideViewport);
@@ -287,13 +275,13 @@ export class AsmDecorator {
 		else {
 			// Clear selected line decoration when the assembly editor line doesn't correspond to a source location
 			for (let editor of this.getAllSourceEditors()) {
-				editor.setDecorations(this.styleManager.selectedLineDecoration, []);
+				editor.setDecorations(selectedLineDecoration, []);
 			}
         }
     }
 
 	private updateActiveState(): void {
-		if (this.asmData instanceof Error) {
+		if (!this.asmData || this.asmData instanceof Error) {
 			this.active = false;
 			return;
 		}
@@ -332,7 +320,7 @@ export class AsmDecorator {
 	}
 
 	private getAllSourceEditors(): TextEditor[] {
-		if (this.asmData instanceof Error) {
+		if (!this.asmData || this.asmData instanceof Error) {
 			return [];
 		}
 

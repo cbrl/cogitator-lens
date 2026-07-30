@@ -20,7 +20,7 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import {AsmResultSource} from './asmresult.interfaces.js';
+import {AsmResultSource} from '../../types/asmresult/asmresult.interfaces.js';
 
 export class ParsingState {
     public mayRemovePreviousLabel = true;

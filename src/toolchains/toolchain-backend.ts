@@ -1,25 +1,21 @@
 import fs from 'fs';
 import path from 'path';
-import type { CancellationToken } from 'vscode';
-import { AsmParser } from '../parsers/asm-parser.js';
-import type { ParseFiltersAndOutputOptions } from '../parsers/filters.interfaces.js';
-import type { ParsedAsmResult } from '../parsers/asmresult.interfaces.js';
+import type { CancellationToken, Uri } from 'vscode';
+import { AsmParser } from '../vendor/lib/parsers/asm-parser.js';
+import { noopPropertyGetter } from '../vendor/compiler-props.js';
+import type { ParseFiltersAndOutputOptions } from '../vendor/types/features/filters.interfaces.js';
+import type { ParsedAsmResult } from '../vendor/types/asmresult/asmresult.interfaces.js';
 import type {
 	ToolchainProfile,
-	ToolchainCapabilities,
 	CompileOptions,
 	DisplayOptions,
 	ProductionOptions,
 	RawArtifact,
 } from '../types/index.js';
-import { redactArguments } from '../toolchain-arguments.js';
-import { sanitizeAssemblyArguments } from '../artifacts/assembly-producer.js';
-import {
-	ToolExecutionGate,
-	trustedToolExecution,
-	type ExecResult,
-} from '../tool-execution.js';
+import { samePath } from '../toolchain-arguments.js';
+import * as exec from '../exec.js';
 import { withTemporaryDirectory } from '../temporary-directory.js';
+import type { ToolchainDefinition } from './toolchain-map.js';
 
 export class ToolExitError extends Error {
 	constructor(
@@ -33,70 +29,138 @@ export class ToolExitError extends Error {
 	}
 }
 
-export interface AssemblyToolOutput extends RawArtifact {
-	readonly stdout: string;
-	readonly stderr: string;
+export interface BinaryDisassembler {
+	readonly tool: string;
+	readonly arguments: (objectFile: string) => readonly string[];
+	readonly normalizeOutput?: (output: string) => string;
 }
 
-export interface IToolchainBackend {
-	readonly profile: ToolchainProfile;
-	produceAssembly(
-		file: string,
-		options: CompileOptions,
-		cancellationToken: CancellationToken,
-	): Promise<AssemblyToolOutput>;
-	parseAssembly(rawAssembly: string, options: DisplayOptions): ParsedAsmResult;
+const flagsWithSeparateValues = new Set(['-o', '-MF', '-MT', '-MQ', '/Fo', '/Fa', '/Fd']);
+const flagsWithJoinedValues = /^(?:-o|-MF|-MT|-MQ|\/Fo|\/Fa|\/Fd).+/;
+const compilerManagedFlags = new Set([
+	'-S',
+	'-c',
+	'-M',
+	'-MM',
+	'-MD',
+	'-MMD',
+	'/c',
+	'/FA',
+	'/FAc',
+	'/FAs',
+	'/FAcs',
+]);
+
+/**
+ * Strips the output-file and compile-mode flags this extension supplies itself
+ * (via `ToolchainDefinition.outputArguments`), so a toolchain's own default
+ * arguments can't conflict with them.
+ */
+export function stripCompilerManagedArguments(
+	args: readonly string[],
+	sourceFile: string,
+	workingDirectory?: string,
+): string[] {
+	const result: string[] = [];
+	for (let index = 0; index < args.length; index++) {
+		const argument = args[index];
+		if (samePath(argument, sourceFile, workingDirectory) || compilerManagedFlags.has(argument)) {
+			continue;
+		}
+		if (flagsWithSeparateValues.has(argument)) {
+			index++;
+			continue;
+		}
+		if (flagsWithJoinedValues.test(argument)) {
+			continue;
+		}
+		result.push(argument);
+	}
+	return result;
 }
 
-export abstract class ToolchainBackend implements IToolchainBackend {
-	readonly profile: ToolchainProfile;
-	protected asmParser: AsmParser;
-	protected readonly capabilities: ToolchainCapabilities;
+/**
+ * Whether Intel-syntax output arguments should be added, extracted as a pure
+ * function so the gating logic (as opposed to full compilation) is directly
+ * unit-testable without spawning a compiler.
+ */
+export function intelOutputArguments(
+	definition: Pick<ToolchainDefinition, 'intelSyntax' | 'intelArguments'>,
+	options: ProductionOptions,
+): readonly string[] {
+	return options.intel && definition.intelSyntax === 'selectable' && definition.intelArguments
+		? definition.intelArguments
+		: [];
+}
 
-	constructor(
-		profile: ToolchainProfile,
-		capabilities: ToolchainCapabilities,
-		protected readonly execution: ToolExecutionGate = trustedToolExecution,
-	) {
+export async function demangleViaStdin(
+	rawAssembly: string,
+	demanglerTool: string,
+	environment: NodeJS.ProcessEnv,
+	workingDirectory: string,
+	cancellationToken: CancellationToken,
+): Promise<string> {
+	const result = await exec.execute(demanglerTool, [], {
+		cwd: workingDirectory,
+		env: environment,
+		cancellationToken,
+		stdin: rawAssembly,
+	});
+	if (result.returnCode !== 0) {
+		throw new ToolExitError(
+			`Demangler exited with code ${result.returnCode}`,
+			result.returnCode,
+			result.stdout,
+			result.stderr,
+		);
+	}
+	return result.stdout;
+}
+
+interface PreparedInvocation {
+	readonly workingDirectory: string;
+	readonly preparedEnvironment: NodeJS.ProcessEnv;
+	readonly argumentsList: readonly string[];
+	readonly overriddenNames: readonly string[];
+	readonly started: number;
+}
+
+export class ToolchainBackend {
+	readonly profile: ToolchainProfile;
+	private readonly definition: ToolchainDefinition;
+	private readonly asmParser: AsmParser;
+	// Binary disassembly is always GNU objdump-style text (GNU/LLVM objdump, or dumpbin
+	// normalized to that shape by binary-disassembly-producer.ts), regardless of which
+	// dialect `asmParser` handles for textual assembly. Parsing it with a dedicated plain
+	// `AsmParser` keeps that independent of a backend's assembly dialect (e.g. MSVC's
+	// `VcAsmParser`, whose own binary-mode parsing is an unimplemented upstream stub).
+	private readonly binaryAsmParser: AsmParser = new AsmParser(noopPropertyGetter);
+
+	constructor(profile: ToolchainProfile, definition: ToolchainDefinition) {
 		this.profile = profile;
-		this.capabilities = capabilities;
-		this.asmParser = new AsmParser();
+		this.definition = definition;
+		this.asmParser = definition.createParser();
 	}
 
 	async produceAssembly(
-		file: string,
+		source: Uri,
 		options: CompileOptions,
 		cancellationToken: CancellationToken,
-	): Promise<AssemblyToolOutput> {
+	): Promise<RawArtifact> {
 		return withTemporaryDirectory('coglens-', async temporaryDirectory => {
 			const outputFile = path.join(temporaryDirectory, 'output.asm');
-			const workingDirectory = options.workingDirectory ?? path.dirname(file);
+			const invocation = await this.prepareInvocation(source, options, 'assembly', outputFile, cancellationToken);
 
-			const environment = {
-				...process.env,
-				...this.profile.environment,
-				...options.env,
-			};
-
-			const providerArguments = sanitizeAssemblyArguments([
-				...this.profile.defaultArguments,
-				...(options.args ?? []),
-			], file, workingDirectory);
-			const argumentsList = [
-				...providerArguments,
-				...this.outputOptionArguments(options.productionOptions),
-				...this.prepareArguments(outputFile),
-				file,
-			];
-
-			const started = performance.now();
 			const { logChannel } = await import('../logger.js');
-			logChannel.info(`Compiling ${file} with ${this.profile.displayName}`);
-			logChannel.info(`Command: ${this.profile.executable} ${redactArguments(argumentsList).join(' ')}`);
-			const overriddenNames = Object.keys({ ...this.profile.environment, ...options.env }).sort();
-			logChannel.debug(`Environment overrides: ${overriddenNames.join(', ') || '(none)'}`);
+			logChannel.info(`Compiling ${source.fsPath} with ${this.profile.displayName}`);
+			logChannel.info(`Command: ${this.profile.executable} ${invocation.argumentsList.join(' ')}`);
+			logChannel.debug(`Environment overrides: ${invocation.overriddenNames.join(', ') || '(none)'}`);
 
-			const result = await this.runCompiler(argumentsList, environment, workingDirectory, cancellationToken);
+			const result = await exec.execute(this.profile.executable, invocation.argumentsList, {
+				cwd: invocation.workingDirectory,
+				env: invocation.preparedEnvironment,
+				cancellationToken,
+			});
 			if (result.returnCode !== 0) {
 				throw new ToolExitError(
 					`Toolchain exited with code ${result.returnCode}`,
@@ -107,26 +171,102 @@ export abstract class ToolchainBackend implements IToolchainBackend {
 			}
 
 			const assembly = await fs.promises.readFile(outputFile, 'utf8');
-			const postProcessedAssembly = await this.postProcessAssembly(
+			const text = await this.postProcessAssembly(
 				assembly,
 				options.productionOptions,
-				environment,
-				workingDirectory,
+				invocation.preparedEnvironment,
+				invocation.workingDirectory,
 				cancellationToken,
 			);
+			const { parseToolDiagnostics } = await import('../diagnostics.js');
 			return {
 				kind: 'assembly',
-				text: postProcessedAssembly,
-				diagnostics: [],
-				stdout: result.stdout,
-				stderr: result.stderr,
-				durationMs: performance.now() - started,
+				text,
+				diagnostics: parseToolDiagnostics(
+					`${result.stderr}\n${result.stdout}`,
+					source,
+					invocation.workingDirectory,
+				),
+				durationMs: performance.now() - invocation.started,
 				truncated: false,
 				command: {
 					executable: this.profile.executable,
-					arguments: redactArguments(argumentsList),
-					environmentVariableNames: overriddenNames,
-					workingDirectory,
+					arguments: invocation.argumentsList,
+					environmentVariableNames: invocation.overriddenNames,
+					workingDirectory: invocation.workingDirectory,
+				},
+			};
+		});
+	}
+
+	async produceBinaryDisassembly(
+		source: Uri,
+		options: CompileOptions,
+		disassembler: BinaryDisassembler,
+		cancellationToken: CancellationToken,
+	): Promise<RawArtifact> {
+		return withTemporaryDirectory('coglens-', async temporaryDirectory => {
+			const objectFile = path.join(temporaryDirectory, this.definition.objectFilename);
+			const invocation = await this.prepareInvocation(source, options, 'object', objectFile, cancellationToken);
+			const disassemblerExecutable = this.profile.tools[disassembler.tool];
+			if (!disassemblerExecutable) {
+				throw new Error(`${this.profile.displayName} has no ${disassembler.tool} auxiliary tool.`);
+			}
+
+			const { logChannel } = await import('../logger.js');
+			logChannel.info(`Compiling ${source.fsPath} to an object file with ${this.profile.displayName}`);
+			logChannel.info(`Command: ${this.profile.executable} ${invocation.argumentsList.join(' ')}`);
+			logChannel.debug(`Environment overrides: ${invocation.overriddenNames.join(', ') || '(none)'}`);
+
+			const compilerResult = await exec.execute(this.profile.executable, invocation.argumentsList, {
+				cwd: invocation.workingDirectory,
+				env: invocation.preparedEnvironment,
+				cancellationToken,
+			});
+			if (compilerResult.returnCode !== 0) {
+				throw new ToolExitError(
+					`Toolchain exited with code ${compilerResult.returnCode}`,
+					compilerResult.returnCode,
+					compilerResult.stdout,
+					compilerResult.stderr,
+				);
+			}
+
+			const disassemblerArguments = disassembler.arguments(objectFile);
+			logChannel.info(`Command: ${disassemblerExecutable} ${disassemblerArguments.join(' ')}`);
+			const disassemblerResult = await exec.execute(disassemblerExecutable, disassemblerArguments, {
+				cwd: invocation.workingDirectory,
+				env: invocation.preparedEnvironment,
+				cancellationToken,
+			});
+			if (disassemblerResult.returnCode !== 0) {
+				throw new ToolExitError(
+					`Disassembler exited with code ${disassemblerResult.returnCode}`,
+					disassemblerResult.returnCode,
+					disassemblerResult.stdout,
+					disassemblerResult.stderr,
+				);
+			}
+
+			const text = disassembler.normalizeOutput
+				? disassembler.normalizeOutput(disassemblerResult.stdout)
+				: disassemblerResult.stdout;
+			const { parseToolDiagnostics } = await import('../diagnostics.js');
+			return {
+				kind: 'binary-disassembly',
+				text,
+				diagnostics: parseToolDiagnostics(
+					[compilerResult.stderr, compilerResult.stdout, disassemblerResult.stderr].join('\n'),
+					source,
+					invocation.workingDirectory,
+				),
+				durationMs: performance.now() - invocation.started,
+				truncated: false,
+				command: {
+					executable: disassemblerExecutable,
+					arguments: disassemblerArguments,
+					environmentVariableNames: invocation.overriddenNames,
+					workingDirectory: invocation.workingDirectory,
 				},
 			};
 		});
@@ -134,62 +274,68 @@ export abstract class ToolchainBackend implements IToolchainBackend {
 
 	parseAssembly(rawAssembly: string, options: DisplayOptions): ParsedAsmResult {
 		const filters: ParseFiltersAndOutputOptions = { ...options };
-		return this.asmParser.process(rawAssembly, {
-			...filters,
-			libraryCode: this.capabilities.libraryCodeFilter
-				? filters.libraryCode
-				: false,
-		});
+		return this.asmParser.process(rawAssembly, filters);
 	}
 
-	protected runCompiler(
-		args: readonly string[],
-		environment: NodeJS.ProcessEnv,
-		workingDirectory: string,
+	parseBinaryDisassembly(rawDisassembly: string, options: DisplayOptions): ParsedAsmResult {
+		const filters: ParseFiltersAndOutputOptions = { ...options, binary: true };
+		return this.binaryAsmParser.process(rawDisassembly, filters);
+	}
+
+	private async prepareInvocation(
+		source: Uri,
+		options: CompileOptions,
+		target: 'assembly' | 'object',
+		outputFile: string,
 		cancellationToken: CancellationToken,
-	): Promise<ExecResult> {
-		return this.execution.execute(this.profile.executable, args, {
-			cwd: workingDirectory,
-			env: environment,
-			cancellationToken,
-		});
+	): Promise<PreparedInvocation> {
+		const workingDirectory = options.workingDirectory ?? path.dirname(source.fsPath);
+		const environment = {
+			...process.env,
+			...this.profile.environment,
+			...options.env,
+		};
+		const preparedEnvironment = this.definition.prepareEnvironment
+			? await this.definition.prepareEnvironment(this.profile, environment, cancellationToken)
+			: environment;
+
+		const strip = this.definition.stripOwnedArguments ?? stripCompilerManagedArguments;
+		const providerArguments = strip([
+			...this.profile.defaultArguments,
+			...(options.args ?? []),
+		], source.fsPath, workingDirectory);
+
+		const argumentsList = [
+			...providerArguments,
+			...(target === 'assembly' ? this.outputOptionArguments(options.productionOptions) : []),
+			...this.definition.outputArguments(target, outputFile, providerArguments),
+			source.fsPath,
+		];
+
+		return {
+			workingDirectory,
+			preparedEnvironment,
+			argumentsList,
+			overriddenNames: Object.keys({ ...this.profile.environment, ...options.env }).sort(),
+			started: performance.now(),
+		};
 	}
 
-	protected abstract prepareArguments(outputFile: string): readonly string[];
-
-	protected outputOptionArguments(_options: ProductionOptions): readonly string[] {
-		return [];
+	private outputOptionArguments(options: ProductionOptions): readonly string[] {
+		return intelOutputArguments(this.definition, options);
 	}
 
-	protected async postProcessAssembly(
+	private async postProcessAssembly(
 		rawAssembly: string,
 		options: ProductionOptions,
 		environment: NodeJS.ProcessEnv,
 		workingDirectory: string,
 		cancellationToken: CancellationToken,
 	): Promise<string> {
-		if (
-			!options.demangle
-			|| !this.capabilities.demangle
-			|| !this.profile.tools.demangler
-		) {
+		if (!options.demangle || !this.profile.tools.demangler) {
 			return rawAssembly;
 		}
-
-		const result = await this.execution.execute(this.profile.tools.demangler, [], {
-			cwd: workingDirectory,
-			env: environment,
-			cancellationToken,
-			stdin: rawAssembly,
-		});
-		if (result.returnCode !== 0) {
-			throw new ToolExitError(
-				`Demangler exited with code ${result.returnCode}`,
-				result.returnCode,
-				result.stdout,
-				result.stderr,
-			);
-		}
-		return result.stdout;
+		const demangle = this.definition.demangle ?? demangleViaStdin;
+		return demangle(rawAssembly, this.profile.tools.demangler, environment, workingDirectory, cancellationToken);
 	}
 }

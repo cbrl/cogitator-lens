@@ -1,17 +1,16 @@
 import vscode from 'vscode';
-import type { ToolchainProfile } from '../types/index.js';
+import type { IntelSyntaxSupport, ToolchainProfile } from '../types/index.js';
 import { ToolchainRegistry } from '../compilation/index.js';
-import { TreeItem, TreeNode, TreeProvider } from './treedata.js';
-import {
-	resolveToolchainCapabilities,
-	type ResolvedToolchainCapabilities,
-} from '../toolchains/toolchain-map.js';
+import { TreeNode, TreeProvider } from './treedata.js';
+import { makeEnvironmentNode, makeListNode, noneNode } from './tree-helpers.js';
+import { toolchainDefinitions } from '../toolchains/toolchain-map.js';
 import {
 	type ConfigurationOrigin,
 	variantProviderDefinitions,
 } from '../buildsystems/variant-provider.js';
 
 export class ToolchainTreeNode extends TreeNode {
+	declare children?: ToolchainTreeNode[];
 	profile?: ToolchainProfile;
 	origin?: ConfigurationOrigin;
 
@@ -21,19 +20,19 @@ export class ToolchainTreeNode extends TreeNode {
 			description: originLabel(origin),
 			tooltip: profile.executable,
 			nodeType: 'subtree',
-			treeContext: origin === 'user' ? 'instance' : 'derivedInstance',
+			treeContext: origin === 'user' ? undefined : 'derivedInstance',
 			iconPath: new vscode.ThemeIcon('chip'),
 			profile,
 			origin,
 			children: [
 				this.informationNode(profile, origin),
 				makeListNode('Arguments', profile.defaultArguments),
-				makeEnvironmentNode(profile.environment),
+				makeEnvironmentNode(profile.environment, sensitiveEnvironmentName),
 				makeToolsNode(profile.tools),
 				this.capabilitiesNode(profile),
 			],
 		};
-		for (const child of root.children as ToolchainTreeNode[]) {
+		for (const child of root.children ?? []) {
 			child.profile = profile;
 			child.origin = origin;
 		}
@@ -56,19 +55,19 @@ export class ToolchainTreeNode extends TreeNode {
 	}
 
 	private static capabilitiesNode(profile: ToolchainProfile): ToolchainTreeNode {
-		const capabilities = resolveToolchainCapabilities(profile);
-		const available = Object.values(capabilities)
+		const intelSyntax = toolchainDefinitions[profile.kind].intelSyntax;
+		const demangle = profile.tools.demangler ? 'available' : 'unavailable';
+		const available = [demangle, intelSyntax]
 			.filter(status => status === 'available' || status === 'selectable' || status === 'inherent')
 			.length;
 		return {
 			label: 'Capabilities',
-			description: `${available}/3`,
+			description: `${available}/2`,
 			nodeType: 'subtree',
 			iconPath: new vscode.ThemeIcon('tools'),
 			children: [
-				capabilityNode('Symbol demangling', capabilities.demangle),
-				capabilityNode('Intel syntax', capabilities.intelSyntax),
-				capabilityNode('Library-code filtering', capabilities.libraryCodeFilter),
+				capabilityNode('Symbol demangling', demangle),
+				capabilityNode('Intel syntax', intelSyntax),
 			],
 		};
 	}
@@ -83,7 +82,7 @@ function makeToolsNode(tools: Readonly<Record<string, string>>): ToolchainTreeNo
 		iconPath: new vscode.ThemeIcon('tools'),
 		children: entries.length
 			? entries.map(([name, executable]) => detailNode(name, executable, 'symbol-method'))
-			: [{ label: '(none)', nodeType: 'text' }],
+			: [noneNode],
 	};
 }
 
@@ -92,13 +91,9 @@ export class ToolchainTreeProvider extends TreeProvider<ToolchainTreeNode> {
 		super();
 	}
 
-	getTreeItem(element: ToolchainTreeNode): vscode.TreeItem {
-		return new TreeItem(element);
-	}
-
-	protected createChildren(element?: ToolchainTreeNode): ToolchainTreeNode[] | undefined {
+	getChildren(element?: ToolchainTreeNode): ToolchainTreeNode[] | undefined {
 		if (element) {
-			return element.children as ToolchainTreeNode[] | undefined;
+			return element.children;
 		}
 		return [...this.registry.getProfiles()]
 			.sort((left, right) => left.displayName.localeCompare(right.displayName, undefined, { sensitivity: 'base' }))
@@ -123,46 +118,9 @@ function detailNode(label: string, value: string, icon: string): ToolchainTreeNo
 	};
 }
 
-function makeListNode(label: string, values: readonly string[]): ToolchainTreeNode {
-	return {
-		label,
-		description: `${values.length}`,
-		nodeType: 'subtree',
-		iconPath: new vscode.ThemeIcon('list-ordered'),
-		children: values.length
-			? values.map(value => ({
-				label: value,
-				tooltip: value,
-				nodeType: 'text',
-				treeContext: 'text',
-			}))
-			: [{ label: '(none)', nodeType: 'text' }],
-	};
-}
-
-function makeEnvironmentNode(environment: Readonly<Record<string, string>>): ToolchainTreeNode {
-	const entries = Object.entries(environment)
-		.sort(([left], [right]) => left.localeCompare(right, undefined, { sensitivity: 'base' }));
-	return {
-		label: 'Environment overrides',
-		description: `${entries.length}`,
-		nodeType: 'subtree',
-		iconPath: new vscode.ThemeIcon('symbol-variable'),
-		children: entries.length
-			? entries.map(([name, value]) => ({
-				label: name,
-				description: sensitiveEnvironmentName(name) ? '<redacted>' : value,
-				tooltip: sensitiveEnvironmentName(name) ? `${name}=<redacted>` : `${name}=${value}`,
-				nodeType: 'text',
-				treeContext: 'text',
-			}))
-			: [{ label: '(none)', nodeType: 'text' }],
-	};
-}
-
 function capabilityNode(
 	label: string,
-	status: ResolvedToolchainCapabilities[keyof ResolvedToolchainCapabilities],
+	status: 'available' | 'unavailable' | IntelSyntaxSupport,
 ): ToolchainTreeNode {
 	const descriptions: Record<typeof status, string> = {
 		available: 'Available',

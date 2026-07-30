@@ -8,19 +8,7 @@ export function removeSourceArgument(
 	return args.filter(argument => !samePath(argument, sourceFile, workingDirectory));
 }
 
-export function redactArguments(args: readonly string[]): string[] {
-	const secretFlags = /^(?:--?(?:password|token|secret|api[-_]?key)|\/(?:password|token))$/i;
-	const assignment = /^([^=]*(?:password|token|secret|api[-_]?key)[^=]*)=(.*)$/i;
-	return args.map((argument, index) => {
-		if (index > 0 && secretFlags.test(args[index - 1])) {
-			return '<redacted>';
-		}
-		const match = assignment.exec(argument);
-		return match ? `${match[1]}=<redacted>` : argument;
-	});
-}
-
-function samePath(left: string, right: string, workingDirectory?: string): boolean {
+export function samePath(left: string, right: string, workingDirectory?: string): boolean {
 	if (!left || !right) {
 		return false;
 	}

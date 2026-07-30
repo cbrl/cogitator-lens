@@ -24,12 +24,6 @@ export function getArtifactUri(
 	artifactKind: ArtifactKind,
 	presetId: string,
 ): Uri {
-	if (source.scheme !== 'file') {
-		throw new Error('Artifact documents require a file-backed source');
-	}
-	if (!presetId) {
-		throw new Error('An artifact preset identifier is required');
-	}
 	const query = new URLSearchParams({
 		source: source.toString(),
 		variant: variant.id,
@@ -49,12 +43,12 @@ export function parseArtifactUri(uri: Uri): ArtifactUriIdentity | undefined {
 		return undefined;
 	}
 	const query = new URLSearchParams(uri.query);
-	const source = query.get('source');
+	const rawSource = query.get('source');
 	const variantId = query.get('variant');
 	const artifactKind = query.get('artifact');
 	const presetId = query.get('preset');
 	if (
-		!source
+		!rawSource
 		|| !variantId
 		|| !artifactKind
 		|| !getArtifactDefinition(artifactKind)
@@ -62,32 +56,14 @@ export function parseArtifactUri(uri: Uri): ArtifactUriIdentity | undefined {
 	) {
 		return undefined;
 	}
-	try {
-		const identity = {
-			source: Uri.parse(source),
-			variantId,
-			artifactKind: artifactKind as ArtifactKind,
-			presetId,
-		};
-		if (identity.source.scheme !== 'file') {
-			return undefined;
-		}
-		const canonical = getArtifactUri(
-			identity.source,
-			{ id: identity.variantId },
-			identity.artifactKind,
-			identity.presetId,
-		);
-		if (
-			uri.authority !== canonical.authority
-			|| uri.path !== canonical.path
-			|| uri.query !== canonical.query
-			|| uri.fragment !== ''
-		) {
-			return undefined;
-		}
-		return identity;
-	} catch {
+	const source = Uri.parse(rawSource);
+	if (source.scheme !== 'file') {
 		return undefined;
 	}
+	return {
+		source,
+		variantId,
+		artifactKind: artifactKind as ArtifactKind,
+		presetId,
+	};
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2016, Matt Godbolt
+// Copyright (c) 2022, Compiler Explorer Authors
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -22,46 +22,30 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-const tabsRe = /\t/g;
-const lineRe = /\r?\n/;
-const findQuotes = /(.*?)("(?:[^"\\]|\\.)*")(.*)/;
+export type PropertyValue = string | boolean | number | undefined;
 
-export const ce_temp_prefix = 'compiler-explorer-compiler';
-
-export function splitLines(text: string): string[] {
-    if (!text) {
-		return [];
-	}
-    const result = text.split(lineRe);
-    if (result.length > 0 && result[result.length - 1] === '') {
-		return result.slice(0, -1);
-	}
-    return result;
+// names don't matter
+interface TypeMap {
+    a: string;
+    b: boolean;
+    c: number;
+    d: undefined;
 }
 
-export function expandTabs(line: string): string {
-    let extraChars = 0;
-    return line.replaceAll(tabsRe, (match, offset) => {
-        const total = offset + extraChars;
-        const spacesNeeded = (total + 8) & 7;
-        extraChars += spacesNeeded - 1;
-        return '        '.substring(spacesNeeded);
-    });
+export type Widen<T> = T extends T
+    ? {
+          [P in keyof TypeMap]: T extends TypeMap[P] ? TypeMap[P] : never;
+      }[keyof TypeMap]
+    : T;
+
+// TODO(jeremy-rifkin): I think the types could use some work here.
+// Maybe props<string>(property) should be string | undefined.
+
+function superficialGetter(property: string, defaultValue?: undefined): PropertyValue;
+function superficialGetter<T extends PropertyValue>(property: string, defaultValue: Widen<T>): typeof defaultValue;
+function superficialGetter<T extends PropertyValue>(property: string, defaultValue?: unknown): T;
+function superficialGetter(property: string, defaultValue?: unknown): unknown {
+    return;
 }
 
-export function squashHorizontalWhitespace(line: string, atStart = true): string {
-    if (line.trim().length === 0) {
-        return '';
-    }
-    const splat = line.split(/\s+/);
-    if (splat[0] === '' && atStart) {
-        // An indented line: preserve a two-space indent (max)
-        const intent = line[1] === ' ' ? '  ' : ' ';
-        return intent + splat.slice(1).join(' ');
-    }
-    return splat.join(' ');
-}
-
-export function deltaTimeNanoToMili(startTime: bigint, endTime: bigint): number {
-    return Number((endTime - startTime) / BigInt(1_000_000));
-}
+export type PropertyGetter = typeof superficialGetter;

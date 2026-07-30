@@ -12,17 +12,13 @@ import {
 	compilationDatabaseProviderId,
 	parseCompilationDatabase,
 } from './compilation-database-parser.js';
+import type { ConfigurationService } from '../services/configuration-service.js';
 import type {
 	CompilationVariant,
 	ToolchainProfile,
 	ProviderSnapshot,
 } from '../types/index.js';
 import * as logger from '../logger.js';
-
-const defaultCompilationDatabases = [
-	'compile_commands.json',
-	'build/compile_commands.json',
-] as const;
 
 interface DatabaseFile {
 	readonly folder: WorkspaceFolder;
@@ -36,6 +32,10 @@ export class CompilationDatabaseVariantProvider extends VariantProvider {
 	private readonly watchers: Disposable[] = [];
 	private refreshGeneration = 0;
 	private disposed = false;
+
+	constructor(private readonly configuration: ConfigurationService) {
+		super();
+	}
 
 	async initialize(): Promise<void> {
 		this.subscriptions.push(
@@ -104,21 +104,7 @@ export class CompilationDatabaseVariantProvider extends VariantProvider {
 				);
 				continue;
 			}
-			const configured = workspace.getConfiguration('coglens', folder.uri)
-				.get<unknown>('compilationDatabases', [...defaultCompilationDatabases]);
-			if (!Array.isArray(configured) || configured.some(value => typeof value !== 'string')) {
-				logger.logChannel.error(
-					`Ignoring invalid coglens.compilationDatabases for ${folder.name}: expected an array of paths`,
-				);
-				continue;
-			}
-			for (const configuredPath of configured) {
-				if (!configuredPath.trim()) {
-					logger.logChannel.warn(
-						`Ignoring an empty compilation database path for ${folder.name}`,
-					);
-					continue;
-				}
+			for (const configuredPath of this.configuration.getCompilationDatabases(folder.uri)) {
 				const filePath = path.resolve(folder.uri.fsPath, configuredPath);
 				const key = process.platform === 'win32' ? filePath.toLowerCase() : filePath;
 				files.set(key, { folder, filePath });

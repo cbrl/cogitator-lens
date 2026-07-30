@@ -5,7 +5,11 @@ export default [{
     files: ["**/*.ts"],
 },
 {
-	ignores: ["node_modules/", "src/parsers/**/*", "src/stacktrace.ts"]
+	ignores: [
+		"node_modules/",
+		"src/vendor/lib/parsers/**/*",
+		"src/vendor/types/**/*",
+	]
 },
 {
     plugins: {

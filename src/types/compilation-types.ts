@@ -5,7 +5,6 @@
 
 import type { CancellationToken, Uri } from 'vscode';
 import type { ArtifactOptions } from './artifact-options.js';
-import type { ToolchainProfile } from './toolchain-types.js';
 import type { ArtifactKind } from '../artifacts/artifact-definitions.js';
 
 export interface CompilationVariant {
@@ -24,7 +23,6 @@ export interface CompilationVariant {
 
 export interface ArtifactRequest {
 	variant: CompilationVariant;
-	toolchain: ToolchainProfile;
 	artifactKind: ArtifactKind;
 	presetId: string;
 	extraArguments: readonly string[];
@@ -103,9 +101,12 @@ export interface RenderedArtifact {
 	readonly symbols: readonly ArtifactSymbol[];
 	readonly metrics: Readonly<Record<string, unknown>>;
 	readonly raw: RawArtifact;
-	readonly diagnostics: readonly CompileDiagnostic[];
-	readonly durationMs: number;
-	readonly command: ArtifactCommand;
+	/**
+	 * Whether output was truncated, either at the tool-output level
+	 * (`raw.truncated`) or by the vendored parser's own line-count limit
+	 * (which only signals via a `[truncated; too many lines]` marker line,
+	 * not a boolean — the upstream parser can't be changed to add one).
+	 */
 	readonly truncated: boolean;
 }
 
@@ -160,10 +161,4 @@ export interface ProviderSnapshot {
 	provider: import('../buildsystems/variant-provider.js').ConfigurationOrigin;
 	toolchainProfiles: readonly import('./toolchain-types.js').ToolchainProfile[];
 	variants: readonly CompilationVariant[];
-}
-
-export interface ReconciliationChange<T> {
-	added: readonly T[];
-	updated: readonly T[];
-	removed: readonly T[];
 }

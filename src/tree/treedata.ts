@@ -10,7 +10,7 @@ export type TreeItemSpecifier = 'checkbox' | 'subtree' | 'text';
  * Specifies the context in which a tree item is used. This will be the value of vscode.TreeItem.contextValue,
  * and can be used to limit commands to specific menu items based on the context.
  */
-export type TreeContextSpecifier = 'derivedInstance' | 'disabled' | 'instance' | 'options' | 'text';
+export type TreeContextSpecifier = 'derivedInstance' | 'text';
 
 export class TreeNode {
 	/**
@@ -45,11 +45,6 @@ export class TreeNode {
 	checked?: boolean;
 
 	/**
-	 * A reference to the tree that owns this node. Automatically set by the tree.
-	 */
-	tree?: TreeProvider<TreeNode>;
-
-	/**
 	 * The tooltip to display for this node.
 	 */
 	tooltip?: string;
@@ -76,16 +71,15 @@ export class TreeItem extends vscode.TreeItem {
 		if (nodeType === 'subtree') {
 			this.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
 		}
-		else if (nodeType === 'checkbox' && !node.disabled) {
+		if (nodeType === 'checkbox' && !node.disabled) {
 			this.checkboxState = node.checked
 				? vscode.TreeItemCheckboxState.Checked
 				: vscode.TreeItemCheckboxState.Unchecked;
-        }
-		else if (node.disabled) {
+		}
+		if (node.disabled) {
 			this.contextValue = 'disabled';
 			this.iconPath ??= new vscode.ThemeIcon('circle-slash');
 		}
-
     }
 }
 
@@ -100,19 +94,9 @@ export abstract class TreeProvider<NodeType extends TreeNode> implements vscode.
         this._onDidChangeTreeData.fire(undefined);
     }
 
-	public refreshItem(node: NodeType): void {
-		this._onDidChangeTreeData.fire(node);
-	}
+    public getTreeItem(element: NodeType): vscode.TreeItem {
+        return new TreeItem(element);
+    }
 
-    public abstract getTreeItem(element: NodeType): vscode.TreeItem;
-
-    public getChildren(element?: NodeType): vscode.ProviderResult<NodeType[]> {
-		const children = this.createChildren(element);
-
-		children?.forEach(child => child.tree = this);
-
-		return children;
-	}
-
-	protected abstract createChildren(element?: NodeType): NodeType[] | undefined;
+    public abstract getChildren(element?: NodeType): vscode.ProviderResult<NodeType[]>;
 }

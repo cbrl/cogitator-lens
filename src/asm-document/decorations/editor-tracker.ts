@@ -50,18 +50,4 @@ export class EditorTracker {
 		this.pendingEditors.set(uri, promise);
 		return promise;
 	}
-
-	/**
-	 * Check if an editor is for a source file
-	 */
-	isSourceEditor(editor: TextEditor, srcUris: UriSet): boolean {
-		return srcUris.has(editor.document.uri);
-	}
-
-	/**
-	 * Check if an editor is for the assembly file
-	 */
-	isAsmEditor(editor: TextEditor, asmUri: Uri): boolean {
-		return equalUri(editor.document.uri, asmUri);
-	}
 }

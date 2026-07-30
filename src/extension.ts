@@ -10,16 +10,15 @@ import { AsmDefinitionProvider } from './asm-document/asm-definition-provider.js
 import { AsmProvider, getArtifactUri } from './asm-document/asm-provider.js';
 import { CmakeVariantProvider } from './buildsystems/cmake.js';
 import { CompilationDatabaseVariantProvider } from './buildsystems/compilation-database.js';
+import { VariantProvider } from './buildsystems/variant-provider.js';
 import { CompilationService } from './compilation/index.js';
 import { ConfigurationService } from './services/configuration-service.js';
-import type { IVariantProvider } from './interfaces/index.js';
 import type { ArtifactKind } from './types/index.js';
 import {
 	artifactDefinitions,
 	supportedArtifactKinds,
 } from './artifacts/artifact-definitions.js';
 import { supportedLanguageIdentifiers } from './toolchains/toolchain-map.js';
-import { ToolExecutionGate } from './tool-execution.js';
 import * as setup from './setup.js';
 
 export async function activate(context: ExtensionContext): Promise<void> {
@@ -27,7 +26,6 @@ export async function activate(context: ExtensionContext): Promise<void> {
 	const compilationService = new CompilationService(
 		configuration,
 		context.workspaceState,
-		new ToolExecutionGate(() => workspace.isTrusted),
 	);
 	const artifactProvider = new AsmProvider(compilationService, configuration);
 	const definitionProvider = new AsmDefinitionProvider(uri =>
@@ -38,9 +36,9 @@ export async function activate(context: ExtensionContext): Promise<void> {
 	setup.createGlobalOptionsTreeView(context, compilationService);
 	setup.setupCommands(context, compilationService, configuration);
 
-	const variantProviders: IVariantProvider[] = [
+	const variantProviders: VariantProvider[] = [
 		new CmakeVariantProvider(),
-		new CompilationDatabaseVariantProvider(),
+		new CompilationDatabaseVariantProvider(configuration),
 	];
 	const providerSubscriptions = variantProviders.map(provider =>
 		provider.onSnapshot(snapshot => compilationService.reconcileProviderSnapshot(snapshot)));
@@ -127,13 +125,6 @@ async function openArtifact(
 		);
 		return;
 	}
-	const dirtyDecision = await resolveDirtyDocument(editor.document);
-	if (dirtyDecision === 'cancel') {
-		return;
-	}
-	if (dirtyDecision === 'saved-version') {
-		artifactProvider.allowDirtySavedCompilation(editor.document.uri);
-	}
 	if (!await pickVariantIfNeeded(editor.document.uri, compilationService)) {
 		return;
 	}
@@ -199,25 +190,6 @@ async function openArtifact(
 function isSupportedSourceDocument(document: vscode.TextDocument): boolean {
 	return document.uri.scheme === 'file'
 		&& supportedLanguageIdentifiers.has(document.languageId);
-}
-
-type DirtyDocumentDecision = 'current' | 'saved-version' | 'cancel';
-
-async function resolveDirtyDocument(document: vscode.TextDocument): Promise<DirtyDocumentDecision> {
-	if (!document.isDirty) {
-		return 'current';
-	}
-	const choice = await window.showWarningMessage(
-		'This source file has unsaved changes. What should Cogitator Lens use?',
-		{ modal: true },
-		'Save and Continue',
-		'Use Saved Version',
-		'Cancel',
-	);
-	if (choice === 'Save and Continue') {
-		return await document.save() ? 'current' : 'cancel';
-	}
-	return choice === 'Use Saved Version' ? 'saved-version' : 'cancel';
 }
 
 async function pickVariantIfNeeded(source: vscode.Uri, service: CompilationService): Promise<boolean> {

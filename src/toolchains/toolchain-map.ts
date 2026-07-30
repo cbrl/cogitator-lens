@@ -1,41 +1,41 @@
 import fs from 'fs';
 import path from 'path';
-import { AppleClangCompiler, ClangCompiler, GccCompiler } from './gcc.js';
-import { ClangClCompiler, MsvcCompiler } from './msvc.js';
+import type { CancellationToken, Uri } from 'vscode';
 import type {
 	ArtifactKind,
 	ArtifactOptionAvailability,
 	ArtifactOptionId,
 	CompileOptions,
+	IntelSyntaxSupport,
 	RawArtifact,
 	ToolchainKind,
 	ToolchainProfile,
-	ToolchainCapabilities,
-	IntelSyntaxSupport,
 } from '../types/index.js';
-import type { ToolchainBackend } from '../toolchains/toolchain-backend.js';
-import type { CancellationToken, Uri } from 'vscode';
-import { produceAssembly } from '../artifacts/assembly-producer.js';
-import type { ToolExecutionGate } from '../tool-execution.js';
-
-type ToolchainBackendConstructor = new(
-	profile: ToolchainProfile,
-	capabilities: ToolchainCapabilities,
-	execution?: ToolExecutionGate,
-) => ToolchainBackend;
+import { ToolchainBackend } from '../toolchains/toolchain-backend.js';
+import { AsmParser } from '../vendor/lib/parsers/asm-parser.js';
+import { noopPropertyGetter } from '../vendor/compiler-props.js';
+import {
+	captureWindowsEnvironment,
+	clangClOutputArguments,
+	createMsvcAsmParser,
+	msvcOutputArguments,
+	windowsDemangle,
+} from './msvc.js';
+import { rustOutputArguments, stripRustManagedArguments } from './rust.js';
+import {
+	artifactDefinitions,
+	supportedArtifactKinds,
+} from '../artifacts/artifact-definitions.js';
+import {
+	binaryDisassemblyProducer,
+	dumpbin,
+	gnuObjdump,
+	llvmObjdump,
+} from '../artifacts/binary-disassembly-producer.js';
 
 export type ToolCapabilityStatus = 'available' | 'unavailable' | 'unsupported';
 
-interface ToolchainDefinitionShape {
-	readonly Adapter: ToolchainBackendConstructor;
-	readonly executablePattern: RegExp;
-	readonly languageIdentifiers: readonly string[];
-	readonly includeFlag: string;
-	readonly defineFlag: string;
-	readonly capabilities: ToolchainCapabilities;
-	readonly findDemangler: (executable: string) => string | undefined;
-	readonly artifacts: Readonly<Record<ArtifactKind, ToolchainArtifactCell>>;
-}
+export const disassemblerToolName = 'disassembler';
 
 export type ArtifactProducer = (
 	backend: ToolchainBackend,
@@ -48,11 +48,50 @@ export type ToolchainArtifactCell =
 	| {
 		readonly status: 'available';
 		readonly producer: ArtifactProducer;
+		readonly requiredTool?: {
+			readonly name: string;
+			readonly label: string;
+		};
 	}
 	| {
 		readonly status: 'unavailable' | 'unsupported';
 		readonly explanation: string;
 	};
+
+export interface ToolchainDefinitionShape {
+	readonly executablePattern: RegExp;
+	readonly languageIdentifiers: readonly string[];
+	readonly intelSyntax: IntelSyntaxSupport;
+	readonly intelArguments?: readonly string[];
+	readonly includeFlag?: string;
+	readonly defineFlag?: string;
+	readonly objectFilename: string;
+	readonly outputArguments: (
+		target: 'assembly' | 'object',
+		outputFile: string,
+		providerArguments: readonly string[],
+	) => readonly string[];
+	readonly stripOwnedArguments?: (
+		args: readonly string[],
+		sourceFile: string,
+		workingDirectory: string,
+	) => readonly string[];
+	readonly createParser: () => AsmParser;
+	readonly prepareEnvironment?: (
+		profile: ToolchainProfile,
+		environment: NodeJS.ProcessEnv,
+		cancellationToken: CancellationToken,
+	) => Promise<NodeJS.ProcessEnv>;
+	readonly demangle?: (
+		rawAssembly: string,
+		demanglerTool: string,
+		environment: NodeJS.ProcessEnv,
+		workingDirectory: string,
+		cancellationToken: CancellationToken,
+	) => Promise<string>;
+	readonly discoverTools: (executable: string) => Readonly<Record<string, string>>;
+	readonly artifacts: Readonly<Record<ArtifactKind, ToolchainArtifactCell>>;
+}
 
 const cFamilyLanguageIdentifiers = Object.freeze([
 	'c',
@@ -62,138 +101,209 @@ const cFamilyLanguageIdentifiers = Object.freeze([
 	'cuda',
 ]);
 
-const artifactCells = {
-	assembly: {
-		status: 'available',
-		producer: produceAssembly,
-	},
-	'binary-disassembly': {
-		status: 'unavailable',
-		explanation: 'Binary disassembly is not available because no disassembler producer is configured.',
-	},
-	'llvm-ir': {
-		status: 'unsupported',
-		explanation: 'This toolchain has no LLVM IR producer.',
-	},
-	'optimization-remarks': {
-		status: 'unsupported',
-		explanation: 'This toolchain has no optimization-remarks producer.',
-	},
-} as const satisfies Readonly<Record<ArtifactKind, ToolchainArtifactCell>>;
+const assemblyCell: ToolchainArtifactCell = {
+	status: 'available',
+	producer: (backend, source, options, cancellationToken) =>
+		backend.produceAssembly(source, options, cancellationToken),
+};
 
-const clangArtifactCells = {
-	...artifactCells,
-	'llvm-ir': {
-		status: 'unavailable',
-		explanation: 'LLVM IR production is not available in this release.',
+const binaryCell = (
+	label: string,
+	producer: ArtifactProducer,
+): ToolchainArtifactCell => ({
+	status: 'available',
+	producer,
+	requiredTool: {
+		name: disassemblerToolName,
+		label,
 	},
-	'optimization-remarks': {
-		status: 'unavailable',
-		explanation: 'Optimization-remarks production is not available in this release.',
-	},
-} as const satisfies Readonly<Record<ArtifactKind, ToolchainArtifactCell>>;
+});
 
-const gccArtifactCells = {
-	...artifactCells,
-	'optimization-remarks': {
-		status: 'unavailable',
-		explanation: 'Optimization-remarks production is not available in this release.',
-	},
-} as const satisfies Readonly<Record<ArtifactKind, ToolchainArtifactCell>>;
+function unsupportedCell(kind: ArtifactKind): ToolchainArtifactCell {
+	return {
+		status: 'unsupported',
+		explanation: `This toolchain has no ${artifactDefinitions[kind].label.toLowerCase()} producer.`,
+	};
+}
+
+function artifactCells(
+	overrides: Partial<Record<ArtifactKind, ToolchainArtifactCell>>,
+): Readonly<Record<ArtifactKind, ToolchainArtifactCell>> {
+	return Object.freeze(Object.fromEntries(
+		supportedArtifactKinds.map(kind => [kind, overrides[kind] ?? unsupportedCell(kind)]),
+	)) as Readonly<Record<ArtifactKind, ToolchainArtifactCell>>;
+}
 
 const existingFile = (candidate: string): string | undefined =>
 	fs.existsSync(candidate) ? candidate : undefined;
 const sibling = (executable: string, name: string): string =>
 	path.join(path.dirname(executable), name);
+const toolExecutableName = (name: string): string =>
+	process.platform === 'win32' ? `${name}.exe` : name;
+const executableOnPath = (name: string): string | undefined => {
+	for (const directory of (process.env.PATH ?? '').split(path.delimiter)) {
+		if (directory) {
+			const candidate = path.join(directory, name);
+			if (fs.existsSync(candidate)) {
+				return candidate;
+			}
+		}
+	}
+	return undefined;
+};
+const siblingOrPath = (executable: string, name: string): string | undefined =>
+	existingFile(sibling(executable, name)) ?? executableOnPath(name);
+const discoveredTools = (
+	candidates: Readonly<Record<string, string | undefined>>,
+): Readonly<Record<string, string>> => Object.freeze(Object.fromEntries(
+	Object.entries(candidates).filter(
+		(entry): entry is [string, string] => entry[1] !== undefined,
+	),
+));
+
+interface AuxiliaryToolNames {
+	readonly demangler?: string;
+	readonly disassembler?: string;
+}
+
+function toolDiscoverer(names: AuxiliaryToolNames): (executable: string) => Readonly<Record<string, string>> {
+	return executable => discoveredTools({
+		demangler: names.demangler
+			? siblingOrPath(executable, toolExecutableName(names.demangler))
+			: undefined,
+		disassembler: names.disassembler
+			? siblingOrPath(executable, toolExecutableName(names.disassembler))
+			: undefined,
+	});
+}
+
+function gnuOutputArguments(lineTableArguments: readonly string[]) {
+	return (target: 'assembly' | 'object', outputFile: string): readonly string[] =>
+		target === 'assembly'
+			? ['-S', ...lineTableArguments, '-o', outputFile]
+			: ['-c', ...lineTableArguments, '-o', outputFile];
+}
+
+const gnuIntelArguments = Object.freeze(['-masm=intel']);
+const rustIntelArguments = Object.freeze(['-C', 'llvm-args=-x86-asm-syntax=intel']);
+
+const defaultAsmParser = (): AsmParser => new AsmParser(noopPropertyGetter);
+
+const clangArtifacts = artifactCells({
+	assembly: assemblyCell,
+	'binary-disassembly': binaryCell('llvm-objdump', binaryDisassemblyProducer(llvmObjdump)),
+});
+
+const gccArtifacts = artifactCells({
+	assembly: assemblyCell,
+	'binary-disassembly': binaryCell('GNU objdump', binaryDisassemblyProducer(gnuObjdump)),
+});
+
+const msvcArtifacts = artifactCells({
+	assembly: assemblyCell,
+	'binary-disassembly': binaryCell('dumpbin', binaryDisassemblyProducer(dumpbin)),
+});
+
+const rustArtifacts = artifactCells({
+	assembly: assemblyCell,
+});
 
 export const toolchainDefinitions = {
 	gcc: {
-		Adapter: GccCompiler,
 		executablePattern: /^(?:gcc|g\+\+)(?:-\d+(?:\.\d+)*)?(?:\.exe)?$/i,
 		languageIdentifiers: cFamilyLanguageIdentifiers,
+		intelSyntax: 'selectable',
+		intelArguments: gnuIntelArguments,
 		includeFlag: '-I',
 		defineFlag: '-D',
-		capabilities: {
-			demangle: true,
-			intelSyntax: 'selectable',
-			libraryCodeFilter: true,
-		},
-		findDemangler: executable => existingFile(executable.replace(
-			/(?:gcc|g\+\+)(?:-\d+(?:\.\d+)*)?(?:\.exe)?$/i,
-			process.platform === 'win32' ? 'c++filt.exe' : 'c++filt',
-		)),
-		artifacts: gccArtifactCells,
+		objectFilename: 'output.o',
+		outputArguments: gnuOutputArguments(['-g1']),
+		createParser: defaultAsmParser,
+		discoverTools: toolDiscoverer({ demangler: 'c++filt', disassembler: 'objdump' }),
+		artifacts: gccArtifacts,
 	},
 	'clang-cl': {
-		Adapter: ClangClCompiler,
 		executablePattern: /^clang-cl(?:\.exe)?$/i,
 		languageIdentifiers: cFamilyLanguageIdentifiers,
+		intelSyntax: 'inherent',
 		includeFlag: '/I',
 		defineFlag: '/D',
-		capabilities: {
-			demangle: true,
-			intelSyntax: 'inherent',
-			libraryCodeFilter: true,
-		},
-		findDemangler: executable => existingFile(sibling(executable, 'llvm-cxxfilt.exe')),
-		artifacts: clangArtifactCells,
+		objectFilename: 'output.obj',
+		outputArguments: clangClOutputArguments,
+		createParser: defaultAsmParser,
+		prepareEnvironment: captureWindowsEnvironment,
+		demangle: windowsDemangle,
+		discoverTools: toolDiscoverer({ demangler: 'llvm-cxxfilt', disassembler: 'llvm-objdump' }),
+		artifacts: clangArtifacts,
 	},
 	msvc: {
-		Adapter: MsvcCompiler,
 		executablePattern: /^cl\.exe$/i,
 		languageIdentifiers: cFamilyLanguageIdentifiers,
+		intelSyntax: 'inherent',
 		includeFlag: '/I',
 		defineFlag: '/D',
-		capabilities: {
-			demangle: true,
-			intelSyntax: 'inherent',
-			libraryCodeFilter: true,
-		},
-		findDemangler: executable => existingFile(executable.replace(/cl\.exe$/i, 'undname.exe')),
-		artifacts: artifactCells,
+		objectFilename: 'output.obj',
+		outputArguments: msvcOutputArguments,
+		createParser: createMsvcAsmParser,
+		prepareEnvironment: captureWindowsEnvironment,
+		demangle: windowsDemangle,
+		discoverTools: toolDiscoverer({ demangler: 'undname', disassembler: 'dumpbin' }),
+		artifacts: msvcArtifacts,
 	},
 	clang: {
-		Adapter: ClangCompiler,
 		executablePattern: /^clang(?:\+\+)?(?:-\d+(?:\.\d+)*)?(?:\.exe)?$/i,
 		languageIdentifiers: cFamilyLanguageIdentifiers,
+		intelSyntax: 'selectable',
+		intelArguments: gnuIntelArguments,
 		includeFlag: '-I',
 		defineFlag: '-D',
-		capabilities: {
-			demangle: true,
-			intelSyntax: 'selectable',
-			libraryCodeFilter: true,
-		},
-		findDemangler: executable => existingFile(sibling(
-			executable,
-			process.platform === 'win32' ? 'llvm-cxxfilt.exe' : 'llvm-cxxfilt',
-		)),
-		artifacts: clangArtifactCells,
+		objectFilename: 'output.o',
+		outputArguments: gnuOutputArguments(['-gline-tables-only']),
+		createParser: defaultAsmParser,
+		discoverTools: toolDiscoverer({ demangler: 'llvm-cxxfilt', disassembler: 'llvm-objdump' }),
+		artifacts: clangArtifacts,
 	},
 	'apple-clang': {
-		Adapter: AppleClangCompiler,
 		executablePattern: /^clang(?:\+\+)?(?:-\d+(?:\.\d+)*)?(?:\.exe)?$/i,
 		languageIdentifiers: cFamilyLanguageIdentifiers,
+		intelSyntax: 'selectable',
+		intelArguments: gnuIntelArguments,
 		includeFlag: '-I',
 		defineFlag: '-D',
-		capabilities: {
-			demangle: true,
-			intelSyntax: 'selectable',
-			libraryCodeFilter: true,
-		},
-		findDemangler: executable => existingFile(sibling(
-			executable,
-			process.platform === 'win32' ? 'llvm-cxxfilt.exe' : 'llvm-cxxfilt',
-		)),
-		artifacts: clangArtifactCells,
+		objectFilename: 'output.o',
+		outputArguments: gnuOutputArguments(['-gline-tables-only']),
+		createParser: defaultAsmParser,
+		discoverTools: toolDiscoverer({ demangler: 'llvm-cxxfilt', disassembler: 'llvm-objdump' }),
+		artifacts: clangArtifacts,
+	},
+	rust: {
+		executablePattern: /^rustc(?:\.exe)?$/i,
+		languageIdentifiers: Object.freeze(['rust']),
+		intelSyntax: 'selectable',
+		intelArguments: rustIntelArguments,
+		// rustc has no analogue of a C-style header search path, so unlike the
+		// other toolchains this intentionally leaves `includeFlag` unset rather
+		// than mapping it to something misleading; `defineFlag` maps CMake
+		// compile definitions onto rustc's `--cfg`.
+		defineFlag: '--cfg=',
+		objectFilename: 'output.o',
+		outputArguments: rustOutputArguments,
+		stripOwnedArguments: stripRustManagedArguments,
+		createParser: defaultAsmParser,
+		discoverTools: toolDiscoverer({ demangler: 'rustfilt' }),
+		artifacts: rustArtifacts,
 	},
 } as const satisfies Record<string, ToolchainDefinitionShape>;
 
-export type ToolchainDefinition = (typeof toolchainDefinitions)[ToolchainKind];
+/**
+ * Aliased to the shape (rather than derived from `typeof toolchainDefinitions`)
+ * so that accessing a per-kind-optional field like `prepareEnvironment` doesn't
+ * require narrowing a six-member union of distinct literal object types first.
+ */
+export type ToolchainDefinition = ToolchainDefinitionShape;
 
-export function getToolchainDefinition(type: string): ToolchainDefinition | undefined {
-	return Object.hasOwn(toolchainDefinitions, type)
-		? toolchainDefinitions[type as ToolchainKind]
-		: undefined;
+export function getToolchainDefinition(kind: ToolchainKind): ToolchainDefinition {
+	return toolchainDefinitions[kind];
 }
 
 export function detectToolchainDefinition(
@@ -237,7 +347,7 @@ export function createToolchainProfile(
 ): ToolchainProfile {
 	const definition = toolchainDefinitions[kind];
 	const normalized = path.normalize(executable);
-	const detectedDemangler = definition.findDemangler(normalized);
+	const detectedTools = definition.discoverTools(normalized);
 	return {
 		id: overrides.id ?? normalizedExecutableLocalId(normalized),
 		displayName,
@@ -245,26 +355,10 @@ export function createToolchainProfile(
 		executable: normalized,
 		defaultArguments: overrides.defaultArguments ?? [],
 		environment: overrides.environment ?? {},
-		tools: overrides.tools ?? Object.freeze({
-			...(detectedDemangler ? { demangler: detectedDemangler } : {}),
+		tools: Object.freeze({
+			...detectedTools,
+			...overrides.tools,
 		}),
-	};
-}
-
-export interface ResolvedToolchainCapabilities {
-	readonly demangle: ToolCapabilityStatus;
-	readonly intelSyntax: IntelSyntaxSupport;
-	readonly libraryCodeFilter: 'available' | 'unsupported';
-}
-
-export function resolveToolchainCapabilities(profile: ToolchainProfile): ResolvedToolchainCapabilities {
-	const capabilities = toolchainDefinitions[profile.kind].capabilities;
-	return {
-		demangle: capabilities.demangle
-			? profile.tools.demangler ? 'available' : 'unavailable'
-			: 'unsupported',
-		intelSyntax: capabilities.intelSyntax,
-		libraryCodeFilter: capabilities.libraryCodeFilter ? 'available' : 'unsupported',
 	};
 }
 
@@ -272,7 +366,19 @@ export function resolveArtifactAvailability(
 	profile: ToolchainProfile,
 	kind: ArtifactKind,
 ): ToolchainArtifactCell {
-	return toolchainDefinitions[profile.kind].artifacts[kind];
+	const cell: ToolchainArtifactCell = toolchainDefinitions[profile.kind].artifacts[kind];
+	if (
+		cell.status === 'available'
+		&& cell.requiredTool
+		&& !profile.tools[cell.requiredTool.name]
+	) {
+		return {
+			status: 'unavailable',
+			explanation: `${cell.requiredTool.label} was not detected or configured as the `
+				+ `${cell.requiredTool.name} auxiliary tool for ${profile.displayName}.`,
+		};
+	}
+	return cell;
 }
 
 export function resolveArtifactOptionAvailability(
@@ -285,32 +391,28 @@ export function resolveArtifactOptionAvailability(
 		return artifact;
 	}
 	if (id === 'demangle') {
-		const status = resolveToolchainCapabilities(profile).demangle;
-		return status === 'available'
-			? { status }
+		return profile.tools.demangler
+			? { status: 'available' }
 			: {
-				status,
-				explanation: status === 'unsupported'
-					? `${profile.displayName} does not support symbol demangling.`
-					: `No demangler was detected or configured for ${profile.displayName}.`,
+				status: 'unavailable',
+				explanation: `No demangler was detected or configured for ${profile.displayName}.`,
 			};
 	}
 	if (id === 'intel') {
-		const status = resolveToolchainCapabilities(profile).intelSyntax;
-		return status === 'selectable'
-			? { status: 'available' }
+		const intelSyntax = toolchainDefinitions[profile.kind].intelSyntax;
+		if (intelSyntax === 'selectable') {
+			return { status: 'available' };
+		}
+		return intelSyntax === 'inherent'
+			? {
+				status: 'unavailable',
+				explanation: `${profile.displayName} already emits Intel syntax.`,
+				reason: 'inherent',
+			}
 			: {
-				status: status === 'unsupported' ? 'unsupported' : 'unavailable',
-				explanation: status === 'inherent'
-					? `${profile.displayName} already emits Intel syntax.`
-					: `${profile.displayName} does not support selectable Intel syntax.`,
+				status: 'unsupported',
+				explanation: `${profile.displayName} does not support selectable Intel syntax.`,
 			};
-	}
-	if (id === 'libraryCode' && !toolchainDefinitions[profile.kind].capabilities.libraryCodeFilter) {
-		return {
-			status: 'unsupported',
-			explanation: `${profile.displayName} does not support library-code filtering.`,
-		};
 	}
 	return { status: 'available' };
 }

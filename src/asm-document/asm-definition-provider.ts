@@ -1,5 +1,5 @@
 import { DefinitionProvider, TextDocument, Position, CancellationToken, ProviderResult, Definition, DefinitionLink, Location, Uri } from "vscode";
-import { CompiledAssembly } from "./compiled-assembly";
+import { asmLineHasSource, type CompiledAssembly } from "./compiled-assembly.js";
 
 // Provides "Go To Definition" support for ASM lines that go to the corresponding source line. This isn't ideal though
 // since the default behavior is to open a new source editor unless the user has enabled "workbench.editor.revealIfOpen".
@@ -22,8 +22,7 @@ export class AsmDefinitionProvider implements DefinitionProvider {
 
 		const asmLine = assembly.lines[position.line];
 
-		// eslint-disable-next-line eqeqeq
-		if (asmLine.source?.line == null || asmLine.source?.file == null) {
+		if (!asmLineHasSource(asmLine)) {
 			return undefined;
 		}
 

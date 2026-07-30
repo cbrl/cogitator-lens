@@ -1,3 +1,5 @@
+import { structurallyEqual } from '../utils.js';
+
 export interface ProductionOptions {
 	readonly intel: boolean;
 	readonly demangle: boolean;
@@ -44,5 +46,5 @@ export function immutableArtifactOptions(options: ArtifactOptions): ArtifactOpti
 }
 
 export function artifactOptionsEqual(left: ArtifactOptions, right: ArtifactOptions): boolean {
-	return JSON.stringify(left) === JSON.stringify(right);
+	return structurallyEqual(left, right);
 }

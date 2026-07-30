@@ -1,19 +1,13 @@
 import fs from 'fs';
 import path from 'path';
-import { ToolchainBackend, ToolExitError } from '../toolchains/toolchain-backend.js';
 import type { CancellationToken } from 'vscode';
-import { VcAsmParser } from '../parsers/asm-parser-vc.js';
+import { VcAsmParser } from '../vendor/lib/parsers/asm-parser-vc.js';
+import { noopPropertyGetter } from '../vendor/compiler-props.js';
 import { withTemporaryDirectory } from '../temporary-directory.js';
-import type {
-	ToolchainProfile,
-	ToolchainCapabilities,
-	ProductionOptions,
-} from '../types/index.js';
-import {
-	ExecError,
-	ToolExecutionGate,
-	type ExecResult,
-} from '../tool-execution.js';
+import { demangleViaStdin, ToolExitError } from './toolchain-backend.js';
+import type { ToolchainProfile } from '../types/index.js';
+import * as exec from '../exec.js';
+import { ExecError } from '../exec.js';
 
 export const visualStudioDiscoveryArguments = [
 	'-latest',
@@ -41,187 +35,166 @@ export function visualStudioEnvironmentCandidates(executable: string): readonly 
 	}
 }
 
-abstract class WindowsToolchainBackend extends ToolchainBackend {
-	private static readonly environmentCache = new Map<string, Promise<NodeJS.ProcessEnv>>();
+export function createMsvcAsmParser(): VcAsmParser {
+	return new VcAsmParser(noopPropertyGetter);
+}
 
-	protected override prepareArguments(outputFile: string): readonly string[] {
-		return ['/nologo', '/c', '/FAcs', `/Fa${outputFile}`, `/Fo${outputFile}.obj`, `/Fd${outputFile}.pdb`];
+export function msvcOutputArguments(target: 'assembly' | 'object', outputFile: string): readonly string[] {
+	return target === 'assembly'
+		? ['/nologo', '/c', '/FAcs', `/Fa${outputFile}`, `/Fo${outputFile}.obj`, `/Fd${outputFile}.pdb`]
+		: ['/nologo', '/c', '/Z7', `/Fo${outputFile}`];
+}
+
+export function clangClOutputArguments(target: 'assembly' | 'object', outputFile: string): readonly string[] {
+	return target === 'assembly'
+		? ['/Z7', ...msvcOutputArguments('assembly', outputFile)]
+		: msvcOutputArguments('object', outputFile);
+}
+
+const environmentCache = new Map<string, Promise<NodeJS.ProcessEnv>>();
+
+export async function captureWindowsEnvironment(
+	profile: ToolchainProfile,
+	environment: NodeJS.ProcessEnv,
+	cancellationToken: CancellationToken,
+): Promise<NodeJS.ProcessEnv> {
+	const architecture = vcvarsArchitecture(profile.executable);
+	const cacheKey = `${path.normalize(profile.executable).toLowerCase()}\0${architecture}`;
+	let environmentPromise = environmentCache.get(cacheKey);
+	if (!environmentPromise) {
+		environmentPromise = captureVisualStudioEnvironment(
+			{ ...process.env },
+			profile.executable,
+			architecture,
+			cancellationToken,
+		);
+		environmentCache.set(cacheKey, environmentPromise);
+		void environmentPromise.catch(() => {
+			if (environmentCache.get(cacheKey) === environmentPromise) {
+				environmentCache.delete(cacheKey);
+			}
+		});
+	}
+	const visualStudioEnvironment = { ...await environmentPromise };
+	for (const [name, value] of Object.entries(environment)) {
+		if (value !== process.env[name]) {
+			visualStudioEnvironment[name] = value;
+		}
+	}
+	return visualStudioEnvironment;
+}
+
+/**
+ * MSVC's own demangler (undname) only reads from a file, unlike every other
+ * supported toolchain's demangler, which reads assembly from stdin. Tools
+ * configured under the `demangler` slot that aren't literally undname (e.g.
+ * clang-cl's llvm-cxxfilt) still go through the shared stdin path.
+ */
+export async function windowsDemangle(
+	rawAssembly: string,
+	demanglerTool: string,
+	environment: NodeJS.ProcessEnv,
+	workingDirectory: string,
+	cancellationToken: CancellationToken,
+): Promise<string> {
+	if (!/^undname(?:\.exe)?$/i.test(path.basename(demanglerTool))) {
+		return demangleViaStdin(rawAssembly, demanglerTool, environment, workingDirectory, cancellationToken);
 	}
 
-	protected override async runCompiler(
-		args: readonly string[],
-		environment: NodeJS.ProcessEnv,
-		workingDirectory: string,
-		cancellationToken: CancellationToken,
-	): Promise<ExecResult> {
-		const architecture = vcvarsArchitecture(this.profile.executable);
-		const cacheKey = `${path.normalize(this.profile.executable).toLowerCase()}\0${architecture}`;
-		let environmentPromise = WindowsToolchainBackend.environmentCache.get(cacheKey);
-		if (!environmentPromise) {
-			environmentPromise = this.captureVisualStudioEnvironment(
-				{ ...process.env },
-				architecture,
-				cancellationToken,
-			);
-			WindowsToolchainBackend.environmentCache.set(cacheKey, environmentPromise);
-			void environmentPromise.catch(() => {
-				if (WindowsToolchainBackend.environmentCache.get(cacheKey) === environmentPromise) {
-					WindowsToolchainBackend.environmentCache.delete(cacheKey);
-				}
-			});
-		}
-		const visualStudioEnvironment = { ...await environmentPromise };
-		for (const [name, value] of Object.entries(environment)) {
-			if (value !== process.env[name]) {
-				visualStudioEnvironment[name] = value;
-			}
-		}
-		return this.execution.execute(this.profile.executable, args, {
+	return withTemporaryDirectory('coglens-undname-', async temporaryDirectory => {
+		const inputFile = path.join(temporaryDirectory, 'assembly.txt');
+		await fs.promises.writeFile(inputFile, rawAssembly, 'utf8');
+		const result = await exec.execute(demanglerTool, [inputFile], {
 			cwd: workingDirectory,
-			env: visualStudioEnvironment,
+			env: environment,
 			cancellationToken,
-		});
-	}
-
-	protected override async postProcessAssembly(
-		rawAssembly: string,
-		options: ProductionOptions,
-		environment: NodeJS.ProcessEnv,
-		workingDirectory: string,
-		cancellationToken: CancellationToken,
-	): Promise<string> {
-		if (
-			!options.demangle
-			|| !this.capabilities.demangle
-			|| !this.profile.tools.demangler
-			|| !/^undname(?:\.exe)?$/i.test(path.basename(this.profile.tools.demangler))
-		) {
-			return super.postProcessAssembly(
-				rawAssembly,
-				options,
-				environment,
-				workingDirectory,
-				cancellationToken,
-			);
-		}
-
-		return withTemporaryDirectory('coglens-undname-', async temporaryDirectory => {
-			const inputFile = path.join(temporaryDirectory, 'assembly.txt');
-			await fs.promises.writeFile(inputFile, rawAssembly, 'utf8');
-			const result = await this.execution.execute(this.profile.tools.demangler, [inputFile], {
-				cwd: workingDirectory,
-				env: environment,
-				cancellationToken,
-			});
-			if (result.returnCode !== 0) {
-				throw new ToolExitError(
-					`Demangler exited with code ${result.returnCode}`,
-					result.returnCode,
-					result.stdout,
-					result.stderr,
-				);
-			}
-			return result.stdout;
-		});
-	}
-
-	private async captureVisualStudioEnvironment(
-		baseEnvironment: NodeJS.ProcessEnv,
-		vcvarsArchitecture: string,
-		cancellationToken: CancellationToken,
-	): Promise<NodeJS.ProcessEnv> {
-		if (!/^[a-z0-9_]+$/i.test(vcvarsArchitecture)) {
-			throw new Error(`Unsupported Visual Studio architecture: ${vcvarsArchitecture}`);
-		}
-
-		const vcvarsScript = await this.findVisualStudioEnvironmentScript(baseEnvironment, cancellationToken);
-		if (/["\r\n%!]/.test(vcvarsScript)) {
-			throw new Error('The Visual Studio environment script path contains characters that cmd.exe cannot safely quote.');
-		}
-
-		const captureCommand = `call "${vcvarsScript}" ${vcvarsArchitecture} >nul && set`;
-		const result = await this.execution.execute('cmd.exe', ['/d', '/s', '/c', captureCommand], {
-			env: baseEnvironment,
-			cancellationToken,
-			windowsVerbatimArguments: true,
 		});
 		if (result.returnCode !== 0) {
-			throw new Error(`Visual Studio environment setup failed with code ${result.returnCode}: ${result.stderr}`);
+			throw new ToolExitError(
+				`Demangler exited with code ${result.returnCode}`,
+				result.returnCode,
+				result.stdout,
+				result.stderr,
+			);
 		}
+		return result.stdout;
+	});
+}
 
-		const captured: NodeJS.ProcessEnv = { ...baseEnvironment };
-		for (const line of result.stdout.split(/\r?\n/)) {
-			const separator = line.indexOf('=');
-			if (separator > 0) {
-				captured[line.slice(0, separator)] = line.slice(separator + 1);
-			}
-		}
+async function captureVisualStudioEnvironment(
+	baseEnvironment: NodeJS.ProcessEnv,
+	executable: string,
+	vcvarsArchitectureValue: string,
+	cancellationToken: CancellationToken,
+): Promise<NodeJS.ProcessEnv> {
+	const vcvarsScript = await findVisualStudioEnvironmentScript(executable, baseEnvironment, cancellationToken);
 
-		return captured;
+	const captureCommand = `call "${vcvarsScript}" ${vcvarsArchitectureValue} >nul && set`;
+	const result = await exec.execute('cmd.exe', ['/d', '/s', '/c', captureCommand], {
+		env: baseEnvironment,
+		cancellationToken,
+		windowsVerbatimArguments: true,
+	});
+	if (result.returnCode !== 0) {
+		throw new Error(`Visual Studio environment setup failed with code ${result.returnCode}: ${result.stderr}`);
 	}
 
-	private async findVisualStudioEnvironmentScript(
-		baseEnvironment: NodeJS.ProcessEnv,
-		cancellationToken: CancellationToken,
-	): Promise<string> {
-		const programFilesX86 = baseEnvironment['ProgramFiles(x86)'] ?? baseEnvironment.PROGRAMFILES_X86;
-		if (programFilesX86) {
-			const vswhere = path.join(programFilesX86, 'Microsoft Visual Studio', 'Installer', 'vswhere.exe');
-			if (fs.existsSync(vswhere)) {
-				try {
-					const result = await this.execution.execute(vswhere, visualStudioDiscoveryArguments, {
-						env: baseEnvironment,
-						cancellationToken,
-					});
-					if (result.returnCode === 0) {
-						const installationPath = result.stdout.split(/\r?\n/).find(line => line.trim())?.trim();
-						if (installationPath) {
-							const discovered = path.join(
-								installationPath,
-								'VC',
-								'Auxiliary',
-								'Build',
-								'vcvarsall.bat',
-							);
-							if (fs.existsSync(discovered)) {
-								return discovered;
-							}
+	const captured: NodeJS.ProcessEnv = { ...baseEnvironment };
+	for (const line of result.stdout.split(/\r?\n/)) {
+		const separator = line.indexOf('=');
+		if (separator > 0) {
+			captured[line.slice(0, separator)] = line.slice(separator + 1);
+		}
+	}
+
+	return captured;
+}
+
+async function findVisualStudioEnvironmentScript(
+	executable: string,
+	baseEnvironment: NodeJS.ProcessEnv,
+	cancellationToken: CancellationToken,
+): Promise<string> {
+	const programFilesX86 = baseEnvironment['ProgramFiles(x86)'] ?? baseEnvironment.PROGRAMFILES_X86;
+	if (programFilesX86) {
+		const vswhere = path.join(programFilesX86, 'Microsoft Visual Studio', 'Installer', 'vswhere.exe');
+		if (fs.existsSync(vswhere)) {
+			try {
+				const result = await exec.execute(vswhere, visualStudioDiscoveryArguments, {
+					env: baseEnvironment,
+					cancellationToken,
+				});
+				if (result.returnCode === 0) {
+					const installationPath = result.stdout.split(/\r?\n/).find(line => line.trim())?.trim();
+					if (installationPath) {
+						const discovered = path.join(
+							installationPath,
+							'VC',
+							'Auxiliary',
+							'Build',
+							'vcvarsall.bat',
+						);
+						if (fs.existsSync(discovered)) {
+							return discovered;
 						}
 					}
-				} catch (error) {
-					if (error instanceof ExecError && error.kind === 'cancelled') {
-						throw error;
-					}
+				}
+			} catch (error) {
+				if (error instanceof ExecError && error.kind === 'cancelled') {
+					throw error;
 				}
 			}
 		}
+	}
 
-		for (const candidate of visualStudioEnvironmentCandidates(this.profile.executable)) {
-			if (fs.existsSync(candidate)) {
-				return candidate;
-			}
+	for (const candidate of visualStudioEnvironmentCandidates(executable)) {
+		if (fs.existsSync(candidate)) {
+			return candidate;
 		}
-		throw new Error(
-			`Visual Studio environment script was not found through vswhere or relative to ${this.profile.executable}`,
-		);
 	}
-}
-
-export class MsvcCompiler extends WindowsToolchainBackend {
-	constructor(
-		profile: ToolchainProfile,
-		capabilities: ToolchainCapabilities,
-		execution?: ToolExecutionGate,
-	) {
-		super(profile, capabilities, execution);
-		this.asmParser = new VcAsmParser();
-	}
-}
-
-export class ClangClCompiler extends WindowsToolchainBackend {
-	protected override prepareArguments(outputFile: string): readonly string[] {
-		return ['/Z7', ...super.prepareArguments(outputFile)];
-	}
+	throw new Error(
+		`Visual Studio environment script was not found through vswhere or relative to ${executable}`,
+	);
 }
 
 function vcvarsArchitecture(executable: string): string {

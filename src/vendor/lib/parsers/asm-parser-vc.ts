@@ -22,11 +22,12 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import {ParsedAsmResult, ParsedAsmResultLine} from './asmresult.interfaces.js';
-import {ParseFiltersAndOutputOptions} from './filters.interfaces.js';
-import assert from 'assert';
-import * as utils from '../ce-utils.js';
-
+import {ParsedAsmResult, ParsedAsmResultLine} from '../../types/asmresult/asmresult.interfaces.js';
+import {ParseFiltersAndOutputOptions} from '../../types/features/filters.interfaces.js';
+import {assert} from '../assert.js';
+import {logger} from '../logger.js';
+import {PropertyGetter} from '../properties.interfaces.js';
+import * as utils from '../utils.js';
 import {AsmParser} from './asm-parser.js';
 import {AsmRegex} from './asmregex.js';
 
@@ -46,10 +47,11 @@ type ResultObject = {
 };
 
 export class VcAsmParser extends AsmParser {
-    private readonly asmBinaryParser: AsmParser;
     private readonly filenameComment = /^; File (.+)/;
-    protected miscDirective = /^\s*(include|INCLUDELIB|TITLE|\.|THUMB|ARM64|TTL|END$)/;
-    private readonly localLabelDef = /^([$A-Z_a-z]+) =/;
+    protected miscDirective = /^\s*(include|INCLUDELIB|TITLE|\.|THUMB|ARM64|TTL|DD|voltbl|_volmd|END$)/;
+    private readonly postfixComment = /; (.*)/;
+    private readonly stdData = /^`?[?_0-9$A-Z_a-z']+@std@@.* DC?[BWDQT] /;
+    private readonly localLabelDef = /^([$A-Z_a-z]+) (?:=|EQU)/;
     private readonly lineNumberComment = /^; Line (\d+)/;
     protected beginSegment =
         /^(CONST|_BSS|\.?[prx]?data(\$[A-Za-z]+)?|CRT(\$[A-Za-z]+)?|_TEXT|\.?text(\$[A-Za-z]+)?)\s+SEGMENT|\s*AREA/;
@@ -58,17 +60,16 @@ export class VcAsmParser extends AsmParser {
     private readonly endProc = /^([$?@A-Z_a-z][\w$<>?@]*)?\s+ENDP/;
     private readonly labelFind = /[$?@A-Z_a-z][\w$<>?@]*/g;
 
-    constructor() {
-        super();
-        this.asmBinaryParser = new AsmParser();
+    constructor(compilerProps?: PropertyGetter) {
+        super(compilerProps);
         this.commentOnly = /^;/;
 
-        this.labelDef = /^\|?([$?@A-Z_a-z][\w$<>?@]*)\|?\s+(PROC|=|D[BDQW])/;
+        this.labelDef = /^\|?([$?@A-Z_a-z][\w$<>?@]*)\|?\s+(PROC|=|D[BWDQT])/;
         this.definesGlobal = /^\s*(PUBLIC|EXTRN|EXPORT)\s+/;
         this.definesFunction = /^\|?([$?@A-Z_a-z][\w$<>?@]*)\|?\s+PROC/;
         this.dataDefn = /^(\|?[$?@A-Z_a-z][\w$<>?@]*\|?)\sDC?[BDQW]\s|\s+DC?[BDQW]\s|\s+ORG/;
 
-        // these are set to an impossible regex, because VC doesn't have inline assembly
+        // these are set to an impossible regex. VC-x86 does have inline assembly, but no special treatment is needed
         this.startAppBlock = this.startAsmNesting = /a^/;
         this.endAppBlock = this.endAsmNesting = /a^/;
         // same, but for CUDA
@@ -98,13 +99,23 @@ export class VcAsmParser extends AsmParser {
         return this.hasOpcodeRe.test(line);
     }
 
-    override labelFindFor() {
-        return this.labelFind;
+    override processBinaryAsm(asm: string, filters: ParseFiltersAndOutputOptions): ParsedAsmResult {
+        // TODO: actually implement
+        const result: ParsedAsmResultLine[] = [];
+        const asmLines = asm.split('\n');
+
+        for (const line of asmLines) {
+            result.push({text: line, source: null});
+        }
+
+        return {
+            asm: result,
+        };
     }
 
     override processAsm(asm: string, filters: ParseFiltersAndOutputOptions): ParsedAsmResult {
         if (filters.binary || filters.binaryObject) {
-            return this.asmBinaryParser.processAsm(asm, filters);
+            return this.processBinaryAsm(asm, filters);
         }
 
         const getFilenameFromComment = (line: string): string | null => {
@@ -117,7 +128,7 @@ export class VcAsmParser extends AsmParser {
         const getLineNumberFromComment = (line: string) => {
             const matches = line.match(this.lineNumberComment);
             if (matches) {
-                return Number.parseInt(matches[1]);
+                return Number.parseInt(matches[1], 10);
             }
             return null;
         };
@@ -217,7 +228,7 @@ export class VcAsmParser extends AsmParser {
                 const lineNum = getLineNumberFromComment(line);
                 if (lineNum !== null) {
                     if (currentFile === undefined) {
-                        logParserError('Somehow, we have a line number comment without a file comment', line);
+                        logger.error('Somehow, we have a line number comment without a file comment: %s', line);
                     }
                     assert(currentFunction);
                     if (currentFunction.initialLine === undefined) {
@@ -227,7 +238,7 @@ export class VcAsmParser extends AsmParser {
                 }
             } else {
                 if (currentFunction === null) {
-                    logParserError('We have a file comment outside of a function', line);
+                    logger.error('We have a file comment outside of a function: %s', line);
                 }
                 // if the file is the "main file", give it the file `null`
                 if (stdInLooking.test(fileName)) {
@@ -243,25 +254,32 @@ export class VcAsmParser extends AsmParser {
 
             currentFunction = checkBeginFunction(line);
 
-            const functionName = line.match(this.definesFunction);
-            if (functionName) {
+            const functionLine = line.match(this.definesFunction);
+            if (functionLine) {
                 if (asmLines.length === 0) {
                     continue;
                 }
                 assert(currentFunction);
-                currentFunction.name = functionName[1];
+                const functionName = line.match(this.postfixComment); // Try to extract demangled name from line comment
+                if (functionName?.[1]) currentFunction.name = functionName[1];
+                else currentFunction.name = functionLine[1];
             }
 
             if (filters.commentOnly && this.commentOnly.test(line)) continue;
 
-            const shouldSkip =
+            const shouldSkipDirective =
                 filters.directives &&
-                (line.match(this.endSegment) ||
-                    line.match(this.definesGlobal) ||
-                    line.match(this.miscDirective) ||
-                    line.match(this.beginSegment));
+                (this.endSegment.test(line) ||
+                    this.definesGlobal.test(line) ||
+                    this.miscDirective.test(line) ||
+                    this.beginSegment.test(line));
 
-            if (shouldSkip) {
+            const shouldSkipLibraryCode = filters.libraryCode && currentFunction?.name?.trim().startsWith('std::');
+            // Filter out lines like
+            // const std::bad_alloc::`RTTI Complete Object Locator' DD 01H
+            const shouldSkipLibOrDirective = (filters.directives || filters.libraryCode) && this.stdData.test(line);
+
+            if (shouldSkipDirective || shouldSkipLibraryCode || shouldSkipLibOrDirective) {
                 continue;
             }
 
@@ -275,7 +293,7 @@ export class VcAsmParser extends AsmParser {
             };
             if (currentFunction === null) {
                 resultObject.prefix.push(textAndSource);
-            } else if (!shouldSkip) {
+            } else {
                 currentFunction.lines.push(textAndSource);
             }
 
@@ -382,10 +400,4 @@ export class VcAsmParser extends AsmParser {
             asm: result,
         };
     }
-}
-
-function logParserError(message: string, line: string): void {
-    void import('../logger.js')
-        .then(({logChannel}) => logChannel.error(`${message}: ${line}`))
-        .catch(() => undefined);
 }

@@ -7,7 +7,7 @@ import type {
 	ToolchainProfile,
 } from '../types/index.js';
 import { parseArtifactUri } from '../asm-document/artifact-uri.js';
-import { TreeItem, TreeNode, TreeProvider } from './treedata.js';
+import { TreeNode, TreeProvider } from './treedata.js';
 import {
 	resolveArtifactAvailability,
 	resolveArtifactOptionAvailability,
@@ -20,6 +20,7 @@ interface SelectedArtifact {
 }
 
 export class GlobalOptionsNode extends TreeNode {
+	declare children?: GlobalOptionsNode[];
 	artifactKind?: ArtifactKind;
 
 	static createFilterTree(
@@ -85,13 +86,9 @@ export class GlobalOptionsTreeProvider extends TreeProvider<GlobalOptionsNode> {
 		super();
 	}
 
-	getTreeItem(element: GlobalOptionsNode): vscode.TreeItem {
-		return new TreeItem(element);
-	}
-
-	protected createChildren(element?: GlobalOptionsNode): GlobalOptionsNode[] | undefined {
+	getChildren(element?: GlobalOptionsNode): GlobalOptionsNode[] | undefined {
 		if (element?.children) {
-			return element.children as GlobalOptionsNode[];
+			return element.children;
 		}
 		const selected = this.selectedArtifact();
 		return GlobalOptionsNode.createFilterTree(
@@ -99,10 +96,6 @@ export class GlobalOptionsTreeProvider extends TreeProvider<GlobalOptionsNode> {
 			selected.profile,
 			selected.kind,
 		);
-	}
-
-	get activeArtifactKind(): ArtifactKind {
-		return this.selectedArtifact().kind;
 	}
 
 	private selectedArtifact(): SelectedArtifact {
@@ -138,7 +131,6 @@ function optionNode(
 	return {
 		label: descriptor.label,
 		nodeType: 'checkbox',
-		treeContext: 'options',
 		artifactKind: kind,
 		optionId: descriptor.id,
 		checked: optionValue(options, descriptor.id),
@@ -149,7 +141,7 @@ function optionNode(
 			? undefined
 			: capability.status === 'unsupported'
 				? 'Unsupported'
-				: descriptor.id === 'intel' && capability.explanation.includes('already emits')
+				: capability.reason === 'inherent'
 					? 'Inherent'
 					: 'Unavailable',
 		disabled: capability.status !== 'available',
