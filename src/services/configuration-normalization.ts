@@ -9,6 +9,7 @@ import type {
 } from '../types/index.js';
 import { defaultArtifactOptions, immutableArtifactOptions } from '../types/index.js';
 import { artifactDefinitions } from '../artifacts/artifact-definitions.js';
+import type { ArtifactPreset } from '../artifacts/presets.js';
 import {
 	createToolchainProfile,
 	supportedToolchainKinds,
@@ -89,4 +90,27 @@ export function parseArtifactOptions(raw: unknown, kind: ArtifactKind): Artifact
 		(descriptor.group === 'production' ? production : display)[descriptor.id] = value;
 	}
 	return immutableArtifactOptions({ production, display } as unknown as ArtifactOptions);
+}
+
+export function parseArtifactPresets(raw: unknown): ArtifactPreset[] {
+	return Object.entries(asRecord(raw)).flatMap(([id, rawPreset]) => {
+		const preset = asRecord(rawPreset);
+		const artifactKind = asString(preset.artifactKind);
+		if (!Object.hasOwn(artifactDefinitions, artifactKind)) {
+			return [];
+		}
+		const rawProductionOptions = asRecord(preset.productionOptions);
+		const productionOptions = Object.fromEntries(
+			Object.keys(defaultArtifactOptions.production).flatMap(key =>
+				typeof rawProductionOptions[key] === 'boolean'
+					? [[key, rawProductionOptions[key]]]
+					: []),
+		);
+		return [{
+			id,
+			artifactKind: artifactKind as ArtifactKind,
+			extraArguments: asStringArray(preset.extraArguments),
+			productionOptions,
+		}];
+	});
 }

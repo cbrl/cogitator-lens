@@ -15,9 +15,11 @@ import type {
 	ToolchainSettings,
 } from '../types/index.js';
 import { artifactDefinitions } from '../artifacts/artifact-definitions.js';
+import type { ArtifactPreset } from '../artifacts/presets.js';
 import * as logger from '../logger.js';
 import {
 	parseArtifactOptions,
+	parseArtifactPresets,
 	parseDefaultCompilationSettings,
 	parseToolchainSettings,
 } from './configuration-normalization.js';
@@ -62,6 +64,11 @@ export class ConfigurationService implements Disposable {
 	getArtifactOptions(kind: ArtifactKind, scope?: Uri): ArtifactOptions {
 		const raw = workspace.getConfiguration('coglens', scope).get<unknown>('artifactOptions', {});
 		return parseArtifactOptions(raw, kind);
+	}
+
+	getArtifactPresets(scope?: Uri): readonly ArtifactPreset[] {
+		const raw = workspace.getConfiguration('coglens', scope).get<unknown>('artifactPresets', {});
+		return parseArtifactPresets(raw);
 	}
 
 	getDimUnusedSourceLines(uri: Uri): boolean {

@@ -17,6 +17,12 @@ export function splitLines(text: string): string[] {
 	return result;
 }
 
+export function eachLine(text: string, func: (line: string) => void): void {
+	for (const line of splitLines(text)) {
+		func(line);
+	}
+}
+
 export function expandTabs(line: string): string {
 	let extraChars = 0;
 	return line.replaceAll(tabsRe, (match, offset) => {

@@ -32,6 +32,14 @@ import {
 	gnuObjdump,
 	llvmObjdump,
 } from '../artifacts/binary-disassembly-producer.js';
+import {
+	clangClLlvmIrOutput,
+	clangClOptimizationRecord,
+	clangOptimizationRecord,
+	compilerOutputProducer,
+	gccOptimizationRecord,
+	llvmIrOutput,
+} from '../artifacts/compiler-output-producer.js';
 
 export type ToolCapabilityStatus = 'available' | 'unavailable' | 'unsupported';
 
@@ -192,16 +200,41 @@ const defaultAsmParser = (): AsmParser => new AsmParser(noopPropertyGetter);
 const clangArtifacts = artifactCells({
 	assembly: assemblyCell,
 	'binary-disassembly': binaryCell('llvm-objdump', binaryDisassemblyProducer(llvmObjdump)),
+	'llvm-ir': {
+		status: 'available',
+		producer: compilerOutputProducer('llvm-ir', llvmIrOutput),
+	},
+	'optimization-remarks': {
+		status: 'available',
+		producer: compilerOutputProducer('optimization-remarks', clangOptimizationRecord),
+	},
 });
 
 const gccArtifacts = artifactCells({
 	assembly: assemblyCell,
 	'binary-disassembly': binaryCell('GNU objdump', binaryDisassemblyProducer(gnuObjdump)),
+	'optimization-remarks': {
+		status: 'available',
+		producer: compilerOutputProducer('optimization-remarks', gccOptimizationRecord),
+	},
 });
 
 const msvcArtifacts = artifactCells({
 	assembly: assemblyCell,
 	'binary-disassembly': binaryCell('dumpbin', binaryDisassemblyProducer(dumpbin)),
+});
+
+const clangClArtifacts = artifactCells({
+	assembly: assemblyCell,
+	'binary-disassembly': binaryCell('llvm-objdump', binaryDisassemblyProducer(llvmObjdump)),
+	'llvm-ir': {
+		status: 'available',
+		producer: compilerOutputProducer('llvm-ir', clangClLlvmIrOutput),
+	},
+	'optimization-remarks': {
+		status: 'available',
+		producer: compilerOutputProducer('optimization-remarks', clangClOptimizationRecord),
+	},
 });
 
 const rustArtifacts = artifactCells({
@@ -234,7 +267,7 @@ export const toolchainDefinitions = {
 		prepareEnvironment: captureWindowsEnvironment,
 		demangle: windowsDemangle,
 		discoverTools: toolDiscoverer({ demangler: 'llvm-cxxfilt', disassembler: 'llvm-objdump' }),
-		artifacts: clangArtifacts,
+		artifacts: clangClArtifacts,
 	},
 	msvc: {
 		executablePattern: /^cl\.exe$/i,

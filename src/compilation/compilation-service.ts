@@ -38,6 +38,10 @@ import { resolveArtifactAvailability } from '../toolchains/toolchain-map.js';
 import { ToolchainRegistry } from './toolchain-registry.js';
 import { CompilationConfigDatabase } from './compilation-config.js';
 import { parseToolDiagnostics } from '../diagnostics.js';
+import {
+	resolveArtifactPreset,
+	type ArtifactPreset,
+} from '../artifacts/presets.js';
 
 export class CompilationService {
 	readonly toolchainRegistry: ToolchainRegistry;
@@ -73,6 +77,10 @@ export class CompilationService {
 	getArtifactOptions(kind: ArtifactKind): ArtifactOptions {
 		// The constructor pre-fills every supported kind, so this entry always exists.
 		return this.currentArtifactOptions.get(kind)!;
+	}
+
+	getArtifactPreset(kind: ArtifactKind, id: string, scope?: Uri): ArtifactPreset | undefined {
+		return resolveArtifactPreset(id, this.configuration.getArtifactPresets(scope), kind);
 	}
 
 	setArtifactOption(kind: ArtifactKind, id: ArtifactOptionId, value: boolean): void {
@@ -168,7 +176,7 @@ export class CompilationService {
 		if (cached) {
 			return {
 				status: 'available',
-				artifact: this.renderArtifact(backend, cached, options),
+				artifact: await this.renderArtifact(backend, cached, options),
 			};
 		}
 
@@ -187,7 +195,7 @@ export class CompilationService {
 			this.rawArtifactCache.set(key, raw);
 			return {
 				status: 'available',
-				artifact: this.renderArtifact(backend, raw, options),
+				artifact: await this.renderArtifact(backend, raw, options),
 			};
 		} catch (error: unknown) {
 			if (error instanceof CancellationError || cancellationToken.isCancellationRequested) {
@@ -221,12 +229,12 @@ export class CompilationService {
 		this.rawArtifactCache.clear();
 	}
 
-	private renderArtifact(
+	private async renderArtifact(
 		backend: import('../toolchains/toolchain-backend.js').ToolchainBackend,
 		raw: RawArtifact,
 		options: ArtifactOptions,
-	): RenderedArtifact {
-		return artifactDefinitions[raw.kind].renderer(raw, options.display, backend);
+	): Promise<RenderedArtifact> {
+		return await artifactDefinitions[raw.kind].renderer(raw, options.display, backend);
 	}
 
 	private reloadUserConfiguration(): void {

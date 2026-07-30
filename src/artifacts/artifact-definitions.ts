@@ -7,6 +7,10 @@ import type {
 } from '../types/index.js';
 import type { ToolchainBackend } from '../toolchains/toolchain-backend.js';
 import type { ParsedAsmResultLine } from '../vendor/types/asmresult/asmresult.interfaces.js';
+import type { ParsedAsmResult } from '../vendor/types/asmresult/asmresult.interfaces.js';
+import { renderLlvmIr } from './llvm-ir-renderer.js';
+import { renderOptimizationRemarks } from './optimization-remarks-renderer.js';
+import { renderedArtifact } from './rendered-artifact.js';
 
 export interface ArtifactOptionDescriptor {
 	readonly id: keyof ArtifactOptions['production'] | keyof ArtifactOptions['display'];
@@ -31,7 +35,7 @@ interface ArtifactDefinitionShape {
 		raw: RawArtifact,
 		options: DisplayOptions,
 		backend: ToolchainBackend,
-	) => RenderedArtifact;
+	) => RenderedArtifact | Promise<RenderedArtifact>;
 	readonly navigation: ArtifactNavigationFeatures;
 }
 
@@ -98,14 +102,6 @@ const binaryDisassemblyOptions = [
 	displayOptionDescriptors.dontMaskFilenames,
 ] as const satisfies readonly ArtifactOptionDescriptor[];
 
-const noNavigation: ArtifactNavigationFeatures = Object.freeze({
-	definitions: false,
-	sourceLocations: false,
-	links: false,
-	folds: false,
-	symbols: false,
-});
-
 export const artifactDefinitions = {
 	assembly: {
 		label: 'Assembly',
@@ -115,9 +111,9 @@ export const artifactDefinitions = {
 		navigation: {
 			definitions: true,
 			sourceLocations: true,
-			links: false,
-			folds: false,
-			symbols: false,
+			links: true,
+			folds: true,
+			symbols: true,
 		},
 	},
 	'binary-disassembly': {
@@ -129,7 +125,7 @@ export const artifactDefinitions = {
 			definitions: true,
 			sourceLocations: true,
 			links: true,
-			folds: false,
+			folds: true,
 			symbols: true,
 		},
 	},
@@ -137,15 +133,27 @@ export const artifactDefinitions = {
 		label: 'LLVM IR',
 		filenameExtension: '.ll',
 		options: [],
-		renderer: renderPlainText,
-		navigation: noNavigation,
+		renderer: renderLlvmIr,
+		navigation: {
+			definitions: true,
+			sourceLocations: true,
+			links: false,
+			folds: true,
+			symbols: true,
+		},
 	},
 	'optimization-remarks': {
 		label: 'Optimization remarks',
-		filenameExtension: '.opt.yaml',
+		filenameExtension: '.opt',
 		options: [],
-		renderer: renderPlainText,
-		navigation: noNavigation,
+		renderer: renderOptimizationRemarks,
+		navigation: {
+			definitions: true,
+			sourceLocations: true,
+			links: false,
+			folds: false,
+			symbols: false,
+		},
 	},
 } as const satisfies Record<string, ArtifactDefinitionShape>;
 
@@ -169,9 +177,9 @@ function renderAssembly(
 ): RenderedArtifact {
 	const parsed = backend.parseAssembly(raw.text, options);
 	const lines = parsed.asm.map(parsedLine);
-	return renderedArtifact(raw, lines, {
+	return withLabelNavigation(renderedArtifact(raw, lines, {
 		labelDefinitions: parsed.labelDefinitions,
-	});
+	}), parsed);
 }
 
 function renderBinaryDisassembly(
@@ -181,9 +189,23 @@ function renderBinaryDisassembly(
 ): RenderedArtifact {
 	const parsed = backend.parseBinaryDisassembly(raw.text, options);
 	const lines = parsed.asm.map(parsedLine);
+	return withLabelNavigation(renderedArtifact(raw, lines, {
+			codeSizeBytes: parsed.asm.reduce(
+				(total, line) => total + (line.opcodes?.length ?? 0),
+				0,
+			),
+			instructionCount: parsed.asm.filter(line => line.opcodes?.length).length,
+		}), parsed);
+}
+
+function withLabelNavigation(
+	artifact: RenderedArtifact,
+	parsed: ParsedAsmResult,
+): RenderedArtifact {
+	const definitions = parsed.labelDefinitions ?? {};
 	const links = parsed.asm.flatMap((line, lineIndex) =>
 		(line.labels ?? []).flatMap(label => {
-			const targetLine = parsed.labelDefinitions?.[label.name];
+			const targetLine = definitions[label.target ?? label.name];
 			return targetLine === undefined
 				? []
 				: [{
@@ -194,21 +216,17 @@ function renderBinaryDisassembly(
 				}];
 		}),
 	);
-	const symbols = Object.entries(parsed.labelDefinitions ?? {}).map(([name, line]) => ({
-		name,
-		line,
-	}));
-	return {
-		...renderedArtifact(raw, lines, {
-			codeSizeBytes: parsed.asm.reduce(
-				(total, line) => total + (line.opcodes?.length ?? 0),
-				0,
-			),
-			instructionCount: parsed.asm.filter(line => line.opcodes?.length).length,
-		}),
-		links,
-		symbols,
-	};
+	const symbols = Object.entries(definitions)
+		.map(([name, line]) => ({ name, line }))
+		.sort((left, right) => left.line - right.line || left.name.localeCompare(right.name));
+	const boundaryLines = [...new Set(symbols.map(symbol => symbol.line))]
+		.filter(line => line >= 0 && line < artifact.lines.length)
+		.sort((left, right) => left - right);
+	const folds = boundaryLines.flatMap((startLine, index) => {
+		const endLine = (boundaryLines[index + 1] ?? artifact.lines.length) - 1;
+		return endLine > startLine ? [{ startLine, endLine }] : [];
+	});
+	return { ...artifact, links, folds, symbols };
 }
 
 function parsedLine(line: ParsedAsmResultLine): RenderedArtifactLine {
@@ -225,45 +243,6 @@ function parsedLine(line: ParsedAsmResultLine): RenderedArtifactLine {
 				mainSource: line.source.mainsource,
 			}
 			: line.source,
-	};
-}
-
-function renderPlainText(
-	raw: RawArtifact,
-	_options: DisplayOptions,
-	_backend: ToolchainBackend,
-): RenderedArtifact {
-	return renderedArtifact(
-		raw,
-		raw.text.split(/\r?\n/).map(text => ({ text })),
-	);
-}
-
-function renderedArtifact(
-	raw: RawArtifact,
-	lines: readonly RenderedArtifactLine[],
-	metrics: Readonly<Record<string, unknown>> = {},
-): RenderedArtifact {
-	return {
-		kind: raw.kind,
-		lines,
-		sourceLocations: lines.flatMap((line, lineIndex) => {
-			const sourceLine = line.source?.line;
-			return line.source?.file && sourceLine !== undefined && sourceLine !== null
-				? [{
-					line: lineIndex,
-					uri: line.source.file,
-					sourceLine,
-				}]
-				: [];
-		}),
-		links: [],
-		folds: [],
-		symbols: [],
-		metrics,
-		raw,
-		truncated: raw.truncated || lines.some(line =>
-			line.text.includes('[truncated; too many lines]')),
 	};
 }
 

@@ -6,7 +6,7 @@ import vscode, {
 	window,
 	workspace,
 } from 'vscode';
-import { AsmDefinitionProvider } from './asm-document/asm-definition-provider.js';
+import { ArtifactNavigationProvider } from './asm-document/artifact-navigation-provider.js';
 import { AsmProvider, getArtifactUri } from './asm-document/asm-provider.js';
 import { CmakeVariantProvider } from './buildsystems/cmake.js';
 import { CompilationDatabaseVariantProvider } from './buildsystems/compilation-database.js';
@@ -18,6 +18,10 @@ import {
 	artifactDefinitions,
 	supportedArtifactKinds,
 } from './artifacts/artifact-definitions.js';
+import {
+	effectiveArtifactPresets,
+	type ArtifactPreset,
+} from './artifacts/presets.js';
 import { supportedLanguageIdentifiers } from './toolchains/toolchain-map.js';
 import * as setup from './setup.js';
 
@@ -28,8 +32,8 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		context.workspaceState,
 	);
 	const artifactProvider = new AsmProvider(compilationService, configuration);
-	const definitionProvider = new AsmDefinitionProvider(uri =>
-		artifactProvider.getCompiledAssembly(uri));
+	const navigationProvider = new ArtifactNavigationProvider(uri =>
+		artifactProvider.getRenderedArtifact(uri));
 
 	setup.createToolchainTreeView(context, compilationService.toolchainRegistry);
 	setup.createCompilationInfoTreeView(context, compilationService);
@@ -49,12 +53,38 @@ export async function activate(context: ExtensionContext): Promise<void> {
 	);
 	const definitionRegistration = vscode.languages.registerDefinitionProvider(
 		{ scheme: AsmProvider.scheme },
-		definitionProvider,
+		navigationProvider,
+	);
+	const linkRegistration = vscode.languages.registerDocumentLinkProvider(
+		{ scheme: AsmProvider.scheme },
+		navigationProvider,
+	);
+	const foldingRegistration = vscode.languages.registerFoldingRangeProvider(
+		{ scheme: AsmProvider.scheme },
+		navigationProvider,
+	);
+	const hoverRegistration = vscode.languages.registerHoverProvider(
+		{ scheme: AsmProvider.scheme },
+		navigationProvider,
+	);
+	const symbolRegistration = vscode.languages.registerDocumentSymbolProvider(
+		{ scheme: AsmProvider.scheme },
+		navigationProvider,
 	);
 
 	const openArtifactCommand = commands.registerTextEditorCommand(
 		'coglens.OpenArtifact',
-		editor => openArtifact(editor, undefined, compilationService, artifactProvider),
+		editor => openArtifact(
+			editor,
+			undefined,
+			compilationService,
+			artifactProvider,
+			configuration,
+		),
+	);
+	const compareArtifactsCommand = commands.registerTextEditorCommand(
+		'coglens.CompareArtifacts',
+		editor => compareArtifacts(editor, compilationService, configuration),
 	);
 
 	const pickVariantCommand = commands.registerTextEditorCommand(
@@ -103,7 +133,12 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		...providerSubscriptions,
 		contentProvider,
 		definitionRegistration,
+		linkRegistration,
+		foldingRegistration,
+		hoverRegistration,
+		symbolRegistration,
 		openArtifactCommand,
+		compareArtifactsCommand,
 		pickVariantCommand,
 		activeEditorSubscription,
 		openedDocumentSubscription,
@@ -118,6 +153,7 @@ async function openArtifact(
 	requestedKind: ArtifactKind | undefined,
 	compilationService: CompilationService,
 	artifactProvider: AsmProvider,
+	configuration: ConfigurationService,
 ): Promise<void> {
 	if (!isSupportedSourceDocument(editor.document)) {
 		await window.showWarningMessage(
@@ -177,7 +213,25 @@ async function openArtifact(
 		return;
 	}
 
-	const artifactUri = getArtifactUri(editor.document.uri, variant, kind, 'default');
+	const presets = [...effectiveArtifactPresets(
+		configuration.getArtifactPresets(editor.document.uri),
+		kind,
+	).values()];
+	const preset = presets.length === 1
+		? presets[0]
+		: await window.showQuickPick(
+			presets.map(candidate => ({
+				label: candidate.id === 'default' ? 'Default' : candidate.id,
+				description: candidate.extraArguments.join(' '),
+				preset: candidate,
+			})),
+			{ title: `${artifactDefinitions[kind].label} preset` },
+		).then(choice => choice?.preset);
+	if (!preset) {
+		return;
+	}
+
+	const artifactUri = getArtifactUri(editor.document.uri, variant, kind, preset.id);
 	artifactProvider.requestRefresh(artifactUri);
 	const options: TextDocumentShowOptions = {
 		viewColumn: ViewColumn.Beside,
@@ -185,6 +239,144 @@ async function openArtifact(
 		preview: false,
 	};
 	await window.showTextDocument(artifactUri, options);
+}
+
+interface ComparisonTarget {
+	readonly id: string;
+	readonly label: string;
+	readonly description: string;
+	readonly variant: import('./types/index.js').CompilationVariant;
+	readonly preset?: ArtifactPreset;
+}
+
+async function compareArtifacts(
+	editor: vscode.TextEditor,
+	compilationService: CompilationService,
+	configuration: ConfigurationService,
+): Promise<void> {
+	if (!isSupportedSourceDocument(editor.document)) {
+		await window.showWarningMessage(
+			'Cogitator Lens compares saved, file-backed sources declared by its toolchains.',
+		);
+		return;
+	}
+	if (!await pickVariantIfNeeded(editor.document.uri, compilationService)) {
+		return;
+	}
+	const variants = compilationService.getVariants(editor.document.uri);
+	const selectedVariant = compilationService.getSelectedVariant(editor.document.uri);
+	if (!selectedVariant) {
+		await window.showErrorMessage('No compilation variant is available for this file.');
+		return;
+	}
+	const targets: ComparisonTarget[] = [
+		...variants.map(variant => ({
+			id: `variant:${variant.id}`,
+			label: variant.displayLabel,
+			description: 'Compilation variant',
+			variant,
+		})),
+		...configuration.getArtifactPresets(editor.document.uri).map(preset => ({
+			id: `preset:${preset.id}`,
+			label: preset.id,
+			description: `${artifactDefinitions[preset.artifactKind].label} preset`,
+			variant: selectedVariant,
+			preset,
+		})),
+	];
+	if (targets.length < 2) {
+		await window.showInformationMessage(
+			'Artifact comparison needs at least two variants or configured presets.',
+		);
+		return;
+	}
+
+	const left = await pickComparisonTarget(targets, 'Select the left artifact');
+	if (!left) {
+		return;
+	}
+	const right = await pickComparisonTarget(
+		targets.filter(target => target.id !== left.id),
+		'Select the right artifact',
+	);
+	if (!right) {
+		return;
+	}
+
+	const commonKinds = supportedArtifactKinds.filter(kind =>
+		targetSupportsKind(left, kind, compilationService)
+		&& targetSupportsKind(right, kind, compilationService));
+	if (commonKinds.length === 0) {
+		await window.showWarningMessage(
+			`"${left.label}" and "${right.label}" do not support a common artifact kind.`,
+		);
+		return;
+	}
+	const kind = commonKinds.length === 1
+		? commonKinds[0]
+		: await window.showQuickPick(
+			commonKinds.map(artifactKind => ({
+				label: artifactDefinitions[artifactKind].label,
+				artifactKind,
+			})),
+			{ title: 'Select the artifact kind to compare' },
+		).then(choice => choice?.artifactKind);
+	if (!kind) {
+		return;
+	}
+
+	const leftUri = comparisonUri(editor.document.uri, left, kind);
+	const rightUri = comparisonUri(editor.document.uri, right, kind);
+	if (leftUri.toString() === rightUri.toString()) {
+		await window.showInformationMessage(
+			'These selections resolve to the same artifact. Choose a different variant or preset.',
+		);
+		return;
+	}
+	await commands.executeCommand(
+		'vscode.diff',
+		leftUri,
+		rightUri,
+		`${left.label} ↔ ${right.label} — ${artifactDefinitions[kind].label}`,
+		{ preview: false },
+	);
+}
+
+async function pickComparisonTarget(
+	targets: readonly ComparisonTarget[],
+	title: string,
+): Promise<ComparisonTarget | undefined> {
+	return window.showQuickPick(
+		targets.map(target => ({
+			label: target.label,
+			description: target.description,
+			target,
+		})),
+		{ title, matchOnDescription: true },
+	).then(choice => choice?.target);
+}
+
+function targetSupportsKind(
+	target: ComparisonTarget,
+	kind: ArtifactKind,
+	compilationService: CompilationService,
+): boolean {
+	return (!target.preset || target.preset.artifactKind === kind)
+		&& compilationService.toolchainRegistry
+			.getArtifactAvailability(target.variant.toolchainProfileId, kind).status === 'available';
+}
+
+function comparisonUri(
+	source: vscode.Uri,
+	target: ComparisonTarget,
+	kind: ArtifactKind,
+): vscode.Uri {
+	return getArtifactUri(
+		source,
+		target.variant,
+		kind,
+		target.preset?.id ?? 'default',
+	);
 }
 
 function isSupportedSourceDocument(document: vscode.TextDocument): boolean {

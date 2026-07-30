@@ -88,12 +88,29 @@ export class CompileHandler implements Disposable {
 		});
 
 		try {
+			const preset = this.compilationService.getArtifactPreset(
+				this.artifactKind,
+				this.presetId,
+				this.srcUri,
+			);
+			if (!preset) {
+				throw new CompilationError(
+					`Artifact preset "${this.presetId}" does not exist or does not produce ${this.artifactKind}.`,
+				);
+			}
+			const baseOptions = this.compilationService.getArtifactOptions(this.artifactKind);
 			const artifact = await this.compilationService.compile({
 				variant: this.variant,
 				artifactKind: this.artifactKind,
 				presetId: this.presetId,
-				extraArguments: [],
-				options: this.compilationService.getArtifactOptions(this.artifactKind),
+				extraArguments: preset.extraArguments,
+				options: {
+					production: {
+						...baseOptions.production,
+						...preset.productionOptions,
+					},
+					display: baseOptions.display,
+				},
 				cancellationToken: cancellation.token,
 			});
 			if (artifact.status !== 'available') {

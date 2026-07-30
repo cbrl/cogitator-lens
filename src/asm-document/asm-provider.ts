@@ -24,7 +24,11 @@ import {
 import path from 'path';
 import { CompilationService } from '../compilation/index.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
-import { CompilationError, type CompileDiagnostic } from '../types/index.js';
+import {
+	CompilationError,
+	type CompileDiagnostic,
+	type RenderedArtifact,
+} from '../types/index.js';
 import { toComparisonKey } from '../utils.js';
 import { sourceUriMap, sourceUriSet, UriSet } from '../uri-containers.js';
 import {
@@ -74,6 +78,11 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 				}
 			}),
 			compilationService.onArtifactOptionsChanged(() => {
+				for (const document of this.documents.values()) {
+					this.requestRefresh(document.handler.asmUri);
+				}
+			}),
+			configuration.onDidChange(() => {
 				for (const document of this.documents.values()) {
 					this.requestRefresh(document.handler.asmUri);
 				}
@@ -129,6 +138,10 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 
 	getCompiledAssembly(uri: Uri): CompiledAssembly | undefined {
 		return this.documents.get(documentKey(uri))?.assembly;
+	}
+
+	getRenderedArtifact(uri: Uri): RenderedArtifact | undefined {
+		return this.documents.get(documentKey(uri))?.handler.status.artifact;
 	}
 
 	requestRefresh(assemblyUri: Uri): void {
@@ -292,7 +305,7 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 		}
 		this.statusBar.tooltip = status.state === 'failed'
 			? status.error.message
-			: `Assembly state: ${status.state}`;
+			: `Artifact state: ${status.state}`;
 		this.statusBar.show();
 	}
 

@@ -6,6 +6,7 @@ import { noopPropertyGetter } from '../vendor/compiler-props.js';
 import type { ParseFiltersAndOutputOptions } from '../vendor/types/features/filters.interfaces.js';
 import type { ParsedAsmResult } from '../vendor/types/asmresult/asmresult.interfaces.js';
 import type {
+	ArtifactKind,
 	ToolchainProfile,
 	CompileOptions,
 	DisplayOptions,
@@ -35,8 +36,30 @@ export interface BinaryDisassembler {
 	readonly normalizeOutput?: (output: string) => string;
 }
 
-const flagsWithSeparateValues = new Set(['-o', '-MF', '-MT', '-MQ', '/Fo', '/Fa', '/Fd']);
+export interface CompilerOutputSpec {
+	readonly outputFilename: string;
+	readonly optionalOutput?: boolean;
+	readonly arguments: (
+		outputFile: string,
+		temporaryDirectory: string,
+		providerArguments: readonly string[],
+	) => readonly string[];
+}
+
+const flagsWithSeparateValues = new Set([
+	'-o',
+	'-MF',
+	'-MT',
+	'-MQ',
+	'-foptimization-record-file',
+	'/clang:-o',
+	'/clang:-foptimization-record-file',
+	'/Fo',
+	'/Fa',
+	'/Fd',
+]);
 const flagsWithJoinedValues = /^(?:-o|-MF|-MT|-MQ|\/Fo|\/Fa|\/Fd).+/;
+const artifactOutputFlags = /^(?:-emit-llvm|-fsave-optimization-record(?:=.*)?|-foptimization-record-file(?:=.*)?|-fopt-info(?:-[^=]+)?(?:=.*)?|\/clang:-(?:emit-llvm|S|gline-tables-only|fsave-optimization-record(?:=.*)?|foptimization-record-file(?:=.*)?))$/;
 const compilerManagedFlags = new Set([
 	'-S',
 	'-c',
@@ -72,6 +95,9 @@ export function stripCompilerManagedArguments(
 			continue;
 		}
 		if (flagsWithJoinedValues.test(argument)) {
+			continue;
+		}
+		if (artifactOutputFlags.test(argument)) {
 			continue;
 		}
 		result.push(argument);
@@ -149,7 +175,15 @@ export class ToolchainBackend {
 	): Promise<RawArtifact> {
 		return withTemporaryDirectory('coglens-', async temporaryDirectory => {
 			const outputFile = path.join(temporaryDirectory, 'output.asm');
-			const invocation = await this.prepareInvocation(source, options, 'assembly', outputFile, cancellationToken);
+			const invocation = await this.prepareInvocation(
+				source,
+				options,
+				providerArguments => [
+					...this.outputOptionArguments(options.productionOptions),
+					...this.definition.outputArguments('assembly', outputFile, providerArguments),
+				],
+				cancellationToken,
+			);
 
 			const { logChannel } = await import('../logger.js');
 			logChannel.info(`Compiling ${source.fsPath} with ${this.profile.displayName}`);
@@ -207,7 +241,13 @@ export class ToolchainBackend {
 	): Promise<RawArtifact> {
 		return withTemporaryDirectory('coglens-', async temporaryDirectory => {
 			const objectFile = path.join(temporaryDirectory, this.definition.objectFilename);
-			const invocation = await this.prepareInvocation(source, options, 'object', objectFile, cancellationToken);
+			const invocation = await this.prepareInvocation(
+				source,
+				options,
+				providerArguments =>
+					this.definition.outputArguments('object', objectFile, providerArguments),
+				cancellationToken,
+			);
 			const disassemblerExecutable = this.profile.tools[disassembler.tool];
 			if (!disassemblerExecutable) {
 				throw new Error(`${this.profile.displayName} has no ${disassembler.tool} auxiliary tool.`);
@@ -272,6 +312,75 @@ export class ToolchainBackend {
 		});
 	}
 
+	async produceCompilerOutput(
+		kind: ArtifactKind,
+		source: Uri,
+		options: CompileOptions,
+		spec: CompilerOutputSpec,
+		cancellationToken: CancellationToken,
+	): Promise<RawArtifact> {
+		return withTemporaryDirectory('coglens-', async temporaryDirectory => {
+			const outputFile = path.join(temporaryDirectory, spec.outputFilename);
+			const invocation = await this.prepareInvocation(
+				source,
+				options,
+				providerArguments => spec.arguments(
+					outputFile,
+					temporaryDirectory,
+					providerArguments,
+				),
+				cancellationToken,
+			);
+
+			const { logChannel } = await import('../logger.js');
+			logChannel.info(`Producing ${kind} for ${source.fsPath} with ${this.profile.displayName}`);
+			logChannel.info(`Command: ${this.profile.executable} ${invocation.argumentsList.join(' ')}`);
+			logChannel.debug(`Environment overrides: ${invocation.overriddenNames.join(', ') || '(none)'}`);
+
+			const result = await exec.execute(this.profile.executable, invocation.argumentsList, {
+				cwd: invocation.workingDirectory,
+				env: invocation.preparedEnvironment,
+				cancellationToken,
+			});
+			if (result.returnCode !== 0) {
+				throw new ToolExitError(
+					`Toolchain exited with code ${result.returnCode}`,
+					result.returnCode,
+					result.stdout,
+					result.stderr,
+				);
+			}
+
+			let text: string;
+			try {
+				text = await fs.promises.readFile(outputFile, 'utf8');
+			} catch (error) {
+				if (!spec.optionalOutput || (error as NodeJS.ErrnoException).code !== 'ENOENT') {
+					throw error;
+				}
+				text = '';
+			}
+			const { parseToolDiagnostics } = await import('../diagnostics.js');
+			return {
+				kind,
+				text,
+				diagnostics: parseToolDiagnostics(
+					`${result.stderr}\n${result.stdout}`,
+					source,
+					invocation.workingDirectory,
+				),
+				durationMs: performance.now() - invocation.started,
+				truncated: false,
+				command: {
+					executable: this.profile.executable,
+					arguments: invocation.argumentsList,
+					environmentVariableNames: invocation.overriddenNames,
+					workingDirectory: invocation.workingDirectory,
+				},
+			};
+		});
+	}
+
 	parseAssembly(rawAssembly: string, options: DisplayOptions): ParsedAsmResult {
 		const filters: ParseFiltersAndOutputOptions = { ...options };
 		return this.asmParser.process(rawAssembly, filters);
@@ -285,8 +394,7 @@ export class ToolchainBackend {
 	private async prepareInvocation(
 		source: Uri,
 		options: CompileOptions,
-		target: 'assembly' | 'object',
-		outputFile: string,
+		ownedArguments: (providerArguments: readonly string[]) => readonly string[],
 		cancellationToken: CancellationToken,
 	): Promise<PreparedInvocation> {
 		const workingDirectory = options.workingDirectory ?? path.dirname(source.fsPath);
@@ -307,8 +415,7 @@ export class ToolchainBackend {
 
 		const argumentsList = [
 			...providerArguments,
-			...(target === 'assembly' ? this.outputOptionArguments(options.productionOptions) : []),
-			...this.definition.outputArguments(target, outputFile, providerArguments),
+			...ownedArguments(providerArguments),
 			source.fsPath,
 		];
 
