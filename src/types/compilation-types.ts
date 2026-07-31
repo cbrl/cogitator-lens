@@ -59,6 +59,12 @@ export interface ArtifactCommand {
 	workingDirectory: string;
 }
 
+export interface ArtifactInputState {
+	readonly uri: string;
+	readonly size: number;
+	readonly mtimeMs: number;
+}
+
 export interface RawArtifact {
 	kind: ArtifactKind;
 	text: string;
@@ -66,6 +72,8 @@ export interface RawArtifact {
 	durationMs: number;
 	command: ArtifactCommand;
 	truncated: boolean;
+	readonly inputs: readonly ArtifactInputState[];
+	readonly dependencyCoverage: 'complete' | 'source-only';
 }
 
 export interface ArtifactSourceLocation {
@@ -78,6 +86,12 @@ export interface RenderedArtifactLineSource {
 	readonly file: string | null;
 	readonly line: number | null;
 	readonly column?: number;
+	/**
+	 * Optional exclusive end position for precise source highlighting.
+	 * Lines are one-based and columns are zero-based, matching `line` and `column`.
+	 */
+	readonly endLine?: number;
+	readonly endColumn?: number;
 	readonly mainSource?: boolean;
 }
 
@@ -171,6 +185,18 @@ export class CompilationError extends Error {
 	) {
 		super(message, options);
 		this.name = 'CompilationError';
+	}
+}
+
+export class UnsupportedToolVersionError extends Error {
+	constructor(
+		message: string,
+		public readonly detectedVersion: string,
+		public readonly requiredVersion: string,
+		options?: ErrorOptions,
+	) {
+		super(message, options);
+		this.name = 'UnsupportedToolVersionError';
 	}
 }
 

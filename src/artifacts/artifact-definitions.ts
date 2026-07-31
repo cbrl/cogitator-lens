@@ -10,9 +10,10 @@ import type { Uri } from 'vscode';
 import type { ParsedAsmResultLine } from '../vendor/types/asmresult/asmresult.interfaces.js';
 import type { ParsedAsmResult } from '../vendor/types/asmresult/asmresult.interfaces.js';
 import { renderLlvmIr } from './llvm-ir-renderer.js';
-import { renderOptimizationRemarks } from './optimization-remarks-renderer.js';
 import { renderPythonBytecode } from './python-bytecode-renderer.js';
 import { renderedArtifact } from './rendered-artifact.js';
+import { renderPreprocessedSource } from './preprocessed-source-renderer.js';
+import { renderRustMir } from './rust-mir-renderer.js';
 
 export interface ArtifactOptionDescriptor {
 	readonly id: keyof ArtifactOptions['production'] | keyof ArtifactOptions['display'];
@@ -37,16 +38,18 @@ export interface ArtifactRenderContext {
 	};
 }
 
+export type ArtifactRenderer = (
+	raw: RawArtifact,
+	options: DisplayOptions,
+	context: ArtifactRenderContext,
+) => RenderedArtifact | Promise<RenderedArtifact>;
+
 interface ArtifactDefinitionShape {
 	readonly label: string;
 	readonly filenameExtension: string;
 	readonly documentLanguage: 'artifact' | 'source';
 	readonly options: readonly ArtifactOptionDescriptor[];
-	readonly renderer: (
-		raw: RawArtifact,
-		options: DisplayOptions,
-		context: ArtifactRenderContext,
-	) => RenderedArtifact | Promise<RenderedArtifact>;
+	readonly renderer: ArtifactRenderer;
 	readonly navigation: ArtifactNavigationFeatures;
 }
 
@@ -68,6 +71,18 @@ const displayOptionDescriptors = {
 		group: 'display',
 		label: 'Show full filenames',
 		description: 'Keep source filenames visible in rendered output',
+	},
+	showIncludedFiles: {
+		id: 'showIncludedFiles',
+		group: 'display',
+		label: 'Show included files',
+		description: 'Include content originating from headers in preprocessed output',
+	},
+	showSystemDeclarations: {
+		id: 'showSystemDeclarations',
+		group: 'display',
+		label: 'Show system declarations',
+		description: 'Include declarations originating from compiler and system headers',
 	},
 } as const satisfies Record<string, ArtifactOptionDescriptor>;
 
@@ -142,6 +157,34 @@ export const artifactDefinitions = {
 			symbols: true,
 		},
 	},
+	'preprocessed-source': {
+		label: 'Preprocessed source',
+		filenameExtension: '.preprocessed',
+		documentLanguage: 'source',
+		options: [displayOptionDescriptors.showIncludedFiles],
+		renderer: renderPreprocessedSource,
+		navigation: {
+			definitions: true,
+			sourceLocations: true,
+			links: false,
+			folds: true,
+			symbols: false,
+		},
+	},
+	ast: {
+		label: 'Abstract syntax tree',
+		filenameExtension: '.ast',
+		documentLanguage: 'artifact',
+		options: [displayOptionDescriptors.showSystemDeclarations],
+		renderer: renderToolchainArtifact,
+		navigation: {
+			definitions: true,
+			sourceLocations: true,
+			links: false,
+			folds: true,
+			symbols: true,
+		},
+	},
 	'llvm-ir': {
 		label: 'LLVM IR',
 		filenameExtension: '.ll',
@@ -156,12 +199,26 @@ export const artifactDefinitions = {
 			symbols: true,
 		},
 	},
+	'rust-mir': {
+		label: 'Rust MIR',
+		filenameExtension: '.mir',
+		documentLanguage: 'artifact',
+		options: [],
+		renderer: renderRustMir,
+		navigation: {
+			definitions: true,
+			sourceLocations: true,
+			links: true,
+			folds: true,
+			symbols: true,
+		},
+	},
 	'optimization-remarks': {
 		label: 'Optimization remarks',
 		filenameExtension: '.opt',
 		documentLanguage: 'source',
 		options: [],
-		renderer: renderOptimizationRemarks,
+		renderer: renderToolchainArtifact,
 		navigation: {
 			definitions: true,
 			sourceLocations: true,
@@ -197,6 +254,14 @@ export function getArtifactDefinition(kind: string): ArtifactDefinition | undefi
 	return Object.hasOwn(artifactDefinitions, kind)
 		? artifactDefinitions[kind as ArtifactKind]
 		: undefined;
+}
+
+function renderToolchainArtifact(
+	raw: RawArtifact,
+	options: DisplayOptions,
+	context: ArtifactRenderContext,
+): RenderedArtifact {
+	return context.backend.renderArtifact(raw, options, context);
 }
 
 function renderAssembly(

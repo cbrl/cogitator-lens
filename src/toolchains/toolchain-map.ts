@@ -5,13 +5,19 @@ import type {
 	ArtifactKind,
 	ArtifactOptionAvailability,
 	ArtifactOptionId,
+	ArtifactRenderContext,
 	CompileOptions,
+	DisplayOptions,
 	IntelSyntaxSupport,
 	RawArtifact,
+	RenderedArtifact,
 	ToolchainKind,
 	ToolchainProfile,
 } from '../types/index.js';
-import { ToolchainBackend } from '../toolchains/toolchain-backend.js';
+import {
+	ToolchainBackend,
+	type DependencyCollectionSpec,
+} from '../toolchains/toolchain-backend.js';
 import { AsmParser } from '../vendor/lib/parsers/asm-parser.js';
 import { noopPropertyGetter } from '../vendor/compiler-props.js';
 import {
@@ -40,8 +46,27 @@ import {
 	compilerOutputProducer,
 	gccOptimizationRecord,
 	llvmIrOutput,
+	rustLlvmIrOutput,
+	rustMirOutput,
 } from '../artifacts/compiler-output-producer.js';
 import { pythonBytecodeProducer } from '../artifacts/python-bytecode-producer.js';
+import {
+	pythonAstProducer,
+	stdoutArtifactProducer,
+} from '../artifacts/front-end-producers.js';
+import {
+	renderClangAst,
+	renderPythonAst,
+} from '../artifacts/ast-renderer.js';
+import {
+	optimizationRemarksRenderer,
+	parseClangOptimizationRemarks,
+	parseGccOptimizationRemarks,
+} from '../artifacts/optimization-remarks-renderer.js';
+import {
+	parseMakeDepfile,
+	parseMsvcSourceDependencies,
+} from '../compilation/artifact-inputs.js';
 
 export type ToolCapabilityStatus = 'available' | 'unavailable' | 'unsupported';
 
@@ -58,6 +83,12 @@ export type ToolchainArtifactCell =
 	| {
 		readonly status: 'available';
 		readonly producer: ArtifactProducer;
+		/** Optional toolchain-specific rendering action; otherwise the artifact default is used. */
+		readonly renderer?: (
+			raw: RawArtifact,
+			options: DisplayOptions,
+			context: ArtifactRenderContext,
+		) => RenderedArtifact;
 		readonly requiredTool?: {
 			readonly name: string;
 			readonly label: string;
@@ -99,6 +130,8 @@ export interface ToolchainDefinitionShape {
 		workingDirectory: string,
 		cancellationToken: CancellationToken,
 	) => Promise<string>;
+	/** Omit when the toolchain cannot enumerate inputs beyond the main source. */
+	readonly dependencyCollection?: DependencyCollectionSpec;
 	readonly discoverTools: (executable: string) => Readonly<Record<string, string>>;
 	readonly artifacts: Readonly<Record<ArtifactKind, ToolchainArtifactCell>>;
 }
@@ -194,14 +227,77 @@ function gnuOutputArguments(lineTableArguments: readonly string[]) {
 			: ['-c', ...lineTableArguments, '-o', outputFile];
 }
 
+const gnuDependencyCollection: DependencyCollectionSpec = Object.freeze({
+	outputFilename: 'dependencies.d',
+	arguments: (outputFile: string) => ['-M', '-MF', outputFile],
+	parse: parseMakeDepfile,
+});
+
+const msvcDependencyCollection: DependencyCollectionSpec = Object.freeze({
+	outputFilename: 'dependencies.json',
+	arguments: (outputFile: string, temporaryDirectory: string) => [
+		'/c',
+		'/sourceDependencies',
+		outputFile,
+		`/Fo${path.join(temporaryDirectory, 'dependencies.obj')}`,
+	],
+	parse: parseMsvcSourceDependencies,
+});
+
+const rustDependencyCollection: DependencyCollectionSpec = Object.freeze({
+	outputFilename: 'dependencies.d',
+	arguments: (
+		outputFile: string,
+		_temporaryDirectory: string,
+		providerArguments: readonly string[],
+	) => [
+		...(hasOption(providerArguments, '--crate-name')
+			? []
+			: ['--crate-name=coglens_artifact']),
+		...(hasOption(providerArguments, '--crate-type')
+			? []
+			: ['--crate-type=lib']),
+		`--emit=dep-info=${outputFile}`,
+		'--error-format=human',
+		'--color=never',
+	],
+	parse: parseMakeDepfile,
+});
+
+const gnuPreprocessedSourceProducer = stdoutArtifactProducer(
+	'preprocessed-source',
+	{ arguments: () => ['-E'] },
+);
+const msvcPreprocessedSourceProducer = stdoutArtifactProducer(
+	'preprocessed-source',
+	{ arguments: () => ['/E'] },
+);
+const clangAstProducer = stdoutArtifactProducer('ast', {
+	arguments: () => ['-Xclang', '-ast-dump', '-fsyntax-only'],
+	acceptOutputOnError: true,
+});
+
 const gnuIntelArguments = Object.freeze(['-masm=intel']);
 const rustIntelArguments = Object.freeze(['-C', 'llvm-args=-x86-asm-syntax=intel']);
 
 const defaultAsmParser = (): AsmParser => new AsmParser(noopPropertyGetter);
 
+function hasOption(args: readonly string[], name: string): boolean {
+	return args.some(argument => argument === name || argument.startsWith(`${name}=`));
+}
+
 const clangArtifacts = artifactCells({
 	assembly: assemblyCell,
 	'binary-disassembly': binaryCell('llvm-objdump', binaryDisassemblyProducer(llvmObjdump)),
+	'preprocessed-source': {
+		status: 'available',
+		producer: gnuPreprocessedSourceProducer,
+	},
+	ast: {
+		status: 'available',
+		producer: clangAstProducer,
+		renderer: renderClangAst,
+	},
 	'llvm-ir': {
 		status: 'available',
 		producer: compilerOutputProducer('llvm-ir', llvmIrOutput),
@@ -209,26 +305,45 @@ const clangArtifacts = artifactCells({
 	'optimization-remarks': {
 		status: 'available',
 		producer: compilerOutputProducer('optimization-remarks', clangOptimizationRecord),
+		renderer: optimizationRemarksRenderer(parseClangOptimizationRemarks),
 	},
 });
 
 const gccArtifacts = artifactCells({
 	assembly: assemblyCell,
 	'binary-disassembly': binaryCell('GNU objdump', binaryDisassemblyProducer(gnuObjdump)),
+	'preprocessed-source': {
+		status: 'available',
+		producer: gnuPreprocessedSourceProducer,
+	},
 	'optimization-remarks': {
 		status: 'available',
 		producer: compilerOutputProducer('optimization-remarks', gccOptimizationRecord),
+		renderer: optimizationRemarksRenderer(parseGccOptimizationRemarks),
 	},
 });
 
 const msvcArtifacts = artifactCells({
 	assembly: assemblyCell,
 	'binary-disassembly': binaryCell('dumpbin', binaryDisassemblyProducer(dumpbin)),
+	'preprocessed-source': {
+		status: 'available',
+		producer: msvcPreprocessedSourceProducer,
+	},
 });
 
 const clangClArtifacts = artifactCells({
 	assembly: assemblyCell,
 	'binary-disassembly': binaryCell('llvm-objdump', binaryDisassemblyProducer(llvmObjdump)),
+	'preprocessed-source': {
+		status: 'available',
+		producer: msvcPreprocessedSourceProducer,
+	},
+	ast: {
+		status: 'available',
+		producer: clangAstProducer,
+		renderer: renderClangAst,
+	},
 	'llvm-ir': {
 		status: 'available',
 		producer: compilerOutputProducer('llvm-ir', clangClLlvmIrOutput),
@@ -236,14 +351,28 @@ const clangClArtifacts = artifactCells({
 	'optimization-remarks': {
 		status: 'available',
 		producer: compilerOutputProducer('optimization-remarks', clangClOptimizationRecord),
+		renderer: optimizationRemarksRenderer(parseClangOptimizationRemarks),
 	},
 });
 
 const rustArtifacts = artifactCells({
 	assembly: assemblyCell,
+	'llvm-ir': {
+		status: 'available',
+		producer: compilerOutputProducer('llvm-ir', rustLlvmIrOutput),
+	},
+	'rust-mir': {
+		status: 'available',
+		producer: compilerOutputProducer('rust-mir', rustMirOutput),
+	},
 });
 
 const pythonArtifacts = artifactCells({
+	ast: {
+		status: 'available',
+		producer: pythonAstProducer,
+		renderer: (raw, _options, context) => renderPythonAst(raw, context),
+	},
 	'python-bytecode': {
 		status: 'available',
 		producer: pythonBytecodeProducer,
@@ -260,6 +389,7 @@ export const toolchainDefinitions = {
 		defineFlag: '-D',
 		objectFilename: 'output.o',
 		outputArguments: gnuOutputArguments(['-g1']),
+		dependencyCollection: gnuDependencyCollection,
 		createParser: defaultAsmParser,
 		discoverTools: toolDiscoverer({ demangler: 'c++filt', disassembler: 'objdump' }),
 		artifacts: gccArtifacts,
@@ -272,6 +402,7 @@ export const toolchainDefinitions = {
 		defineFlag: '/D',
 		objectFilename: 'output.obj',
 		outputArguments: clangClOutputArguments,
+		dependencyCollection: msvcDependencyCollection,
 		createParser: defaultAsmParser,
 		prepareEnvironment: captureWindowsEnvironment,
 		demangle: windowsDemangle,
@@ -286,6 +417,7 @@ export const toolchainDefinitions = {
 		defineFlag: '/D',
 		objectFilename: 'output.obj',
 		outputArguments: msvcOutputArguments,
+		dependencyCollection: msvcDependencyCollection,
 		createParser: createMsvcAsmParser,
 		prepareEnvironment: captureWindowsEnvironment,
 		demangle: windowsDemangle,
@@ -301,6 +433,7 @@ export const toolchainDefinitions = {
 		defineFlag: '-D',
 		objectFilename: 'output.o',
 		outputArguments: gnuOutputArguments(['-gline-tables-only']),
+		dependencyCollection: gnuDependencyCollection,
 		createParser: defaultAsmParser,
 		discoverTools: toolDiscoverer({ demangler: 'llvm-cxxfilt', disassembler: 'llvm-objdump' }),
 		artifacts: clangArtifacts,
@@ -314,6 +447,7 @@ export const toolchainDefinitions = {
 		defineFlag: '-D',
 		objectFilename: 'output.o',
 		outputArguments: gnuOutputArguments(['-gline-tables-only']),
+		dependencyCollection: gnuDependencyCollection,
 		createParser: defaultAsmParser,
 		discoverTools: toolDiscoverer({ demangler: 'llvm-cxxfilt', disassembler: 'llvm-objdump' }),
 		artifacts: clangArtifacts,
@@ -331,6 +465,7 @@ export const toolchainDefinitions = {
 		objectFilename: 'output.o',
 		outputArguments: rustOutputArguments,
 		stripOwnedArguments: stripRustManagedArguments,
+		dependencyCollection: rustDependencyCollection,
 		createParser: defaultAsmParser,
 		discoverTools: toolDiscoverer({ demangler: 'rustfilt' }),
 		artifacts: rustArtifacts,

@@ -209,6 +209,8 @@ function rawArtifact(text: string): RawArtifact {
 			workingDirectory: process.cwd(),
 		},
 		truncated: false,
+		inputs: [],
+		dependencyCoverage: 'source-only',
 	};
 }
 

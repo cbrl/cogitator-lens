@@ -15,6 +15,14 @@ export const selectedLineDecoration = window.createTextEditorDecorationType({
 	overviewRulerColor: new ThemeColor('editorOverviewRuler.findMatchForeground'),
 });
 
+export const selectedSourceRangeDecoration = window.createTextEditorDecorationType({
+	backgroundColor: new ThemeColor('editor.wordHighlightStrongBackground'),
+	borderColor: new ThemeColor('editor.wordHighlightStrongBorder'),
+	borderStyle: 'solid',
+	borderWidth: '1px',
+	overviewRulerColor: new ThemeColor('editorOverviewRuler.wordHighlightStrongForeground'),
+});
+
 export const unusedLineDecoration = window.createTextEditorDecorationType({
 	opacity: '0.5',
 });

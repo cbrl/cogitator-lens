@@ -12,11 +12,19 @@ import type {
 	DisplayOptions,
 	ProductionOptions,
 	RawArtifact,
+	ArtifactRenderContext,
+	RenderedArtifact,
 } from '../types/index.js';
 import { samePath } from '../toolchain-arguments.js';
 import * as exec from '../exec.js';
 import { withTemporaryDirectory } from '../temporary-directory.js';
 import type { ToolchainDefinition } from './toolchain-map.js';
+import {
+	snapshotArtifactInputs,
+	type ArtifactInputMetadata,
+} from '../compilation/artifact-inputs.js';
+
+const maxArtifactFileBytes = 50 * 1024 * 1024;
 
 export class ToolExitError extends Error {
 	constructor(
@@ -46,6 +54,31 @@ export interface CompilerOutputSpec {
 	) => readonly string[];
 }
 
+export interface StdoutArtifactSpec {
+	/** Builds the arguments owned by this artifact action after provider arguments are sanitized. */
+	readonly arguments: (
+		temporaryDirectory: string,
+		providerArguments: readonly string[],
+	) => readonly string[];
+	readonly acceptOutputOnError?: boolean;
+}
+
+export interface DependencyCollectionSpec {
+	/** Name reserved inside the backend's per-invocation temporary directory. */
+	readonly outputFilename: string;
+	/** Builds a bounded companion invocation that writes dependency metadata. */
+	readonly arguments: (
+		outputFile: string,
+		temporaryDirectory: string,
+		providerArguments: readonly string[],
+	) => readonly string[];
+	/** Converts the toolchain's dependency format into local input paths. */
+	readonly parse: (
+		text: string,
+		workingDirectory: string,
+	) => readonly string[];
+}
+
 const flagsWithSeparateValues = new Set([
 	'-o',
 	'-MF',
@@ -57,12 +90,17 @@ const flagsWithSeparateValues = new Set([
 	'/Fo',
 	'/Fa',
 	'/Fd',
+	'/Fi',
+	'/sourceDependencies',
 ]);
-const flagsWithJoinedValues = /^(?:-o|-MF|-MT|-MQ|\/Fo|\/Fa|\/Fd).+/;
+const flagsWithJoinedValues =
+	/^(?:-o|-MF|-MT|-MQ|\/[Ff][OoAaDdIi]|\/[Ss]ource[Dd]ependencies:).+/;
 const artifactOutputFlags = /^(?:-emit-llvm|-fsave-optimization-record(?:=.*)?|-foptimization-record-file(?:=.*)?|-fopt-info(?:-[^=]+)?(?:=.*)?|\/clang:-(?:emit-llvm|S|gline-tables-only|fsave-optimization-record(?:=.*)?|foptimization-record-file(?:=.*)?))$/;
 const compilerManagedFlags = new Set([
 	'-S',
 	'-c',
+	'-E',
+	'-fsyntax-only',
 	'-M',
 	'-MM',
 	'-MD',
@@ -72,6 +110,9 @@ const compilerManagedFlags = new Set([
 	'/FAc',
 	'/FAs',
 	'/FAcs',
+	'/E',
+	'/EP',
+	'/P',
 ]);
 
 /**
@@ -91,6 +132,10 @@ export function stripCompilerManagedArguments(
 			continue;
 		}
 		if (flagsWithSeparateValues.has(argument)) {
+			index++;
+			continue;
+		}
+		if (argument === '-Xclang' && args[index + 1] === '-ast-dump') {
 			index++;
 			continue;
 		}
@@ -147,6 +192,7 @@ interface PreparedInvocation {
 	readonly workingDirectory: string;
 	readonly preparedEnvironment: NodeJS.ProcessEnv;
 	readonly argumentsList: readonly string[];
+	readonly providerArguments: readonly string[];
 	readonly overriddenNames: readonly string[];
 	readonly started: number;
 }
@@ -208,12 +254,18 @@ export class ToolchainBackend {
 				);
 			}
 
-			const assembly = await fs.promises.readFile(outputFile, 'utf8');
+			const assembly = await readBoundedArtifactFile(outputFile);
 			const text = await this.postProcessAssembly(
 				assembly,
 				options.productionOptions,
 				invocation.preparedEnvironment,
 				invocation.workingDirectory,
+				cancellationToken,
+			);
+			const inputMetadata = await this.collectDependencyInputs(
+				source,
+				invocation,
+				temporaryDirectory,
 				cancellationToken,
 			);
 			const { parseToolDiagnostics } = await import('../diagnostics.js');
@@ -227,6 +279,7 @@ export class ToolchainBackend {
 				),
 				durationMs: performance.now() - invocation.started,
 				truncated: false,
+				...inputMetadata,
 				command: {
 					executable: this.profile.executable,
 					arguments: invocation.argumentsList,
@@ -300,6 +353,12 @@ export class ToolchainBackend {
 			const text = disassembler.normalizeOutput
 				? disassembler.normalizeOutput(disassemblerResult.stdout)
 				: disassemblerResult.stdout;
+			const inputMetadata = await this.collectDependencyInputs(
+				source,
+				invocation,
+				temporaryDirectory,
+				cancellationToken,
+			);
 			const { parseToolDiagnostics } = await import('../diagnostics.js');
 			return {
 				kind: 'binary-disassembly',
@@ -311,6 +370,7 @@ export class ToolchainBackend {
 				),
 				durationMs: performance.now() - invocation.started,
 				truncated: false,
+				...inputMetadata,
 				command: {
 					executable: disassemblerExecutable,
 					arguments: disassemblerArguments,
@@ -360,15 +420,13 @@ export class ToolchainBackend {
 				);
 			}
 
-			let text: string;
-			try {
-				text = await fs.promises.readFile(outputFile, 'utf8');
-			} catch (error) {
-				if (!spec.optionalOutput || (error as NodeJS.ErrnoException).code !== 'ENOENT') {
-					throw error;
-				}
-				text = '';
-			}
+			const text = await readBoundedArtifactFile(outputFile, spec.optionalOutput);
+			const inputMetadata = await this.collectDependencyInputs(
+				source,
+				invocation,
+				temporaryDirectory,
+				cancellationToken,
+			);
 			const { parseToolDiagnostics } = await import('../diagnostics.js');
 			return {
 				kind,
@@ -380,6 +438,7 @@ export class ToolchainBackend {
 				),
 				durationMs: performance.now() - invocation.started,
 				truncated: false,
+				...inputMetadata,
 				command: {
 					executable: this.profile.executable,
 					arguments: invocation.argumentsList,
@@ -394,53 +453,63 @@ export class ToolchainBackend {
 		kind: ArtifactKind,
 		source: Uri,
 		options: CompileOptions,
-		ownedArguments: readonly string[],
+		spec: StdoutArtifactSpec,
 		cancellationToken: CancellationToken,
 	): Promise<RawArtifact> {
-		const invocation = await this.prepareInvocation(
-			source,
-			options,
-			() => ownedArguments,
-			cancellationToken,
-		);
-
-		const { logChannel } = await import('../logger.js');
-		logChannel.info(`Producing ${kind} for ${source.fsPath} with ${this.profile.displayName}`);
-		logChannel.info(`Command: ${this.profile.executable} ${invocation.argumentsList.join(' ')}`);
-		logChannel.debug(`Environment overrides: ${invocation.overriddenNames.join(', ') || '(none)'}`);
-
-		const result = await exec.execute(this.profile.executable, invocation.argumentsList, {
-			cwd: invocation.workingDirectory,
-			env: invocation.preparedEnvironment,
-			cancellationToken,
-		});
-		if (result.returnCode !== 0) {
-			throw new ToolExitError(
-				`Toolchain exited with code ${result.returnCode}`,
-				result.returnCode,
-				result.stdout,
-				result.stderr,
-			);
-		}
-
-		const { parseToolDiagnostics } = await import('../diagnostics.js');
-		return {
-			kind,
-			text: result.stdout,
-			diagnostics: parseToolDiagnostics(
-				result.stderr,
+		return withTemporaryDirectory('coglens-', async temporaryDirectory => {
+			const invocation = await this.prepareInvocation(
 				source,
-				invocation.workingDirectory,
-			),
-			durationMs: performance.now() - invocation.started,
-			truncated: false,
-			command: {
-				executable: this.profile.executable,
-				arguments: invocation.argumentsList,
-				environmentVariableNames: invocation.overriddenNames,
-				workingDirectory: invocation.workingDirectory,
-			},
-		};
+				options,
+				providerArguments =>
+					spec.arguments(temporaryDirectory, providerArguments),
+				cancellationToken,
+			);
+
+			const { logChannel } = await import('../logger.js');
+			logChannel.info(`Producing ${kind} for ${source.fsPath} with ${this.profile.displayName}`);
+			logChannel.info(`Command: ${this.profile.executable} ${invocation.argumentsList.join(' ')}`);
+			logChannel.debug(`Environment overrides: ${invocation.overriddenNames.join(', ') || '(none)'}`);
+
+			const result = await exec.execute(this.profile.executable, invocation.argumentsList, {
+				cwd: invocation.workingDirectory,
+				env: invocation.preparedEnvironment,
+				cancellationToken,
+			});
+			if (result.returnCode !== 0 && !(spec.acceptOutputOnError && result.stdout)) {
+				throw new ToolExitError(
+					`Toolchain exited with code ${result.returnCode}`,
+					result.returnCode,
+					result.stdout,
+					result.stderr,
+				);
+			}
+
+			const inputMetadata = await this.collectDependencyInputs(
+				source,
+				invocation,
+				temporaryDirectory,
+				cancellationToken,
+			);
+			const { parseToolDiagnostics } = await import('../diagnostics.js');
+			return {
+				kind,
+				text: result.stdout,
+				diagnostics: parseToolDiagnostics(
+					result.stderr,
+					source,
+					invocation.workingDirectory,
+				),
+				durationMs: performance.now() - invocation.started,
+				truncated: false,
+				...inputMetadata,
+				command: {
+					executable: this.profile.executable,
+					arguments: invocation.argumentsList,
+					environmentVariableNames: invocation.overriddenNames,
+					workingDirectory: invocation.workingDirectory,
+				},
+			};
+		});
 	}
 
 	parseAssembly(rawAssembly: string, options: DisplayOptions): ParsedAsmResult {
@@ -454,6 +523,31 @@ export class ToolchainBackend {
 	parseBinaryDisassembly(rawDisassembly: string, options: DisplayOptions): ParsedAsmResult {
 		const filters: ParseFiltersAndOutputOptions = { ...options, binary: true };
 		return this.binaryAsmParser.process(rawDisassembly, filters);
+	}
+
+	renderArtifact(
+		raw: RawArtifact,
+		options: DisplayOptions,
+		context: ArtifactRenderContext,
+	): RenderedArtifact {
+		const renderer = this.getArtifactRenderer(raw.kind);
+		if (!renderer) {
+			throw new Error(
+				`${this.profile.displayName} has no ${raw.kind} rendering capability.`,
+			);
+		}
+		return renderer(raw, options, context);
+	}
+
+	getArtifactRenderer(
+		kind: ArtifactKind,
+	): ((
+		raw: RawArtifact,
+		options: DisplayOptions,
+		context: ArtifactRenderContext,
+	) => RenderedArtifact) | undefined {
+		const cell = this.definition.artifacts[kind];
+		return cell.status === 'available' ? cell.renderer : undefined;
 	}
 
 	private async prepareInvocation(
@@ -488,9 +582,90 @@ export class ToolchainBackend {
 			workingDirectory,
 			preparedEnvironment,
 			argumentsList,
+			providerArguments,
 			overriddenNames: Object.keys({ ...this.profile.environment, ...options.env }).sort(),
 			started: performance.now(),
 		};
+	}
+
+	private async collectDependencyInputs(
+		source: Uri,
+		invocation: PreparedInvocation,
+		temporaryDirectory: string,
+		cancellationToken: CancellationToken,
+	): Promise<ArtifactInputMetadata> {
+		const spec = this.definition.dependencyCollection;
+		if (!spec) {
+			return snapshotArtifactInputs(
+				source.fsPath,
+				[],
+				'source-only',
+				invocation.workingDirectory,
+			);
+		}
+		const dependencyFile = path.join(temporaryDirectory, spec.outputFilename);
+		const dependencyArguments = spec.arguments(
+			dependencyFile,
+			temporaryDirectory,
+			invocation.providerArguments,
+		);
+
+		try {
+			const result = await exec.execute(
+				this.profile.executable,
+				[
+					...invocation.providerArguments,
+					...dependencyArguments,
+					source.fsPath,
+				],
+				{
+					cwd: invocation.workingDirectory,
+					env: invocation.preparedEnvironment,
+					cancellationToken,
+				},
+			);
+			if (result.returnCode !== 0) {
+				return snapshotArtifactInputs(
+					source.fsPath,
+					[],
+					'source-only',
+					invocation.workingDirectory,
+				);
+			}
+			const dependencyText = await fs.promises.readFile(dependencyFile, 'utf8');
+			const dependencies = spec.parse(
+				dependencyText,
+				invocation.workingDirectory,
+			);
+			if (dependencies.length === 0) {
+				return snapshotArtifactInputs(
+					source.fsPath,
+					[],
+					'source-only',
+					invocation.workingDirectory,
+				);
+			}
+			return snapshotArtifactInputs(
+				source.fsPath,
+				dependencies,
+				'complete',
+				invocation.workingDirectory,
+			);
+		} catch (error) {
+			if (
+				cancellationToken.isCancellationRequested
+				|| (error instanceof exec.ExecError
+					&& (error.kind === 'cancelled' || error.kind === 'timeout'))
+			) {
+				throw error;
+			}
+			return snapshotArtifactInputs(
+				source.fsPath,
+				[],
+				'source-only',
+				invocation.workingDirectory,
+			);
+		}
 	}
 
 	private outputOptionArguments(options: ProductionOptions): readonly string[] {
@@ -510,4 +685,28 @@ export class ToolchainBackend {
 		const demangle = this.definition.demangle ?? demangleViaStdin;
 		return demangle(rawAssembly, this.profile.tools.demangler, environment, workingDirectory, cancellationToken);
 	}
+}
+
+async function readBoundedArtifactFile(
+	filename: string,
+	optional = false,
+): Promise<string> {
+	let stat: fs.Stats;
+	try {
+		stat = await fs.promises.stat(filename);
+	} catch (error) {
+		if (optional && (error as NodeJS.ErrnoException).code === 'ENOENT') {
+			return '';
+		}
+		throw new Error(`Toolchain did not produce the expected output file: ${filename}`, {
+			cause: error,
+		});
+	}
+	if (stat.size > maxArtifactFileBytes) {
+		throw new exec.ExecError(
+			'output-limit',
+			`Toolchain output file exceeded the ${maxArtifactFileBytes}-byte limit`,
+		);
+	}
+	return fs.promises.readFile(filename, 'utf8');
 }

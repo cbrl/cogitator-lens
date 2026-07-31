@@ -16,12 +16,14 @@ import { equalUri } from '../utils.js';
 import {
 	optimizationRemarkDecorations,
 	selectedLineDecoration,
+	selectedSourceRangeDecoration,
 	stateDecoration,
 	unusedLineDecoration,
 } from './decorations/decoration-styles.js';
 import { EditorTracker } from './decorations/editor-tracker.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
 import type { CompileHandlerStatus, CompilationDocumentState } from './compile-handler.js';
+import type { RenderedArtifactLine } from '../types/index.js';
 
 /*
 Nice-to-have features:
@@ -160,6 +162,7 @@ export class AsmDecorator {
 
 	private clearDecorations(editor: TextEditor) {
 		editor.setDecorations(selectedLineDecoration, []);
+		editor.setDecorations(selectedSourceRangeDecoration, []);
 		editor.setDecorations(unusedLineDecoration, []);
 		editor.setDecorations(stateDecoration, []);
 		for (const decoration of Object.values(optimizationRemarkDecorations)) {
@@ -239,6 +242,7 @@ export class AsmDecorator {
 
 		// Highlight selected line in source editor
         const srcLineRange = selectedEditor.document.lineAt(selectedEditor.selection.start.line).range;
+		selectedEditor.setDecorations(selectedSourceRangeDecoration, []);
         selectedEditor.setDecorations(selectedLineDecoration, [srcLineRange]);
 
 		// Highlight associated lines in ASM editor
@@ -272,6 +276,7 @@ export class AsmDecorator {
 		// Highlight selected line in ASM editor
         const asmLineRange = asmEditor.document.lineAt(line).range;
         asmEditor.setDecorations(selectedLineDecoration, [asmLineRange]);
+		asmEditor.setDecorations(selectedSourceRangeDecoration, []);
 
 		// Highlight associated lines in source editor
         if (asmLineHasSource(asmLine)) {
@@ -279,7 +284,7 @@ export class AsmDecorator {
 
 			// Open the correct source document if this line of assembly refers to a different file
 			this.getOrCreateSourceEditor(srcUri).then(targetEditor => {
-				if (this.isDisposed) {
+				if (this.isDisposed || asmEditor.selection.start.line !== line) {
 					return;
 				}
 
@@ -288,9 +293,17 @@ export class AsmDecorator {
 					return;
 				}
 
-				const srcLineRange = targetEditor.document.lineAt(srcLineIndex).range;
-
-				targetEditor.setDecorations(selectedLineDecoration, [srcLineRange]);
+				const preciseRange = sourceSelectionRange(targetEditor.document, asmLine);
+				const srcLineRange = preciseRange
+					?? targetEditor.document.lineAt(srcLineIndex).range;
+				for (const editor of this.getAllSourceEditors()) {
+					editor.setDecorations(selectedLineDecoration, []);
+					editor.setDecorations(selectedSourceRangeDecoration, []);
+				}
+				targetEditor.setDecorations(
+					preciseRange ? selectedSourceRangeDecoration : selectedLineDecoration,
+					[srcLineRange],
+				);
 
 				if (!highlightOnly) {
 					targetEditor.revealRange(srcLineRange, TextEditorRevealType.InCenterIfOutsideViewport);
@@ -303,6 +316,7 @@ export class AsmDecorator {
 			// Clear selected line decoration when the assembly editor line doesn't correspond to a source location
 			for (let editor of this.getAllSourceEditors()) {
 				editor.setDecorations(selectedLineDecoration, []);
+				editor.setDecorations(selectedSourceRangeDecoration, []);
 			}
         }
     }
@@ -387,4 +401,43 @@ export class AsmDecorator {
 				return this.truncated ? 'Assembly output was truncated.' : undefined;
 		}
 	}
+}
+
+function sourceSelectionRange(
+	document: TextDocument,
+	line: RenderedArtifactLine,
+): Range | undefined {
+	const source = line.source;
+	if (
+		source?.line === null
+		|| source?.line === undefined
+		|| source.endLine === undefined
+		|| source.endColumn === undefined
+	) {
+		return undefined;
+	}
+	const startLine = source.line - 1;
+	const endLine = source.endLine - 1;
+	if (
+		startLine < 0
+		|| endLine < startLine
+		|| endLine >= document.lineCount
+	) {
+		return undefined;
+	}
+	const startCharacter = Math.min(
+		Math.max(0, source.column ?? 0),
+		document.lineAt(startLine).text.length,
+	);
+	const endCharacter = Math.min(
+		Math.max(0, source.endColumn),
+		document.lineAt(endLine).text.length,
+	);
+	if (
+		endLine === startLine
+		&& endCharacter <= startCharacter
+	) {
+		return undefined;
+	}
+	return new Range(startLine, startCharacter, endLine, endCharacter);
 }

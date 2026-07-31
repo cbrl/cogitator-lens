@@ -184,6 +184,8 @@ test('assembly rendering maps parsed lines without a binary-mode disassembly fal
 			workingDirectory: process.cwd(),
 		},
 		truncated: false,
+		inputs: [],
+		dependencyCoverage: 'source-only',
 	};
 	const rendered = artifactDefinitions.assembly.renderer(
 		raw,

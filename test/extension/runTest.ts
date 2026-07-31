@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import * as vscode from 'vscode';
 import type {
 	PythonExtension,
@@ -382,6 +383,8 @@ function verifyArtifactNavigationProviders(): void {
 				workingDirectory: '/project',
 			},
 			truncated: false,
+			inputs: [],
+			dependencyCoverage: 'source-only',
 		},
 		truncated: false,
 	};
@@ -438,9 +441,13 @@ async function verifyDisplayFilterCaching(workspaceFolder: vscode.WorkspaceFolde
 	const registered = { id: ToolchainRegistry.profileId('user', profile.id) };
 	const backend = service.toolchainRegistry.getToolchainById(registered.id);
 	assert.ok(backend);
+	const dependency = vscode.Uri.joinPath(workspaceFolder.uri, 'coglens-cache-dependency.h');
+	fs.writeFileSync(dependency.fsPath, 'one\n');
 	let toolchainRuns = 0;
-	backend.produceAssembly = async () => {
+	backend.produceAssembly = async source => {
 		toolchainRuns++;
+		const input = fs.statSync(source.fsPath);
+		const dependencyInput = fs.statSync(dependency.fsPath);
 		return {
 			kind: 'assembly',
 			text: '.text\nmain:\n  ret',
@@ -449,6 +456,16 @@ async function verifyDisplayFilterCaching(workspaceFolder: vscode.WorkspaceFolde
 			stderr: '',
 			durationMs: 1,
 			truncated: toolchainRuns === 2,
+			inputs: [{
+				uri: pathToFileURL(source.fsPath).href,
+				size: input.size,
+				mtimeMs: input.mtimeMs,
+			}, {
+				uri: pathToFileURL(dependency.fsPath).href,
+				size: dependencyInput.size,
+				mtimeMs: dependencyInput.mtimeMs,
+			}],
+			dependencyCoverage: 'complete',
 			command: {
 				executable: profile.executable,
 				arguments: [],
@@ -503,10 +520,21 @@ async function verifyDisplayFilterCaching(workspaceFolder: vscode.WorkspaceFolde
 		true,
 		'Toolchain truncation should propagate to the artifact',
 	);
+	fs.writeFileSync(dependency.fsPath, 'dependency changed\n');
+	await service.compile({
+		variant,
+		artifactKind: 'assembly',
+		presetId: 'default',
+		extraArguments: [],
+		options: defaultArtifactOptions,
+		cancellationToken: cancellation.token,
+	});
+	assert.equal(toolchainRuns, 3, 'A changed compiler-reported dependency should invalidate raw output');
 
 	cancellation.dispose();
 	service.dispose();
 	configurationChange.dispose();
+	fs.rmSync(dependency.fsPath, { force: true });
 }
 
 async function verifyMissingSourceIsUnavailable(

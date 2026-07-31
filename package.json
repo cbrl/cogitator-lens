@@ -2,7 +2,7 @@
     "name": "coglens",
     "displayName": "Cogitator Lens",
     "description": "Divine the substratal invocations of your digital canticles",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "icon": "resources/gear-phi.png",
     "publisher": "cbrl",
     "license": "MPL-2.0",
@@ -29,6 +29,24 @@
     "contributes": {
         "languages": [
             {
+                "id": "coglens-ast",
+                "aliases": [
+                    "Compiler AST"
+                ],
+                "extensions": [
+                    ".ast"
+                ]
+            },
+            {
+                "id": "coglens-mir",
+                "aliases": [
+                    "Rust MIR"
+                ],
+                "extensions": [
+                    ".mir"
+                ]
+            },
+            {
                 "id": "python-bytecode",
                 "aliases": [
                     "Python Bytecode"
@@ -39,6 +57,16 @@
             }
         ],
         "grammars": [
+            {
+                "language": "coglens-ast",
+                "scopeName": "source.coglens-ast",
+                "path": "./syntaxes/coglens-ast.tmLanguage.json"
+            },
+            {
+                "language": "coglens-mir",
+                "scopeName": "source.coglens-mir",
+                "path": "./syntaxes/coglens-mir.tmLanguage.json"
+            },
             {
                 "language": "python-bytecode",
                 "scopeName": "source.python-bytecode",
@@ -400,6 +428,12 @@
                                 "commentOnly": true,
                                 "trim": false,
                                 "dontMaskFilenames": true
+                            },
+                            "preprocessed-source": {
+                                "showIncludedFiles": true
+                            },
+                            "ast": {
+                                "showSystemDeclarations": false
                             }
                         },
                         "additionalProperties": false,
@@ -473,9 +507,39 @@
                                     }
                                 }
                             },
+                            "preprocessed-source": {
+                                "type": "object",
+                                "description": "Preprocessed source options",
+                                "additionalProperties": false,
+                                "properties": {
+                                    "showIncludedFiles": {
+                                        "type": "boolean",
+                                        "default": true,
+                                        "description": "Include content originating from headers"
+                                    }
+                                }
+                            },
+                            "ast": {
+                                "type": "object",
+                                "description": "Abstract syntax tree options",
+                                "additionalProperties": false,
+                                "properties": {
+                                    "showSystemDeclarations": {
+                                        "type": "boolean",
+                                        "default": false,
+                                        "description": "Include declarations originating from compiler and system headers"
+                                    }
+                                }
+                            },
                             "llvm-ir": {
                                 "type": "object",
                                 "description": "LLVM IR options",
+                                "additionalProperties": false,
+                                "properties": {}
+                            },
+                            "rust-mir": {
+                                "type": "object",
+                                "description": "Rust MIR options",
                                 "additionalProperties": false,
                                 "properties": {}
                             },
@@ -510,7 +574,10 @@
                                     "enum": [
                                         "assembly",
                                         "binary-disassembly",
+                                        "preprocessed-source",
+                                        "ast",
                                         "llvm-ir",
+                                        "rust-mir",
                                         "optimization-remarks",
                                         "python-bytecode"
                                     ],

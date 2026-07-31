@@ -5,9 +5,10 @@ Divine the substratal invocations of your digital canticles.
 ## Description
 
 This VS Code extension produces and renders toolchain artifacts using a project's real invocation
-settings. The current release renders assembly for C-family toolchains and Rust, binary
-disassembly for GCC, Clang, Apple Clang, clang-cl, and MSVC, LLVM IR for Clang, Apple Clang, and
-clang-cl, optimization remarks for GCC, Clang, Apple Clang, and clang-cl, and Python bytecode.
+settings. The current release renders assembly for C-family toolchains and Rust; preprocessing for
+GCC, Clang, Apple Clang, clang-cl, and MSVC; ASTs for Clang-family compilers and Python; binary
+disassembly for C-family toolchains; LLVM IR for Clang-family compilers and Rust; Rust MIR;
+optimization remarks for GCC and Clang-family compilers; and Python bytecode.
 Source navigation and highlighting work across all source files that contribute locations to the
 rendered artifact.
 
@@ -38,6 +39,19 @@ provides that metadata.
 Use `Cogitator Lens: Compare Artifacts` to open a native VS Code diff between two compilation
 variants, two configured presets, or one of each. Only artifact kinds supported by both selections
 are offered.
+
+### Artifact support
+
+| Artifact | GCC | Clang / Apple Clang | clang-cl | MSVC | Rust | Python |
+| --- | --- | --- | --- | --- | --- | --- |
+| Assembly | Yes | Yes | Yes | Yes | Yes | — |
+| Binary disassembly | Yes | Yes | Yes | Yes | — | — |
+| Preprocessed source | Yes | Yes | Yes | Yes | — | — |
+| AST | — | Yes | Yes | — | — | Yes (3.9+) |
+| LLVM IR | — | Yes | Yes | — | Yes | — |
+| Rust MIR | — | — | — | — | Yes | — |
+| Optimization remarks | Yes | Yes | Yes | — | — | — |
+| Python bytecode | — | — | — | — | — | Yes |
 
 ### Manual Configuration
 
@@ -81,6 +95,8 @@ kind and may append arguments or override production options. For example:
 
 Preset arguments and production options are part of artifact identity and caching. Display-only
 options remain independent, so changing a display filter does not rerun the toolchain.
+Raw artifacts track compiler-reported source dependencies where stable tooling permits it, so
+changing or deleting an included header invalidates the affected cache entry.
 
 Toolchain entries use `{ displayName, kind, executable, defaultArguments?, environment?, tools? }`.
 Include and macro-definition flags belong in `defaultArguments`. Supported kinds are `gcc`, `clang`,
@@ -108,7 +124,17 @@ symbols, and code-size metrics supplied by the disassembler.
 Clang and Apple Clang produce LLVM IR with `-emit-llvm -S`; clang-cl forwards the equivalent
 arguments through `/clang:`. All three request line-table debug metadata. The dedicated IR renderer
 resolves that metadata into source navigation and exposes functions in the Outline view and as
-foldable regions.
+foldable regions. Rust produces the same artifact through stable `--emit=llvm-ir` output.
+
+Preprocessed-source artifacts preserve compiler line markers and map emitted lines back to the
+logical source or header. The `preprocessed-source.showIncludedFiles` display option hides included
+file bodies without rerunning the compiler.
+
+Clang-family AST artifacts use the documented Clang text dump, remove unstable object addresses,
+provide declaration folds and symbols, and hide common system declarations by default. Set
+`ast.showSystemDeclarations` to show them. Python ASTs are produced by the selected Python 3.9+
+interpreter in isolated mode with `ast.parse`; the module is read and parsed but never imported or
+executed.
 
 Optimization remarks are first-class artifacts. Clang and Apple Clang emit YAML records through
 `-fsave-optimization-record`, while clang-cl forwards the same record options through `/clang:`;
@@ -136,9 +162,11 @@ A simple standalone Rust setup looks like:
 }
 ```
 
-Cogitator Lens supplies Rust assembly emission, source-mapping, diagnostic-format, and output
-arguments. If the invocation does not specify a crate name or crate type, it uses a synthetic crate
-name and `lib`, which lets standalone source files without `main` produce assembly. Project-specific
+Cogitator Lens supplies Rust assembly, MIR, and LLVM IR emission plus source-mapping,
+diagnostic-format, and output arguments. MIR functions and basic blocks are foldable, block targets
+are clickable, and stable span comments become source links. If the invocation does not specify a
+crate name or crate type, it uses a synthetic crate name and `lib`, which lets standalone source
+files without `main` produce artifacts. Project-specific
 arguments such as the edition, target, features, dependency search paths, and `--extern` entries
 remain the invocation's responsibility. Install `rustfilt` beside `rustc`, or configure it as the
 `demangler` auxiliary tool, to enable Rust symbol demangling.

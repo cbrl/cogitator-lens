@@ -23,14 +23,28 @@ export interface OptimizationRemark {
 	readonly message: string;
 }
 
-export function renderOptimizationRemarks(
+export type OptimizationRemarksParser = (
+	text: string,
+	workingDirectory: string,
+) => OptimizationRemark[];
+
+export function optimizationRemarksRenderer(
+	parser: OptimizationRemarksParser,
+): (
 	raw: RawArtifact,
-	_options: DisplayOptions,
+	options: DisplayOptions,
 	context: ArtifactRenderContext,
+) => RenderedArtifact {
+	return (raw, _options, context) =>
+		renderOptimizationRemarks(raw, context, parser);
+}
+
+function renderOptimizationRemarks(
+	raw: RawArtifact,
+	context: ArtifactRenderContext,
+	parser: OptimizationRemarksParser,
 ): RenderedArtifact {
-	const remarks = context.backend.profile.kind === 'gcc'
-		? parseGccOptimizationRemarks(raw.text, raw.command.workingDirectory)
-		: parseClangOptimizationRemarks(raw.text, raw.command.workingDirectory);
+	const remarks = parser(raw.text, raw.command.workingDirectory);
 	const sourceFile = path.normalize(context.source.uri.fsPath);
 	const sourceLines = splitSourceLines(context.source.text);
 	const mappedRemarks = remarks.filter(remark =>

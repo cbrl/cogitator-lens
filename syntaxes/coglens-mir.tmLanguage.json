@@ -1,0 +1,42 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+    "name": "Rust MIR",
+    "scopeName": "source.coglens-mir",
+    "patterns": [
+        {
+            "match": "\\bbb\\d+\\b",
+            "name": "entity.name.label.mir"
+        },
+        {
+            "match": "\\b_(?:\\d+|return)\\b",
+            "name": "variable.other.local.mir"
+        },
+        {
+            "match": "\\b(?:fn|let|mut|const|static|as|move)\\b",
+            "name": "keyword.mir"
+        },
+        {
+            "match": "\\b(?:goto|switchInt|return|resume|abort|unreachable|drop|assert|yield)\\b",
+            "name": "keyword.control.mir"
+        },
+        {
+            "begin": "//",
+            "beginCaptures": {
+                "0": {
+                    "name": "punctuation.definition.comment.mir"
+                }
+            },
+            "end": "$",
+            "name": "comment.line.double-slash.mir"
+        },
+        {
+            "begin": "\"",
+            "end": "\"",
+            "name": "string.quoted.double.mir"
+        },
+        {
+            "match": "\\b\\d+\\b",
+            "name": "constant.numeric.mir"
+        }
+    ]
+}

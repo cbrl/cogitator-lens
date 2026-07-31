@@ -55,6 +55,39 @@ test('registry definitions own generic flags and option availability', () => {
 	);
 });
 
+test('registry definitions own dependency argument and parser actions', () => {
+	const gcc = getToolchainDefinition('gcc').dependencyCollection;
+	assert.ok(gcc);
+	assert.equal(gcc.outputFilename, 'dependencies.d');
+	assert.deepEqual(gcc.arguments('deps.d', '/temporary', ['-O2']), [
+		'-M',
+		'-MF',
+		'deps.d',
+	]);
+
+	const msvc = getToolchainDefinition('msvc').dependencyCollection;
+	assert.ok(msvc);
+	assert.equal(msvc.outputFilename, 'dependencies.json');
+	assert.deepEqual(msvc.arguments('deps.json', '/temporary', ['/O2']).slice(0, 3), [
+		'/c',
+		'/sourceDependencies',
+		'deps.json',
+	]);
+
+	const rust = getToolchainDefinition('rust').dependencyCollection;
+	assert.ok(rust);
+	assert.deepEqual(
+		rust.arguments('deps.d', '/temporary', ['--crate-name=real']),
+		[
+			'--crate-type=lib',
+			'--emit=dep-info=deps.d',
+			'--error-format=human',
+			'--color=never',
+		],
+	);
+	assert.equal(getToolchainDefinition('python').dependencyCollection, undefined);
+});
+
 test('registry detection returns the matching definition and disambiguates Apple Clang', () => {
 	assert.equal(detectToolchainDefinition('g++-14', '', 'linux')?.kind, 'gcc');
 	assert.equal(detectToolchainDefinition('clang++-19', '', 'linux')?.kind, 'clang');

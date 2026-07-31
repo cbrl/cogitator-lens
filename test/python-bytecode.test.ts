@@ -25,10 +25,15 @@ test('Python bytecode producer owns module dispatch and uses stdout', async () =
 			kind: ArtifactKind,
 			_source: unknown,
 			_options: unknown,
-			argumentsList: readonly string[],
+			spec: {
+				arguments: (
+					temporaryDirectory: string,
+					providerArguments: readonly string[],
+				) => readonly string[];
+			},
 		) => {
 			receivedKind = kind;
-			receivedArguments = argumentsList;
+			receivedArguments = spec.arguments('/temporary', []);
 			return rawArtifact('');
 		},
 	};
@@ -130,5 +135,7 @@ function rawArtifact(text: string): RawArtifact {
 			workingDirectory: 'C:\\project',
 		},
 		truncated: false,
+		inputs: [],
+		dependencyCoverage: 'source-only',
 	};
 }

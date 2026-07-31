@@ -12,6 +12,8 @@ export interface DisplayOptions {
 	readonly commentOnly: boolean;
 	readonly trim: boolean;
 	readonly dontMaskFilenames: boolean;
+	readonly showIncludedFiles: boolean;
+	readonly showSystemDeclarations: boolean;
 }
 
 export interface ArtifactOptions {
@@ -35,6 +37,8 @@ export const defaultArtifactOptions: ArtifactOptions = Object.freeze({
 		commentOnly: true,
 		trim: false,
 		dontMaskFilenames: true,
+		showIncludedFiles: true,
+		showSystemDeclarations: false,
 	}),
 });
 

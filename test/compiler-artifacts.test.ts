@@ -36,7 +36,8 @@ test('compiler artifact availability matches implemented producers', () => {
 	assert.equal(availability('gcc', 'llvm-ir'), 'unsupported');
 	assert.equal(availability('clang-cl', 'llvm-ir'), 'available');
 	assert.equal(availability('clang-cl', 'optimization-remarks'), 'available');
-	for (const kind of ['msvc', 'rust'] as const) {
+	assert.equal(availability('rust', 'llvm-ir'), 'available');
+	for (const kind of ['msvc'] as const) {
 		assert.equal(availability(kind, 'llvm-ir'), 'unsupported');
 		assert.equal(availability(kind, 'optimization-remarks'), 'unsupported');
 	}
@@ -310,6 +311,8 @@ function rawArtifact(kind: ArtifactKind, text: string): RawArtifact {
 			workingDirectory: path.resolve('/work'),
 		},
 		truncated: false,
+		inputs: [],
+		dependencyCoverage: 'source-only',
 	};
 }
 

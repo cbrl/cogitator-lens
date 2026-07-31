@@ -28,6 +28,7 @@ import {
 	CompilationError,
 	immutableArtifactOptions,
 	productionKey,
+	UnsupportedToolVersionError,
 } from '../types/index.js';
 import { ToolExitError } from '../toolchains/toolchain-backend.js';
 import { ExecError } from '../exec.js';
@@ -43,6 +44,11 @@ import {
 	resolveArtifactPreset,
 	type ArtifactPreset,
 } from '../artifacts/presets.js';
+import {
+	artifactInputComparisonKey,
+	validateArtifactInputs,
+} from './artifact-inputs.js';
+import { pathToFileURL } from 'node:url';
 
 export class CompilationService {
 	readonly toolchainRegistry: ToolchainRegistry;
@@ -51,6 +57,7 @@ export class CompilationService {
 	private readonly artifactOptionsChangeEmitter = new EventEmitter<ArtifactKind>();
 	private readonly subscriptions: Disposable[] = [];
 	private readonly rawArtifactCache = new Map<string, RawArtifact>();
+	private readonly inputToRawCacheKeys = new Map<string, Set<string>>();
 	private readonly currentArtifactOptions = new Map<ArtifactKind, ArtifactOptions>();
 
 	readonly onVariantsChanged: Event<readonly Uri[]> = this.changeEmitter.event;
@@ -65,13 +72,18 @@ export class CompilationService {
 			this.currentArtifactOptions.set(kind, configuration.getArtifactOptions(kind));
 		}
 		this.reloadUserConfiguration();
+		const inputWatcher = workspace.createFileSystemWatcher('**/*');
 		this.subscriptions.push(
 			configuration.onDidChange(() => this.reloadUserConfiguration()),
 			this.variants.onDidChange(sources => this.changeEmitter.fire(sources)),
 			this.toolchainRegistry.onDidChange(() => {
-				this.rawArtifactCache.clear();
+				this.clearRawArtifactCache();
 				this.changeEmitter.fire(this.variantsSources());
 			}),
+			inputWatcher,
+			inputWatcher.onDidChange(uri => this.evictInput(uri)),
+			inputWatcher.onDidDelete(uri => this.evictInput(uri)),
+			inputWatcher.onDidCreate(uri => this.evictInput(uri)),
 		);
 	}
 
@@ -181,11 +193,13 @@ export class CompilationService {
 			},
 		};
 		const cached = this.rawArtifactCache.get(key);
-		if (cached) {
+		if (cached && await validateArtifactInputs(cached.inputs)) {
 			return {
 				status: 'available',
 				artifact: await this.renderArtifact(cached, options, renderContext),
 			};
+		} else if (cached) {
+			this.removeRawArtifact(key);
 		}
 
 		try {
@@ -200,7 +214,7 @@ export class CompilationService {
 				},
 				cancellationToken,
 			);
-			this.rawArtifactCache.set(key, raw);
+			this.cacheRawArtifact(key, raw);
 			return {
 				status: 'available',
 				artifact: await this.renderArtifact(raw, options, renderContext),
@@ -211,6 +225,12 @@ export class CompilationService {
 			}
 			if (error instanceof CompilationError) {
 				throw error;
+			}
+			if (error instanceof UnsupportedToolVersionError) {
+				return {
+					status: 'unavailable',
+					explanation: error.message,
+				};
 			}
 			const output = toolErrorOutput(error);
 			const diagnostics = parseToolDiagnostics(
@@ -234,7 +254,7 @@ export class CompilationService {
 		this.artifactOptionsChangeEmitter.dispose();
 		this.variants.dispose();
 		this.toolchainRegistry.dispose();
-		this.rawArtifactCache.clear();
+		this.clearRawArtifactCache();
 	}
 
 	private async renderArtifact(
@@ -242,7 +262,9 @@ export class CompilationService {
 		options: ArtifactOptions,
 		context: ArtifactRenderContext,
 	): Promise<RenderedArtifact> {
-		return await artifactDefinitions[raw.kind].renderer(raw, options.display, context);
+		const renderer = context.backend.getArtifactRenderer(raw.kind)
+			?? artifactDefinitions[raw.kind].renderer;
+		return await renderer(raw, options.display, context);
 	}
 
 	private reloadUserConfiguration(): void {
@@ -290,6 +312,45 @@ export class CompilationService {
 
 	private selectionKey(file: Uri): string {
 		return `coglens.variant.${file.toString()}`;
+	}
+
+	private cacheRawArtifact(key: string, artifact: RawArtifact): void {
+		this.removeRawArtifact(key);
+		this.rawArtifactCache.set(key, artifact);
+		for (const input of artifact.inputs) {
+			const inputKey = artifactInputComparisonKey(input.uri);
+			const keys = this.inputToRawCacheKeys.get(inputKey) ?? new Set<string>();
+			keys.add(key);
+			this.inputToRawCacheKeys.set(inputKey, keys);
+		}
+	}
+
+	private removeRawArtifact(key: string): void {
+		const artifact = this.rawArtifactCache.get(key);
+		if (!artifact) {
+			return;
+		}
+		this.rawArtifactCache.delete(key);
+		for (const input of artifact.inputs) {
+			const inputKey = artifactInputComparisonKey(input.uri);
+			const keys = this.inputToRawCacheKeys.get(inputKey);
+			keys?.delete(key);
+			if (keys?.size === 0) {
+				this.inputToRawCacheKeys.delete(inputKey);
+			}
+		}
+	}
+
+	private clearRawArtifactCache(): void {
+		this.rawArtifactCache.clear();
+		this.inputToRawCacheKeys.clear();
+	}
+
+	private evictInput(uri: Uri): void {
+		const inputKey = artifactInputComparisonKey(pathToFileURL(uri.fsPath).href);
+		for (const key of [...(this.inputToRawCacheKeys.get(inputKey) ?? [])]) {
+			this.removeRawArtifact(key);
+		}
 	}
 }
 
