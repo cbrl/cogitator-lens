@@ -179,7 +179,7 @@ test('GCC optimization info normalizes relative locations and pass families', ()
 	]);
 });
 
-test('optimization renderer inserts annotated remarks before their original source lines', () => {
+test('optimization renderer places each remark decoration on an empty row above its source', () => {
 	const raw = rawArtifact(
 		'optimization-remarks',
 		fixture('test/fixtures/optimization-remarks/clang.opt.yaml'),
@@ -194,16 +194,18 @@ test('optimization renderer inserts annotated remarks before their original sour
 		renderContext(backend('clang'), '/project/source.cpp', sourceText),
 	);
 	assert.equal(rendered.lines.length, 17);
-	assert.match(rendered.lines[7].text, /\[passed\] loop-vectorize: vectorized loop/);
-	assert.deepEqual(rendered.lines[7].annotation, {
+	assert.equal(rendered.lines[7].text, '');
+	assert.deepEqual(rendered.lines[7].decorations?.[0], {
 		kind: 'optimization-remark',
 		category: 'passed',
+		text: '[passed] loop-vectorize: vectorized loop (vectorization width: 4)',
 	});
 	assert.equal(rendered.lines[7].source?.line, 8);
 	assert.equal(rendered.lines[7].source?.column, 2);
 	assert.equal(rendered.lines[8].text, 'source line 8');
-	assert.equal(rendered.lines[8].source?.line, 8);
-	assert.match(rendered.lines[14].text, /\[missed\] inline: external will not be inlined/);
+	assert.equal(rendered.lines[8].decorations, undefined);
+	assert.equal(rendered.lines[14].text, '');
+	assert.match(rendered.lines[14].decorations?.[0].text ?? '', /\[missed\] inline: external will not be inlined/);
 	assert.equal(rendered.lines[15].text, 'source line 14');
 	assert.deepEqual(rendered.metrics.categories, { missed: 1, passed: 1 });
 	assert.equal(rendered.metrics.remarkCount, 2);
@@ -229,13 +231,48 @@ test('optimization renderer omits foreign, locationless, and out-of-range remark
 
 	assert.deepEqual(rendered.lines.map(line => line.text), [
 		'first line',
-		'[passed] vectorizer: loop vectorized',
+		'',
 		'second line',
 		'third line',
 	]);
+	assert.deepEqual(rendered.lines[1].decorations, [{
+		kind: 'optimization-remark',
+		category: 'passed',
+		text: '[passed] vectorizer: loop vectorized',
+	}]);
 	assert.equal(rendered.metrics.remarkCount, 1);
 	assert.equal(rendered.metrics.omittedRemarkCount, 3);
 	assert.deepEqual(rendered.metrics.categories, { passed: 1 });
+});
+
+test('optimization renderer gives multiple remarks on one source line separate anchor rows', () => {
+	const rendered = artifactDefinitions['optimization-remarks'].renderer(
+		rawArtifact('optimization-remarks', [
+			'/project/source.cpp:2:3: optimized: loop vectorized',
+			'/project/source.cpp:2:7: missed: call was not inlined',
+		].join('\n')),
+		defaultArtifactOptions.display,
+		renderContext(
+			backend('gcc'),
+			'/project/source.cpp',
+			'first line\nsecond line',
+		),
+	);
+
+	assert.deepEqual(rendered.lines.map(line => line.text), [
+		'first line',
+		'',
+		'',
+		'second line',
+	]);
+	assert.deepEqual(
+		rendered.lines.slice(1, 3).map(line => line.decorations?.[0].category),
+		['passed', 'missed'],
+	);
+	assert.deepEqual(
+		rendered.lines.slice(1, 3).map(line => line.source?.column),
+		[2, 6],
+	);
 });
 
 test('malformed LLVM IR and optimization records produce valid rendered artifacts', async () => {

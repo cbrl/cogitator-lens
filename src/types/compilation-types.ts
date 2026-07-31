@@ -100,10 +100,13 @@ export type OptimizationRemarkCategory =
 	| 'missed'
 	| 'analysis';
 
-export interface OptimizationRemarkLineAnnotation {
+export interface OptimizationRemarkLineDecoration {
 	readonly kind: 'optimization-remark';
 	readonly category: OptimizationRemarkCategory;
+	readonly text: string;
 }
+
+export type RenderedArtifactLineDecoration = OptimizationRemarkLineDecoration;
 
 export interface RenderedArtifactLine {
 	readonly text: string;
@@ -111,7 +114,8 @@ export interface RenderedArtifactLine {
 	readonly address?: number;
 	readonly disassembly?: string;
 	readonly source?: RenderedArtifactLineSource | null;
-	readonly annotation?: OptimizationRemarkLineAnnotation;
+	/** Visual annotations rendered by the editor without changing document text. */
+	readonly decorations?: readonly RenderedArtifactLineDecoration[];
 }
 
 export interface ArtifactLink {

@@ -62,6 +62,7 @@ function renderOptimizationRemarks(
 
 	const lines: RenderedArtifactLine[] = sourceLines.flatMap((text, index) => {
 		const sourceLine = index + 1;
+		const lineRemarks = remarksByLine.get(sourceLine) ?? [];
 		const source = {
 			file: sourceFile,
 			line: sourceLine,
@@ -69,16 +70,20 @@ function renderOptimizationRemarks(
 			mainSource: true,
 		} as const;
 		return [
-			...(remarksByLine.get(sourceLine) ?? []).map(remark => ({
-				text: `[${remark.category}] ${remark.pass}: ${remark.message}`,
+			...lineRemarks.map(remark => ({
+				text: '',
 				source: {
 					...source,
-					column: Math.max(0, (remark.column ?? 1) - 1),
+					column: Math.max(0, Math.min(
+						text.length,
+						(remark.column ?? 1) - 1,
+					)),
 				},
-				annotation: {
+				decorations: [{
 					kind: 'optimization-remark' as const,
 					category: remark.category,
-				},
+					text: `[${remark.category}] ${remark.pass}: ${remark.message}`,
+				}],
 			})),
 			{ text, source },
 		];

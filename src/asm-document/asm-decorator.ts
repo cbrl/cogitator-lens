@@ -346,13 +346,27 @@ export class AsmDecorator {
 			return;
 		}
 		for (const [category, decoration] of Object.entries(optimizationRemarkDecorations)) {
-			const ranges = this.asmData.lines.flatMap((line, index) =>
-				line.annotation?.kind === 'optimization-remark'
-					&& line.annotation.category === category
-					&& index < editor.document.lineCount
-					? [editor.document.lineAt(index).range]
-					: []);
-			editor.setDecorations(decoration, ranges);
+			const options = this.asmData.lines.flatMap((line, index) => {
+				if (index >= editor.document.lineCount) {
+					return [];
+				}
+				const remarks = line.decorations?.filter(candidate =>
+					candidate.kind === 'optimization-remark'
+					&& candidate.category === category) ?? [];
+				if (remarks.length === 0) {
+					return [];
+				}
+				const end = editor.document.lineAt(index).range.end;
+				return [{
+					range: new Range(end, end),
+					renderOptions: {
+						after: {
+							contentText: remarks.map(remark => remark.text).join(' · '),
+						},
+					},
+				}];
+			});
+			editor.setDecorations(decoration, options);
 		}
 	}
 

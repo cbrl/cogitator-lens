@@ -36,8 +36,10 @@ function optimizationRemarkDecoration(category: OptimizationRemarkCategory) {
 		`coglens.optimizationRemarks.${category}Background`,
 	);
 	return window.createTextEditorDecorationType({
-		isWholeLine: true,
-		backgroundColor: background,
+		after: {
+			backgroundColor: background,
+			margin: '0 0 0 1.5em',
+		},
 		overviewRulerColor: background,
 		overviewRulerLane: OverviewRulerLane.Right,
 	});
