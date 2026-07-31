@@ -1,0 +1,19 @@
+--- !Passed
+Pass:            loop-vectorize
+Name:            Vectorized
+DebugLoc:        { File: /project/source.cpp, Line: 8, Column: 3 }
+Function:        sum
+Args:
+  - String:          'vectorized loop (vectorization width: '
+  - VectorizationFactor: '4'
+  - String:          ')'
+...
+--- !Missed
+Pass:            inline
+Name:            NoDefinition
+DebugLoc:        { File: /project/source.cpp, Line: 14, Column: 9 }
+Function:        caller
+Args:
+  - Callee:          external
+  - String:          ' will not be inlined'
+...

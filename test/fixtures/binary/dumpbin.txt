@@ -1,0 +1,11 @@
+Microsoft (R) COFF/PE Dumper Version 14.40
+
+?helper@@YAHH@Z (int __cdecl helper(int)):
+C:/project/source.cpp(3)
+  0000000000000000: 55                    push        rbp
+  0000000000000006: C3                    ret
+?entry@@YAHH@Z (int __cdecl entry(int)):
+C:/project/source.cpp(7)
+  0000000000000009: 6B C1 02              imul        eax,ecx,2
+  000000000000000C: E8 00 00 00 00        call        ?helper@@YAHH@Z
+  000000000000000C: C3                    ret

@@ -5,379 +5,671 @@
     "version": "0.4.0",
     "icon": "resources/gear-phi.png",
     "publisher": "cbrl",
-    "license": "MIT",
+    "license": "MPL-2.0",
     "repository": {
         "type": "git",
         "url": "https://github.com/cbrl/cogitator-lens"
     },
     "engines": {
-    	"vscode": "^1.94.0"
+        "vscode": "^1.94.0"
+    },
+    "capabilities": {
+        "untrustedWorkspaces": {
+            "supported": false,
+            "description": "Cogitator Lens invokes configured toolchains and therefore requires a trusted workspace."
+        }
     },
     "categories": [
-		"Programming Languages",
-		"Visualization",
-		"Debuggers"
+        "Programming Languages",
+        "Visualization",
+        "Debuggers"
     ],
-	"activationEvents": [],
+    "activationEvents": [],
     "main": "./dist/extension.js",
     "contributes": {
-		"viewsContainers": {
-			"activitybar": [
-				{
-					"id": "coglens",
-					"title": "Cogitator Lens",
-					"icon": "resources/gear-phi.png"
-				}
-			]
-		},
-		"views": {
-			"coglens": [
-				{
-					"id": "coglens.compilers",
-					"name": "Compilers",
-					"icon": "$(blank)"
-				},
-				{
-					"id": "coglens.compileInfo",
-					"name": "Project Compile Info",
-					"icon": "$(blank)"
-				},
-				{
-					"id": "coglens.globalOptions",
-					"name": "Global Options",
-					"icon": "$(filter)"
-				}
-			]
-		},
+        "languages": [
+            {
+                "id": "python-bytecode",
+                "aliases": [
+                    "Python Bytecode"
+                ],
+                "extensions": [
+                    ".pybytecode"
+                ]
+            }
+        ],
+        "grammars": [
+            {
+                "language": "python-bytecode",
+                "scopeName": "source.python-bytecode",
+                "path": "./syntaxes/python-bytecode.tmLanguage.json"
+            }
+        ],
+        "colors": [
+            {
+                "id": "coglens.optimizationRemarks.passedBackground",
+                "description": "Background color for successful optimization remarks.",
+                "defaults": {
+                    "dark": "#125C12",
+                    "light": "#A9FFA9",
+                    "highContrast": "#125C12",
+                    "highContrastLight": "#A9FFA9"
+                }
+            },
+            {
+                "id": "coglens.optimizationRemarks.missedBackground",
+                "description": "Background color for missed optimization remarks.",
+                "defaults": {
+                    "dark": "#631E1C",
+                    "light": "#F8CAC8",
+                    "highContrast": "#631E1C",
+                    "highContrastLight": "#F8CAC8"
+                }
+            },
+            {
+                "id": "coglens.optimizationRemarks.analysisBackground",
+                "description": "Background color for optimization analysis remarks.",
+                "defaults": {
+                    "dark": "#4F4F18",
+                    "light": "#FFFFAE",
+                    "highContrast": "#4F4F18",
+                    "highContrastLight": "#FFFFAE"
+                }
+            }
+        ],
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "coglens",
+                    "title": "Cogitator Lens",
+                    "icon": "resources/gear-phi.png"
+                }
+            ]
+        },
+        "views": {
+            "coglens": [
+                {
+                    "id": "coglens.toolchains",
+                    "name": "Toolchains",
+                    "icon": "$(blank)"
+                },
+                {
+                    "id": "coglens.compileInfo",
+                    "name": "Project Compile Info",
+                    "icon": "$(blank)"
+                },
+                {
+                    "id": "coglens.artifactOptions",
+                    "name": "Artifact Options",
+                    "icon": "$(filter)"
+                }
+            ]
+        },
         "commands": [
             {
-                "command": "coglens.Disassemble",
-                "title": "Disassemble Current File",
+                "command": "coglens.OpenArtifact",
+                "title": "Open Artifact",
                 "category": "Cogitator Lens",
-				"icon": "$(file-binary)"
+                "enablement": "coglens.supportedSource",
+                "icon": "$(preview)"
             },
-			{
-				"command": "coglens.GetInput",
-				"title": "Get Input",
-				"category": "Cogitator Lens",
-				"icon": "$(pencil)"
-			},
-			{
-				"command": "coglens.GetFile",
-				"title": "Get File",
-				"category": "Cogitator Lens",
-				"icon": "$(folder-opened)"
-			},
-			{
-				"command": "coglens.PickCompiler",
-				"title": "Pick Compiler",
-				"category": "Cogitator Lens",
-				"icon": "$(pencil)"
-			},
             {
-                "command": "coglens.ClearInput",
-                "title": "Clear Input",
+                "command": "coglens.CompareArtifacts",
+                "title": "Compare Artifacts",
                 "category": "Cogitator Lens",
-                "icon": "$(clear-all)"
+                "enablement": "coglens.supportedSource",
+                "icon": "$(diff)"
             },
             {
                 "command": "coglens.CopyText",
-                "title": "Copy Input",
+                "title": "Copy Text",
                 "category": "Cogitator Lens",
                 "icon": "$(clippy)"
             },
-			{
-				"command": "coglens.AddElement",
-				"title": "Add Element",
-				"category": "Cogitator Lens",
-				"icon": "$(add)"
-			},
-			{
-				"command": "coglens.RemoveElement",
-				"title": "Remove Element",
-				"category": "Cogitator Lens",
-				"icon": "$(remove)"
-			},
-			{
-				"command": "coglens.AddDefaultCompileInfo",
-				"title": "Add Default Compile Info",
-				"category": "Cogitator Lens",
-				"icon": "$(add)"
-			},
-			{
-				"command": "coglens.AddCompiler",
-				"title": "Add Compiler",
-				"category": "Cogitator Lens",
-				"icon": "$(add)"
-			}
+            {
+                "command": "coglens.DeleteToolchain",
+                "title": "Delete Toolchain",
+                "category": "Cogitator Lens",
+                "icon": "$(trash)"
+            },
+            {
+                "command": "coglens.AddToolchain",
+                "title": "Add Toolchain",
+                "category": "Cogitator Lens",
+                "icon": "$(add)"
+            },
+            {
+                "command": "coglens.PickCompilationVariant",
+                "title": "Select Compilation Variant",
+                "category": "Cogitator Lens",
+                "enablement": "coglens.supportedSource",
+                "icon": "$(list-selection)"
+            },
+            {
+                "command": "coglens.CreateWorkspaceOverride",
+                "title": "Create Workspace Override",
+                "category": "Cogitator Lens",
+                "icon": "$(copy)"
+            },
+            {
+                "command": "coglens.AddCompilationVariant",
+                "title": "Add Workspace Compilation Variant",
+                "category": "Cogitator Lens",
+                "icon": "$(add)"
+            },
+            {
+                "command": "coglens.EditCompilationVariant",
+                "title": "Edit as Workspace Compilation Variant",
+                "category": "Cogitator Lens",
+                "icon": "$(edit)"
+            },
+            {
+                "command": "coglens.DeleteCompilationVariant",
+                "title": "Delete Workspace Compilation Variant",
+                "category": "Cogitator Lens",
+                "icon": "$(trash)"
+            },
+            {
+                "command": "coglens.RevealActiveSource",
+                "title": "Reveal Active Source",
+                "category": "Cogitator Lens",
+                "icon": "$(go-to-file)"
+            },
+            {
+                "command": "coglens.OpenToolchainSettingsJson",
+                "title": "Open Toolchain Settings JSON",
+                "category": "Cogitator Lens",
+                "icon": "$(json)"
+            },
+            {
+                "command": "coglens.OpenCompileSettingsJson",
+                "title": "Open Compile Settings JSON",
+                "category": "Cogitator Lens",
+                "icon": "$(json)"
+            },
+            {
+                "command": "coglens.OpenArtifactSettingsJson",
+                "title": "Open Artifact Settings JSON",
+                "category": "Cogitator Lens",
+                "icon": "$(json)"
+            }
         ],
         "configuration": [
             {
                 "title": "Cogitator Lens",
                 "properties": {
+                    "coglens.compilationDatabases": {
+                        "type": "array",
+                        "scope": "resource",
+                        "default": [
+                            "compile_commands.json",
+                            "build/compile_commands.json"
+                        ],
+                        "description": "Compilation database paths resolved relative to each workspace folder. Use an empty array to disable compilation database discovery.",
+                        "items": {
+                            "type": "string"
+                        },
+                        "uniqueItems": true
+                    },
                     "coglens.dimUnusedSourceLines": {
                         "type": "boolean",
                         "default": true,
-                        "description": "Dim lines that do not contribute to the assembly output",
+                        "description": "Dim lines that do not contribute to the rendered artifact",
                         "scope": "resource"
                     },
-					"coglens.compilers": {
-						"type": "array",
-						"scope": "window",
-						"default": [],
-						"items": {
-							"type": "object",
-							"title": "Compiler configuration",
-							"description": "Compiler configuration parameters (name, path, flags, etc...)",
-							"default": {},
-							"required": ["name", "type", "exe", "includeFlag", "defineFlag"],
-							"additionalProperties": false,
-							"properties": {
-								"name": {
-									"type": "string",
-									"description": "The name of this compiler configuration"
-								},
-								"type": {
-									"type": "string",
-									"description": "The type of compiler",
-									"enum": ["gcc", "msvc", "clang-cl"]
-								},
-								"exe": {
-									"type": "string",
-									"description": "The path to the compiler executable"
-								},
-								"includeFlag": {
-									"type": "string",
-									"description": "The flag provided to the compiler to indicate an include path",
-									"default": "-I"
-								},
-								"defineFlag": {
-									"type": "string",
-									"description": "The flag provided to the compiler to indicate an macro definition",
-									"default": "-D"
-								},
-								"defines": {
-									"type": "array",
-									"description": "A list of macro definitions (without compiler flag) to be used when compiling files",
-									"items": {
-										"type": "string"
-									},
-									"default": []
-								},
-								"includes": {
-									"type": "array",
-									"description": "A list of include paths (without compiler flag) to be used when compiling files",
-									"items": {
-										"type": "string"
-									},
-									"default": []
-								},
-								"args": {
-									"type": "array",
-									"description": "A list of arguments to provide to the compiler when compiling files",
-									"items": {
-										"type": "string"
-									},
-									"default": []
-								},
-								"env": {
-									"type": "object",
-									"description": "Environment variables to be defined when using this compiler",
-									"additionalProperties": {
-										"type": "string"
-									},
-									"default": {}
-								},
-								"supportsDemangle": {
-									"type": "boolean",
-									"description": "Whether this compiler supports demangling of C++ symbols"
-								},
-								"demangler": {
-									"type": "string",
-									"description": "Path to the demangler executable (e.g. c++filt for GCC)"
-								},
-								"supportsIntel": {
-									"type": "boolean",
-									"description": "Whether this compiler supports Intel syntax"
-								},
-								"supportsLibraryCodeFilter": {
-									"type": "boolean",
-									"description": "Whether this compiler supports library code filtering"
-								}
-							}
-						}
-					},
-					"coglens.defaultCompileInfo": {
-						"type": "object",
-						"title": "Default Compile Info",
-						"description": "Default compile info to be used when compiling files that have no associated compiler configuration",
-						"default": {},
-						"required": ["compiler"],
-						"additionalProperties": false,
-						"properties": {
-							"compiler": {
-								"type": "string",
-								"description": "The name of the compiler to use for compilation. Must match one of the compilers defined in `coglens.compilers`",
-								"default": ""
-							},
-							"defines": {
-								"type": "array",
-								"description": "A list of macro definitions (without compiler flag) to be used when compiling files",
-								"items": {
-									"type": "string"
-								},
-								"default": []
-							},
-							"includes": {
-								"type": "array",
-								"description": "A list of include paths (without compiler flag) to be used when compiling files",
-								"items": {
-									"type": "string"
-								},
-								"default": []
-							},
-							"args": {
-								"type": "array",
-								"description": "A list of arguments to provide to the compiler when compiling files",
-								"items": {
-									"type": "string"
-								},
-								"default": []
-							},
-							"env": {
-								"type": "object",
-								"description": "Environment variables to be defined when compiling files",
-								"additionalProperties": {
-									"type": "string"
-								},
-								"default": {}
-							}
-						}
-					}
+                    "coglens.toolchains": {
+                        "type": "array",
+                        "scope": "window",
+                        "default": [],
+                        "items": {
+                            "type": "object",
+                            "title": "Toolchain configuration",
+                            "description": "Toolchain configuration parameters",
+                            "default": {},
+                            "required": [
+                                "displayName",
+                                "kind",
+                                "executable"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                                "displayName": {
+                                    "type": "string",
+                                    "description": "The name of this toolchain configuration"
+                                },
+                                "kind": {
+                                    "type": "string",
+                                    "description": "The type of toolchain",
+                                    "enum": [
+                                        "gcc",
+                                        "clang-cl",
+                                        "msvc",
+                                        "clang",
+                                        "apple-clang",
+                                        "rust",
+                                        "python"
+                                    ]
+                                },
+                                "executable": {
+                                    "type": "string",
+                                    "description": "The path to the toolchain executable"
+                                },
+                                "defaultArguments": {
+                                    "type": "array",
+                                    "description": "Arguments provided to the toolchain",
+                                    "items": {
+                                        "type": "string"
+                                    },
+                                    "default": []
+                                },
+                                "environment": {
+                                    "type": "object",
+                                    "description": "Environment variables defined when using this toolchain",
+                                    "additionalProperties": {
+                                        "type": "string"
+                                    },
+                                    "default": {}
+                                },
+                                "tools": {
+                                    "type": "object",
+                                    "description": "Named auxiliary tool executables",
+                                    "additionalProperties": {
+                                        "type": "string"
+                                    },
+                                    "default": {}
+                                }
+                            }
+                        }
+                    },
+                    "coglens.defaultInvocation": {
+                        "type": "object",
+                        "scope": "resource",
+                        "title": "Default Invocation",
+                        "description": "Default invocation for files with no discovered compilation variant",
+                        "default": {},
+                        "required": [
+                            "toolchain"
+                        ],
+                        "additionalProperties": false,
+                        "properties": {
+                            "toolchain": {
+                                "type": "string",
+                                "description": "Toolchain name matching an entry in coglens.toolchains",
+                                "default": ""
+                            },
+                            "args": {
+                                "type": "array",
+                                "description": "Arguments provided to the selected toolchain",
+                                "items": {
+                                    "type": "string"
+                                },
+                                "default": []
+                            },
+                            "env": {
+                                "type": "object",
+                                "description": "Environment variables defined for artifact production",
+                                "additionalProperties": {
+                                    "type": "string"
+                                },
+                                "default": {}
+                            },
+                            "workingDirectory": {
+                                "type": "string",
+                                "description": "Working directory used for artifact production"
+                            }
+                        }
+                    },
+                    "coglens.compileVariants": {
+                        "type": "array",
+                        "scope": "window",
+                        "default": [],
+                        "description": "Workspace-owned compilation variants. Use the Project Compile Info sidebar to add and edit entries.",
+                        "items": {
+                            "type": "object",
+                            "title": "Workspace compilation variant",
+                            "required": [
+                                "id",
+                                "source",
+                                "displayLabel",
+                                "toolchainProfileId",
+                                "workingDirectory",
+                                "arguments",
+                                "environment"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                                "id": {
+                                    "type": "string",
+                                    "description": "Stable variant identifier"
+                                },
+                                "source": {
+                                    "type": "string",
+                                    "description": "Absolute path to the source file"
+                                },
+                                "displayLabel": {
+                                    "type": "string",
+                                    "description": "Name shown in variant pickers and the sidebar"
+                                },
+                                "toolchainProfileId": {
+                                    "type": "string",
+                                    "description": "Toolchain profile ID shown in the Toolchains sidebar"
+                                },
+                                "workingDirectory": {
+                                    "type": "string",
+                                    "description": "Working directory used to invoke the toolchain"
+                                },
+                                "arguments": {
+                                    "type": "array",
+                                    "description": "Arguments appended to the selected toolchain's default arguments",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                },
+                                "environment": {
+                                    "type": "object",
+                                    "description": "Environment variables added to the toolchain process",
+                                    "additionalProperties": {
+                                        "type": "string"
+                                    }
+                                },
+                                "project": {
+                                    "type": "string",
+                                    "description": "Optional project grouping label"
+                                },
+                                "target": {
+                                    "type": "string",
+                                    "description": "Optional target grouping label"
+                                },
+                                "configuration": {
+                                    "type": "string",
+                                    "description": "Optional configuration grouping label"
+                                }
+                            }
+                        }
+                    },
+                    "coglens.artifactOptions": {
+                        "type": "object",
+                        "scope": "resource",
+                        "default": {
+                            "assembly": {
+                                "intel": false,
+                                "demangle": false,
+                                "labels": true,
+                                "libraryCode": false,
+                                "directives": true,
+                                "commentOnly": true,
+                                "trim": false,
+                                "dontMaskFilenames": true
+                            }
+                        },
+                        "additionalProperties": false,
+                        "properties": {
+                            "assembly": {
+                                "type": "object",
+                                "description": "Assembly options",
+                                "additionalProperties": false,
+                                "properties": {
+                                    "intel": {
+                                        "type": "boolean",
+                                        "default": false,
+                                        "description": "Emit Intel syntax when supported by the selected toolchain"
+                                    },
+                                    "demangle": {
+                                        "type": "boolean",
+                                        "default": false,
+                                        "description": "Run the configured demangler before rendering assembly"
+                                    },
+                                    "labels": {
+                                        "type": "boolean",
+                                        "default": true,
+                                        "description": "Remove labels that are not referenced"
+                                    },
+                                    "libraryCode": {
+                                        "type": "boolean",
+                                        "default": false,
+                                        "description": "Hide code from system libraries"
+                                    },
+                                    "directives": {
+                                        "type": "boolean",
+                                        "default": true,
+                                        "description": "Hide assembler directives"
+                                    },
+                                    "commentOnly": {
+                                        "type": "boolean",
+                                        "default": true,
+                                        "description": "Remove comment-only lines"
+                                    },
+                                    "trim": {
+                                        "type": "boolean",
+                                        "default": false,
+                                        "description": "Remove excessive horizontal whitespace"
+                                    },
+                                    "dontMaskFilenames": {
+                                        "type": "boolean",
+                                        "default": true,
+                                        "description": "Keep source filenames visible in rendered output"
+                                    }
+                                }
+                            },
+                            "binary-disassembly": {
+                                "type": "object",
+                                "description": "Binary disassembly options",
+                                "additionalProperties": false,
+                                "properties": {
+                                    "labels": {
+                                        "type": "boolean",
+                                        "default": true,
+                                        "description": "Remove labels that are not referenced"
+                                    },
+                                    "libraryCode": {
+                                        "type": "boolean",
+                                        "default": false,
+                                        "description": "Hide code from system libraries"
+                                    },
+                                    "dontMaskFilenames": {
+                                        "type": "boolean",
+                                        "default": true,
+                                        "description": "Keep source filenames visible in rendered output"
+                                    }
+                                }
+                            },
+                            "llvm-ir": {
+                                "type": "object",
+                                "description": "LLVM IR options",
+                                "additionalProperties": false,
+                                "properties": {}
+                            },
+                            "optimization-remarks": {
+                                "type": "object",
+                                "description": "Optimization remarks options",
+                                "additionalProperties": false,
+                                "properties": {}
+                            },
+                            "python-bytecode": {
+                                "type": "object",
+                                "description": "Python bytecode options",
+                                "additionalProperties": false,
+                                "properties": {}
+                            }
+                        }
+                    },
+                    "coglens.artifactPresets": {
+                        "type": "object",
+                        "scope": "resource",
+                        "default": {},
+                        "description": "Named artifact production presets",
+                        "additionalProperties": {
+                            "type": "object",
+                            "required": [
+                                "artifactKind"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                                "artifactKind": {
+                                    "type": "string",
+                                    "enum": [
+                                        "assembly",
+                                        "binary-disassembly",
+                                        "llvm-ir",
+                                        "optimization-remarks",
+                                        "python-bytecode"
+                                    ],
+                                    "description": "Artifact kind produced by this preset"
+                                },
+                                "extraArguments": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    },
+                                    "default": [],
+                                    "description": "Additional arguments appended to the compilation variant"
+                                },
+                                "productionOptions": {
+                                    "type": "object",
+                                    "additionalProperties": false,
+                                    "default": {},
+                                    "properties": {
+                                        "intel": {
+                                            "type": "boolean",
+                                            "description": "Emit Intel syntax when supported"
+                                        },
+                                        "demangle": {
+                                            "type": "boolean",
+                                            "description": "Demangle symbols when supported"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         ],
-		"menus": {
-			"commandPalette": [
-				{
-					"command": "coglens.GetInput",
-					"when": "false"
-				},
-				{
-					"command": "coglens.GetFile",
-					"when": "false"
-				},
-				{
-					"command": "coglens.PickCompiler",
-					"when": "false"
-				},
-				{
-					"command": "coglens.ClearInput",
-					"when": "false"
-				},
-				{
-					"command": "coglens.CopyText",
-					"when": "false"
-				},
-				{
-					"command": "coglens.AddElement",
-					"when": "false"
-				},
-				{
-					"command": "coglens.RemoveElement",
-					"when": "false"
-				}
-			],
-			"editor/title": [
-				{
-					"command": "coglens.Disassemble",
-					"group": "navigation@1"
-				}
-			],
-			"view/title": [
-				{
-					"command": "coglens.AddCompiler",
-					"when": "view == coglens.compilers",
-					"group": "navigation@2"
-				},
-				{
-					"command": "coglens.AddDefaultCompileInfo",
-					"when": "view == coglens.compileinfo",
-					"group": "navigation@1"
-				}
-			],
-			"view/item/context": [
-				{
-					"command": "coglens.GetInput",
-					"when": "view =~ /^coglens/ && viewItem =~ /editText/",
-					"group": "inline@1"
-				},
-				{
-					"command": "coglens.GetFile",
-					"when": "view =~ /^coglens/ && viewItem =~ /pickFile/",
-					"group": "inline@1"
-				},
-				{
-					"command": "coglens.PickCompiler",
-					"when": "view =~ /^coglens/ && viewItem =~ /pickCompiler/",
-					"group": "inline@1"
-				},
+        "menus": {
+            "editor/title": [
                 {
-                    "command": "coglens.ClearInput",
-                    "when": "view =~ /^coglens/ && viewItem =~ /editText/",
-                    "group": "inline@2"
+                    "command": "coglens.OpenArtifact",
+                    "group": "navigation@1",
+                    "when": "resourceScheme == file && coglens.supportedSource"
                 },
+                {
+                    "command": "coglens.PickCompilationVariant",
+                    "group": "navigation@2",
+                    "when": "resourceScheme == file && coglens.supportedSource"
+                },
+                {
+                    "command": "coglens.CompareArtifacts",
+                    "group": "navigation@3",
+                    "when": "resourceScheme == file && coglens.supportedSource"
+                }
+            ],
+            "view/title": [
+                {
+                    "command": "coglens.AddToolchain",
+                    "when": "view == coglens.toolchains",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "coglens.OpenToolchainSettingsJson",
+                    "when": "view == coglens.toolchains",
+                    "group": "navigation@9"
+                },
+                {
+                    "command": "coglens.AddCompilationVariant",
+                    "when": "view == coglens.compileInfo",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "coglens.RevealActiveSource",
+                    "when": "view == coglens.compileInfo",
+                    "group": "navigation@2"
+                },
+                {
+                    "command": "coglens.OpenCompileSettingsJson",
+                    "when": "view == coglens.compileInfo",
+                    "group": "navigation@9"
+                },
+                {
+                    "command": "coglens.OpenArtifactSettingsJson",
+                    "when": "view == coglens.artifactOptions",
+                    "group": "navigation@9"
+                }
+            ],
+            "view/item/context": [
                 {
                     "command": "coglens.CopyText",
-                    "when": "view =~ /^coglens/ && (viewItem =~ /text/ || viewItem =~ /editText/ || viewItem =~ /pickFile/)"
+                    "when": "view =~ /^coglens/ && viewItem == text"
                 },
                 {
-                    "command": "coglens.AddElement",
-                    "when": "view =~ /^coglens/ && viewItem =~ /array/",
-					"group": "inline@3"
+                    "command": "coglens.CreateWorkspaceOverride",
+                    "when": "view == coglens.toolchains && viewItem == derivedInstance",
+                    "group": "inline@1"
                 },
-				{
-                    "command": "coglens.RemoveElement",
-                    "when": "view =~ /^coglens/ && (viewItem =~ /array/ || viewItem =~ /element/)",
-					"group": "inline@4"
-				}
-			]
-		}
+                {
+                    "command": "coglens.DeleteToolchain",
+                    "when": "view == coglens.toolchains && viewItem == userToolchain",
+                    "group": "inline@1"
+                },
+                {
+                    "command": "coglens.EditCompilationVariant",
+                    "when": "view == coglens.compileInfo && viewItem == compilationVariant",
+                    "group": "inline@1"
+                },
+                {
+                    "command": "coglens.AddCompilationVariant",
+                    "when": "view == coglens.compileInfo && viewItem == compilationSource",
+                    "group": "inline@1"
+                },
+                {
+                    "command": "coglens.EditCompilationVariant",
+                    "when": "view == coglens.compileInfo && viewItem == manualCompilationVariant",
+                    "group": "inline@1"
+                },
+                {
+                    "command": "coglens.DeleteCompilationVariant",
+                    "when": "view == coglens.compileInfo && viewItem == manualCompilationVariant",
+                    "group": "inline@2"
+                }
+            ]
+        }
     },
     "scripts": {
-		"vscode:prepublish": "npm run package",
-		"compile": "npm run check-types && npm run lint && node esbuild.js",
-		"watch": "npm-run-all -p watch:*",
-		"watch:esbuild": "node esbuild.js --watch",
-		"watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-		"package": "npm run check-types && npm run lint && node esbuild.js --production",
-		"compile-tests": "tsc -p . --outDir out",
-		"watch-tests": "tsc -p . -w --outDir out",
-		"pretest": "npm run compile-tests && npm run compile && npm run lint",
-		"check-types": "tsc --noEmit",
-		"lint": "eslint src",
-		"test": "vscode-test"
+        "vscode:prepublish": "npm run package",
+        "compile": "npm run check-types && npm run lint && node esbuild.js",
+        "watch": "node esbuild.js --watch",
+        "watch:esbuild": "node esbuild.js --watch",
+        "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
+        "package": "npm run check-types && npm run lint && node esbuild.js --production",
+        "compile-tests": "tsc -p tsconfig.extension-tests.json",
+        "watch-tests": "tsc -p tsconfig.extension-tests.json -w",
+        "pretest": "npm run compile-tests && npm run compile && npm run lint",
+        "check-types": "tsc --noEmit && tsc --noEmit -p tsconfig.unit.json",
+        "lint": "eslint src test",
+        "test": "npm run test:unit",
+        "test:unit": "node --import tsx --test \"test/**/*.test.ts\"",
+        "test:extension": "npm run compile-tests && npm run compile && node scripts/run-extension-tests.mjs",
+        "vendor:check": "node scripts/vendor-check.mjs",
+        "package:vsix": "vsce package --no-dependencies"
     },
-	"dependencies": {
-        "vscode-cmake-tools": "^1.2.0"
-	},
+    "dependencies": {
+        "@vscode/python-extension": "^1.0.6",
+        "vscode-cmake-tools": "^1.7.0",
+        "yaml": "^2.9.0"
+    },
     "devDependencies": {
-		"@types/vscode": "^1.94.0",
-		"@types/mocha": "^10.0.9",
-		"@types/node": "20.x",
-		"@typescript-eslint/eslint-plugin": "^8.10.0",
-		"@typescript-eslint/parser": "^8.7.0",
-		"@vscode/test-cli": "^0.0.10",
-		"@vscode/test-electron": "^2.4.1",
-		"eslint": "^9.13.0",
-		"esbuild": "^0.24.0",
-		"npm-run-all": "^4.1.5",
-		"typescript": "^5.6.3"
+        "@types/node": "20.x",
+        "@types/vscode": "1.94.0",
+        "@typescript-eslint/eslint-plugin": "^8.65.0",
+        "@typescript-eslint/parser": "^8.65.0",
+        "@vscode/test-electron": "^2.5.2",
+        "@vscode/vsce": "^3.6.0",
+        "esbuild": "^0.28.1",
+        "eslint": "^10.8.0",
+        "tsx": "^4.20.3",
+        "typescript": "^5.9.3"
     },
-	"extensionDependencies": [
-		"ms-vscode.cmake-tools"
-	],
 	"extensionPack": [
-		"13xforever.language-x86-64-assembly"
+		"13xforever.language-x86-64-assembly",
+		"ms-python.python"
 	]
 }

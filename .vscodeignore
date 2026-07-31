@@ -2,6 +2,7 @@
 .github/**
 .vscode/**
 assets/**
+external/**
 node_modules/**
 out/**
 src/**
@@ -13,4 +14,4 @@ PLAN.md
 scripts/**
 tsconfig.json
 tsconfig.unit.json
-vscode-test.*
+tsconfig.extension-tests.json

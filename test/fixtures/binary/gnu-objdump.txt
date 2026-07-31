@@ -1,0 +1,9 @@
+0000000000000000 <main>:
+C:/project/source.cpp:7
+   0: 55                    push   rbp
+   1: e8 03 00 00 00        call   9 <helper>
+   6: c3                    ret
+0000000000000009 <helper>:
+C:/project/source.cpp:3
+   9: 6b c1 02              imul   eax,ecx,0x2
+   c: c3                    ret
