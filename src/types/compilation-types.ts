@@ -21,6 +21,20 @@ export interface CompilationVariant {
 	displayLabel: string;
 }
 
+/** A user-authored compilation variant stored in workspace settings. */
+export interface ManualCompilationVariantSettings {
+	id: string;
+	source: string;
+	displayLabel: string;
+	toolchainProfileId: string;
+	workingDirectory: string;
+	arguments: string[];
+	environment: Record<string, string>;
+	project?: string;
+	target?: string;
+	configuration?: string;
+}
+
 export interface ArtifactRequest {
 	variant: CompilationVariant;
 	artifactKind: ArtifactKind;

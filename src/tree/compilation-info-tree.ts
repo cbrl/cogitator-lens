@@ -4,6 +4,10 @@ import type { CompilationVariant } from '../types/index.js';
 import { CompilationService } from '../compilation/index.js';
 import { TreeNode, TreeProvider } from './treedata.js';
 import { compareLabels, makeEnvironmentNode, makeListNode } from './tree-helpers.js';
+import {
+	type ConfigurationOrigin,
+	variantProviderDefinitions,
+} from '../buildsystems/variant-provider.js';
 
 type GroupKey = 'project' | 'target' | 'configuration';
 
@@ -20,6 +24,7 @@ interface WorkspaceVariantGroup {
 
 export class CompilationInfoTreeNode extends TreeNode {
 	declare children?: CompilationInfoTreeNode[];
+	parent?: CompilationInfoTreeNode;
 	source?: vscode.Uri;
 	variant?: CompilationVariant;
 
@@ -35,9 +40,11 @@ export class CompilationInfoTreeNode extends TreeNode {
 			}
 		}
 
-		return [...groups.values()]
+		const roots = [...groups.values()]
 			.sort((left, right) => compareLabels(left.folder?.name ?? 'External Sources', right.folder?.name ?? 'External Sources'))
 			.map(group => this.workspaceNode(group, compilationService));
+		attachParents(roots);
+		return roots;
 	}
 
 	private static workspaceNode(
@@ -140,8 +147,16 @@ export class CompilationInfoTreeNode extends TreeNode {
 					description: child.variants.length > 1 ? `${child.variants.length} variants` : undefined,
 					tooltip: source?.fsPath,
 					nodeType: 'subtree',
+					treeContext: 'compilationSource',
 					iconPath: vscode.ThemeIcon.File,
 					source,
+					command: source
+						? {
+							command: 'vscode.open',
+							title: 'Open Source',
+							arguments: [source],
+						}
+						: undefined,
 					children: child.variants
 						.sort((left, right) => compareLabels(left.displayLabel, right.displayLabel))
 						.map(variant => this.variantNode(variant, compilationService)),
@@ -156,9 +171,12 @@ export class CompilationInfoTreeNode extends TreeNode {
 		const backend = compilationService.toolchainRegistry.getToolchainById(variant.toolchainProfileId);
 		return {
 			label: variant.displayLabel,
-			description: variant.provider,
+			description: providerLabel(variant.provider),
 			tooltip: variant.id,
 			nodeType: 'subtree',
+			treeContext: variant.provider === 'manual'
+				? 'manualCompilationVariant'
+				: 'compilationVariant',
 			iconPath: new vscode.ThemeIcon('symbol-interface'),
 			source: variant.source,
 			variant,
@@ -187,19 +205,35 @@ export class CompilationInfoTreeNode extends TreeNode {
 }
 
 export class CompilationInfoTreeProvider extends TreeProvider<CompilationInfoTreeNode> {
+	private roots?: CompilationInfoTreeNode[];
+
 	constructor(private readonly compilationService: CompilationService) {
 		super();
 	}
 
 	getChildren(element?: CompilationInfoTreeNode): CompilationInfoTreeNode[] | undefined {
 		return element?.children
-			?? CompilationInfoTreeNode.build(this.compilationService);
+			?? (this.roots ??= CompilationInfoTreeNode.build(this.compilationService));
+	}
+
+	getParent(element: CompilationInfoTreeNode): CompilationInfoTreeNode | undefined {
+		return element.parent;
+	}
+
+	override refresh(): void {
+		this.roots = undefined;
+		super.refresh();
+	}
+
+	findSource(source: vscode.Uri): CompilationInfoTreeNode | undefined {
+		const roots = this.roots ??= CompilationInfoTreeNode.build(this.compilationService);
+		return findSourceNode(roots, source);
 	}
 }
 
 function groupLabel(variant: CompilationVariant, key: GroupKey): string {
 	switch (key) {
-		case 'project': return variant.project?.trim() || `${variant.provider} project`;
+		case 'project': return variant.project?.trim() || `${providerLabel(variant.provider)} project`;
 		case 'target': return variant.target?.trim() || 'Default target';
 		case 'configuration': return variant.configuration?.trim() || 'Default configuration';
 	}
@@ -225,4 +259,39 @@ function externalDisplayPath(filePath: string): string {
 	const parsed = path.parse(filePath);
 	const withoutRoot = filePath.slice(parsed.root.length);
 	return parsed.name ? path.join(parsed.root.replace(/[\\/:]+/g, ''), withoutRoot) : withoutRoot;
+}
+
+function providerLabel(provider: string): string {
+	if (provider === 'manual') {
+		return 'Workspace';
+	}
+	return Object.hasOwn(variantProviderDefinitions, provider)
+		? variantProviderDefinitions[provider as ConfigurationOrigin].label
+		: provider;
+}
+
+function attachParents(
+	nodes: readonly CompilationInfoTreeNode[],
+	parent?: CompilationInfoTreeNode,
+): void {
+	for (const node of nodes) {
+		node.parent = parent;
+		attachParents(node.children ?? [], node);
+	}
+}
+
+function findSourceNode(
+	nodes: readonly CompilationInfoTreeNode[],
+	source: vscode.Uri,
+): CompilationInfoTreeNode | undefined {
+	for (const node of nodes) {
+		if (node.source?.toString() === source.toString() && !node.variant) {
+			return node;
+		}
+		const found = findSourceNode(node.children ?? [], source);
+		if (found) {
+			return found;
+		}
+	}
+	return undefined;
 }

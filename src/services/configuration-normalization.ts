@@ -3,6 +3,7 @@ import type {
 	ArtifactOptions,
 	ArtifactKind,
 	DefaultCompilationSettings,
+	ManualCompilationVariantSettings,
 	ToolchainKind,
 	ToolchainProfile,
 	ToolchainSettings,
@@ -78,6 +79,35 @@ export function parseDefaultCompilationSettings(raw: unknown): DefaultCompilatio
 	};
 }
 
+export function parseManualCompilationVariants(raw: unknown): ManualCompilationVariantSettings[] {
+	if (!Array.isArray(raw)) {
+		return [];
+	}
+	return raw.flatMap(entry => {
+		const value = asRecord(entry) as Partial<ManualCompilationVariantSettings>;
+		const id = asString(value.id);
+		const source = asString(value.source);
+		const displayLabel = asString(value.displayLabel);
+		const toolchainProfileId = asString(value.toolchainProfileId);
+		const workingDirectory = asString(value.workingDirectory);
+		if (!id || !source || !displayLabel || !toolchainProfileId || !workingDirectory) {
+			return [];
+		}
+		return [{
+			id,
+			source,
+			displayLabel,
+			toolchainProfileId,
+			workingDirectory,
+			arguments: asStringArray(value.arguments),
+			environment: asStringRecord(value.environment),
+			project: optionalString(value.project),
+			target: optionalString(value.target),
+			configuration: optionalString(value.configuration),
+		}];
+	});
+}
+
 export function parseArtifactOptions(raw: unknown, kind: ArtifactKind): ArtifactOptions {
 	const selected = asRecord(asRecord(raw)[kind]);
 	const production: Record<string, boolean> = { ...defaultArtifactOptions.production };
@@ -113,4 +143,8 @@ export function parseArtifactPresets(raw: unknown): ArtifactPreset[] {
 			productionOptions,
 		}];
 	});
+}
+
+function optionalString(value: unknown): string | undefined {
+	return typeof value === 'string' && value ? value : undefined;
 }

@@ -79,6 +79,39 @@ export class CompilationConfigDatabase implements Disposable {
 			changed = true;
 		}
 
+		const desiredBySource = sourceUriMap<CompilationVariant[]>();
+		for (const variant of snapshot) {
+			const desired = desiredBySource.get(variant.source) ?? [];
+			desired.push(variant);
+			desiredBySource.set(variant.source, desired);
+		}
+		for (const [source, desired] of desiredBySource) {
+			const current = this.bySource.get(source);
+			if (!current) {
+				continue;
+			}
+			const reordered = new Map<string, CompilationVariant>();
+			let insertedProvider = false;
+			for (const variant of current.values()) {
+				if (variant.provider === provider) {
+					if (!insertedProvider) {
+						desired.forEach(item => reordered.set(item.id, item));
+						insertedProvider = true;
+					}
+				} else {
+					reordered.set(variant.id, variant);
+				}
+			}
+			if (!insertedProvider) {
+				desired.forEach(item => reordered.set(item.id, item));
+			}
+			if (!sameKeyOrder(current, reordered)) {
+				this.bySource.set(source, reordered);
+				affected.add(source);
+				changed = true;
+			}
+		}
+
 		for (const [source, variants] of [...this.bySource]) {
 			if (variants.size === 0) {
 				this.bySource.delete(source);
@@ -107,4 +140,14 @@ export class CompilationConfigDatabase implements Disposable {
 		variants.set(variant.id, variant);
 		this.bySource.set(variant.source, variants);
 	}
+}
+
+function sameKeyOrder(
+	left: ReadonlyMap<string, CompilationVariant>,
+	right: ReadonlyMap<string, CompilationVariant>,
+): boolean {
+	const leftKeys = [...left.keys()];
+	const rightKeys = [...right.keys()];
+	return leftKeys.length === rightKeys.length
+		&& leftKeys.every((key, index) => key === rightKeys[index]);
 }

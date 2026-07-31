@@ -10,7 +10,13 @@ export type TreeItemSpecifier = 'checkbox' | 'subtree' | 'text';
  * Specifies the context in which a tree item is used. This will be the value of vscode.TreeItem.contextValue,
  * and can be used to limit commands to specific menu items based on the context.
  */
-export type TreeContextSpecifier = 'derivedInstance' | 'text';
+export type TreeContextSpecifier =
+	| 'compilationSource'
+	| 'compilationVariant'
+	| 'derivedInstance'
+	| 'manualCompilationVariant'
+	| 'text'
+	| 'userToolchain';
 
 export class TreeNode {
 	/**
@@ -53,6 +59,7 @@ export class TreeNode {
 
 	disabled?: boolean;
 
+	command?: vscode.Command;
 }
 
 export class TreeItem extends vscode.TreeItem {
@@ -67,6 +74,7 @@ export class TreeItem extends vscode.TreeItem {
 		this.tooltip = node.tooltip;
 		this.description = node.description;
 		this.contextValue = treeContext ?? nodeType;
+		this.command = node.command;
 
 		if (nodeType === 'subtree') {
 			this.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;

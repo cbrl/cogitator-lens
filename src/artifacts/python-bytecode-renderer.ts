@@ -1,0 +1,68 @@
+import type {
+	DisplayOptions,
+	RawArtifact,
+	RenderedArtifact,
+	RenderedArtifactLine,
+} from '../types/index.js';
+import type { ArtifactRenderContext } from './artifact-definitions.js';
+import { renderedArtifact } from './rendered-artifact.js';
+
+const sourceLinePrefix = /^\s{0,3}(\d+)\s+/;
+const instruction = /^\s*(?:\d+\s+)?(?:(?:-->)?\s*(?:>>)?\s*)?(?:\d+\s+)?[A-Z][A-Z0-9_]*\b/;
+
+export function renderPythonBytecode(
+	raw: RawArtifact,
+	_options: DisplayOptions,
+	context: ArtifactRenderContext,
+): RenderedArtifact {
+	let currentSourceLine: number | undefined;
+	const mappedSourceLines = new Set<number>();
+	let instructionCount = 0;
+	let codeObjectCount = 1;
+
+	const lines: RenderedArtifactLine[] = splitLines(raw.text).map(text => {
+		if (/^Disassembly of\b/.test(text)) {
+			currentSourceLine = undefined;
+			codeObjectCount++;
+		}
+
+		const sourceMatch = sourceLinePrefix.exec(text);
+		if (sourceMatch) {
+			const candidate = Number.parseInt(sourceMatch[1], 10);
+			currentSourceLine = candidate > 0 ? candidate : undefined;
+		}
+
+		const isInstruction = instruction.test(text);
+		if (isInstruction) {
+			instructionCount++;
+		}
+		if (!isInstruction || currentSourceLine === undefined) {
+			return { text };
+		}
+
+		mappedSourceLines.add(currentSourceLine);
+		return {
+			text,
+			source: {
+				file: context.source.uri.fsPath,
+				line: currentSourceLine,
+				column: 0,
+				mainSource: true,
+			},
+		};
+	});
+
+	return renderedArtifact(raw, lines, {
+		instructionCount,
+		codeObjectCount: instructionCount === 0 ? 0 : codeObjectCount,
+		sourceLineCount: mappedSourceLines.size,
+	});
+}
+
+function splitLines(text: string): string[] {
+	const lines = text.split(/\r\n|\n|\r/);
+	if (lines.at(-1) === '') {
+		lines.pop();
+	}
+	return lines;
+}

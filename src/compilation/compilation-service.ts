@@ -247,6 +247,11 @@ export class CompilationService {
 
 	private reloadUserConfiguration(): void {
 		this.toolchainRegistry.reconcile('user', this.configuration.getToolchains());
+		this.variants.reconcile('manual', this.configuration.getManualCompilationVariants().map(variant => ({
+			...variant,
+			provider: 'manual',
+			source: Uri.file(variant.source),
+		})));
 		for (const kind of supportedArtifactKinds) {
 			const options = this.configuration.getArtifactOptions(kind);
 			if (!artifactOptionsEqual(this.getArtifactOptions(kind), options)) {

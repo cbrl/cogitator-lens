@@ -3,7 +3,14 @@ import type { IntelSyntaxSupport, ToolchainProfile } from '../types/index.js';
 import { ToolchainRegistry } from '../compilation/index.js';
 import { TreeNode, TreeProvider } from './treedata.js';
 import { makeEnvironmentNode, makeListNode, noneNode } from './tree-helpers.js';
-import { toolchainDefinitions } from '../toolchains/toolchain-map.js';
+import {
+	getToolchainDefinition,
+	resolveArtifactAvailability,
+} from '../toolchains/toolchain-map.js';
+import {
+	artifactDefinitions,
+	supportedArtifactKinds,
+} from '../artifacts/artifact-definitions.js';
 import {
 	type ConfigurationOrigin,
 	variantProviderDefinitions,
@@ -20,14 +27,14 @@ export class ToolchainTreeNode extends TreeNode {
 			description: originLabel(origin),
 			tooltip: profile.executable,
 			nodeType: 'subtree',
-			treeContext: origin === 'user' ? undefined : 'derivedInstance',
+			treeContext: origin === 'user' ? 'userToolchain' : 'derivedInstance',
 			iconPath: new vscode.ThemeIcon('chip'),
 			profile,
 			origin,
 			children: [
 				this.informationNode(profile, origin),
 				makeListNode('Arguments', profile.defaultArguments),
-				makeEnvironmentNode(profile.environment, sensitiveEnvironmentName),
+				makeEnvironmentNode(profile.environment),
 				makeToolsNode(profile.tools),
 				this.capabilitiesNode(profile),
 			],
@@ -55,20 +62,35 @@ export class ToolchainTreeNode extends TreeNode {
 	}
 
 	private static capabilitiesNode(profile: ToolchainProfile): ToolchainTreeNode {
-		const intelSyntax = toolchainDefinitions[profile.kind].intelSyntax;
-		const demangle = profile.tools.demangler ? 'available' : 'unavailable';
-		const available = [demangle, intelSyntax]
+		const definition = getToolchainDefinition(profile.kind);
+		const capabilities: Array<{
+			label: string;
+			status: 'available' | 'unavailable' | IntelSyntaxSupport;
+		}> = supportedArtifactKinds.map(kind => ({
+			label: artifactDefinitions[kind].label,
+			status: resolveArtifactAvailability(profile, kind).status,
+		}));
+		if (definition.artifacts.assembly.status === 'available') {
+			capabilities.push({
+				label: 'Symbol demangling',
+				status: profile.tools.demangler ? 'available' : 'unavailable',
+			});
+			capabilities.push({
+				label: 'Intel syntax',
+				status: definition.intelSyntax ?? 'unsupported',
+			});
+		}
+		const available = capabilities
+			.map(capability => capability.status)
 			.filter(status => status === 'available' || status === 'selectable' || status === 'inherent')
 			.length;
 		return {
 			label: 'Capabilities',
-			description: `${available}/2`,
+			description: `${available}/${capabilities.length}`,
 			nodeType: 'subtree',
 			iconPath: new vscode.ThemeIcon('tools'),
-			children: [
-				capabilityNode('Symbol demangling', demangle),
-				capabilityNode('Intel syntax', intelSyntax),
-			],
+			children: capabilities.map(capability =>
+				capabilityNode(capability.label, capability.status)),
 		};
 	}
 }
@@ -140,8 +162,4 @@ function capabilityNode(
 
 function originLabel(origin: ConfigurationOrigin): string {
 	return variantProviderDefinitions[origin].label;
-}
-
-function sensitiveEnvironmentName(name: string): boolean {
-	return /(?:password|token|secret|api[-_]?key)/i.test(name);
 }

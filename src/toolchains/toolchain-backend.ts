@@ -154,7 +154,7 @@ interface PreparedInvocation {
 export class ToolchainBackend {
 	readonly profile: ToolchainProfile;
 	private readonly definition: ToolchainDefinition;
-	private readonly asmParser: AsmParser;
+	private readonly asmParser?: AsmParser;
 	// Binary disassembly is always GNU objdump-style text (GNU/LLVM objdump, or dumpbin
 	// normalized to that shape by binary-disassembly-producer.ts), regardless of which
 	// dialect `asmParser` handles for textual assembly. Parsing it with a dedicated plain
@@ -165,7 +165,7 @@ export class ToolchainBackend {
 	constructor(profile: ToolchainProfile, definition: ToolchainDefinition) {
 		this.profile = profile;
 		this.definition = definition;
-		this.asmParser = definition.createParser();
+		this.asmParser = definition.createParser?.();
 	}
 
 	async produceAssembly(
@@ -173,6 +173,10 @@ export class ToolchainBackend {
 		options: CompileOptions,
 		cancellationToken: CancellationToken,
 	): Promise<RawArtifact> {
+		if (!this.definition.outputArguments || !this.asmParser) {
+			throw new Error(`${this.profile.displayName} has no assembly production capability.`);
+		}
+		const outputArguments = this.definition.outputArguments;
 		return withTemporaryDirectory('coglens-', async temporaryDirectory => {
 			const outputFile = path.join(temporaryDirectory, 'output.asm');
 			const invocation = await this.prepareInvocation(
@@ -180,7 +184,7 @@ export class ToolchainBackend {
 				options,
 				providerArguments => [
 					...this.outputOptionArguments(options.productionOptions),
-					...this.definition.outputArguments('assembly', outputFile, providerArguments),
+					...outputArguments('assembly', outputFile, providerArguments),
 				],
 				cancellationToken,
 			);
@@ -239,13 +243,18 @@ export class ToolchainBackend {
 		disassembler: BinaryDisassembler,
 		cancellationToken: CancellationToken,
 	): Promise<RawArtifact> {
+		if (!this.definition.outputArguments || !this.definition.objectFilename) {
+			throw new Error(`${this.profile.displayName} has no object-file production capability.`);
+		}
+		const outputArguments = this.definition.outputArguments;
+		const objectFilename = this.definition.objectFilename;
 		return withTemporaryDirectory('coglens-', async temporaryDirectory => {
-			const objectFile = path.join(temporaryDirectory, this.definition.objectFilename);
+			const objectFile = path.join(temporaryDirectory, objectFilename);
 			const invocation = await this.prepareInvocation(
 				source,
 				options,
 				providerArguments =>
-					this.definition.outputArguments('object', objectFile, providerArguments),
+					outputArguments('object', objectFile, providerArguments),
 				cancellationToken,
 			);
 			const disassemblerExecutable = this.profile.tools[disassembler.tool];
@@ -381,7 +390,63 @@ export class ToolchainBackend {
 		});
 	}
 
+	async produceStdoutArtifact(
+		kind: ArtifactKind,
+		source: Uri,
+		options: CompileOptions,
+		ownedArguments: readonly string[],
+		cancellationToken: CancellationToken,
+	): Promise<RawArtifact> {
+		const invocation = await this.prepareInvocation(
+			source,
+			options,
+			() => ownedArguments,
+			cancellationToken,
+		);
+
+		const { logChannel } = await import('../logger.js');
+		logChannel.info(`Producing ${kind} for ${source.fsPath} with ${this.profile.displayName}`);
+		logChannel.info(`Command: ${this.profile.executable} ${invocation.argumentsList.join(' ')}`);
+		logChannel.debug(`Environment overrides: ${invocation.overriddenNames.join(', ') || '(none)'}`);
+
+		const result = await exec.execute(this.profile.executable, invocation.argumentsList, {
+			cwd: invocation.workingDirectory,
+			env: invocation.preparedEnvironment,
+			cancellationToken,
+		});
+		if (result.returnCode !== 0) {
+			throw new ToolExitError(
+				`Toolchain exited with code ${result.returnCode}`,
+				result.returnCode,
+				result.stdout,
+				result.stderr,
+			);
+		}
+
+		const { parseToolDiagnostics } = await import('../diagnostics.js');
+		return {
+			kind,
+			text: result.stdout,
+			diagnostics: parseToolDiagnostics(
+				result.stderr,
+				source,
+				invocation.workingDirectory,
+			),
+			durationMs: performance.now() - invocation.started,
+			truncated: false,
+			command: {
+				executable: this.profile.executable,
+				arguments: invocation.argumentsList,
+				environmentVariableNames: invocation.overriddenNames,
+				workingDirectory: invocation.workingDirectory,
+			},
+		};
+	}
+
 	parseAssembly(rawAssembly: string, options: DisplayOptions): ParsedAsmResult {
+		if (!this.asmParser) {
+			throw new Error(`${this.profile.displayName} has no assembly parser.`);
+		}
 		const filters: ParseFiltersAndOutputOptions = { ...options };
 		return this.asmParser.process(rawAssembly, filters);
 	}

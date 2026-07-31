@@ -5,6 +5,7 @@ export const variantProviderDefinitions = {
 	user: { label: 'Workspace' },
 	cmake: { label: 'CMake' },
 	'compilation-database': { label: 'Compilation database' },
+	'python-environments': { label: 'Python environments' },
 } as const satisfies Record<string, { readonly label: string }>;
 
 export type ConfigurationOrigin = keyof typeof variantProviderDefinitions;

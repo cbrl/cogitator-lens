@@ -11,6 +11,7 @@ import type { ParsedAsmResultLine } from '../vendor/types/asmresult/asmresult.in
 import type { ParsedAsmResult } from '../vendor/types/asmresult/asmresult.interfaces.js';
 import { renderLlvmIr } from './llvm-ir-renderer.js';
 import { renderOptimizationRemarks } from './optimization-remarks-renderer.js';
+import { renderPythonBytecode } from './python-bytecode-renderer.js';
 import { renderedArtifact } from './rendered-artifact.js';
 
 export interface ArtifactOptionDescriptor {
@@ -161,6 +162,20 @@ export const artifactDefinitions = {
 		documentLanguage: 'source',
 		options: [],
 		renderer: renderOptimizationRemarks,
+		navigation: {
+			definitions: true,
+			sourceLocations: true,
+			links: false,
+			folds: false,
+			symbols: false,
+		},
+	},
+	'python-bytecode': {
+		label: 'Python bytecode',
+		filenameExtension: '.pybytecode',
+		documentLanguage: 'artifact',
+		options: [],
+		renderer: renderPythonBytecode,
 		navigation: {
 			definitions: true,
 			sourceLocations: true,

@@ -10,6 +10,7 @@ import { ArtifactNavigationProvider } from './asm-document/artifact-navigation-p
 import { AsmProvider, getArtifactUri } from './asm-document/asm-provider.js';
 import { CmakeVariantProvider } from './buildsystems/cmake.js';
 import { CompilationDatabaseVariantProvider } from './buildsystems/compilation-database.js';
+import { PythonEnvironmentVariantProvider } from './buildsystems/python-environments.js';
 import { VariantProvider } from './buildsystems/variant-provider.js';
 import { CompilationService } from './compilation/index.js';
 import { ConfigurationService } from './services/configuration-service.js';
@@ -22,6 +23,10 @@ import {
 	effectiveArtifactPresets,
 	type ArtifactPreset,
 } from './artifacts/presets.js';
+import {
+	partitionArtifactPickerChoices,
+	type ArtifactPickerChoice,
+} from './artifacts/artifact-picker.js';
 import { supportedLanguageIdentifiers } from './toolchains/toolchain-map.js';
 import * as setup from './setup.js';
 
@@ -43,6 +48,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
 	const variantProviders: VariantProvider[] = [
 		new CmakeVariantProvider(),
 		new CompilationDatabaseVariantProvider(configuration),
+		new PythonEnvironmentVariantProvider(),
 	];
 	const providerSubscriptions = variantProviders.map(provider =>
 		provider.onSnapshot(snapshot => compilationService.reconcileProviderSnapshot(snapshot)));
@@ -178,25 +184,30 @@ async function openArtifact(
 
 	let kind = requestedKind;
 	if (!kind) {
+		const sections = partitionArtifactPickerChoices(
+			supportedArtifactKinds.map(artifactKind => ({
+				label: artifactDefinitions[artifactKind].label,
+				artifactKind,
+				availability: compilationService.toolchainRegistry
+					.getArtifactAvailability(variant.toolchainProfileId, artifactKind),
+			})),
+		);
+		const items: Array<vscode.QuickPickItem | ArtifactQuickPickChoice> = [];
+		if (sections.unavailable.length > 0) {
+			items.push(
+				{ label: 'Available', kind: vscode.QuickPickItemKind.Separator },
+				...sections.available.map(availableArtifactPickerItem),
+				{ label: 'Unavailable', kind: vscode.QuickPickItemKind.Separator },
+				...sections.unavailable.map(unavailableArtifactPickerItem),
+			);
+		} else {
+			items.push(...sections.available.map(availableArtifactPickerItem));
+		}
 		const choice = await window.showQuickPick(
-			supportedArtifactKinds.map(artifactKind => {
-				const availability = compilationService.toolchainRegistry
-					.getArtifactAvailability(variant.toolchainProfileId, artifactKind);
-				return {
-					label: artifactDefinitions[artifactKind].label,
-					description: availability.status === 'available'
-						? undefined
-						: availability.status,
-					detail: availability.status === 'available'
-						? undefined
-						: availability.explanation,
-					artifactKind,
-					availability,
-				};
-			}),
+			items,
 			{ title: 'Open Artifact', matchOnDescription: true, matchOnDetail: true },
 		);
-		if (!choice) {
+		if (!choice || !('artifactKind' in choice)) {
 			return;
 		}
 		if (choice.availability.status !== 'available') {
@@ -239,6 +250,25 @@ async function openArtifact(
 		preview: false,
 	};
 	await window.showTextDocument(artifactUri, options);
+}
+
+type ArtifactQuickPickChoice =
+	vscode.QuickPickItem
+	& Omit<ArtifactPickerChoice, 'label'>;
+
+function availableArtifactPickerItem(choice: ArtifactPickerChoice): ArtifactQuickPickChoice {
+	return { ...choice };
+}
+
+function unavailableArtifactPickerItem(choice: ArtifactPickerChoice): ArtifactQuickPickChoice {
+	return {
+		...choice,
+		label: `$(circle-slash) ${choice.label}`,
+		description: 'Unavailable',
+		detail: choice.availability.status === 'unavailable'
+			? choice.availability.explanation
+			: undefined,
+	};
 }
 
 interface ComparisonTarget {

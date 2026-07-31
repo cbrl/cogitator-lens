@@ -11,6 +11,7 @@ import type {
 	ArtifactOptions,
 	ArtifactKind,
 	DefaultCompilationSettings,
+	ManualCompilationVariantSettings,
 	ToolchainProfile,
 	ToolchainSettings,
 } from '../types/index.js';
@@ -21,6 +22,7 @@ import {
 	parseArtifactOptions,
 	parseArtifactPresets,
 	parseDefaultCompilationSettings,
+	parseManualCompilationVariants,
 	parseToolchainSettings,
 } from './configuration-normalization.js';
 
@@ -61,6 +63,11 @@ export class ConfigurationService implements Disposable {
 		return parseDefaultCompilationSettings(raw);
 	}
 
+	getManualCompilationVariants(): ManualCompilationVariantSettings[] {
+		const raw = workspace.getConfiguration('coglens').get<unknown>('compileVariants', []);
+		return parseManualCompilationVariants(raw);
+	}
+
 	getArtifactOptions(kind: ArtifactKind, scope?: Uri): ArtifactOptions {
 		const raw = workspace.getConfiguration('coglens', scope).get<unknown>('artifactOptions', {});
 		return parseArtifactOptions(raw, kind);
@@ -91,6 +98,16 @@ export class ConfigurationService implements Disposable {
 		await workspace.getConfiguration('coglens', folder?.uri).update(
 			'toolchains',
 			settings,
+			ConfigurationTarget.Workspace,
+		);
+	}
+
+	async updateManualCompilationVariants(
+		variants: readonly ManualCompilationVariantSettings[],
+	): Promise<void> {
+		await workspace.getConfiguration('coglens').update(
+			'compileVariants',
+			variants,
 			ConfigurationTarget.Workspace,
 		);
 	}

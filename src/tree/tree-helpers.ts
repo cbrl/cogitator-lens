@@ -19,10 +19,7 @@ export function makeListNode(label: string, values: readonly string[]): TreeNode
 	};
 }
 
-export function makeEnvironmentNode(
-	environment: Readonly<Record<string, string>>,
-	redact: (name: string) => boolean = () => false,
-): TreeNode {
+export function makeEnvironmentNode(environment: Readonly<Record<string, string>>): TreeNode {
 	const entries = Object.entries(environment).sort(([left], [right]) => compareLabels(left, right));
 	return {
 		label: 'Environment overrides',
@@ -32,8 +29,8 @@ export function makeEnvironmentNode(
 		children: entries.length
 			? entries.map(([name, value]) => ({
 				label: name,
-				description: redact(name) ? '<redacted>' : value,
-				tooltip: redact(name) ? `${name}=<redacted>` : `${name}=${value}`,
+				description: value,
+				tooltip: `${name}=${value}`,
 				nodeType: 'text',
 				treeContext: 'text',
 			}))

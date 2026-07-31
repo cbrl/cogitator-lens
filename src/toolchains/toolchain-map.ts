@@ -22,6 +22,7 @@ import {
 	windowsDemangle,
 } from './msvc.js';
 import { rustOutputArguments, stripRustManagedArguments } from './rust.js';
+import { stripPythonManagedArguments } from './python.js';
 import {
 	artifactDefinitions,
 	supportedArtifactKinds,
@@ -40,6 +41,7 @@ import {
 	gccOptimizationRecord,
 	llvmIrOutput,
 } from '../artifacts/compiler-output-producer.js';
+import { pythonBytecodeProducer } from '../artifacts/python-bytecode-producer.js';
 
 export type ToolCapabilityStatus = 'available' | 'unavailable' | 'unsupported';
 
@@ -69,12 +71,12 @@ export type ToolchainArtifactCell =
 export interface ToolchainDefinitionShape {
 	readonly executablePattern: RegExp;
 	readonly languageIdentifiers: readonly string[];
-	readonly intelSyntax: IntelSyntaxSupport;
+	readonly intelSyntax?: IntelSyntaxSupport;
 	readonly intelArguments?: readonly string[];
 	readonly includeFlag?: string;
 	readonly defineFlag?: string;
-	readonly objectFilename: string;
-	readonly outputArguments: (
+	readonly objectFilename?: string;
+	readonly outputArguments?: (
 		target: 'assembly' | 'object',
 		outputFile: string,
 		providerArguments: readonly string[],
@@ -84,7 +86,7 @@ export interface ToolchainDefinitionShape {
 		sourceFile: string,
 		workingDirectory: string,
 	) => readonly string[];
-	readonly createParser: () => AsmParser;
+	readonly createParser?: () => AsmParser;
 	readonly prepareEnvironment?: (
 		profile: ToolchainProfile,
 		environment: NodeJS.ProcessEnv,
@@ -241,6 +243,13 @@ const rustArtifacts = artifactCells({
 	assembly: assemblyCell,
 });
 
+const pythonArtifacts = artifactCells({
+	'python-bytecode': {
+		status: 'available',
+		producer: pythonBytecodeProducer,
+	},
+});
+
 export const toolchainDefinitions = {
 	gcc: {
 		executablePattern: /^(?:gcc|g\+\+)(?:-\d+(?:\.\d+)*)?(?:\.exe)?$/i,
@@ -325,6 +334,13 @@ export const toolchainDefinitions = {
 		createParser: defaultAsmParser,
 		discoverTools: toolDiscoverer({ demangler: 'rustfilt' }),
 		artifacts: rustArtifacts,
+	},
+	python: {
+		executablePattern: /^(?:python(?:\d+(?:\.\d+)*)?|py)(?:\.exe)?$/i,
+		languageIdentifiers: Object.freeze(['python']),
+		stripOwnedArguments: stripPythonManagedArguments,
+		discoverTools: toolDiscoverer({}),
+		artifacts: pythonArtifacts,
 	},
 } as const satisfies Record<string, ToolchainDefinitionShape>;
 
@@ -432,7 +448,7 @@ export function resolveArtifactOptionAvailability(
 			};
 	}
 	if (id === 'intel') {
-		const intelSyntax = toolchainDefinitions[profile.kind].intelSyntax;
+		const intelSyntax = getToolchainDefinition(profile.kind).intelSyntax ?? 'unsupported';
 		if (intelSyntax === 'selectable') {
 			return { status: 'available' };
 		}
