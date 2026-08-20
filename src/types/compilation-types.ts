@@ -42,6 +42,8 @@ export interface ArtifactRequest {
 	extraArguments: readonly string[];
 	options: ArtifactOptions;
 	cancellationToken: CancellationToken;
+	/** Receives sanitized invocation metadata as soon as a tool is about to run. */
+	onInvocation?: (details: InvocationDetails) => void;
 }
 
 export interface CompileDiagnostic {
@@ -59,6 +61,26 @@ export interface ArtifactCommand {
 	workingDirectory: string;
 }
 
+/** Sanitized invocation metadata suitable for presentation layers. */
+export interface InvocationDetails {
+	readonly executable: string;
+	readonly args: readonly string[];
+	readonly cwd: string;
+	readonly environmentVariableNames: readonly string[];
+}
+
+/** Remove execution-only values before invocation metadata reaches a view. */
+export function invocationDetails(command: ArtifactCommand): InvocationDetails {
+	return Object.freeze({
+		executable: command.executable,
+		args: Object.freeze([...command.arguments]),
+		cwd: command.workingDirectory,
+		environmentVariableNames: Object.freeze(
+			[...command.environmentVariableNames].sort(),
+		),
+	});
+}
+
 export interface ArtifactInputState {
 	readonly uri: string;
 	readonly size: number;
@@ -70,6 +92,8 @@ export interface RawArtifact {
 	text: string;
 	diagnostics: readonly CompileDiagnostic[];
 	durationMs: number;
+	/** Unix epoch milliseconds when tool output and dependency discovery completed. */
+	generatedAt: number;
 	command: ArtifactCommand;
 	truncated: boolean;
 	readonly inputs: readonly ArtifactInputState[];
@@ -100,13 +124,29 @@ export type OptimizationRemarkCategory =
 	| 'missed'
 	| 'analysis';
 
-export interface OptimizationRemarkLineDecoration {
+export interface OptimizationRemarkLineAnnotation {
 	readonly kind: 'optimization-remark';
 	readonly category: OptimizationRemarkCategory;
-	readonly text: string;
+	readonly message: string;
 }
 
-export type RenderedArtifactLineDecoration = OptimizationRemarkLineDecoration;
+export type StackUsageQualifier =
+	| 'static'
+	| 'dynamic'
+	| 'dynamic-bounded'
+	| 'vm';
+
+export interface StackUsageLineAnnotation {
+	readonly kind: 'stack-usage';
+	readonly functionName: string;
+	readonly value: number;
+	readonly unit: 'bytes' | 'vm-slots';
+	readonly qualifier: StackUsageQualifier;
+}
+
+export type ArtifactLineAnnotation =
+	| OptimizationRemarkLineAnnotation
+	| StackUsageLineAnnotation;
 
 export interface RenderedArtifactLine {
 	readonly text: string;
@@ -114,8 +154,8 @@ export interface RenderedArtifactLine {
 	readonly address?: number;
 	readonly disassembly?: string;
 	readonly source?: RenderedArtifactLineSource | null;
-	/** Visual annotations rendered by the editor without changing document text. */
-	readonly decorations?: readonly RenderedArtifactLineDecoration[];
+	/** Typed analyses rendered by the editor without changing document text. */
+	readonly annotations?: readonly ArtifactLineAnnotation[];
 }
 
 export interface ArtifactLink {
@@ -170,6 +210,7 @@ export function productionKey(
 ): ProductionKey {
 	const {
 		cancellationToken: _cancellationToken,
+		onInvocation: _onInvocation,
 		options,
 		...productionInputs
 	} = request;

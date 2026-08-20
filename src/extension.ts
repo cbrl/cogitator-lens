@@ -43,6 +43,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
 	setup.createToolchainTreeView(context, compilationService.toolchainRegistry);
 	setup.createCompilationInfoTreeView(context, compilationService);
 	setup.createGlobalOptionsTreeView(context, compilationService);
+	setup.createArtifactDetailsTreeView(context, artifactProvider);
 	setup.setupCommands(context, compilationService, configuration);
 
 	const variantProviders: VariantProvider[] = [

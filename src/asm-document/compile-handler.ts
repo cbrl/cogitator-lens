@@ -11,6 +11,7 @@ import { CompilationService } from '../compilation/index.js';
 import type {
 	ArtifactKind,
 	CompilationVariant,
+	InvocationDetails,
 	RenderedArtifact,
 } from '../types/index.js';
 import { CompilationError } from '../types/index.js';
@@ -25,23 +26,27 @@ export interface ArtifactHandlerResult {
 interface RetainedArtifactStatus {
 	readonly assembly?: CompiledAssembly;
 	readonly artifact?: RenderedArtifact;
+	readonly invocation?: InvocationDetails;
 	readonly error?: never;
 	readonly truncated: boolean;
 }
 
 export type CompileHandlerStatus =
-	| ({ readonly state: 'compiling' | 'stale' } & RetainedArtifactStatus)
+	| ({ readonly state: 'compiling' | 'stale' | 'cancelled' } & RetainedArtifactStatus)
 	| {
 		readonly state: 'failed';
 		readonly error: Error;
-		readonly assembly?: never;
-		readonly artifact?: never;
+		readonly diagnostics: readonly import('../types/index.js').CompileDiagnostic[];
+		readonly assembly?: CompiledAssembly;
+		readonly artifact?: RenderedArtifact;
+		readonly invocation?: InvocationDetails;
 		readonly truncated: boolean;
 	}
 	| {
 		readonly state: 'successful';
 		readonly assembly: CompiledAssembly;
 		readonly artifact: RenderedArtifact;
+		readonly invocation?: InvocationDetails;
 		readonly error?: never;
 		readonly truncated: boolean;
 	};
@@ -84,6 +89,7 @@ export class CompileHandler implements Disposable {
 			state: 'compiling',
 			assembly: this.currentStatus.assembly,
 			artifact: this.currentStatus.artifact,
+			invocation: this.currentStatus.invocation,
 			truncated: this.currentStatus.truncated,
 		});
 
@@ -112,6 +118,18 @@ export class CompileHandler implements Disposable {
 					display: baseOptions.display,
 				},
 				cancellationToken: cancellation.token,
+				onInvocation: invocation => {
+					if (!isCurrent() || cancellation.token.isCancellationRequested) {
+						return;
+					}
+					this.setStatus({
+						state: 'compiling',
+						assembly: this.currentStatus.assembly,
+						artifact: this.currentStatus.artifact,
+						invocation,
+						truncated: this.currentStatus.truncated,
+					});
+				},
 			});
 			if (artifact.status !== 'available') {
 				throw new CompilationError(artifact.explanation);
@@ -129,6 +147,7 @@ export class CompileHandler implements Disposable {
 				state: 'successful',
 				assembly,
 				artifact: rendered,
+				invocation: this.currentStatus.invocation,
 				truncated: rendered.truncated,
 			});
 
@@ -140,13 +159,16 @@ export class CompileHandler implements Disposable {
 				this.setStatus({
 					state: 'failed',
 					error: normalized,
+					diagnostics: error instanceof CompilationError ? error.diagnostics : [],
+					invocation: this.currentStatus.invocation,
 					truncated: error instanceof CompilationError && error.truncated,
 				});
 			} else if (isCurrent()) {
 				this.setStatus({
-					state: 'stale',
+					state: 'cancelled',
 					assembly: this.currentStatus.assembly,
 					artifact: this.currentStatus.artifact,
+					invocation: this.currentStatus.invocation,
 					truncated: this.currentStatus.truncated,
 				});
 			}
@@ -175,6 +197,7 @@ export class CompileHandler implements Disposable {
 				state: 'stale',
 				assembly: this.currentStatus.assembly,
 				artifact: this.currentStatus.artifact,
+				invocation: this.currentStatus.invocation,
 				truncated: this.currentStatus.truncated,
 			});
 		}

@@ -50,3 +50,14 @@ export const optimizationRemarkDecorations = {
 	missed: optimizationRemarkDecoration('missed'),
 	analysis: optimizationRemarkDecoration('analysis'),
 } as const;
+
+const stackUsageBackground = new ThemeColor('coglens.stackUsage.background');
+
+export const stackUsageDecoration = window.createTextEditorDecorationType({
+	after: {
+		backgroundColor: stackUsageBackground,
+		margin: '0 0 0 1.5em',
+	},
+	overviewRulerColor: stackUsageBackground,
+	overviewRulerLane: OverviewRulerLane.Right,
+});

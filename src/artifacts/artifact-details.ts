@@ -1,0 +1,200 @@
+import type { ArtifactDocumentSnapshot } from '../asm-document/asm-provider.js';
+import type { CompileHandlerStatus } from '../asm-document/compile-handler.js';
+import type {
+	CompileDiagnostic,
+	InvocationDetails,
+	RenderedArtifact,
+} from '../types/index.js';
+import { invocationDetails } from '../types/index.js';
+
+export { invocationDetails } from '../types/index.js';
+
+export interface ArtifactDetailsItem {
+	readonly id: string;
+	readonly label: string;
+	readonly value?: string;
+	readonly copyText?: string;
+	readonly children?: readonly ArtifactDetailsItem[];
+}
+
+export function buildArtifactDetails(
+	snapshot: ArtifactDocumentSnapshot,
+	metricLabels: Readonly<Record<string, string>> = {},
+): readonly ArtifactDetailsItem[] {
+	const { identity, status } = snapshot;
+	const artifact = retainedArtifact(status);
+	const diagnostics = currentDiagnostics(status, artifact);
+	const invocation = status.invocation
+		?? (artifact ? invocationDetails(artifact.raw.command) : undefined);
+	const counts = countDiagnostics(diagnostics);
+
+	return Object.freeze([
+		group('artifact', 'Artifact', [
+			value('artifact-label', 'Artifact', identity.artifactLabel),
+			value('kind', 'Kind', identity.artifactKind),
+			value('source', 'Source', identity.sourceLabel),
+			value('preset', 'Preset', identity.presetId),
+			value('variant', 'Variant', identity.variantLabel),
+			value('variant-id', 'Variant ID', identity.variantId),
+			value('toolchain', 'Toolchain', identity.toolchainLabel),
+			value('toolchain-kind', 'Toolchain kind', identity.toolchainKind),
+			value('toolchain-id', 'Toolchain ID', identity.toolchainId),
+			value('rendered-identity', 'Rendered identity', identity.renderedIdentity),
+		]),
+		group('status', 'Status', [
+			value('state', 'State', statusLabel(status)),
+			value(
+				'duration',
+				'Duration',
+				artifact ? formatDuration(artifact.raw.durationMs) : 'Not available',
+			),
+			value(
+				'generated',
+				'Generated',
+				artifact ? new Date(artifact.raw.generatedAt).toISOString() : 'Not available',
+			),
+			value('truncated', 'Output truncated', status.truncated ? 'Yes' : 'No'),
+			value('errors', 'Errors', String(counts.error)),
+			value('warnings', 'Warnings', String(counts.warning)),
+			value('information', 'Information', String(counts.information)),
+			...(status.state === 'failed'
+				? [value('failure', 'Failure', status.error.message)]
+				: []),
+		]),
+		group('invocation', 'Invocation', invocation
+			? invocationItems(invocation)
+			: [empty('invocation-unavailable', 'Not available')]),
+		group('environment', 'Environment', invocation
+			? environmentItems(invocation.environmentVariableNames)
+			: [empty('environment-unavailable', 'Not available')]),
+		group('metrics', 'Metrics', artifact
+			? metricItems(artifact.metrics, metricLabels)
+			: [empty('metrics-unavailable', 'Not available')]),
+	]);
+}
+
+function retainedArtifact(status: CompileHandlerStatus): RenderedArtifact | undefined {
+	return status.artifact;
+}
+
+function currentDiagnostics(
+	status: CompileHandlerStatus,
+	artifact: RenderedArtifact | undefined,
+): readonly CompileDiagnostic[] {
+	return status.state === 'failed' ? status.diagnostics : artifact?.raw.diagnostics ?? [];
+}
+
+function statusLabel(status: CompileHandlerStatus): string {
+	switch (status.state) {
+		case 'compiling': return 'Generating';
+		case 'successful':
+			return status.artifact.raw.diagnostics.length > 0
+				? 'Ready with diagnostics'
+				: 'Ready';
+		case 'cancelled': return 'Cancelled';
+		case 'failed': return 'Failed';
+		case 'stale': return status.artifact ? 'Stale because an input changed' : 'Not generated';
+	}
+}
+
+function countDiagnostics(diagnostics: readonly CompileDiagnostic[]): Record<CompileDiagnostic['severity'], number> {
+	const result = { error: 0, warning: 0, information: 0 };
+	for (const diagnostic of diagnostics) {
+		result[diagnostic.severity]++;
+	}
+	return result;
+}
+
+function invocationItems(invocation: InvocationDetails): ArtifactDetailsItem[] {
+	const commandLine = [invocation.executable, ...invocation.args]
+		.map(formatCommandArgument)
+		.join(' ');
+	return [
+		value('command-line', 'Command line', commandLine),
+		value('executable', 'Executable', invocation.executable),
+		group('arguments', 'Arguments', invocation.args.length
+			? invocation.args.map((argument, index) =>
+				value(`argument-${index}`, `Argument ${index + 1}`, argument))
+			: [empty('arguments-none', '(none)')]),
+		value('working-directory', 'Working directory', invocation.cwd),
+	];
+}
+
+function environmentItems(names: readonly string[]): ArtifactDetailsItem[] {
+	return names.length
+		? [...names].sort(compareText).map(name =>
+			value(`environment-${encodeURIComponent(name)}`, name, name))
+		: [empty('environment-none', '(none)')];
+}
+
+function metricItems(
+	metrics: Readonly<Record<string, unknown>>,
+	labels: Readonly<Record<string, string>>,
+): ArtifactDetailsItem[] {
+	const entries = Object.entries(metrics).sort(([left], [right]) => compareText(left, right));
+	return entries.length
+		? entries.map(([key, metric]) =>
+			value(`metric-${key}`, labels[key] ?? humanizeIdentifier(key), formatMetric(metric)))
+		: [empty('metrics-none', '(none)')];
+}
+
+function formatCommandArgument(argument: string): string {
+	return argument && !/[\s"']/u.test(argument)
+		? argument
+		: JSON.stringify(argument);
+}
+
+function formatDuration(durationMs: number): string {
+	return `${Math.max(0, durationMs).toFixed(durationMs < 10 ? 1 : 0)} ms`;
+}
+
+function formatMetric(metric: unknown): string {
+	if (typeof metric === 'string' || typeof metric === 'number' || typeof metric === 'boolean') {
+		return String(metric);
+	}
+	if (metric === null || metric === undefined) {
+		return String(metric);
+	}
+	return stableJson(metric);
+}
+
+function stableJson(value: unknown): string {
+	return JSON.stringify(sortJson(value));
+}
+
+function sortJson(value: unknown): unknown {
+	if (Array.isArray(value)) {
+		return value.map(sortJson);
+	}
+	if (typeof value === 'object' && value !== null) {
+		return Object.fromEntries(Object.entries(value)
+			.sort(([left], [right]) => compareText(left, right))
+			.map(([key, child]) => [key, sortJson(child)]));
+	}
+	return value;
+}
+
+function humanizeIdentifier(identifier: string): string {
+	const words = identifier.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[-_]+/g, ' ');
+	return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+function compareText(left: string, right: string): number {
+	return left.localeCompare(right, undefined, { sensitivity: 'base', numeric: true });
+}
+
+function group(
+	id: string,
+	label: string,
+	children: readonly ArtifactDetailsItem[],
+): ArtifactDetailsItem {
+	return { id, label, children };
+}
+
+function value(id: string, label: string, itemValue: string): ArtifactDetailsItem {
+	return { id, label, value: itemValue, copyText: itemValue };
+}
+
+function empty(id: string, label: string): ArtifactDetailsItem {
+	return { id, label };
+}

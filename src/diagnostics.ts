@@ -11,6 +11,9 @@ export function parseToolDiagnostics(
 	let pendingRustDiagnostic:
 		| { severity: 'error' | 'warning' | 'information'; message: string }
 		| undefined;
+	let pendingPythonLocation:
+		| { filename: string; line: number; column: number }
+		| undefined;
 	for (const line of output.split(/\r?\n/)) {
 		const gcc = /^(.*?):(\d+):(\d+):\s*(?:fatal\s+)?(error|warning|note):\s*(.*)$/.exec(line);
 		if (gcc) {
@@ -59,6 +62,36 @@ export function parseToolDiagnostics(
 					: rust[1] as 'error' | 'warning',
 				message: `${rust[2] ? `${rust[2]} ` : ''}${rust[3]}`,
 			};
+			continue;
+		}
+
+		const pythonLocation = /^\s*File "(.*)", line (\d+)(?:, in .*)?\s*$/.exec(line);
+		if (pythonLocation) {
+			pendingPythonLocation = {
+				filename: pythonLocation[1],
+				line: Number(pythonLocation[2]),
+				column: 0,
+			};
+			continue;
+		}
+		if (pendingPythonLocation && line.includes('^')) {
+			pendingPythonLocation.column = Math.max(0, line.indexOf('^') - 4);
+			continue;
+		}
+		const pythonError = /^(SyntaxError|IndentationError|TabError):\s*(.*)$/.exec(line);
+		if (pythonError && pendingPythonLocation) {
+			diagnostics.push({
+				uri: diagnosticUri(
+					pendingPythonLocation.filename,
+					fallbackSource,
+					workingDirectory,
+				),
+				line: Math.max(0, pendingPythonLocation.line - 1),
+				column: pendingPythonLocation.column,
+				severity: 'error',
+				message: `${pythonError[1]}: ${pythonError[2]}`,
+			});
+			pendingPythonLocation = undefined;
 		}
 	}
 	return diagnostics;

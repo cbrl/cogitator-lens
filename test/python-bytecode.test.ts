@@ -128,6 +128,7 @@ function rawArtifact(text: string): RawArtifact {
 		text,
 		diagnostics: [],
 		durationMs: 1,
+		generatedAt: 0,
 		command: {
 			executable: process.execPath,
 			arguments: ['-m', 'dis', 'C:\\project\\main.py'],

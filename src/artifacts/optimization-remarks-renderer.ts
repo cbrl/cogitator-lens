@@ -4,7 +4,6 @@ import type {
 	OptimizationRemarkCategory,
 	RawArtifact,
 	RenderedArtifact,
-	RenderedArtifactLine,
 } from '../types/index.js';
 import {
 	processRawGccOptRemarks,
@@ -12,7 +11,10 @@ import {
 } from '../vendor/lib/optimization-remarks.js';
 import type { OptRemark } from '../vendor/static/panes/opt-view.interfaces.js';
 import type { ArtifactRenderContext } from './artifact-definitions.js';
-import { renderedArtifact } from './rendered-artifact.js';
+import {
+	renderAnalysisSource,
+	sameSourcePath,
+} from './analysis-source-renderer.js';
 
 export interface OptimizationRemark {
 	readonly file?: string;
@@ -46,48 +48,13 @@ function renderOptimizationRemarks(
 ): RenderedArtifact {
 	const remarks = parser(raw.text, raw.command.workingDirectory);
 	const sourceFile = path.normalize(context.source.uri.fsPath);
-	const sourceLines = splitSourceLines(context.source.text);
+	const sourceLineCount = context.source.text.split(/\r\n|\n|\r/).length;
 	const mappedRemarks = remarks.filter(remark =>
 		remark.file !== undefined
 		&& remark.line !== undefined
 		&& remark.line >= 1
-		&& remark.line <= sourceLines.length
+		&& remark.line <= sourceLineCount
 		&& sameSourcePath(remark.file, sourceFile));
-	const remarksByLine = new Map<number, OptimizationRemark[]>();
-	for (const remark of mappedRemarks) {
-		const lineRemarks = remarksByLine.get(remark.line!) ?? [];
-		lineRemarks.push(remark);
-		remarksByLine.set(remark.line!, lineRemarks);
-	}
-
-	const lines: RenderedArtifactLine[] = sourceLines.flatMap((text, index) => {
-		const sourceLine = index + 1;
-		const lineRemarks = remarksByLine.get(sourceLine) ?? [];
-		const source = {
-			file: sourceFile,
-			line: sourceLine,
-			column: 0,
-			mainSource: true,
-		} as const;
-		return [
-			...lineRemarks.map(remark => ({
-				text: '',
-				source: {
-					...source,
-					column: Math.max(0, Math.min(
-						text.length,
-						(remark.column ?? 1) - 1,
-					)),
-				},
-				decorations: [{
-					kind: 'optimization-remark' as const,
-					category: remark.category,
-					text: `[${remark.category}] ${remark.pass}: ${remark.message}`,
-				}],
-			})),
-			{ text, source },
-		];
-	});
 	const categories = Object.fromEntries(
 		[...new Set(mappedRemarks.map(remark => remark.category))]
 			.sort()
@@ -96,11 +63,27 @@ function renderOptimizationRemarks(
 				mappedRemarks.filter(remark => remark.category === category).length,
 			]),
 	);
-	return renderedArtifact(raw, lines, {
-		remarkCount: mappedRemarks.length,
-		omittedRemarkCount: remarks.length - mappedRemarks.length,
-		categories,
-	});
+	return renderAnalysisSource(
+		raw,
+		context,
+		mappedRemarks.map(remark => ({
+			sourceUri: remark.file,
+			sourceLine: remark.line,
+			sourceColumn: remark.column,
+			annotation: {
+				kind: 'optimization-remark',
+				category: remark.category,
+				message: `${remark.pass}: ${remark.message}`,
+			},
+		})),
+		{
+			metrics: {
+				remarkCount: mappedRemarks.length,
+				omittedRemarkCount: remarks.length - mappedRemarks.length,
+				categories,
+			},
+		},
+	);
 }
 
 export function parseClangOptimizationRemarks(
@@ -163,16 +146,4 @@ function sourcePath(filename: string, workingDirectory: string): string {
 	return path.normalize(path.isAbsolute(filename)
 		? filename
 		: path.resolve(workingDirectory, filename));
-}
-
-function splitSourceLines(text: string): string[] {
-	return text.split(/\r\n|\n|\r/);
-}
-
-function sameSourcePath(left: string, right: string): boolean {
-	const normalizedLeft = path.resolve(left);
-	const normalizedRight = path.resolve(right);
-	return process.platform === 'win32'
-		? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
-		: normalizedLeft === normalizedRight;
 }

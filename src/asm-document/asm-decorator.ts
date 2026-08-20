@@ -15,6 +15,7 @@ import path from 'path';
 import { equalUri } from '../utils.js';
 import {
 	optimizationRemarkDecorations,
+	stackUsageDecoration,
 	selectedLineDecoration,
 	selectedSourceRangeDecoration,
 	stateDecoration,
@@ -23,7 +24,12 @@ import {
 import { EditorTracker } from './decorations/editor-tracker.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
 import type { CompileHandlerStatus, CompilationDocumentState } from './compile-handler.js';
-import type { RenderedArtifactLine } from '../types/index.js';
+import type {
+	OptimizationRemarkLineAnnotation,
+	RenderedArtifactLine,
+	StackUsageLineAnnotation,
+} from '../types/index.js';
+import { formatArtifactLineAnnotation } from '../artifacts/analysis-source-renderer.js';
 
 /*
 Nice-to-have features:
@@ -136,7 +142,7 @@ export class AsmDecorator {
 			// Recalculate active state now that asmData may have changed
 			this.updateActiveState();
 			this.dimUnusedSourceLines();
-			this.decorateOptimizationRemarks();
+			this.decorateAnalysisAnnotations();
 		}
 
 		// Treat as if the user selected the current line of the first editor (only highlights the line, doesn't scroll)
@@ -168,6 +174,7 @@ export class AsmDecorator {
 		for (const decoration of Object.values(optimizationRemarkDecorations)) {
 			editor.setDecorations(decoration, []);
 		}
+		editor.setDecorations(stackUsageDecoration, []);
 	}
 
 	private clearAllDecorations() {
@@ -337,7 +344,7 @@ export class AsmDecorator {
 		this.active = hasAsmEditor && hasAnySourceEditor;
 	}
 
-	private decorateOptimizationRemarks(): void {
+	private decorateAnalysisAnnotations(): void {
 		if (!this.asmData || this.asmData instanceof Error) {
 			return;
 		}
@@ -350,24 +357,49 @@ export class AsmDecorator {
 				if (index >= editor.document.lineCount) {
 					return [];
 				}
-				const remarks = line.decorations?.filter(candidate =>
+				const remarks = line.annotations?.filter(
+					(candidate): candidate is OptimizationRemarkLineAnnotation =>
 					candidate.kind === 'optimization-remark'
-					&& candidate.category === category) ?? [];
+					&& candidate.category === category,
+				) ?? [];
 				if (remarks.length === 0) {
 					return [];
 				}
 				const end = editor.document.lineAt(index).range.end;
 				return [{
 					range: new Range(end, end),
-					renderOptions: {
-						after: {
-							contentText: remarks.map(remark => remark.text).join(' · '),
+						renderOptions: {
+							after: {
+							contentText: remarks.map(formatArtifactLineAnnotation).join(' · '),
 						},
 					},
 				}];
 			});
 			editor.setDecorations(decoration, options);
 		}
+
+		const stackOptions = this.asmData.lines.flatMap((line, index) => {
+			if (index >= editor.document.lineCount) {
+				return [];
+			}
+			const entries = line.annotations?.filter(
+				(candidate): candidate is StackUsageLineAnnotation =>
+					candidate.kind === 'stack-usage',
+			) ?? [];
+			if (entries.length === 0) {
+				return [];
+			}
+			const end = editor.document.lineAt(index).range.end;
+			return [{
+				range: new Range(end, end),
+					renderOptions: {
+						after: {
+						contentText: entries.map(formatArtifactLineAnnotation).join(' · '),
+					},
+				},
+			}];
+		});
+		editor.setDecorations(stackUsageDecoration, stackOptions);
 	}
 
 	private onChangeVisibleEditors(): void {
@@ -407,6 +439,8 @@ export class AsmDecorator {
 				return 'Compiling…';
 			case 'stale':
 				return 'Assembly is stale. Refresh pending.';
+			case 'cancelled':
+				return 'Artifact generation was cancelled.';
 			case 'failed':
 				return this.truncated
 					? 'Compilation failed because process output was truncated.'

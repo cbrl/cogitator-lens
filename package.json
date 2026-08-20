@@ -2,7 +2,7 @@
     "name": "coglens",
     "displayName": "Cogitator Lens",
     "description": "Divine the substratal invocations of your digital canticles",
-    "version": "0.5.0",
+    "version": "0.6.0",
     "icon": "resources/gear-phi.png",
     "publisher": "cbrl",
     "license": "MPL-2.0",
@@ -103,6 +103,16 @@
                     "highContrast": "#4F4F18",
                     "highContrastLight": "#FFFFAE"
                 }
+            },
+            {
+                "id": "coglens.stackUsage.background",
+                "description": "Background color for stack-usage annotations.",
+                "defaults": {
+                    "dark": "#264F78",
+                    "light": "#D6EBFF",
+                    "highContrast": "#264F78",
+                    "highContrastLight": "#D6EBFF"
+                }
             }
         ],
         "viewsContainers": {
@@ -130,6 +140,11 @@
                     "id": "coglens.artifactOptions",
                     "name": "Artifact Options",
                     "icon": "$(filter)"
+                },
+                {
+                    "id": "coglens.artifactDetails",
+                    "name": "Artifact Details",
+                    "icon": "$(info)"
                 }
             ]
         },
@@ -549,6 +564,12 @@
                                 "additionalProperties": false,
                                 "properties": {}
                             },
+                            "stack-analysis": {
+                                "type": "object",
+                                "description": "Stack analysis options",
+                                "additionalProperties": false,
+                                "properties": {}
+                            },
                             "python-bytecode": {
                                 "type": "object",
                                 "description": "Python bytecode options",
@@ -579,6 +600,7 @@
                                         "llvm-ir",
                                         "rust-mir",
                                         "optimization-remarks",
+                                        "stack-analysis",
                                         "python-bytecode"
                                     ],
                                     "description": "Artifact kind produced by this preset"

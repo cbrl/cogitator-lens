@@ -36,10 +36,13 @@ test('artifact and toolchain tables define the complete cross-product', () => {
 
 test('the manifest toolchain-kind enum and artifactOptions schema stay synchronized with the code tables', () => {
 	const manifest = JSON.parse(fs.readFileSync('package.json', 'utf8')) as {
+		version: string;
 		capabilities: {
 			untrustedWorkspaces: { supported: boolean };
 		};
 		contributes: {
+			views: { coglens: Array<{ id: string }> };
+			colors: Array<{ id: string }>;
 			configuration: Array<{
 				properties: {
 					'coglens.toolchains': {
@@ -84,6 +87,13 @@ test('the manifest toolchain-kind enum and artifactOptions schema stay synchroni
 	);
 	assert.equal(manifest.capabilities.untrustedWorkspaces.supported, false);
 	assert.doesNotMatch(JSON.stringify(manifest.contributes.menus), /editorLangId/);
+	assert.equal(manifest.version, '0.6.0');
+	assert.ok(manifest.contributes.views.coglens.some(view =>
+		view.id === 'coglens.artifactDetails'));
+	assert.ok(manifest.contributes.colors.some(color =>
+		color.id === 'coglens.stackUsage.background'));
+	assert.match(fs.readFileSync('.vscodeignore', 'utf8'), /^test\/\*\*$/m);
+	assert.match(fs.readFileSync('.vscodeignore', 'utf8'), /^plans\/\*\*$/m);
 });
 
 test('the default preset is total and a configured default overrides it', () => {
@@ -128,6 +138,10 @@ test('production keys exclude display options and include every production reque
 	};
 	const source = { size: 10, mtimeMs: 20 };
 	const initial = productionKey(request, source);
+	assert.equal(productionKey({
+		...request,
+		onInvocation: () => {},
+	}, source), initial);
 	assert.equal(productionKey({
 		...request,
 		options: {
@@ -177,6 +191,7 @@ test('assembly rendering maps parsed lines without a binary-mode disassembly fal
 		text: 'main:\n  ret\n',
 		diagnostics: [],
 		durationMs: 1,
+		generatedAt: 0,
 		command: {
 			executable: process.execPath,
 			arguments: [],

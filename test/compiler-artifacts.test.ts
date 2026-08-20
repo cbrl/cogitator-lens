@@ -195,17 +195,19 @@ test('optimization renderer places each remark decoration on an empty row above 
 	);
 	assert.equal(rendered.lines.length, 17);
 	assert.equal(rendered.lines[7].text, '');
-	assert.deepEqual(rendered.lines[7].decorations?.[0], {
+	assert.deepEqual(rendered.lines[7].annotations?.[0], {
 		kind: 'optimization-remark',
 		category: 'passed',
-		text: '[passed] loop-vectorize: vectorized loop (vectorization width: 4)',
+		message: 'loop-vectorize: vectorized loop (vectorization width: 4)',
 	});
 	assert.equal(rendered.lines[7].source?.line, 8);
 	assert.equal(rendered.lines[7].source?.column, 2);
 	assert.equal(rendered.lines[8].text, 'source line 8');
-	assert.equal(rendered.lines[8].decorations, undefined);
+	assert.equal(rendered.lines[8].annotations, undefined);
 	assert.equal(rendered.lines[14].text, '');
-	assert.match(rendered.lines[14].decorations?.[0].text ?? '', /\[missed\] inline: external will not be inlined/);
+	const missed = rendered.lines[14].annotations?.[0];
+	assert.equal(missed?.kind, 'optimization-remark');
+	assert.match(missed?.kind === 'optimization-remark' ? missed.message : '', /inline: external will not be inlined/);
 	assert.equal(rendered.lines[15].text, 'source line 14');
 	assert.deepEqual(rendered.metrics.categories, { missed: 1, passed: 1 });
 	assert.equal(rendered.metrics.remarkCount, 2);
@@ -235,10 +237,10 @@ test('optimization renderer omits foreign, locationless, and out-of-range remark
 		'second line',
 		'third line',
 	]);
-	assert.deepEqual(rendered.lines[1].decorations, [{
+	assert.deepEqual(rendered.lines[1].annotations, [{
 		kind: 'optimization-remark',
 		category: 'passed',
-		text: '[passed] vectorizer: loop vectorized',
+		message: 'vectorizer: loop vectorized',
 	}]);
 	assert.equal(rendered.metrics.remarkCount, 1);
 	assert.equal(rendered.metrics.omittedRemarkCount, 3);
@@ -266,7 +268,12 @@ test('optimization renderer gives multiple remarks on one source line separate a
 		'second line',
 	]);
 	assert.deepEqual(
-		rendered.lines.slice(1, 3).map(line => line.decorations?.[0].category),
+		rendered.lines.slice(1, 3).map(line => {
+			const annotation = line.annotations?.[0];
+			return annotation?.kind === 'optimization-remark'
+				? annotation.category
+				: undefined;
+		}),
 		['passed', 'missed'],
 	);
 	assert.deepEqual(
@@ -341,6 +348,7 @@ function rawArtifact(kind: ArtifactKind, text: string): RawArtifact {
 		text,
 		diagnostics: [],
 		durationMs: 1,
+		generatedAt: 0,
 		command: {
 			executable: process.execPath,
 			arguments: [],

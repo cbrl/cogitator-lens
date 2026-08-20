@@ -67,6 +67,14 @@ import {
 	parseMakeDepfile,
 	parseMsvcSourceDependencies,
 } from '../compilation/artifact-inputs.js';
+import {
+	clangClStackAnalysisProducer,
+	nativeStackAnalysisProducer,
+} from '../artifacts/stack-analysis.js';
+import {
+	pythonStackAnalysisProducer,
+	renderPythonStackAnalysis,
+} from '../artifacts/python-stack-analysis.js';
 
 export type ToolCapabilityStatus = 'available' | 'unavailable' | 'unsupported';
 
@@ -307,6 +315,10 @@ const clangArtifacts = artifactCells({
 		producer: compilerOutputProducer('optimization-remarks', clangOptimizationRecord),
 		renderer: optimizationRemarksRenderer(parseClangOptimizationRemarks),
 	},
+	'stack-analysis': {
+		status: 'available',
+		producer: nativeStackAnalysisProducer,
+	},
 });
 
 const gccArtifacts = artifactCells({
@@ -320,6 +332,10 @@ const gccArtifacts = artifactCells({
 		status: 'available',
 		producer: compilerOutputProducer('optimization-remarks', gccOptimizationRecord),
 		renderer: optimizationRemarksRenderer(parseGccOptimizationRemarks),
+	},
+	'stack-analysis': {
+		status: 'available',
+		producer: nativeStackAnalysisProducer,
 	},
 });
 
@@ -353,6 +369,10 @@ const clangClArtifacts = artifactCells({
 		producer: compilerOutputProducer('optimization-remarks', clangClOptimizationRecord),
 		renderer: optimizationRemarksRenderer(parseClangOptimizationRemarks),
 	},
+	'stack-analysis': {
+		status: 'available',
+		producer: clangClStackAnalysisProducer,
+	},
 });
 
 const rustArtifacts = artifactCells({
@@ -376,6 +396,11 @@ const pythonArtifacts = artifactCells({
 	'python-bytecode': {
 		status: 'available',
 		producer: pythonBytecodeProducer,
+	},
+	'stack-analysis': {
+		status: 'available',
+		producer: pythonStackAnalysisProducer,
+		renderer: renderPythonStackAnalysis,
 	},
 });
 

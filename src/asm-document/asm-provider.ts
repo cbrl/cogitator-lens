@@ -22,11 +22,13 @@ import {
 	workspace,
 } from 'vscode';
 import path from 'path';
+import { artifactDefinitions } from '../artifacts/artifact-definitions.js';
 import { CompilationService } from '../compilation/index.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
 import {
 	CompilationError,
 	type CompileDiagnostic,
+	type ArtifactKind,
 	type RenderedArtifact,
 } from '../types/index.js';
 import { toComparisonKey } from '../utils.js';
@@ -42,12 +44,33 @@ import { CompileHandler } from './compile-handler.js';
 import type { CompileHandlerStatus } from './compile-handler.js';
 
 interface ArtifactDocument {
+	readonly identity: ArtifactDocumentIdentity;
 	readonly handler: CompileHandler;
 	readonly watcher: Disposable;
 	decorator?: AsmDecorator;
 	assembly?: CompiledAssembly;
 	pendingRefresh?: ReturnType<typeof setTimeout>;
 	diagnostics: readonly CompileDiagnostic[];
+}
+
+export interface ArtifactDocumentIdentity {
+	readonly documentUri: string;
+	readonly sourceUri: string;
+	readonly sourceLabel: string;
+	readonly artifactKind: ArtifactKind;
+	readonly artifactLabel: string;
+	readonly presetId: string;
+	readonly variantId: string;
+	readonly variantLabel: string;
+	readonly toolchainId: string;
+	readonly toolchainLabel: string;
+	readonly toolchainKind: string;
+	readonly renderedIdentity: string;
+}
+
+export interface ArtifactDocumentSnapshot {
+	readonly identity: ArtifactDocumentIdentity;
+	readonly status: CompileHandlerStatus;
 }
 
 function documentKey(uri: Uri): string {
@@ -60,6 +83,7 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 	private readonly documents = new Map<string, ArtifactDocument>();
 	private readonly sourceToAssembly = sourceUriMap<UriSet>();
 	private readonly changeEmitter = new EventEmitter<Uri>();
+	private readonly artifactStateEmitter = new EventEmitter<ArtifactDocumentSnapshot>();
 	private readonly diagnostics: DiagnosticCollection = languages.createDiagnosticCollection('coglens');
 	private readonly statusBar: StatusBarItem = window.createStatusBarItem(StatusBarAlignment.Right, 1000);
 	private readonly subscriptions: Disposable[];
@@ -88,6 +112,7 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 				}
 			}),
 			this.changeEmitter,
+			this.artifactStateEmitter,
 			this.diagnostics,
 			this.statusBar,
 		];
@@ -136,12 +161,24 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 		return this.changeEmitter.event;
 	}
 
+	get onDidChangeArtifactState(): Event<ArtifactDocumentSnapshot> {
+		return this.artifactStateEmitter.event;
+	}
+
 	getCompiledAssembly(uri: Uri): CompiledAssembly | undefined {
 		return this.documents.get(documentKey(uri))?.assembly;
 	}
 
 	getRenderedArtifact(uri: Uri): RenderedArtifact | undefined {
 		return this.documents.get(documentKey(uri))?.handler.status.artifact;
+	}
+
+	/** Returns already-known state only; activating a details view never compiles. */
+	getArtifactDocumentState(uri: Uri): ArtifactDocumentSnapshot | undefined {
+		const document = this.documents.get(documentKey(uri));
+		return document
+			? { identity: document.identity, status: document.handler.status }
+			: undefined;
 	}
 
 	requestRefresh(assemblyUri: Uri): void {
@@ -196,6 +233,22 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 			identity.presetId,
 			this.compilationService,
 		);
+		const profile = this.compilationService.toolchainRegistry
+			.getToolchainById(variant.toolchainProfileId)?.profile;
+		const documentIdentity: ArtifactDocumentIdentity = {
+			documentUri: assemblyUri.toString(),
+			sourceUri: identity.source.toString(),
+			sourceLabel: identity.source.fsPath,
+			artifactKind: identity.artifactKind,
+			artifactLabel: artifactDefinitions[identity.artifactKind].label,
+			presetId: identity.presetId,
+			variantId: variant.id,
+			variantLabel: variant.displayLabel,
+			toolchainId: profile?.id ?? variant.toolchainProfileId,
+			toolchainLabel: profile?.displayName ?? variant.toolchainProfileId,
+			toolchainKind: profile?.kind ?? 'unknown',
+			renderedIdentity: assemblyUri.toString(),
+		};
 
 		let assemblyUris = this.sourceToAssembly.get(identity.source);
 		if (!assemblyUris) {
@@ -209,6 +262,7 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 			path.basename(identity.source.fsPath),
 		));
 		const document: ArtifactDocument = {
+			identity: documentIdentity,
 			handler,
 			watcher: Disposable.from(
 				watcher,
@@ -218,6 +272,10 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 			diagnostics: [],
 		};
 		this.documents.set(key, document);
+		this.artifactStateEmitter.fire({
+			identity: documentIdentity,
+			status: handler.status,
+		});
 
 		return document;
 	}
@@ -233,6 +291,7 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 			document.assembly = undefined;
 		}
 		this.updateStatusBar(document.handler, status);
+		this.artifactStateEmitter.fire({ identity: document.identity, status });
 	}
 
 	private setDiagnostics(document: ArtifactDocument, items: readonly CompileDiagnostic[]): void {
@@ -291,6 +350,9 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 				break;
 			case 'stale':
 				this.statusBar.text = `$(history) Cogitator Lens: Stale ${sourceName}`;
+				break;
+			case 'cancelled':
+				this.statusBar.text = `$(circle-slash) Cogitator Lens: Cancelled ${sourceName}`;
 				break;
 			case 'failed':
 				this.statusBar.text = status.truncated

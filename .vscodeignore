@@ -11,6 +11,7 @@ test/**
 eslint.config.mjs
 esbuild.js
 PLAN.md
+plans/**
 scripts/**
 tsconfig.json
 tsconfig.unit.json

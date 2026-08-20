@@ -326,6 +326,7 @@ function rawArtifact(kind: ArtifactKind, text: string): RawArtifact {
 		text,
 		diagnostics: [],
 		durationMs: 1,
+		generatedAt: 0,
 		command: {
 			executable: process.execPath,
 			arguments: [],

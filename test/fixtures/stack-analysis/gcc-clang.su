@@ -1,0 +1,8 @@
+src/source.cpp:2:5:plain(int)	16	static
+src/source.cpp:4:9:network::Parser::parse<std::pair<int, int> >(char const*)	32	dynamic,bounded
+C:\work dir\source.cpp:8:3:lambda_factory()::<lambda(int)>	64	dynamic
+src/source.cpp:2:5:plain(int)	16	static
+src/source.cpp:12:1:bounded_alias()	24	dynamic bounded
+malformed record
+src/source.cpp:7:2:negative()	-1	static
+src/source.cpp:7:2:huge()	999999999999999999999	static

@@ -18,6 +18,8 @@ import {
 	CompilationInfoTreeProvider,
 } from './tree/compilation-info-tree.js';
 import { GlobalOptionsTreeProvider } from './tree/global-options-tree.js';
+import { ArtifactDetailsTreeProvider } from './tree/artifact-details-tree.js';
+import type { AsmProvider } from './asm-document/asm-provider.js';
 import { TreeNode } from './tree/treedata.js';
 import * as logger from './logger.js';
 
@@ -27,8 +29,9 @@ export function setupCommands(
 	configuration: ConfigurationService,
 ): void {
 	const copyText = vscode.commands.registerCommand('coglens.CopyText', async (node?: TreeNode) => {
-		if (node?.label) {
-			await vscode.env.clipboard.writeText(node.label);
+		const text = node?.copyText ?? node?.label;
+		if (text !== undefined) {
+			await vscode.env.clipboard.writeText(text);
 		}
 	});
 
@@ -431,5 +434,29 @@ export function createGlobalOptionsTreeView(
 		}),
 	);
 
+	return provider;
+}
+
+export function createArtifactDetailsTreeView(
+	context: vscode.ExtensionContext,
+	artifacts: AsmProvider,
+): ArtifactDetailsTreeProvider {
+	const provider = new ArtifactDetailsTreeProvider(artifacts);
+	const view = vscode.window.createTreeView('coglens.artifactDetails', {
+		treeDataProvider: provider,
+	});
+	const followActiveEditor = (): void =>
+		provider.setActiveDocument(vscode.window.activeTextEditor?.document.uri);
+	context.subscriptions.push(
+		view,
+		vscode.window.onDidChangeActiveTextEditor(followActiveEditor),
+		artifacts.onDidChangeArtifactState(snapshot => provider.acceptArtifactState(snapshot)),
+		view.onDidChangeVisibility(event => {
+			if (event.visible) {
+				followActiveEditor();
+			}
+		}),
+	);
+	followActiveEditor();
 	return provider;
 }

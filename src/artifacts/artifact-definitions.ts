@@ -14,6 +14,7 @@ import { renderPythonBytecode } from './python-bytecode-renderer.js';
 import { renderedArtifact } from './rendered-artifact.js';
 import { renderPreprocessedSource } from './preprocessed-source-renderer.js';
 import { renderRustMir } from './rust-mir-renderer.js';
+import { renderNativeStackAnalysis } from './stack-analysis.js';
 
 export interface ArtifactOptionDescriptor {
 	readonly id: keyof ArtifactOptions['production'] | keyof ArtifactOptions['display'];
@@ -51,6 +52,7 @@ interface ArtifactDefinitionShape {
 	readonly options: readonly ArtifactOptionDescriptor[];
 	readonly renderer: ArtifactRenderer;
 	readonly navigation: ArtifactNavigationFeatures;
+	readonly metricLabels?: Readonly<Record<string, string>>;
 }
 
 const displayOptionDescriptors = {
@@ -225,6 +227,29 @@ export const artifactDefinitions = {
 			links: false,
 			folds: false,
 			symbols: false,
+		},
+	},
+	'stack-analysis': {
+		label: 'Stack analysis',
+		filenameExtension: '.stack',
+		documentLanguage: 'source',
+		options: [],
+		renderer: renderNativeStackAnalysis,
+		navigation: {
+			definitions: true,
+			sourceLocations: true,
+			links: false,
+			folds: false,
+			symbols: false,
+		},
+		metricLabels: {
+			functionCount: 'Function count',
+			largestFrame: 'Largest known frame',
+			largestFrameUnit: 'Largest frame unit',
+			totalKnownFrame: 'Total known frame',
+			totalKnownFrameUnit: 'Total frame unit',
+			dynamicFrameCount: 'Dynamic frame count',
+			unmappedEntryCount: 'Unmapped entry count',
 		},
 	},
 	'python-bytecode': {

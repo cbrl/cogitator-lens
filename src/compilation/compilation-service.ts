@@ -27,6 +27,7 @@ import {
 	artifactOptionsEqual,
 	CompilationError,
 	immutableArtifactOptions,
+	invocationDetails,
 	productionKey,
 	UnsupportedToolVersionError,
 } from '../types/index.js';
@@ -58,6 +59,7 @@ export class CompilationService {
 	private readonly subscriptions: Disposable[] = [];
 	private readonly rawArtifactCache = new Map<string, RawArtifact>();
 	private readonly inputToRawCacheKeys = new Map<string, Set<string>>();
+	private readonly rawCacheKeyToSource = new Map<string, Uri>();
 	private readonly currentArtifactOptions = new Map<ArtifactKind, ArtifactOptions>();
 
 	readonly onVariantsChanged: Event<readonly Uri[]> = this.changeEmitter.event;
@@ -194,6 +196,7 @@ export class CompilationService {
 		};
 		const cached = this.rawArtifactCache.get(key);
 		if (cached && await validateArtifactInputs(cached.inputs)) {
+			request.onInvocation?.(invocationDetails(cached.command));
 			return {
 				status: 'available',
 				artifact: await this.renderArtifact(cached, options, renderContext),
@@ -211,10 +214,11 @@ export class CompilationService {
 					env: variant.environment,
 					workingDirectory: variant.workingDirectory,
 					productionOptions: options.production,
+					onInvocation: request.onInvocation,
 				},
 				cancellationToken,
 			);
-			this.cacheRawArtifact(key, raw);
+			this.cacheRawArtifact(key, raw, variant.source);
 			return {
 				status: 'available',
 				artifact: await this.renderArtifact(raw, options, renderContext),
@@ -314,9 +318,10 @@ export class CompilationService {
 		return `coglens.variant.${file.toString()}`;
 	}
 
-	private cacheRawArtifact(key: string, artifact: RawArtifact): void {
+	private cacheRawArtifact(key: string, artifact: RawArtifact, source: Uri): void {
 		this.removeRawArtifact(key);
 		this.rawArtifactCache.set(key, artifact);
+		this.rawCacheKeyToSource.set(key, source);
 		for (const input of artifact.inputs) {
 			const inputKey = artifactInputComparisonKey(input.uri);
 			const keys = this.inputToRawCacheKeys.get(inputKey) ?? new Set<string>();
@@ -331,6 +336,7 @@ export class CompilationService {
 			return;
 		}
 		this.rawArtifactCache.delete(key);
+		this.rawCacheKeyToSource.delete(key);
 		for (const input of artifact.inputs) {
 			const inputKey = artifactInputComparisonKey(input.uri);
 			const keys = this.inputToRawCacheKeys.get(inputKey);
@@ -344,12 +350,21 @@ export class CompilationService {
 	private clearRawArtifactCache(): void {
 		this.rawArtifactCache.clear();
 		this.inputToRawCacheKeys.clear();
+		this.rawCacheKeyToSource.clear();
 	}
 
 	private evictInput(uri: Uri): void {
 		const inputKey = artifactInputComparisonKey(pathToFileURL(uri.fsPath).href);
+		const affectedSources = new Map<string, Uri>();
 		for (const key of [...(this.inputToRawCacheKeys.get(inputKey) ?? [])]) {
+			const source = this.rawCacheKeyToSource.get(key);
+			if (source) {
+				affectedSources.set(source.toString(), source);
+			}
 			this.removeRawArtifact(key);
+		}
+		if (affectedSources.size > 0) {
+			this.changeEmitter.fire([...affectedSources.values()]);
 		}
 	}
 }

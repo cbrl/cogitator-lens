@@ -1,4 +1,5 @@
 import type { toolchainDefinitions } from '../toolchains/toolchain-map.js';
+import type { InvocationDetails } from './compilation-types.js';
 
 /** Toolchain configuration at the public settings boundary. */
 export type ToolchainKind = keyof typeof toolchainDefinitions;
@@ -30,4 +31,6 @@ export interface CompileOptions {
 	env?: Readonly<Record<string, string>>;
 	workingDirectory?: string;
 	productionOptions: import('./artifact-options.js').ProductionOptions;
+	/** Internal observer; environment values must never cross this boundary. */
+	onInvocation?: (details: InvocationDetails) => void;
 }

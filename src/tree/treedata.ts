@@ -19,6 +19,9 @@ export type TreeContextSpecifier =
 	| 'userToolchain';
 
 export class TreeNode {
+	/** Stable identity used to preserve tree rows across refreshes. */
+	id?: string;
+
 	/**
 	 * The label to display in the tree view.
 	 */
@@ -59,6 +62,9 @@ export class TreeNode {
 
 	disabled?: boolean;
 
+	/** Value copied by the shared tree-item copy command. */
+	copyText?: string;
+
 	command?: vscode.Command;
 }
 
@@ -70,11 +76,15 @@ export class TreeItem extends vscode.TreeItem {
 		const { label, nodeType, treeContext, iconPath } = node;
 
 		this.label = label;
+		this.id = node.id;
 		this.iconPath = iconPath;
 		this.tooltip = node.tooltip;
 		this.description = node.description;
 		this.contextValue = treeContext ?? nodeType;
 		this.command = node.command;
+		this.accessibilityInformation = {
+			label: [node.label, node.description].filter(Boolean).join(': '),
+		};
 
 		if (nodeType === 'subtree') {
 			this.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;

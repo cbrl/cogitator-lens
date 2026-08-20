@@ -38,6 +38,14 @@ export class ToolExitError extends Error {
 	}
 }
 
+/** A successful tool invocation did not create its required artifact file. */
+export class MissingToolOutputError extends Error {
+	constructor(public readonly filename: string, options?: ErrorOptions) {
+		super(`Toolchain did not produce the expected output file: ${filename}`, options);
+		this.name = 'MissingToolOutputError';
+	}
+}
+
 export interface BinaryDisassembler {
 	readonly tool: string;
 	readonly arguments: (objectFile: string) => readonly string[];
@@ -95,7 +103,7 @@ const flagsWithSeparateValues = new Set([
 ]);
 const flagsWithJoinedValues =
 	/^(?:-o|-MF|-MT|-MQ|\/[Ff][OoAaDdIi]|\/[Ss]ource[Dd]ependencies:).+/;
-const artifactOutputFlags = /^(?:-emit-llvm|-fsave-optimization-record(?:=.*)?|-foptimization-record-file(?:=.*)?|-fopt-info(?:-[^=]+)?(?:=.*)?|\/clang:-(?:emit-llvm|S|gline-tables-only|fsave-optimization-record(?:=.*)?|foptimization-record-file(?:=.*)?))$/;
+const artifactOutputFlags = /^(?:-emit-llvm|-f(?:no-)?stack-usage|-fsave-optimization-record(?:=.*)?|-foptimization-record-file(?:=.*)?|-fopt-info(?:-[^=]+)?(?:=.*)?|\/clang:-(?:emit-llvm|S|gline-tables-only|f(?:no-)?stack-usage|fsave-optimization-record(?:=.*)?|foptimization-record-file(?:=.*)?))$/;
 const compilerManagedFlags = new Set([
 	'-S',
 	'-c',
@@ -194,6 +202,7 @@ interface PreparedInvocation {
 	readonly argumentsList: readonly string[];
 	readonly providerArguments: readonly string[];
 	readonly overriddenNames: readonly string[];
+	readonly environmentVariableNames: readonly string[];
 	readonly started: number;
 }
 
@@ -278,12 +287,13 @@ export class ToolchainBackend {
 					invocation.workingDirectory,
 				),
 				durationMs: performance.now() - invocation.started,
+				generatedAt: Date.now(),
 				truncated: false,
 				...inputMetadata,
 				command: {
 					executable: this.profile.executable,
 					arguments: invocation.argumentsList,
-					environmentVariableNames: invocation.overriddenNames,
+					environmentVariableNames: invocation.environmentVariableNames,
 					workingDirectory: invocation.workingDirectory,
 				},
 			};
@@ -335,6 +345,12 @@ export class ToolchainBackend {
 			}
 
 			const disassemblerArguments = disassembler.arguments(objectFile);
+			this.reportInvocation(
+				options,
+				invocation,
+				disassemblerExecutable,
+				disassemblerArguments,
+			);
 			logChannel.info(`Command: ${disassemblerExecutable} ${disassemblerArguments.join(' ')}`);
 			const disassemblerResult = await exec.execute(disassemblerExecutable, disassemblerArguments, {
 				cwd: invocation.workingDirectory,
@@ -369,12 +385,13 @@ export class ToolchainBackend {
 					invocation.workingDirectory,
 				),
 				durationMs: performance.now() - invocation.started,
+				generatedAt: Date.now(),
 				truncated: false,
 				...inputMetadata,
 				command: {
 					executable: disassemblerExecutable,
 					arguments: disassemblerArguments,
-					environmentVariableNames: invocation.overriddenNames,
+					environmentVariableNames: invocation.environmentVariableNames,
 					workingDirectory: invocation.workingDirectory,
 				},
 			};
@@ -437,12 +454,13 @@ export class ToolchainBackend {
 					invocation.workingDirectory,
 				),
 				durationMs: performance.now() - invocation.started,
+				generatedAt: Date.now(),
 				truncated: false,
 				...inputMetadata,
 				command: {
 					executable: this.profile.executable,
 					arguments: invocation.argumentsList,
-					environmentVariableNames: invocation.overriddenNames,
+					environmentVariableNames: invocation.environmentVariableNames,
 					workingDirectory: invocation.workingDirectory,
 				},
 			};
@@ -500,12 +518,13 @@ export class ToolchainBackend {
 					invocation.workingDirectory,
 				),
 				durationMs: performance.now() - invocation.started,
+				generatedAt: Date.now(),
 				truncated: false,
 				...inputMetadata,
 				command: {
 					executable: this.profile.executable,
 					arguments: invocation.argumentsList,
-					environmentVariableNames: invocation.overriddenNames,
+					environmentVariableNames: invocation.environmentVariableNames,
 					workingDirectory: invocation.workingDirectory,
 				},
 			};
@@ -578,14 +597,33 @@ export class ToolchainBackend {
 			source.fsPath,
 		];
 
-		return {
+		const invocation = {
 			workingDirectory,
 			preparedEnvironment,
 			argumentsList,
 			providerArguments,
 			overriddenNames: Object.keys({ ...this.profile.environment, ...options.env }).sort(),
+			environmentVariableNames: Object.keys(preparedEnvironment).sort(),
 			started: performance.now(),
 		};
+		this.reportInvocation(options, invocation);
+		return invocation;
+	}
+
+	private reportInvocation(
+		options: CompileOptions,
+		invocation: PreparedInvocation,
+		executable = this.profile.executable,
+		args: readonly string[] = invocation.argumentsList,
+	): void {
+		options.onInvocation?.(Object.freeze({
+			executable,
+			args: Object.freeze([...args]),
+			cwd: invocation.workingDirectory,
+			environmentVariableNames: Object.freeze([
+				...invocation.environmentVariableNames,
+			]),
+		}));
 	}
 
 	private async collectDependencyInputs(
@@ -698,7 +736,7 @@ async function readBoundedArtifactFile(
 		if (optional && (error as NodeJS.ErrnoException).code === 'ENOENT') {
 			return '';
 		}
-		throw new Error(`Toolchain did not produce the expected output file: ${filename}`, {
+		throw new MissingToolOutputError(filename, {
 			cause: error,
 		});
 	}
