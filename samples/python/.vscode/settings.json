@@ -10,9 +10,20 @@
         "toolchain": "Sample Python"
     },
     "coglens.artifactPresets": {
-        "ast": { "artifactKind": "ast" },
-        "bytecode": { "artifactKind": "python-bytecode", "extraArguments": ["-O"] },
-        "stack-analysis": { "artifactKind": "stack-analysis", "extraArguments": ["-O"] },
-        "control-flow": { "artifactKind": "control-flow-graph", "extraArguments": ["-O"] }
+        "ast": {
+			"artifactKind": "ast"
+		},
+        "bytecode": {
+			"artifactKind": "python-bytecode",
+			"extraArguments": ["-O"]
+		},
+        "stack-analysis": {
+			"artifactKind": "stack-analysis",
+			"extraArguments": ["-O"]
+		},
+        "control-flow": {
+			"artifactKind": "control-flow-graph",
+			"extraArguments": ["-O"]
+		}
     }
 }

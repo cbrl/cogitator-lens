@@ -17,9 +17,21 @@
                 "defaultArguments": ["-std=c17", "-Iinclude"]
             },
             {
+                "displayName": "Sample GCC C",
+                "kind": "gcc",
+                "executable": "gcc",
+                "defaultArguments": ["-std=c17", "-Iinclude"]
+            },
+            {
                 "displayName": "Sample Clang C++",
                 "kind": "clang",
                 "executable": "clang++",
+                "defaultArguments": ["-std=c++20", "-Iinclude"]
+            },
+            {
+                "displayName": "Sample GCC C++",
+                "kind": "gcc",
+                "executable": "g++",
                 "defaultArguments": ["-std=c++20", "-Iinclude"]
             },
             {
