@@ -41,6 +41,7 @@ test('the manifest toolchain-kind enum and artifactOptions schema stay synchroni
 			untrustedWorkspaces: { supported: boolean };
 		};
 		contributes: {
+			commands: Array<{ command: string }>;
 			views: { coglens: Array<{ id: string }> };
 			colors: Array<{ id: string }>;
 			configuration: Array<{
@@ -87,7 +88,9 @@ test('the manifest toolchain-kind enum and artifactOptions schema stay synchroni
 	);
 	assert.equal(manifest.capabilities.untrustedWorkspaces.supported, false);
 	assert.doesNotMatch(JSON.stringify(manifest.contributes.menus), /editorLangId/);
-	assert.equal(manifest.version, '0.6.0');
+	assert.equal(manifest.version, '0.7.0');
+	assert.ok(manifest.contributes.commands.some(command =>
+		command.command === 'coglens.OpenControlFlowGraph'));
 	assert.ok(manifest.contributes.views.coglens.some(view =>
 		view.id === 'coglens.artifactDetails'));
 	assert.ok(manifest.contributes.colors.some(color =>

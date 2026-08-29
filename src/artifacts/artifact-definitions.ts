@@ -4,6 +4,7 @@ import type {
 	RawArtifact,
 	RenderedArtifactLine,
 	RenderedArtifact,
+	RenderedTextArtifact,
 } from '../types/index.js';
 import type { ToolchainBackend } from '../toolchains/toolchain-backend.js';
 import type { Uri } from 'vscode';
@@ -15,6 +16,7 @@ import { renderedArtifact } from './rendered-artifact.js';
 import { renderPreprocessedSource } from './preprocessed-source-renderer.js';
 import { renderRustMir } from './rust-mir-renderer.js';
 import { renderNativeStackAnalysis } from './stack-analysis.js';
+import { renderControlFlowGraphArtifact } from './control-flow-graph-renderer.js';
 
 export interface ArtifactOptionDescriptor {
 	readonly id: keyof ArtifactOptions['production'] | keyof ArtifactOptions['display'];
@@ -46,6 +48,7 @@ export type ArtifactRenderer = (
 ) => RenderedArtifact | Promise<RenderedArtifact>;
 
 interface ArtifactDefinitionShape {
+	readonly presentation: 'text' | 'graph';
 	readonly label: string;
 	readonly filenameExtension: string;
 	readonly documentLanguage: 'artifact' | 'source';
@@ -132,6 +135,7 @@ const binaryDisassemblyOptions = [
 
 export const artifactDefinitions = {
 	assembly: {
+		presentation: 'text',
 		label: 'Assembly',
 		filenameExtension: '.asm',
 		documentLanguage: 'artifact',
@@ -146,6 +150,7 @@ export const artifactDefinitions = {
 		},
 	},
 	'binary-disassembly': {
+		presentation: 'text',
 		label: 'Binary disassembly',
 		filenameExtension: '.disasm',
 		documentLanguage: 'artifact',
@@ -160,6 +165,7 @@ export const artifactDefinitions = {
 		},
 	},
 	'preprocessed-source': {
+		presentation: 'text',
 		label: 'Preprocessed source',
 		filenameExtension: '.preprocessed',
 		documentLanguage: 'source',
@@ -174,6 +180,7 @@ export const artifactDefinitions = {
 		},
 	},
 	ast: {
+		presentation: 'text',
 		label: 'Abstract syntax tree',
 		filenameExtension: '.ast',
 		documentLanguage: 'artifact',
@@ -188,6 +195,7 @@ export const artifactDefinitions = {
 		},
 	},
 	'llvm-ir': {
+		presentation: 'text',
 		label: 'LLVM IR',
 		filenameExtension: '.ll',
 		documentLanguage: 'artifact',
@@ -202,6 +210,7 @@ export const artifactDefinitions = {
 		},
 	},
 	'rust-mir': {
+		presentation: 'text',
 		label: 'Rust MIR',
 		filenameExtension: '.mir',
 		documentLanguage: 'artifact',
@@ -216,6 +225,7 @@ export const artifactDefinitions = {
 		},
 	},
 	'optimization-remarks': {
+		presentation: 'text',
 		label: 'Optimization remarks',
 		filenameExtension: '.opt',
 		documentLanguage: 'source',
@@ -230,6 +240,7 @@ export const artifactDefinitions = {
 		},
 	},
 	'stack-analysis': {
+		presentation: 'text',
 		label: 'Stack analysis',
 		filenameExtension: '.stack',
 		documentLanguage: 'source',
@@ -253,6 +264,7 @@ export const artifactDefinitions = {
 		},
 	},
 	'python-bytecode': {
+		presentation: 'text',
 		label: 'Python bytecode',
 		filenameExtension: '.pybytecode',
 		documentLanguage: 'artifact',
@@ -264,6 +276,29 @@ export const artifactDefinitions = {
 			links: false,
 			folds: false,
 			symbols: false,
+		},
+	},
+	'control-flow-graph': {
+		presentation: 'graph',
+		label: 'Control-flow graph',
+		filenameExtension: '.cfg',
+		documentLanguage: 'artifact',
+		options: [],
+		renderer: renderControlFlowGraphArtifact,
+		navigation: {
+			definitions: false,
+			sourceLocations: false,
+			links: false,
+			folds: false,
+			symbols: false,
+		},
+		metricLabels: {
+			graphCount: 'Function graphs',
+			nodeCount: 'Basic blocks',
+			edgeCount: 'Control-flow edges',
+			branchNodeCount: 'Branch blocks',
+			unreachableNodeCount: 'Unreachable blocks',
+			sourceMappedNodeCount: 'Source-mapped blocks',
 		},
 	},
 } as const satisfies Record<string, ArtifactDefinitionShape>;
@@ -285,19 +320,23 @@ function renderToolchainArtifact(
 	raw: RawArtifact,
 	options: DisplayOptions,
 	context: ArtifactRenderContext,
-): RenderedArtifact {
-	return context.backend.renderArtifact(raw, options, context);
+): RenderedTextArtifact {
+	const artifact = context.backend.renderArtifact(raw, options, context);
+	if (artifact.presentation !== 'text') {
+		throw new Error(`Expected a text renderer for ${raw.kind}.`);
+	}
+	return artifact;
 }
 
 function renderAssembly(
 	raw: RawArtifact,
 	options: DisplayOptions,
 	context: ArtifactRenderContext,
-): RenderedArtifact {
+): RenderedTextArtifact {
 	const parsed = context.backend.parseAssembly(raw.text, options);
 	const lines = parsed.asm.map(parsedLine);
 	return withLabelNavigation(renderedArtifact(raw, lines, {
-		labelDefinitions: parsed.labelDefinitions,
+		labelCount: Object.keys(parsed.labelDefinitions ?? {}).length,
 	}), parsed);
 }
 
@@ -305,7 +344,7 @@ function renderBinaryDisassembly(
 	raw: RawArtifact,
 	options: DisplayOptions,
 	context: ArtifactRenderContext,
-): RenderedArtifact {
+): RenderedTextArtifact {
 	const parsed = context.backend.parseBinaryDisassembly(raw.text, options);
 	const lines = parsed.asm.map(parsedLine);
 	return withLabelNavigation(renderedArtifact(raw, lines, {
@@ -318,9 +357,9 @@ function renderBinaryDisassembly(
 }
 
 function withLabelNavigation(
-	artifact: RenderedArtifact,
+	artifact: RenderedTextArtifact,
 	parsed: ParsedAsmResult,
-): RenderedArtifact {
+): RenderedTextArtifact {
 	const definitions = parsed.labelDefinitions ?? {};
 	const links = parsed.asm.flatMap((line, lineIndex) =>
 		(line.labels ?? []).flatMap(label => {

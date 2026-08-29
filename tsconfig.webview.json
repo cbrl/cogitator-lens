@@ -1,0 +1,18 @@
+{
+	"compilerOptions": {
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"target": "ES2022",
+		"lib": ["ES2022", "DOM", "DOM.Iterable"],
+		"strict": true,
+		"noEmit": true,
+		"types": ["node", "vscode"]
+	},
+	"include": [
+		"webview-src/**/*.ts",
+		"src/webview/graph-protocol.ts",
+		"src/artifacts/control-flow-graph-model.ts",
+		"src/types/**/*.ts",
+		"src/artifacts/artifact-definitions.ts"
+	]
+}

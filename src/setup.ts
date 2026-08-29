@@ -22,6 +22,7 @@ import { ArtifactDetailsTreeProvider } from './tree/artifact-details-tree.js';
 import type { AsmProvider } from './asm-document/asm-provider.js';
 import { TreeNode } from './tree/treedata.js';
 import * as logger from './logger.js';
+import type { GraphPanelManager } from './webview/graph-panel-manager.js';
 
 export function setupCommands(
 	context: vscode.ExtensionContext,
@@ -440,17 +441,34 @@ export function createGlobalOptionsTreeView(
 export function createArtifactDetailsTreeView(
 	context: vscode.ExtensionContext,
 	artifacts: AsmProvider,
+	graphs?: GraphPanelManager,
 ): ArtifactDetailsTreeProvider {
 	const provider = new ArtifactDetailsTreeProvider(artifacts);
 	const view = vscode.window.createTreeView('coglens.artifactDetails', {
 		treeDataProvider: provider,
 	});
-	const followActiveEditor = (): void =>
-		provider.setActiveDocument(vscode.window.activeTextEditor?.document.uri);
+	const followActiveEditor = (): void => {
+		const graph = graphs?.activeSnapshot;
+		if (graph) {
+			provider.setActiveSnapshot(graph);
+		} else {
+			provider.setActiveDocument(vscode.window.activeTextEditor?.document.uri);
+		}
+	};
 	context.subscriptions.push(
 		view,
 		vscode.window.onDidChangeActiveTextEditor(followActiveEditor),
 		artifacts.onDidChangeArtifactState(snapshot => provider.acceptArtifactState(snapshot)),
+		...(graphs ? [
+			graphs.onDidChangeArtifactState(snapshot => provider.acceptArtifactState(snapshot)),
+			graphs.onDidChangeActiveGraph(snapshot => {
+				if (snapshot) {
+					provider.setActiveSnapshot(snapshot);
+				} else {
+					followActiveEditor();
+				}
+			}),
+		] : []),
 		view.onDidChangeVisibility(event => {
 			if (event.visible) {
 				followActiveEditor();

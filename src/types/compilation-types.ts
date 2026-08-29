@@ -175,23 +175,87 @@ export interface ArtifactSymbol {
 	readonly line: number;
 }
 
-export interface RenderedArtifact {
+export type RenderedArtifactMetric = string | number | boolean;
+
+export interface ControlFlowSourceLocation {
+	/** A local source URI. Lines and columns are zero-based editor positions. */
+	readonly uri: string;
+	readonly line: number;
+	readonly column: number;
+	readonly endLine?: number;
+	readonly endColumn?: number;
+}
+
+export type ControlFlowTerminal =
+	| 'return'
+	| 'throw'
+	| 'resume'
+	| 'unreachable';
+
+export type ControlFlowEdgeKind =
+	| 'unconditional'
+	| 'true'
+	| 'false'
+	| 'fallthrough'
+	| 'return'
+	| 'exception';
+
+export interface ControlFlowNode {
+	readonly id: string;
+	readonly label: string;
+	readonly source?: ControlFlowSourceLocation;
+	/** Zero-based line indexes in the compiler artifact used to derive this node. */
+	readonly referencedArtifactLines?: readonly number[];
+	readonly terminal?: ControlFlowTerminal;
+}
+
+export interface ControlFlowEdge {
+	readonly from: string;
+	readonly to: string;
+	readonly kind: ControlFlowEdgeKind;
+	readonly label?: string;
+}
+
+export interface ControlFlowGraph {
+	readonly id: string;
+	readonly label: string;
+	readonly entryNodeId?: string;
+	readonly nodes: readonly ControlFlowNode[];
+	readonly edges: readonly ControlFlowEdge[];
+}
+
+export interface RenderedArtifactBase {
 	readonly kind: ArtifactKind;
+	readonly presentation: 'text' | 'graph';
+	readonly diagnostics: readonly CompileDiagnostic[];
+	readonly durationMs: number;
+	readonly generatedAt: number;
+	readonly command: InvocationDetails;
+	readonly metrics: Readonly<Record<string, RenderedArtifactMetric>>;
+	readonly truncated: boolean;
+	/** Whether the tool output limit, rather than a renderer limit, was reached. */
+	readonly toolOutputTruncated: boolean;
+}
+
+export interface RenderedTextArtifact extends RenderedArtifactBase {
+	readonly presentation: 'text';
 	readonly lines: readonly RenderedArtifactLine[];
 	readonly sourceLocations: readonly ArtifactSourceLocation[];
 	readonly links: readonly ArtifactLink[];
 	readonly folds: readonly ArtifactFold[];
 	readonly symbols: readonly ArtifactSymbol[];
-	readonly metrics: Readonly<Record<string, unknown>>;
-	readonly raw: RawArtifact;
-	/**
-	 * Whether output was truncated, either at the tool-output level
-	 * (`raw.truncated`) or by the vendored parser's own line-count limit
-	 * (which only signals via a `[truncated; too many lines]` marker line,
-	 * not a boolean — the upstream parser can't be changed to add one).
-	 */
-	readonly truncated: boolean;
+	/** The bounded compiler output before text rendering or filtering. */
+	readonly raw: string;
+	/** Readable alias for `raw` retained for text-renderer call sites. */
+	readonly text: string;
 }
+
+export interface RenderedGraphArtifact extends RenderedArtifactBase {
+	readonly presentation: 'graph';
+	readonly graphs: readonly ControlFlowGraph[];
+}
+
+export type RenderedArtifact = RenderedTextArtifact | RenderedGraphArtifact;
 
 export type ArtifactProductionResult =
 	| { readonly status: 'available'; readonly artifact: RenderedArtifact }

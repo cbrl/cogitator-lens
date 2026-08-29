@@ -17,7 +17,7 @@ import {
 	defaultArtifactOptions,
 	type ArtifactRequest,
 	type CompilationVariant,
-	type RenderedArtifact,
+	type RenderedTextArtifact,
 	type ToolchainProfile,
 } from '../../src/types/index.js';
 import { sourceUriMap } from '../../src/uri-containers.js';
@@ -57,6 +57,7 @@ export async function run(): Promise<void> {
 
 	const registeredCommands = await vscode.commands.getCommands(true);
 	assert.ok(registeredCommands.includes('coglens.OpenArtifact'));
+	assert.ok(registeredCommands.includes('coglens.OpenControlFlowGraph'));
 	assert.ok(registeredCommands.includes('coglens.CompareArtifacts'));
 	assert.ok(registeredCommands.includes('coglens.PickCompilationVariant'));
 	assert.ok(registeredCommands.includes('coglens.CreateWorkspaceOverride'));
@@ -291,34 +292,26 @@ async function verifyCompileHandlerStates(workspaceFolder: vscode.WorkspaceFolde
 				status: 'available',
 				artifact: {
 					kind: 'assembly',
+					presentation: 'text',
+					text: 'ret',
 					lines: [{ text: 'ret' }],
 					sourceLocations: [],
 					links: [],
 					folds: [],
 					symbols: [],
 					metrics: {},
-					raw: {
-						kind: 'assembly',
-						text: 'ret',
-						diagnostics: [],
-						durationMs: 1,
-						command: {
-							executable: process.execPath,
-							arguments: [],
-							environmentVariableNames: [],
-							workingDirectory: workspaceFolder.uri.fsPath,
-						},
-						truncated: false,
-					},
+					raw: 'ret',
 					diagnostics: [],
 					durationMs: 1,
+					generatedAt: 0,
 					command: {
 						executable: process.execPath,
-						arguments: [],
+						args: [],
 						environmentVariableNames: [],
-						workingDirectory: workspaceFolder.uri.fsPath,
+						cwd: workspaceFolder.uri.fsPath,
 					},
 					truncated: false,
+					toolOutputTruncated: false,
 				},
 			};
 		},
@@ -411,8 +404,19 @@ function verifyArtifactNavigationProviders(): void {
 		'coglens-artifact:/project/main.disasm?source=file%3A%2Fproject%2Fmain.cpp&variant=test&artifact=binary-disassembly&preset=default',
 	);
 	const sourcePath = path.join('/project', 'main.cpp');
-	const artifact: RenderedArtifact = {
+	const artifact: RenderedTextArtifact = {
 		kind: 'binary-disassembly',
+		presentation: 'text',
+		diagnostics: [],
+		durationMs: 1,
+		generatedAt: 0,
+		command: {
+			executable: process.execPath,
+			args: [],
+			cwd: '/project',
+			environmentVariableNames: [],
+		},
+		text: '',
 		lines: [
 			{ text: 'entry:', source: { file: sourcePath, line: 4, column: 2 } },
 			{ text: '  call helper' },
@@ -424,23 +428,9 @@ function verifyArtifactNavigationProviders(): void {
 		folds: [{ startLine: 0, endLine: 1 }, { startLine: 2, endLine: 3 }],
 		symbols: [{ name: 'entry', line: 0 }, { name: 'helper', line: 2 }],
 		metrics: {},
-		raw: {
-			kind: 'binary-disassembly',
-			text: '',
-			diagnostics: [],
-			durationMs: 1,
-			generatedAt: 0,
-			command: {
-				executable: process.execPath,
-				arguments: [],
-				environmentVariableNames: [],
-				workingDirectory: '/project',
-			},
-			truncated: false,
-			inputs: [],
-			dependencyCoverage: 'source-only',
-		},
+		raw: '',
 		truncated: false,
+		toolOutputTruncated: false,
 	};
 	const provider = new ArtifactNavigationProvider(uri =>
 		uri.toString() === documentUri.toString() ? artifact : undefined);
@@ -747,29 +737,26 @@ async function verifyArtifactDetailsTree(
 			assembly: {} as never,
 			artifact: {
 				kind: 'stack-analysis',
+				presentation: 'text',
+				diagnostics: [],
+				durationMs: 2,
+				generatedAt: 1_700_000_000_000,
+				command: {
+					executable: 'clang++',
+					args: ['-O2'],
+					cwd: workspaceFolder.uri.fsPath,
+					environmentVariableNames: ['API_KEY', 'TOKEN'],
+				},
+				text: '',
 				lines: [],
 				sourceLocations: [],
 				links: [],
 				folds: [],
 				symbols: [],
 				metrics: { largestFrame: 64 },
-				raw: {
-					kind: 'stack-analysis',
-					text: '',
-					diagnostics: [],
-					durationMs: 2,
-					generatedAt: 1_700_000_000_000,
-					command: {
-						executable: 'clang++',
-						arguments: ['-O2'],
-						environmentVariableNames: ['TOKEN', 'API_KEY'],
-						workingDirectory: workspaceFolder.uri.fsPath,
-					},
-					truncated: false,
-					inputs: [],
-					dependencyCoverage: 'source-only',
-				},
+				raw: '',
 				truncated: false,
+				toolOutputTruncated: false,
 			},
 			truncated: false,
 		},
@@ -820,6 +807,15 @@ async function verifyNativeStackProduction(
 	const output = raw.command.arguments[raw.command.arguments.indexOf('-o') + 1];
 	assert.equal(fs.existsSync(path.dirname(output)), false);
 
+	const lto = await runFakeNativeStackProducer(root, ['-flto=auto']);
+	assert.ok(lto.command.arguments.includes('-flto=auto'));
+	assert.ok(
+		lto.command.arguments.indexOf('-fno-lto')
+		> lto.command.arguments.indexOf('-flto=auto'),
+		'stack analysis must disable CMake-provided LTO after provider arguments',
+	);
+	assert.match(lto.text, /fake_function\(\)\s+16\s+static/);
+
 	await assertFakeNativeStackFailure(
 		root,
 		['--missing-stack'],
@@ -843,11 +839,18 @@ async function verifyNativeStackProduction(
 	const clangCl = await runFakeClangClStackProducer(root);
 	assert.ok(clangCl.command.arguments.includes('/c'));
 	assert.ok(clangCl.command.arguments.includes('/clang:-fstack-usage'));
+	assert.ok(clangCl.command.arguments.includes('/clang:-gline-tables-only'));
 	assert.ok(clangCl.command.arguments.includes('/DPROJECT_BUILD'));
 	assert.ok(!clangCl.command.arguments.includes('/Foignored.obj'));
-	const clangClOutput = clangCl.command.arguments.find(argument => /^\/Fo.+/i.test(argument));
-	assert.ok(clangClOutput);
-	assert.equal(fs.existsSync(path.dirname(clangClOutput.slice(3))), false);
+	assert.match(clangCl.text, /source\.cpp:1:fake_function\(\)\s+16\s+static/);
+	const clangClOutputIndex = clangCl.command.arguments.indexOf('/clang:-o');
+	assert.notEqual(clangClOutputIndex, -1);
+	const clangClOutput = clangCl.command.arguments[clangClOutputIndex + 1];
+	assert.match(clangClOutput, /^\/clang:/);
+	assert.equal(
+		fs.existsSync(path.dirname(clangClOutput.replace(/^\/clang:/, ''))),
+		false,
+	);
 
 	await verifyFakeNativeStackCancellation(root);
 }

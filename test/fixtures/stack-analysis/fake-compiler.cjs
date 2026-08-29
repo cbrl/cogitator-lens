@@ -27,8 +27,13 @@ if (sourceDependenciesIndex >= 0) {
 }
 
 const outputIndex = args.indexOf('-o');
+const clangOutputIndex = args.indexOf('/clang:-o');
 const slashOutput = args.find(argument => /^\/Fo.+/i.test(argument));
-const output = outputIndex >= 0 ? args[outputIndex + 1] : slashOutput?.slice(3);
+const output = outputIndex >= 0
+	? args[outputIndex + 1]
+	: clangOutputIndex >= 0
+		? args[clangOutputIndex + 1]?.replace(/^\/clang:/, '')
+		: slashOutput?.slice(3);
 if (!output) {
 	process.stderr.write('fake compiler did not receive an object output\n');
 	process.exitCode = 2;
@@ -51,6 +56,13 @@ fs.writeFileSync(output, 'object');
 if (args.includes('--missing-stack')) {
 	return;
 }
+const lastLto = args.findLastIndex(argument =>
+	/^(?:-flto(?:=.*)?|\/clang:-flto(?:=.*)?)$/i.test(argument));
+const lastNoLto = args.findLastIndex(argument =>
+	/^(?:-fno-lto|\/clang:-fno-lto)$/i.test(argument));
+if (lastLto > lastNoLto) {
+	return;
+}
 if (args.includes('--large-stack')) {
 	const descriptor = fs.openSync(stackOutput, 'w');
 	try {
@@ -60,4 +72,7 @@ if (args.includes('--large-stack')) {
 	}
 	return;
 }
-fs.writeFileSync(stackOutput, `${source}:1:1:fake_function()\t16\tstatic\n`);
+const location = args.includes('/clang:-fstack-usage')
+	? `${source}:1:fake_function()`
+	: `${source}:1:1:fake_function()`;
+fs.writeFileSync(stackOutput, `${location}\t16\tstatic\n`);

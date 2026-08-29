@@ -8,7 +8,9 @@ This VS Code extension produces and renders toolchain artifacts using a project'
 settings. The current release renders assembly for C-family toolchains and Rust; preprocessing for
 GCC, Clang, Apple Clang, clang-cl, and MSVC; ASTs for Clang-family compilers and Python; binary
 disassembly for C-family toolchains; LLVM IR for Clang-family compilers and Rust; Rust MIR;
-optimization remarks for GCC and Clang-family compilers; and Python bytecode.
+optimization remarks for GCC and Clang-family compilers; stack analysis for GCC, Clang-family
+compilers, and Python; Python bytecode; and interactive control-flow graphs for GCC, Clang-family,
+Rust, and Python toolchains.
 Source navigation and highlighting work across all source files that contribute locations to the
 rendered artifact.
 
@@ -29,7 +31,9 @@ the same file, both choices appear in the compilation variant picker.
 The Cogitator Lens sidebar provides a browsable view of those variants. Opening a source file
 automatically reveals and selects it in **Project Compile Info**; the reveal button performs the
 same navigation on demand, and selecting a source entry opens it in the editor. Toolchain and
-variant entries have inline actions for the operations they support.
+variant entries have inline actions for the operations they support. **Artifact Details** follows
+the active Cogitator Lens artifact and shows its identity, lifecycle state, diagnostics, invocation,
+environment-variable names, and renderer metrics without recompiling it.
 
 Use `Cogitator Lens: Open Artifact` to select an artifact supported by the active compilation
 variant. Branch and label references are clickable, symbol regions can be folded, source-backed
@@ -38,7 +42,7 @@ provides that metadata.
 
 Use `Cogitator Lens: Compare Artifacts` to open a native VS Code diff between two compilation
 variants, two configured presets, or one of each. Only artifact kinds supported by both selections
-are offered.
+are offered. Graph artifacts are opened separately and are not included in native text comparison.
 
 ### Artifact support
 
@@ -51,7 +55,9 @@ are offered.
 | LLVM IR | — | Yes | Yes | — | Yes | — |
 | Rust MIR | — | — | — | — | Yes | — |
 | Optimization remarks | Yes | Yes | Yes | — | — | — |
+| Stack analysis | Yes | Yes | Yes | — | — | Yes |
 | Python bytecode | — | — | — | — | — | Yes |
+| Control-flow graph | Yes | Yes | Yes | — | Yes | Yes |
 
 ### Manual Configuration
 
@@ -144,6 +150,31 @@ the lines they describe. Remark rows retain source navigation, and records that 
 the selected source are omitted from the merged view. A compilation variant must include an
 optimization level such as `-O2` or `-O3` for useful results.
 
+Stack analysis is a source-linked artifact. GCC, Clang, and Apple Clang use the documented
+`-fstack-usage` report; clang-cl forwards the same Clang option while retaining slash-style
+arguments. Native measurements remain bytes and retain the compiler's static, dynamic, or bounded
+dynamic qualifier. Python compiles the module without executing it, recursively walks its code
+objects, and reports `co_stacksize` in interpreter evaluation-stack slots. Python VM slots are not
+native frame bytes and Cogitator Lens does not convert between the units. Each function receives a
+separate annotation row above its source line, while valid records that cannot be mapped to the
+active source appear under **Unmapped entries**. Stable Rust and MSVC do not expose a selected
+stable stack report and are shown as unsupported.
+
+Control-flow graphs open in a bundled, theme-aware view with function selection, pan, zoom, fit,
+edge labels, and keyboard-accessible source navigation. GCC graphs come from the documented tree CFG
+dump, Clang-family graphs from LLVM IR, Rust graphs from MIR, and Python graphs from recursively
+inspected bytecode code objects. Python source is compiled but never executed. Only the selected
+function is laid out, which keeps large translation units responsive. The graph view uses bundled
+assets exclusively and does not contact a remote rendering service. Use **Cogitator Lens: Open
+Control-Flow Graph** to open it directly; double-click a mapped node, or focus it and press Enter or
+Space, to navigate back to source.
+
+The **Artifact Details** view reports the active artifact's preset, variant, toolchain, status,
+duration, generation time, truncation, diagnostic counts, executable, arguments, working
+directory, and metrics. Its environment section deliberately contains sorted variable names only;
+environment values never enter the view model. Context-menu copy actions are available for the
+diagnostic command line, executable, individual arguments, working directory, and metric values.
+
 A simple standalone Rust setup looks like:
 
 ```json
@@ -162,7 +193,7 @@ A simple standalone Rust setup looks like:
 }
 ```
 
-Cogitator Lens supplies Rust assembly, MIR, and LLVM IR emission plus source-mapping,
+Cogitator Lens supplies Rust assembly, MIR, LLVM IR, and control-flow graph emission plus source-mapping,
 diagnostic-format, and output arguments. MIR functions and basic blocks are foldable, block targets
 are clickable, and stable span comments become source links. If the invocation does not specify a
 crate name or crate type, it uses a synthetic crate name and `lib`, which lets standalone source

@@ -50,6 +50,12 @@ export class ArtifactDetailsTreeProvider extends TreeProvider<ArtifactDetailsTre
 		this.refresh();
 	}
 
+	setActiveSnapshot(snapshot: ArtifactDocumentSnapshot | undefined): void {
+		this.activeDocumentUri = snapshot?.identity.documentUri;
+		this.snapshot = snapshot;
+		this.refresh();
+	}
+
 	acceptArtifactState(snapshot: ArtifactDocumentSnapshot): void {
 		if (snapshot.identity.documentUri !== this.activeDocumentUri) {
 			return;

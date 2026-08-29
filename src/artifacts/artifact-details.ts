@@ -4,6 +4,7 @@ import type {
 	CompileDiagnostic,
 	InvocationDetails,
 	RenderedArtifact,
+	RenderedArtifactMetric,
 } from '../types/index.js';
 import { invocationDetails } from '../types/index.js';
 
@@ -25,7 +26,7 @@ export function buildArtifactDetails(
 	const artifact = retainedArtifact(status);
 	const diagnostics = currentDiagnostics(status, artifact);
 	const invocation = status.invocation
-		?? (artifact ? invocationDetails(artifact.raw.command) : undefined);
+		?? artifact?.command;
 	const counts = countDiagnostics(diagnostics);
 
 	return Object.freeze([
@@ -46,12 +47,12 @@ export function buildArtifactDetails(
 			value(
 				'duration',
 				'Duration',
-				artifact ? formatDuration(artifact.raw.durationMs) : 'Not available',
+				artifact ? formatDuration(artifact.durationMs) : 'Not available',
 			),
 			value(
 				'generated',
 				'Generated',
-				artifact ? new Date(artifact.raw.generatedAt).toISOString() : 'Not available',
+				artifact ? new Date(artifact.generatedAt).toISOString() : 'Not available',
 			),
 			value('truncated', 'Output truncated', status.truncated ? 'Yes' : 'No'),
 			value('errors', 'Errors', String(counts.error)),
@@ -81,14 +82,32 @@ function currentDiagnostics(
 	status: CompileHandlerStatus,
 	artifact: RenderedArtifact | undefined,
 ): readonly CompileDiagnostic[] {
-	return status.state === 'failed' ? status.diagnostics : artifact?.raw.diagnostics ?? [];
+	if (status.state !== 'failed') {
+		return artifact?.diagnostics ?? [];
+	}
+	const diagnostics = [...(artifact?.diagnostics ?? []), ...status.diagnostics];
+	const keys = new Set<string>();
+	return diagnostics.filter(diagnostic => {
+		const key = [
+			diagnostic.uri.toString(),
+			diagnostic.line,
+			diagnostic.column,
+			diagnostic.severity,
+			diagnostic.message,
+		].join('\0');
+		if (keys.has(key)) {
+			return false;
+		}
+		keys.add(key);
+		return true;
+	});
 }
 
 function statusLabel(status: CompileHandlerStatus): string {
 	switch (status.state) {
 		case 'compiling': return 'Generating';
 		case 'successful':
-			return status.artifact.raw.diagnostics.length > 0
+			return status.artifact.diagnostics.length > 0
 				? 'Ready with diagnostics'
 				: 'Ready';
 		case 'cancelled': return 'Cancelled';
@@ -128,7 +147,7 @@ function environmentItems(names: readonly string[]): ArtifactDetailsItem[] {
 }
 
 function metricItems(
-	metrics: Readonly<Record<string, unknown>>,
+	metrics: Readonly<Record<string, RenderedArtifactMetric>>,
 	labels: Readonly<Record<string, string>>,
 ): ArtifactDetailsItem[] {
 	const entries = Object.entries(metrics).sort(([left], [right]) => compareText(left, right));
@@ -148,30 +167,8 @@ function formatDuration(durationMs: number): string {
 	return `${Math.max(0, durationMs).toFixed(durationMs < 10 ? 1 : 0)} ms`;
 }
 
-function formatMetric(metric: unknown): string {
-	if (typeof metric === 'string' || typeof metric === 'number' || typeof metric === 'boolean') {
-		return String(metric);
-	}
-	if (metric === null || metric === undefined) {
-		return String(metric);
-	}
-	return stableJson(metric);
-}
-
-function stableJson(value: unknown): string {
-	return JSON.stringify(sortJson(value));
-}
-
-function sortJson(value: unknown): unknown {
-	if (Array.isArray(value)) {
-		return value.map(sortJson);
-	}
-	if (typeof value === 'object' && value !== null) {
-		return Object.fromEntries(Object.entries(value)
-			.sort(([left], [right]) => compareText(left, right))
-			.map(([key, child]) => [key, sortJson(child)]));
-	}
-	return value;
+function formatMetric(metric: RenderedArtifactMetric): string {
+	return String(metric);
 }
 
 function humanizeIdentifier(identifier: string): string {

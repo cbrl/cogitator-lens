@@ -16,10 +16,11 @@ import type {
 } from '../types/index.js';
 import { CompilationError } from '../types/index.js';
 import { buildCompiledAssembly, type CompiledAssembly } from './compiled-assembly.js';
+import { artifactDefinitions } from '../artifacts/artifact-definitions.js';
 import * as logger from '../logger.js';
 
 export interface ArtifactHandlerResult {
-	assembly: CompiledAssembly;
+	assembly?: CompiledAssembly;
 	artifact: RenderedArtifact;
 }
 
@@ -44,7 +45,7 @@ export type CompileHandlerStatus =
 	}
 	| {
 		readonly state: 'successful';
-		readonly assembly: CompiledAssembly;
+		readonly assembly?: CompiledAssembly;
 		readonly artifact: RenderedArtifact;
 		readonly invocation?: InvocationDetails;
 		readonly error?: never;
@@ -139,10 +140,21 @@ export class CompileHandler implements Disposable {
 			}
 
 			const rendered = artifact.artifact;
-			const lines = rendered.raw.truncated
-				? [...rendered.lines, { text: '[truncated; toolchain output was limited]' }]
-				: rendered.lines;
-			const assembly = buildCompiledAssembly(this.srcUri, this.asmUri, lines);
+			const expectedPresentation = artifactDefinitions[this.artifactKind].presentation;
+			if (rendered.presentation !== expectedPresentation) {
+				throw new CompilationError(
+					`${this.artifactKind} produced a ${rendered.presentation} artifact; expected ${expectedPresentation}.`,
+				);
+			}
+			const assembly = rendered.presentation === 'text'
+				? buildCompiledAssembly(
+					this.srcUri,
+					this.asmUri,
+					rendered.toolOutputTruncated
+						? [...rendered.lines, { text: '[truncated; toolchain output was limited]' }]
+						: rendered.lines,
+				)
+				: undefined;
 			this.setStatus({
 				state: 'successful',
 				assembly,
@@ -160,8 +172,11 @@ export class CompileHandler implements Disposable {
 					state: 'failed',
 					error: normalized,
 					diagnostics: error instanceof CompilationError ? error.diagnostics : [],
+					assembly: this.currentStatus.assembly,
+					artifact: this.currentStatus.artifact,
 					invocation: this.currentStatus.invocation,
-					truncated: error instanceof CompilationError && error.truncated,
+					truncated: (error instanceof CompilationError && error.truncated)
+						|| this.currentStatus.truncated,
 				});
 			} else if (isCurrent()) {
 				this.setStatus({

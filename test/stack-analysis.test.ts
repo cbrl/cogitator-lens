@@ -41,6 +41,7 @@ test('native stack specifications own deterministic object and .su output names'
 	assert.deepEqual(nativeStackUsageOutput.arguments('output.su', '/temporary', []), [
 		'-c',
 		'-fstack-usage',
+		'-fno-lto',
 		'-o',
 		path.join('/temporary', 'output.o'),
 	]);
@@ -53,9 +54,61 @@ test('native stack specifications own deterministic object and .su output names'
 		[
 			'/c',
 			'/clang:-fstack-usage',
-			`/Fo${path.join('C:\\temporary', 'output.obj')}`,
+			'/clang:-fno-lto',
+			'/clang:-gline-tables-only',
+			'/clang:-o',
+			`/clang:${path.join('C:\\temporary', 'output.obj')}`,
 		],
 	);
+});
+
+test('.su parser handles Clang locations, locationless records, and GCC 17 symbols', () => {
+	const workingDirectory = path.resolve('/work');
+	const parsed = parseStackUsage([
+		'src/source.c:3:clang_function\t24\tstatic',
+		'C:\\work dir\\source.c:8:?windows_function@@YAHH@Z\t40\tdynamic',
+		'src/source.c:locationless_function\t12\tstatic',
+		'src/source.c:11:2:gcc_function\t_Z12gcc_functionv\t32\tdynamic,bounded',
+	].join('\n'), workingDirectory);
+
+	assert.equal(parsed.diagnostics.length, 0);
+	assert.deepEqual(parsed.entries.map(entry => ({
+		functionName: entry.functionName,
+		sourceLine: entry.sourceLine,
+		sourceColumn: entry.sourceColumn,
+		value: entry.value,
+		qualifier: entry.qualifier,
+	})), [
+		{
+			functionName: 'clang_function',
+			sourceLine: 3,
+			sourceColumn: undefined,
+			value: 24,
+			qualifier: 'static',
+		},
+		{
+			functionName: '?windows_function@@YAHH@Z',
+			sourceLine: 8,
+			sourceColumn: undefined,
+			value: 40,
+			qualifier: 'dynamic',
+		},
+		{
+			functionName: 'locationless_function',
+			sourceLine: undefined,
+			sourceColumn: undefined,
+			value: 12,
+			qualifier: 'static',
+		},
+		{
+			functionName: 'gcc_function',
+			sourceLine: 11,
+			sourceColumn: 2,
+			value: 32,
+			qualifier: 'dynamic-bounded',
+		},
+	]);
+	assert.equal(parsed.entries[1]?.sourceUri, path.win32.normalize('C:\\work dir\\source.c'));
 });
 
 test('.su parser handles dialect qualifiers, punctuation, duplicates, malformed input, and Windows paths', () => {
@@ -241,6 +294,10 @@ test('Python stack renderer keeps VM-slot units explicit', () => {
 		defaultArtifactOptions.display,
 		renderContext('python', source, 'value = 1\ndef answer():\n    return value'),
 	);
+	assert.equal(rendered.presentation, 'text');
+	if (rendered.presentation !== 'text') {
+		return;
+	}
 	assert.match(rendered.lines[0].text, /evaluation-stack slots/);
 	const answer = rendered.lines.flatMap(line => line.annotations ?? [])
 		.find(annotation => annotation.kind === 'stack-usage' && annotation.functionName === 'answer');

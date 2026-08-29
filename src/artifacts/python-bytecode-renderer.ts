@@ -1,7 +1,7 @@
 import type {
 	DisplayOptions,
 	RawArtifact,
-	RenderedArtifact,
+	RenderedTextArtifact,
 	RenderedArtifactLine,
 } from '../types/index.js';
 import type { ArtifactRenderContext } from './artifact-definitions.js';
@@ -14,7 +14,7 @@ export function renderPythonBytecode(
 	raw: RawArtifact,
 	_options: DisplayOptions,
 	context: ArtifactRenderContext,
-): RenderedArtifact {
+): RenderedTextArtifact {
 	let currentSourceLine: number | undefined;
 	const mappedSourceLines = new Set<number>();
 	let instructionCount = 0;

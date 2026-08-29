@@ -209,9 +209,11 @@ test('optimization renderer places each remark decoration on an empty row above 
 	assert.equal(missed?.kind, 'optimization-remark');
 	assert.match(missed?.kind === 'optimization-remark' ? missed.message : '', /inline: external will not be inlined/);
 	assert.equal(rendered.lines[15].text, 'source line 14');
-	assert.deepEqual(rendered.metrics.categories, { missed: 1, passed: 1 });
 	assert.equal(rendered.metrics.remarkCount, 2);
 	assert.equal(rendered.metrics.omittedRemarkCount, 0);
+	assert.equal(rendered.metrics.passedRemarkCount, 1);
+	assert.equal(rendered.metrics.missedRemarkCount, 1);
+	assert.equal(rendered.metrics.analysisRemarkCount, 0);
 });
 
 test('optimization renderer omits foreign, locationless, and out-of-range remarks', () => {
@@ -244,7 +246,8 @@ test('optimization renderer omits foreign, locationless, and out-of-range remark
 	}]);
 	assert.equal(rendered.metrics.remarkCount, 1);
 	assert.equal(rendered.metrics.omittedRemarkCount, 3);
-	assert.deepEqual(rendered.metrics.categories, { passed: 1 });
+	assert.equal(rendered.metrics.passedRemarkCount, 1);
+	assert.equal(rendered.metrics.missedRemarkCount, 0);
 });
 
 test('optimization renderer gives multiple remarks on one source line separate anchor rows', () => {

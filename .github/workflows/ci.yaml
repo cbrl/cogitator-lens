@@ -51,6 +51,8 @@ jobs:
           test -n "$vsix"
           unzip -l "$vsix" > vsix-files.txt
           grep -q 'extension/dist/extension.js' vsix-files.txt
+          grep -q 'extension/dist/webview/control-flow-graph.js' vsix-files.txt
+          grep -q 'extension/dist/webview/control-flow-graph.css' vsix-files.txt
           grep -q 'extension/LICENSE.txt' vsix-files.txt
           grep -q 'extension/THIRD_PARTY_NOTICES.md' vsix-files.txt
           grep -q 'extension/resources/gear-phi.png' vsix-files.txt
@@ -58,7 +60,9 @@ jobs:
           grep -q 'extension/syntaxes/coglens-ast.tmLanguage.json' vsix-files.txt
           grep -q 'extension/syntaxes/coglens-mir.tmLanguage.json' vsix-files.txt
           ! grep -q 'extension/src/' vsix-files.txt
+          ! grep -q 'extension/webview-src/' vsix-files.txt
           ! grep -q 'extension/test/' vsix-files.txt
+          ! grep -q '\.map$' vsix-files.txt
           ! grep -q 'extension/assets/demo.gif' vsix-files.txt
       - uses: actions/upload-artifact@v4
         with:

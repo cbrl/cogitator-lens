@@ -2,13 +2,14 @@ import path from 'path';
 import type {
 	DisplayOptions,
 	RawArtifact,
-	RenderedArtifact,
+	RenderedTextArtifact,
 	RenderedArtifactLine,
 } from '../types/index.js';
 import type { ArtifactRenderContext } from './artifact-definitions.js';
 import { LLVMIRDemangler } from '../vendor/lib/demangler/llvm.js';
 import { LlvmIrParser } from '../vendor/lib/llvm-ir.js';
 import { noopPropertyGetter } from '../vendor/compiler-props.js';
+import { decodeLlvmString } from './llvm-names.js';
 import { renderedArtifact } from './rendered-artifact.js';
 
 const llvmIrParser = new LlvmIrParser(noopPropertyGetter, new LLVMIRDemangler());
@@ -17,7 +18,7 @@ export async function renderLlvmIr(
 	raw: RawArtifact,
 	_options: DisplayOptions,
 	_context: ArtifactRenderContext,
-): Promise<RenderedArtifact> {
+): Promise<RenderedTextArtifact> {
 	const parsed = await llvmIrParser.process(raw.text, {
 		filterDebugInfo: false,
 		filterIRMetadata: false,
@@ -66,13 +67,6 @@ function sourcePath(filename: string, workingDirectory: string): string {
 		: path.resolve(workingDirectory, filename));
 }
 
-function decodeLlvmString(value: string): string {
-	return value
-		.replace(/\\([0-9A-Fa-f]{2})/g, (_match, hex: string) =>
-			String.fromCharCode(Number.parseInt(hex, 16)))
-		.replace(/\\"/g, '"')
-		.replace(/\\\\/g, '\\');
-}
 
 function findFunctionEnd(lines: readonly RenderedArtifactLine[], startLine: number): number {
 	for (let line = startLine + 1; line < lines.length; line++) {

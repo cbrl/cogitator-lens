@@ -1,7 +1,7 @@
 import type {
 	DisplayOptions,
 	RawArtifact,
-	RenderedArtifact,
+	RenderedTextArtifact,
 } from '../types/index.js';
 import type { ArtifactProducer } from '../toolchains/toolchain-map.js';
 import type { ArtifactRenderContext } from './artifact-definitions.js';
@@ -96,7 +96,7 @@ export function renderPythonStackAnalysis(
 	raw: RawArtifact,
 	_options: DisplayOptions,
 	context: ArtifactRenderContext,
-): RenderedArtifact {
+): RenderedTextArtifact {
 	const records = parsePythonStackUsage(raw.text);
 	const entries: StackUsageEntry[] = records.map(record => ({
 		sourceUri: context.source.uri.fsPath,

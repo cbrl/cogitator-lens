@@ -6,6 +6,7 @@ external/**
 node_modules/**
 out/**
 src/**
+webview-src/**
 test/**
 **/*.map
 eslint.config.mjs
@@ -16,3 +17,4 @@ scripts/**
 tsconfig.json
 tsconfig.unit.json
 tsconfig.extension-tests.json
+tsconfig.webview.json

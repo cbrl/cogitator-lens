@@ -2,7 +2,8 @@ import path from 'path';
 import type {
 	ArtifactLineAnnotation,
 	RawArtifact,
-	RenderedArtifact,
+	RenderedArtifactMetric,
+	RenderedTextArtifact,
 	RenderedArtifactLine,
 } from '../types/index.js';
 import type { ArtifactRenderContext } from './artifact-definitions.js';
@@ -22,7 +23,7 @@ export interface AnalysisParserDiagnostic {
 }
 
 export interface AnalysisSourceRenderOptions {
-	readonly metrics?: Readonly<Record<string, unknown>>;
+	readonly metrics?: Readonly<Record<string, RenderedArtifactMetric>>;
 	readonly preamble?: readonly string[];
 	readonly includeUnmappedEntries?: boolean;
 	readonly parserDiagnostics?: readonly AnalysisParserDiagnostic[];
@@ -38,7 +39,7 @@ export function renderAnalysisSource(
 	context: ArtifactRenderContext,
 	entries: readonly SourceAnalysisEntry[],
 	options: AnalysisSourceRenderOptions = {},
-): RenderedArtifact {
+): RenderedTextArtifact {
 	const sourceFile = path.normalize(context.source.uri.fsPath);
 	const sourceLines = splitSourceLines(context.source.text);
 	const entriesByLine = new Map<number, SourceAnalysisEntry[]>();

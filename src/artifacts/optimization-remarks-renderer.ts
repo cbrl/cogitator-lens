@@ -3,7 +3,7 @@ import type {
 	DisplayOptions,
 	OptimizationRemarkCategory,
 	RawArtifact,
-	RenderedArtifact,
+	RenderedTextArtifact,
 } from '../types/index.js';
 import {
 	processRawGccOptRemarks,
@@ -36,16 +36,15 @@ export function optimizationRemarksRenderer(
 	raw: RawArtifact,
 	options: DisplayOptions,
 	context: ArtifactRenderContext,
-) => RenderedArtifact {
-	return (raw, _options, context) =>
-		renderOptimizationRemarks(raw, context, parser);
+	) => RenderedTextArtifact {
+	return (raw, _options, context) => renderOptimizationRemarks(raw, context, parser);
 }
 
 function renderOptimizationRemarks(
 	raw: RawArtifact,
 	context: ArtifactRenderContext,
 	parser: OptimizationRemarksParser,
-): RenderedArtifact {
+): RenderedTextArtifact {
 	const remarks = parser(raw.text, raw.command.workingDirectory);
 	const sourceFile = path.normalize(context.source.uri.fsPath);
 	const sourceLineCount = context.source.text.split(/\r\n|\n|\r/).length;
@@ -55,14 +54,8 @@ function renderOptimizationRemarks(
 		&& remark.line >= 1
 		&& remark.line <= sourceLineCount
 		&& sameSourcePath(remark.file, sourceFile));
-	const categories = Object.fromEntries(
-		[...new Set(mappedRemarks.map(remark => remark.category))]
-			.sort()
-			.map(category => [
-				category,
-				mappedRemarks.filter(remark => remark.category === category).length,
-			]),
-	);
+	const categoryCount = (category: OptimizationRemarkCategory): number =>
+		mappedRemarks.filter(remark => remark.category === category).length;
 	return renderAnalysisSource(
 		raw,
 		context,
@@ -80,7 +73,9 @@ function renderOptimizationRemarks(
 			metrics: {
 				remarkCount: mappedRemarks.length,
 				omittedRemarkCount: remarks.length - mappedRemarks.length,
-				categories,
+				passedRemarkCount: categoryCount('passed'),
+				missedRemarkCount: categoryCount('missed'),
+				analysisRemarkCount: categoryCount('analysis'),
 			},
 		},
 	);
@@ -90,16 +85,14 @@ export function parseClangOptimizationRemarks(
 	text: string,
 	workingDirectory: string,
 ): OptimizationRemark[] {
-	return processRawLlvmOptRemarks(text).map(remark =>
-		normalizeRemark(remark, workingDirectory));
+	return processRawLlvmOptRemarks(text).map(remark => normalizeRemark(remark, workingDirectory));
 }
 
 export function parseGccOptimizationRemarks(
 	text: string,
 	workingDirectory: string,
 ): OptimizationRemark[] {
-	return processRawGccOptRemarks(text).map(remark =>
-		normalizeRemark(remark, workingDirectory));
+	return processRawGccOptRemarks(text).map(remark => normalizeRemark(remark, workingDirectory));
 }
 
 function normalizeRemark(

@@ -2,7 +2,7 @@
     "name": "coglens",
     "displayName": "Cogitator Lens",
     "description": "Divine the substratal invocations of your digital canticles",
-    "version": "0.6.0",
+    "version": "0.7.0",
     "icon": "resources/gear-phi.png",
     "publisher": "cbrl",
     "license": "MPL-2.0",
@@ -155,6 +155,13 @@
                 "category": "Cogitator Lens",
                 "enablement": "coglens.supportedSource",
                 "icon": "$(preview)"
+            },
+            {
+                "command": "coglens.OpenControlFlowGraph",
+                "title": "Open Control-Flow Graph",
+                "category": "Cogitator Lens",
+                "enablement": "coglens.supportedSource",
+                "icon": "$(type-hierarchy)"
             },
             {
                 "command": "coglens.CompareArtifacts",
@@ -575,6 +582,12 @@
                                 "description": "Python bytecode options",
                                 "additionalProperties": false,
                                 "properties": {}
+                            },
+                            "control-flow-graph": {
+                                "type": "object",
+                                "description": "Control-flow graph options",
+                                "additionalProperties": false,
+                                "properties": {}
                             }
                         }
                     },
@@ -601,7 +614,8 @@
                                         "rust-mir",
                                         "optimization-remarks",
                                         "stack-analysis",
-                                        "python-bytecode"
+                                        "python-bytecode",
+                                        "control-flow-graph"
                                     ],
                                     "description": "Artifact kind produced by this preset"
                                 },
@@ -732,8 +746,8 @@
         "compile-tests": "tsc -p tsconfig.extension-tests.json",
         "watch-tests": "tsc -p tsconfig.extension-tests.json -w",
         "pretest": "npm run compile-tests && npm run compile && npm run lint",
-        "check-types": "tsc --noEmit && tsc --noEmit -p tsconfig.unit.json",
-        "lint": "eslint src test",
+        "check-types": "tsc --noEmit && tsc --noEmit -p tsconfig.unit.json && tsc --noEmit -p tsconfig.webview.json",
+        "lint": "eslint src webview-src test",
         "test": "npm run test:unit",
         "test:unit": "node --import tsx --test \"test/**/*.test.ts\"",
         "test:extension": "npm run compile-tests && npm run compile && node scripts/run-extension-tests.mjs",
@@ -741,6 +755,7 @@
         "package:vsix": "vsce package --no-dependencies"
     },
     "dependencies": {
+        "@dagrejs/dagre": "^3.1.1",
         "@vscode/python-extension": "^1.0.6",
         "vscode-cmake-tools": "^1.7.0",
         "yaml": "^2.9.0"
@@ -757,8 +772,8 @@
         "tsx": "^4.20.3",
         "typescript": "^5.9.3"
     },
-	"extensionPack": [
-		"13xforever.language-x86-64-assembly",
-		"ms-python.python"
-	]
+    "extensionPack": [
+        "13xforever.language-x86-64-assembly",
+        "ms-python.python"
+    ]
 }

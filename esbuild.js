@@ -24,7 +24,7 @@ const esbuildProblemMatcherPlugin = {
 };
 
 async function main() {
-	const ctx = await esbuild.context({
+	const extensionContext = await esbuild.context({
 		entryPoints: [
 			'src/extension.ts'
 		],
@@ -42,11 +42,28 @@ async function main() {
 			esbuildProblemMatcherPlugin,
 		],
 	});
+	const webviewContext = await esbuild.context({
+		entryPoints: [
+			'webview-src/control-flow-graph.ts',
+			'webview-src/control-flow-graph.css',
+		],
+		bundle: true,
+		format: 'iife',
+		minify: production,
+		sourcemap: !production,
+		sourcesContent: false,
+		platform: 'browser',
+		outdir: 'dist/webview',
+		entryNames: '[name]',
+		logLevel: 'silent',
+		plugins: [esbuildProblemMatcherPlugin],
+	});
+	const contexts = [extensionContext, webviewContext];
 	if (watch) {
-		await ctx.watch();
+		await Promise.all(contexts.map(context => context.watch()));
 	} else {
-		await ctx.rebuild();
-		await ctx.dispose();
+		await Promise.all(contexts.map(context => context.rebuild()));
+		await Promise.all(contexts.map(context => context.dispose()));
 	}
 }
 

@@ -11,6 +11,24 @@ import type {
 } from '../toolchains/toolchain-backend.js';
 import type { ArtifactProducer } from '../toolchains/toolchain-map.js';
 
+/**
+ * Produces a control-flow graph from the assembly listing a toolchain already
+ * knows how to emit.
+ *
+ * Toolchains without a documented IR dump reach the graph this way: the listing
+ * is produced exactly as it is for the assembly artifact, and the renderer runs
+ * it through the toolchain's assembly parser before building blocks.
+ */
+export const assemblyControlFlowGraphProducer: ArtifactProducer = async (
+	backend: ToolchainBackend,
+	source: Uri,
+	options: CompileOptions,
+	cancellationToken: CancellationToken,
+): Promise<RawArtifact> => ({
+	...(await backend.produceAssembly(source, options, cancellationToken)),
+	kind: 'control-flow-graph',
+});
+
 export function compilerOutputProducer(
 	kind: ArtifactKind,
 	spec: CompilerOutputSpec,
@@ -75,6 +93,16 @@ export const gccOptimizationRecord: CompilerOutputSpec = Object.freeze({
 	arguments: (outputFile: string, temporaryDirectory: string) => [
 		'-c',
 		`-fopt-info-all=${outputFile}`,
+		'-o',
+		path.join(temporaryDirectory, 'output.o'),
+	],
+});
+
+export const gccControlFlowGraphOutput: CompilerOutputSpec = Object.freeze({
+	outputFilename: 'output.cfg',
+	arguments: (outputFile: string, temporaryDirectory: string) => [
+		'-c',
+		`-fdump-tree-cfg=${outputFile}`,
 		'-o',
 		path.join(temporaryDirectory, 'output.o'),
 	],

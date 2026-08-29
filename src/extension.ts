@@ -29,6 +29,7 @@ import {
 } from './artifacts/artifact-picker.js';
 import { supportedLanguageIdentifiers } from './toolchains/toolchain-map.js';
 import * as setup from './setup.js';
+import { GraphPanelManager } from './webview/graph-panel-manager.js';
 
 export async function activate(context: ExtensionContext): Promise<void> {
 	const configuration = new ConfigurationService();
@@ -37,13 +38,14 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		context.workspaceState,
 	);
 	const artifactProvider = new AsmProvider(compilationService, configuration);
+	const graphPanels = new GraphPanelManager(context, compilationService, configuration);
 	const navigationProvider = new ArtifactNavigationProvider(uri =>
 		artifactProvider.getRenderedArtifact(uri));
 
 	setup.createToolchainTreeView(context, compilationService.toolchainRegistry);
 	setup.createCompilationInfoTreeView(context, compilationService);
 	setup.createGlobalOptionsTreeView(context, compilationService);
-	setup.createArtifactDetailsTreeView(context, artifactProvider);
+	setup.createArtifactDetailsTreeView(context, artifactProvider, graphPanels);
 	setup.setupCommands(context, compilationService, configuration);
 
 	const variantProviders: VariantProvider[] = [
@@ -86,6 +88,18 @@ export async function activate(context: ExtensionContext): Promise<void> {
 			undefined,
 			compilationService,
 			artifactProvider,
+			graphPanels,
+			configuration,
+		),
+	);
+	const openControlFlowGraphCommand = commands.registerTextEditorCommand(
+		'coglens.OpenControlFlowGraph',
+		editor => openArtifact(
+			editor,
+			'control-flow-graph',
+			compilationService,
+			artifactProvider,
+			graphPanels,
 			configuration,
 		),
 	);
@@ -136,6 +150,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		configuration,
 		compilationService,
 		artifactProvider,
+		graphPanels,
 		...variantProviders,
 		...providerSubscriptions,
 		contentProvider,
@@ -145,6 +160,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		hoverRegistration,
 		symbolRegistration,
 		openArtifactCommand,
+		openControlFlowGraphCommand,
 		compareArtifactsCommand,
 		pickVariantCommand,
 		activeEditorSubscription,
@@ -160,6 +176,7 @@ async function openArtifact(
 	requestedKind: ArtifactKind | undefined,
 	compilationService: CompilationService,
 	artifactProvider: AsmProvider,
+	graphPanels: GraphPanelManager,
 	configuration: ConfigurationService,
 ): Promise<void> {
 	if (!isSupportedSourceDocument(editor.document)) {
@@ -244,6 +261,10 @@ async function openArtifact(
 	}
 
 	const artifactUri = getArtifactUri(editor.document.uri, variant, kind, preset.id);
+	if (artifactDefinitions[kind].presentation === 'graph') {
+		await graphPanels.open(artifactUri);
+		return;
+	}
 	artifactProvider.requestRefresh(artifactUri);
 	const options: TextDocumentShowOptions = {
 		viewColumn: ViewColumn.Beside,
@@ -333,14 +354,26 @@ async function compareArtifacts(
 	if (!right) {
 		return;
 	}
+	if (
+		(left.preset && artifactDefinitions[left.preset.artifactKind].presentation === 'graph')
+		|| (right.preset && artifactDefinitions[right.preset.artifactKind].presentation === 'graph')
+	) {
+		await window.showInformationMessage(
+			'Control-flow graphs cannot be compared in the native text diff. Open each graph separately.',
+		);
+		return;
+	}
 
-	const commonKinds = supportedArtifactKinds.filter(kind =>
+	const allCommonKinds = supportedArtifactKinds.filter(kind =>
 		targetSupportsKind(left, kind, compilationService)
 		&& targetSupportsKind(right, kind, compilationService));
+	const commonKinds = allCommonKinds.filter(kind =>
+		artifactDefinitions[kind].presentation === 'text');
 	if (commonKinds.length === 0) {
-		await window.showWarningMessage(
-			`"${left.label}" and "${right.label}" do not support a common artifact kind.`,
-		);
+		await window.showWarningMessage(allCommonKinds.some(kind =>
+			artifactDefinitions[kind].presentation === 'graph')
+			? 'Control-flow graphs cannot be compared in the native text diff. Open each graph separately.'
+			: `"${left.label}" and "${right.label}" do not support a common artifact kind.`);
 		return;
 	}
 	const kind = commonKinds.length === 1

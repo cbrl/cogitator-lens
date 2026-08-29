@@ -2,7 +2,7 @@ import path from 'node:path';
 import type {
 	DisplayOptions,
 	RawArtifact,
-	RenderedArtifact,
+	RenderedTextArtifact,
 	RenderedArtifactLine,
 } from '../types/index.js';
 import type { ArtifactRenderContext } from './artifact-definitions.js';
@@ -17,7 +17,7 @@ export function renderRustMir(
 	raw: RawArtifact,
 	_options: DisplayOptions,
 	_context: ArtifactRenderContext,
-): RenderedArtifact {
+): RenderedTextArtifact {
 	const textLines = splitLines(raw.text);
 	const lines: RenderedArtifactLine[] = [];
 	const functions: Array<{ name: string; line: number }> = [];

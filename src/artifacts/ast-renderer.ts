@@ -2,7 +2,7 @@ import path from 'node:path';
 import type {
 	DisplayOptions,
 	RawArtifact,
-	RenderedArtifact,
+	RenderedTextArtifact,
 	RenderedArtifactLine,
 } from '../types/index.js';
 import type { ArtifactRenderContext } from './artifact-definitions.js';
@@ -31,7 +31,7 @@ export function renderClangAst(
 	raw: RawArtifact,
 	options: DisplayOptions,
 	context: ArtifactRenderContext,
-): RenderedArtifact {
+): RenderedTextArtifact {
 	const sourceFile = path.normalize(context.source.uri.fsPath);
 	const output: RenderedArtifactLine[] = [];
 	const nodes: Array<Omit<AstNode, 'endLine'>> = [];
@@ -120,7 +120,7 @@ export function renderClangAst(
 export function renderPythonAst(
 	raw: RawArtifact,
 	context: ArtifactRenderContext,
-): RenderedArtifact {
+): RenderedTextArtifact {
 	const textLines = splitLines(raw.text);
 	const sourceLines = context.source.text.split(/\r\n|\n|\r/);
 	const output: RenderedArtifactLine[] = textLines.map(text => ({ text }));

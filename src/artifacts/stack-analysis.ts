@@ -2,7 +2,7 @@ import path from 'path';
 import type {
 	DisplayOptions,
 	RawArtifact,
-	RenderedArtifact,
+	RenderedTextArtifact,
 	StackUsageQualifier,
 } from '../types/index.js';
 import type { ArtifactProducer } from '../toolchains/toolchain-map.js';
@@ -35,6 +35,9 @@ export const nativeStackUsageOutput: CompilerOutputSpec = Object.freeze({
 	arguments: (_outputFile: string, temporaryDirectory: string) => [
 		'-c',
 		'-fstack-usage',
+		// GCC does not emit a .su file for an LTO object. CMake can add -flto
+		// through INTERPROCEDURAL_OPTIMIZATION, so force ordinary per-TU codegen.
+		'-fno-lto',
 		'-o',
 		path.join(temporaryDirectory, 'output.o'),
 	],
@@ -45,7 +48,14 @@ export const clangClStackUsageOutput: CompilerOutputSpec = Object.freeze({
 	arguments: (_outputFile: string, temporaryDirectory: string) => [
 		'/c',
 		'/clang:-fstack-usage',
-		`/Fo${path.join(temporaryDirectory, 'output.obj')}`,
+		'/clang:-fno-lto',
+		// LLVM only includes a source line in .su records when the function has
+		// debug metadata. Line tables are sufficient and avoid full debug info.
+		'/clang:-gline-tables-only',
+		// Clang derives the .su path from its GCC-style -o option. /Fo controls
+		// the object path in clang-cl mode, but is not consulted for this sidecar.
+		'/clang:-o',
+		`/clang:${path.join(temporaryDirectory, 'output.obj')}`,
 	],
 });
 
@@ -97,46 +107,36 @@ function parseStackUsageRecord(
 	record: string,
 	workingDirectory: string,
 ): StackUsageEntry | string {
-	const fields = /^(.*?)[\t ]+([+-]?\d+)[\t ]+(dynamic(?:[\t , -]+bounded)?|static)\s*$/i.exec(record);
+	const fields = parseStackUsageFields(record);
 	if (!fields) {
 		return 'expected a location, non-negative integer size, and stack qualifier';
 	}
 
-	const value = Number(fields[2]);
+	const value = Number(fields.value);
 	if (!Number.isSafeInteger(value) || value < 0) {
 		return 'stack size must be a non-negative safe integer';
 	}
-	const qualifier = normalizeNativeQualifier(fields[3]);
+	const qualifier = normalizeNativeQualifier(fields.qualifier);
 	if (!qualifier) {
-		return `unknown stack qualifier: ${fields[3]}`;
+		return `unknown stack qualifier: ${fields.qualifier}`;
 	}
 
-	// Greedy matching deliberately selects the rightmost :line:column: pair.
-	// That leaves a Windows drive prefix in the path and C++ punctuation in the
-	// function name instead of treating either colon as a field boundary.
-	const location = /^(.*):(\d+):(\d+):(.*)$/.exec(fields[1]);
-	if (!location) {
-		return 'expected source:line:column:function before the stack size';
-	}
-	const sourceLine = Number(location[2]);
-	const sourceColumn = Number(location[3]);
-	const functionName = location[4].trim();
+	const location = parseStackUsageLocation(fields.location, workingDirectory);
+	const sourceLine = location.sourceLine;
+	const sourceColumn = location.sourceColumn;
+	const functionName = location.functionName;
 	if (
-		!Number.isSafeInteger(sourceLine)
-		|| sourceLine < 1
-		|| !Number.isSafeInteger(sourceColumn)
-		|| sourceColumn < 0
+		(sourceLine !== undefined
+			&& (!Number.isSafeInteger(sourceLine) || sourceLine < 1))
+		|| (sourceColumn !== undefined
+			&& (!Number.isSafeInteger(sourceColumn) || sourceColumn < 0))
 		|| !functionName
 	) {
 		return 'source line, column, and function name must be valid';
 	}
-	const filename = location[1].trim();
-	if (!filename) {
-		return 'source path must not be empty';
-	}
 
 	return {
-		sourceUri: resolveSourcePath(filename, workingDirectory),
+		sourceUri: location.sourceUri,
 		sourceLine,
 		sourceColumn,
 		functionName,
@@ -144,6 +144,80 @@ function parseStackUsageRecord(
 		unit: 'bytes',
 		qualifier,
 	};
+}
+
+interface NativeStackUsageFields {
+	readonly location: string;
+	readonly value: string;
+	readonly qualifier: string;
+}
+
+/**
+ * GCC 17 added a mangled-name column between the location and size. Reading
+ * tab-separated records from the right accepts both versions without letting
+ * whitespace in a demangled function signature change the field boundaries.
+ */
+function parseStackUsageFields(record: string): NativeStackUsageFields | undefined {
+	const tabFields = record.split(/\t+/).map(field => field.trim());
+	if (tabFields.length >= 3) {
+		return {
+			location: tabFields[0],
+			value: tabFields.at(-2) ?? '',
+			qualifier: tabFields.at(-1) ?? '',
+		};
+	}
+
+	const fields = /^(.*?)[ ]+([+-]?\d+)[ ]+(dynamic(?:[ , -]+bounded)?|static)\s*$/i.exec(record);
+	return fields
+		? { location: fields[1], value: fields[2], qualifier: fields[3] }
+		: undefined;
+}
+
+interface NativeStackUsageLocation {
+	readonly sourceUri?: string;
+	readonly sourceLine?: number;
+	readonly sourceColumn?: number;
+	readonly functionName: string;
+}
+
+function parseStackUsageLocation(
+	value: string,
+	workingDirectory: string,
+): NativeStackUsageLocation {
+	// GCC: source:line:column:function. Greedy matching selects the rightmost
+	// numeric location, preserving a Windows drive prefix and C++ punctuation.
+	const gcc = /^(.*):(\d+):(\d+):(.*)$/.exec(value);
+	if (gcc) {
+		return {
+			sourceUri: resolveSourcePath(gcc[1].trim(), workingDirectory),
+			sourceLine: Number(gcc[2]),
+			sourceColumn: Number(gcc[3]),
+			functionName: gcc[4].trim(),
+		};
+	}
+
+	// Clang: source:line:function. LLVM deliberately omits the column.
+	const clang = /^(.*):(\d+):(.*)$/.exec(value);
+	if (clang) {
+		return {
+			sourceUri: resolveSourcePath(clang[1].trim(), workingDirectory),
+			sourceLine: Number(clang[2]),
+			functionName: clang[3].trim(),
+		};
+	}
+
+	// Without line-table metadata LLVM emits source:function. Keep the record
+	// as an unmapped result instead of turning valid stack data into a parser
+	// diagnostic. The owned Clang flags normally prevent this fallback.
+	const separator = value.lastIndexOf(':');
+	if (separator > 1 && separator < value.length - 1) {
+		return {
+			sourceUri: resolveSourcePath(value.slice(0, separator).trim(), workingDirectory),
+			functionName: value.slice(separator + 1).trim(),
+		};
+	}
+
+	return { functionName: value.trim() };
 }
 
 function resolveSourcePath(filename: string, workingDirectory: string): string {
@@ -170,7 +244,7 @@ export function renderNativeStackAnalysis(
 	raw: RawArtifact,
 	_options: DisplayOptions,
 	context: ArtifactRenderContext,
-): RenderedArtifact {
+): RenderedTextArtifact {
 	const parsed = parseStackUsage(raw.text, raw.command.workingDirectory);
 	return renderStackUsage(raw, context, parsed.entries, parsed.diagnostics);
 }
@@ -182,7 +256,7 @@ export function renderStackUsage(
 	parserDiagnostics: readonly AnalysisParserDiagnostic[] = [],
 	preamble: readonly string[] = [],
 	defaultUnit: StackUsageEntry['unit'] = 'bytes',
-): RenderedArtifact {
+): RenderedTextArtifact {
 	const sourceFile = path.normalize(context.source.uri.fsPath);
 	const sourceLineCount = context.source.text.split(/\r\n|\n|\r/).length;
 	const unmappedEntryCount = entries.filter(entry =>

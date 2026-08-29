@@ -40,11 +40,13 @@ import {
 	llvmObjdump,
 } from '../artifacts/binary-disassembly-producer.js';
 import {
+	assemblyControlFlowGraphProducer,
 	clangClLlvmIrOutput,
 	clangClOptimizationRecord,
 	clangOptimizationRecord,
 	compilerOutputProducer,
 	gccOptimizationRecord,
+	gccControlFlowGraphOutput,
 	llvmIrOutput,
 	rustLlvmIrOutput,
 	rustMirOutput,
@@ -75,6 +77,7 @@ import {
 	pythonStackAnalysisProducer,
 	renderPythonStackAnalysis,
 } from '../artifacts/python-stack-analysis.js';
+import { pythonControlFlowGraphProducer } from '../artifacts/python-cfg.js';
 
 export type ToolCapabilityStatus = 'available' | 'unavailable' | 'unsupported';
 
@@ -319,6 +322,10 @@ const clangArtifacts = artifactCells({
 		status: 'available',
 		producer: nativeStackAnalysisProducer,
 	},
+	'control-flow-graph': {
+		status: 'available',
+		producer: compilerOutputProducer('control-flow-graph', llvmIrOutput),
+	},
 });
 
 const gccArtifacts = artifactCells({
@@ -337,6 +344,10 @@ const gccArtifacts = artifactCells({
 		status: 'available',
 		producer: nativeStackAnalysisProducer,
 	},
+	'control-flow-graph': {
+		status: 'available',
+		producer: compilerOutputProducer('control-flow-graph', gccControlFlowGraphOutput),
+	},
 });
 
 const msvcArtifacts = artifactCells({
@@ -345,6 +356,10 @@ const msvcArtifacts = artifactCells({
 	'preprocessed-source': {
 		status: 'available',
 		producer: msvcPreprocessedSourceProducer,
+	},
+	'control-flow-graph': {
+		status: 'available',
+		producer: assemblyControlFlowGraphProducer,
 	},
 });
 
@@ -373,6 +388,10 @@ const clangClArtifacts = artifactCells({
 		status: 'available',
 		producer: clangClStackAnalysisProducer,
 	},
+	'control-flow-graph': {
+		status: 'available',
+		producer: compilerOutputProducer('control-flow-graph', clangClLlvmIrOutput),
+	},
 });
 
 const rustArtifacts = artifactCells({
@@ -384,6 +403,10 @@ const rustArtifacts = artifactCells({
 	'rust-mir': {
 		status: 'available',
 		producer: compilerOutputProducer('rust-mir', rustMirOutput),
+	},
+	'control-flow-graph': {
+		status: 'available',
+		producer: compilerOutputProducer('control-flow-graph', rustMirOutput),
 	},
 });
 
@@ -401,6 +424,10 @@ const pythonArtifacts = artifactCells({
 		status: 'available',
 		producer: pythonStackAnalysisProducer,
 		renderer: renderPythonStackAnalysis,
+	},
+	'control-flow-graph': {
+		status: 'available',
+		producer: pythonControlFlowGraphProducer,
 	},
 });
 

@@ -2,7 +2,7 @@ import path from 'node:path';
 import type {
 	DisplayOptions,
 	RawArtifact,
-	RenderedArtifact,
+	RenderedTextArtifact,
 	RenderedArtifactLine,
 } from '../types/index.js';
 import type { ArtifactRenderContext } from './artifact-definitions.js';
@@ -15,7 +15,7 @@ export function renderPreprocessedSource(
 	raw: RawArtifact,
 	options: DisplayOptions,
 	context: ArtifactRenderContext,
-): RenderedArtifact {
+): RenderedTextArtifact {
 	const sourceFile = path.normalize(context.source.uri.fsPath);
 	let logicalFile = sourceFile;
 	let logicalLine = 1;

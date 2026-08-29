@@ -1,16 +1,23 @@
 import type {
 	RawArtifact,
-	RenderedArtifact,
+	RenderedArtifactMetric,
 	RenderedArtifactLine,
+	RenderedTextArtifact,
 } from '../types/index.js';
+import { invocationDetails } from '../types/index.js';
 
 export function renderedArtifact(
 	raw: RawArtifact,
 	lines: readonly RenderedArtifactLine[],
-	metrics: Readonly<Record<string, unknown>> = {},
-): RenderedArtifact {
+	metrics: Readonly<Record<string, RenderedArtifactMetric>> = {},
+): RenderedTextArtifact {
 	return {
 		kind: raw.kind,
+		presentation: 'text',
+		diagnostics: raw.diagnostics,
+		durationMs: raw.durationMs,
+		generatedAt: raw.generatedAt,
+		command: invocationDetails(raw.command),
 		lines,
 		sourceLocations: lines.flatMap((line, lineIndex) => {
 			const sourceLine = line.source?.line;
@@ -26,7 +33,9 @@ export function renderedArtifact(
 		folds: [],
 		symbols: [],
 		metrics,
-		raw,
+		raw: raw.text,
+		text: raw.text,
+		toolOutputTruncated: raw.truncated,
 		truncated: raw.truncated || lines.some(line =>
 			line.text.includes('[truncated; too many lines]')),
 	};

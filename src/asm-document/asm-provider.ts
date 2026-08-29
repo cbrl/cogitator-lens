@@ -29,7 +29,7 @@ import {
 	CompilationError,
 	type CompileDiagnostic,
 	type ArtifactKind,
-	type RenderedArtifact,
+	type RenderedTextArtifact,
 } from '../types/index.js';
 import { toComparisonKey } from '../utils.js';
 import { sourceUriMap, sourceUriSet, UriSet } from '../uri-containers.js';
@@ -137,8 +137,11 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 		const compilation = handler.update(token);
 
 		return compilation.then(({ assembly, artifact }) => {
+			if (artifact.presentation !== 'text' || !assembly) {
+				throw new CompilationError('Graph artifacts must be opened in the control-flow graph view.');
+			}
 			document.assembly = assembly;
-			this.setDiagnostics(document, artifact.raw.diagnostics);
+			this.setDiagnostics(document, artifact.diagnostics);
 
 			return getContent(assembly);
 		}).catch((error: unknown) => {
@@ -169,8 +172,9 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 		return this.documents.get(documentKey(uri))?.assembly;
 	}
 
-	getRenderedArtifact(uri: Uri): RenderedArtifact | undefined {
-		return this.documents.get(documentKey(uri))?.handler.status.artifact;
+	getRenderedArtifact(uri: Uri): RenderedTextArtifact | undefined {
+		const artifact = this.documents.get(documentKey(uri))?.handler.status.artifact;
+		return artifact?.presentation === 'text' ? artifact : undefined;
 	}
 
 	/** Returns already-known state only; activating a details view never compiles. */

@@ -129,14 +129,21 @@ function successfulStatus(withDiagnostics = true): CompileHandlerStatus {
 	};
 	const artifact: RenderedArtifact = {
 		kind: 'stack-analysis',
+		presentation: 'text',
+		diagnostics: raw.diagnostics,
+		durationMs: raw.durationMs,
+		generatedAt: raw.generatedAt,
+		command: invocationDetails(raw.command),
+		text: raw.text,
 		lines: [],
 		sourceLocations: [],
 		links: [],
 		folds: [],
 		symbols: [],
 		metrics: { largestFrame: 64, functionCount: 3 },
-		raw,
+		raw: raw.text,
 		truncated: false,
+		toolOutputTruncated: false,
 	};
 	return {
 		state: 'successful',

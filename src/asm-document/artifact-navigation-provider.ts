@@ -22,9 +22,9 @@ import {
 	type CancellationToken,
 } from 'vscode';
 import { artifactDefinitions } from '../artifacts/artifact-definitions.js';
-import type { RenderedArtifact } from '../types/index.js';
+import type { RenderedTextArtifact } from '../types/index.js';
 
-type ArtifactLookup = (uri: Uri) => RenderedArtifact | undefined;
+type ArtifactLookup = (uri: Uri) => RenderedTextArtifact | undefined;
 
 export class ArtifactNavigationProvider implements
 	DefinitionProvider,

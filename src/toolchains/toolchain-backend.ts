@@ -92,6 +92,7 @@ const flagsWithSeparateValues = new Set([
 	'-MF',
 	'-MT',
 	'-MQ',
+	'-dumpdir',
 	'-foptimization-record-file',
 	'/clang:-o',
 	'/clang:-foptimization-record-file',
@@ -102,8 +103,8 @@ const flagsWithSeparateValues = new Set([
 	'/sourceDependencies',
 ]);
 const flagsWithJoinedValues =
-	/^(?:-o|-MF|-MT|-MQ|\/[Ff][OoAaDdIi]|\/[Ss]ource[Dd]ependencies:).+/;
-const artifactOutputFlags = /^(?:-emit-llvm|-f(?:no-)?stack-usage|-fsave-optimization-record(?:=.*)?|-foptimization-record-file(?:=.*)?|-fopt-info(?:-[^=]+)?(?:=.*)?|\/clang:-(?:emit-llvm|S|gline-tables-only|f(?:no-)?stack-usage|fsave-optimization-record(?:=.*)?|foptimization-record-file(?:=.*)?))$/;
+	/^(?:-o|-MF|-MT|-MQ|-dumpdir=|\/[Ff][OoAaDdIi]|\/[Ss]ource[Dd]ependencies:).+/;
+const artifactOutputFlags = /^(?:-emit-llvm|-fdump-tree-cfg(?:-[^=]+)*(?:=.*)?|-save-temps(?:=.*)?|-f(?:no-)?stack-usage|-fsave-optimization-record(?:=.*)?|-foptimization-record-file(?:=.*)?|-fopt-info(?:-[^=]+)?(?:=.*)?|\/clang:-(?:emit-llvm|S|gline-tables-only|save-temps(?:=.*)?|f(?:no-)?stack-usage|fsave-optimization-record(?:=.*)?|foptimization-record-file(?:=.*)?))$/;
 const compilerManagedFlags = new Set([
 	'-S',
 	'-c',
@@ -670,7 +671,7 @@ export class ToolchainBackend {
 					invocation.workingDirectory,
 				);
 			}
-			const dependencyText = await fs.promises.readFile(dependencyFile, 'utf8');
+			const dependencyText = await readBoundedArtifactFile(dependencyFile);
 			const dependencies = spec.parse(
 				dependencyText,
 				invocation.workingDirectory,
@@ -729,9 +730,9 @@ async function readBoundedArtifactFile(
 	filename: string,
 	optional = false,
 ): Promise<string> {
-	let stat: fs.Stats;
+	let handle: fs.promises.FileHandle;
 	try {
-		stat = await fs.promises.stat(filename);
+		handle = await fs.promises.open(filename, 'r');
 	} catch (error) {
 		if (optional && (error as NodeJS.ErrnoException).code === 'ENOENT') {
 			return '';
@@ -740,11 +741,35 @@ async function readBoundedArtifactFile(
 			cause: error,
 		});
 	}
-	if (stat.size > maxArtifactFileBytes) {
-		throw new exec.ExecError(
-			'output-limit',
-			`Toolchain output file exceeded the ${maxArtifactFileBytes}-byte limit`,
-		);
+	try {
+		const stat = await handle.stat();
+		if (stat.size > maxArtifactFileBytes) {
+			throw artifactFileLimitError();
+		}
+		const chunks: Buffer[] = [];
+		let position = 0;
+		while (position <= maxArtifactFileBytes) {
+			const remaining = maxArtifactFileBytes + 1 - position;
+			const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, remaining));
+			const { bytesRead } = await handle.read(buffer, 0, buffer.length, position);
+			if (bytesRead === 0) {
+				break;
+			}
+			position += bytesRead;
+			if (position > maxArtifactFileBytes) {
+				throw artifactFileLimitError();
+			}
+			chunks.push(buffer.subarray(0, bytesRead));
+		}
+		return Buffer.concat(chunks, position).toString('utf8');
+	} finally {
+		await handle.close();
 	}
-	return fs.promises.readFile(filename, 'utf8');
+}
+
+function artifactFileLimitError(): exec.ExecError {
+	return new exec.ExecError(
+		'output-limit',
+		`Toolchain output file exceeded the ${maxArtifactFileBytes}-byte limit`,
+	);
 }
