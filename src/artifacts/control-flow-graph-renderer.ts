@@ -93,9 +93,9 @@ function assemblyParser(kind: ArtifactRenderContext['backend']['profile']['kind'
 			return new GccAssemblyCfgParser(new InstructionSetInfo());
 		case 'clang':
 		case 'apple-clang':
+		case 'clang-cl':
 		case 'rust':
 			return new ClangAssemblyCfgParser(new InstructionSetInfo());
-		case 'clang-cl':
 		case 'msvc':
 			return new MsvcAssemblyCfgParser();
 		case 'python':
