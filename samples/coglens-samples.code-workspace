@@ -1,0 +1,56 @@
+{
+    "folders": [
+        { "name": "C sample", "path": "c" },
+        { "name": "C++ sample", "path": "cpp" },
+        { "name": "Objective-C sample", "path": "objective-c" },
+        { "name": "Objective-C++ sample", "path": "objective-cpp" },
+        { "name": "CUDA sample", "path": "cuda" },
+        { "name": "Rust sample", "path": "rust" },
+        { "name": "Python sample", "path": "python" }
+    ],
+    "settings": {
+        "coglens.toolchains": [
+            {
+                "displayName": "Sample Clang C",
+                "kind": "clang",
+                "executable": "clang",
+                "defaultArguments": ["-std=c17", "-Iinclude"]
+            },
+            {
+                "displayName": "Sample Clang C++",
+                "kind": "clang",
+                "executable": "clang++",
+                "defaultArguments": ["-std=c++20", "-Iinclude"]
+            },
+            {
+                "displayName": "Sample Clang Objective-C",
+                "kind": "clang",
+                "executable": "clang",
+                "defaultArguments": ["-std=c17"]
+            },
+            {
+                "displayName": "Sample Clang Objective-C++",
+                "kind": "clang",
+                "executable": "clang++",
+                "defaultArguments": ["-std=c++20"]
+            },
+            {
+                "displayName": "Sample Clang CUDA host",
+                "kind": "clang",
+                "executable": "clang++",
+                "defaultArguments": ["-x", "c++", "-std=c++20"]
+            },
+            {
+                "displayName": "Sample Rust",
+                "kind": "rust",
+                "executable": "rustc",
+                "defaultArguments": ["--edition=2021"]
+            },
+            {
+                "displayName": "Sample Python",
+                "kind": "python",
+                "executable": "python"
+            }
+        ]
+    }
+}

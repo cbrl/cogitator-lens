@@ -1,0 +1,7 @@
+[project]
+name = "coglens-python-sample"
+version = "0.1.0"
+requires-python = ">=3.9"
+
+[tool.coglens]
+entry-point = "src/disassembly_sample.py"
