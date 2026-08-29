@@ -1,48 +1,25 @@
 # Cogitator Lens
 
-Divine the substratal invocations of your digital canticles.
-
-## Description
-
-This VS Code extension produces and renders toolchain artifacts using a project's real invocation
-settings. The current release renders assembly for C-family toolchains and Rust; preprocessing for
-GCC, Clang, Apple Clang, clang-cl, and MSVC; ASTs for Clang-family compilers and Python; binary
-disassembly for C-family toolchains; LLVM IR for Clang-family compilers and Rust; Rust MIR;
-optimization remarks for GCC and Clang-family compilers; stack analysis for GCC, Clang-family
-compilers, and Python; Python bytecode; and interactive control-flow graphs for GCC, Clang-family,
-Rust, and Python toolchains.
-Source navigation and highlighting work across all source files that contribute locations to the
-rendered artifact.
+Cogitator Lens is a VS Code extension for inspecting compiler and interpreter artifacts.
 
 ![Demo](https://raw.githubusercontent.com/cbrl/cogitator-lens/master/assets/demo.gif)
 
 ## Usage
 
-Compile settings are discovered from `compile_commands.json` without requiring another extension.
-By default, Cogitator Lens checks `compile_commands.json` and `build/compile_commands.json` in each
-workspace folder. Configure `coglens.compilationDatabases` to use different paths, or set it to an
-empty array to disable this provider.
+Cogitator Lens discovers C and C++ compile settings from `compile_commands.json` and
+`build/compile_commands.json` in each workspace folder. Set `coglens.compilationDatabases` to use
+other paths, or to `[]` to disable compilation-database discovery.
 
-When installed, the
-[CMake Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools) extension is
-also used to discover configured CMake projects. If CMake Tools and a compilation database describe
-the same file, both choices appear in the compilation variant picker.
+When [CMake Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools) is
+installed, its configured projects are also available. If both sources describe a file, select the
+required variant in the picker.
 
-The Cogitator Lens sidebar provides a browsable view of those variants. Use the reveal button to
-select the active source in **Project Compile Info** on demand; selecting a source entry opens it
-in the editor. Toolchain and variant entries have inline actions for the operations they support.
-**Artifact Details** follows the active Cogitator Lens artifact and shows its identity, lifecycle
-state, diagnostics, invocation, environment-variable names, and renderer metrics without
-recompiling it.
+Use the sidebar to browse variants and toolchains. Run `Cogitator Lens: Open Artifact` to generate
+an artifact for the active variant. Run `Cogitator Lens: Compare Artifacts` to compare a supported
+text artifact from two variants or presets. Control-flow graphs open in their own view.
 
-Use `Cogitator Lens: Open Artifact` to select an artifact supported by the active compilation
-variant. Branch and label references are clickable, symbol regions can be folded, source-backed
-lines show their original location on hover, and the Outline view lists symbols when the renderer
-provides that metadata.
-
-Use `Cogitator Lens: Compare Artifacts` to open a native VS Code diff between two compilation
-variants, two configured presets, or one of each. Only artifact kinds supported by both selections
-are offered. Graph artifacts are opened separately and are not included in native text comparison.
+The **Artifact Details** view shows the active artifact's status, diagnostics, invocation, and
+metrics.
 
 ### Artifact support
 
@@ -59,26 +36,25 @@ are offered. Graph artifacts are opened separately and are not included in nativ
 | Python bytecode | — | — | — | — | — | Yes |
 | Control-flow graph | Yes | Yes | Yes | — | Yes | Yes |
 
-### Manual Configuration
+## Configuration
 
-This project supports a basic level of manual toolchain configuration for simple cases without a
-CMake project.
+For simple projects, configure toolchains and a default invocation in workspace settings.
+`coglens.toolchains` defines available toolchains, and `coglens.defaultInvocation` selects the
+default. You can also add, clone, edit, and delete workspace toolchains and variants from the
+sidebar.
 
-The configuration options `coglens.toolchains` and `coglens.defaultInvocation` define a set of
-toolchains and the default invocation respectively. User toolchains can be added and deleted from
-the **Toolchains** view; discovered toolchains can be cloned into workspace settings.
-`coglens.artifactOptions` stores options under their artifact kind, such as `assembly.intel` and
-`assembly.labels`. Each sidebar view has a JSON button that opens its corresponding workspace
-setting directly.
+A toolchain has the form
+`{ displayName, kind, executable, defaultArguments?, environment?, tools? }`. Supported kinds are
+`gcc`, `clang`, `apple-clang`, `clang-cl`, `msvc`, `rust`, and `python`. Use `defaultArguments` for
+include paths and macro definitions. Set auxiliary tools, such as a disassembler or demangler, in
+`tools` when they are not found beside the compiler or on `PATH`.
 
-Use the add button in **Project Compile Info** to create a `coglens.compileVariants` entry for the
-active file. A variant records its source, toolchain profile, working directory, arguments, and
-environment. The edit action updates a workspace variant in place; using it on a discovered CMake,
-compilation-database, or Python variant creates an editable workspace-owned copy. Workspace variants
-also have a delete action.
+Use the add action in **Project Compile Info** to create a `coglens.compileVariants` entry for the
+active file. Variants specify a source file, toolchain, working directory, arguments, and
+environment. Editing a discovered variant creates a workspace copy.
 
-`coglens.artifactPresets` defines named production configurations. Each preset selects one artifact
-kind and may append arguments or override production options. For example:
+`coglens.artifactOptions` stores options by artifact kind, for example `assembly.intel` and
+`assembly.labels`. `coglens.artifactPresets` defines reusable artifact configurations:
 
 ```json
 {
@@ -99,19 +75,13 @@ kind and may append arguments or override production options. For example:
 }
 ```
 
-Preset arguments and production options are part of artifact identity and caching. Display-only
-options remain independent, so changing a display filter does not rerun the toolchain.
-Raw artifacts track compiler-reported source dependencies where stable tooling permits it, so
-changing or deleting an included header invalidates the affected cache entry.
+Preset arguments and production options are included in the artifact cache key. Display-only
+options do not regenerate an artifact.
 
-Toolchain entries use `{ displayName, kind, executable, defaultArguments?, environment?, tools? }`.
-Include and macro-definition flags belong in `defaultArguments`. Supported kinds are `gcc`, `clang`,
-`apple-clang`, `clang-cl`, `msvc`, `rust`, and `python`. Named auxiliary tools are discovered beside the
-configured compiler or on `PATH` when possible and can be set explicitly in `tools`.
+### Optional tools
 
-Binary disassembly compiles a debug-bearing object and invokes GNU `objdump` for GCC,
-`llvm-objdump` for Clang-family toolchains, or `dumpbin` for MSVC. Configure the executable as the
-`disassembler` auxiliary tool when it is not installed beside the compiler:
+Binary disassembly uses `objdump` for GCC, `llvm-objdump` for Clang toolchains, and `dumpbin` for
+MSVC. Configure a `disassembler` when the tool is not detected automatically:
 
 ```json
 {
@@ -124,60 +94,10 @@ Binary disassembly compiles a debug-bearing object and invokes GNU `objdump` for
 }
 ```
 
-The binary renderer preserves instruction addresses and bytes, source-line mappings, branch links,
-symbols, and code-size metrics supplied by the disassembler.
+Install `rustfilt` beside `rustc`, or configure it as the `demangler` tool, to demangle Rust
+symbols.
 
-Clang and Apple Clang produce LLVM IR with `-emit-llvm -S`; clang-cl forwards the equivalent
-arguments through `/clang:`. All three request line-table debug metadata. The dedicated IR renderer
-resolves that metadata into source navigation and exposes functions in the Outline view and as
-foldable regions. Rust produces the same artifact through stable `--emit=llvm-ir` output.
-
-Preprocessed-source artifacts preserve compiler line markers and map emitted lines back to the
-logical source or header. The `preprocessed-source.showIncludedFiles` display option hides included
-file bodies without rerunning the compiler.
-
-Clang-family AST artifacts use the documented Clang text dump, remove unstable object addresses,
-provide declaration folds and symbols, and hide common system declarations by default. Set
-`ast.showSystemDeclarations` to show them. Python ASTs are produced by the selected Python 3.9+
-interpreter in isolated mode with `ast.parse`; the module is read and parsed but never imported or
-executed.
-
-Optimization remarks are first-class artifacts. Clang and Apple Clang emit YAML records through
-`-fsave-optimization-record`, while clang-cl forwards the same record options through `/clang:`;
-GCC emits `-fopt-info` records. Both formats render as a syntax-highlighted copy of the original
-source, with passed, missed, and analysis remarks inserted and color-highlighted immediately above
-the lines they describe. Remark rows retain source navigation, and records that cannot be mapped to
-the selected source are omitted from the merged view. A compilation variant must include an
-optimization level such as `-O2` or `-O3` for useful results.
-
-Stack analysis is a source-linked artifact. GCC, Clang, and Apple Clang use the documented
-`-fstack-usage` report; clang-cl forwards the same Clang option while retaining slash-style
-arguments. Native measurements remain bytes and retain the compiler's static, dynamic, or bounded
-dynamic qualifier. Python compiles the module without executing it, recursively walks its code
-objects, and reports `co_stacksize` in interpreter evaluation-stack slots. Python VM slots are not
-native frame bytes and Cogitator Lens does not convert between the units. Each function receives a
-separate annotation row above its source line, while valid records that cannot be mapped to the
-active source appear under **Unmapped entries**. Stable Rust and MSVC do not expose a selected
-stable stack report and are shown as unsupported.
-
-Control-flow graphs open in a bundled, theme-aware view with function selection, pan, zoom, fit,
-edge labels, and keyboard-accessible source navigation. When a toolchain can build a graph from
-multiple outputs, opening the graph prompts for the representation: GCC offers its documented tree
-CFG dump or assembly, Clang-family toolchains offer LLVM IR or assembly, and Rust offers MIR, LLVM
-IR, or assembly. Python graphs come from recursively inspected bytecode code objects, and MSVC graphs
-come from assembly listings. Python source is compiled but never executed. Only the selected
-function is laid out, which keeps large translation units responsive. The graph view uses bundled
-assets exclusively and does not contact a remote rendering service. Use **Cogitator Lens: Open
-Control-Flow Graph** to open it directly; double-click a mapped node, or focus it and press Enter or
-Space, to navigate back to source.
-
-The **Artifact Details** view reports the active artifact's preset, variant, toolchain, status,
-duration, generation time, truncation, diagnostic counts, executable, arguments, working
-directory, and metrics. Its environment section deliberately contains sorted variable names only;
-environment values never enter the view model. Context-menu copy actions are available for the
-diagnostic command line, executable, individual arguments, working directory, and metric values.
-
-A simple standalone Rust setup looks like:
+### Rust
 
 ```json
 {
@@ -195,16 +115,11 @@ A simple standalone Rust setup looks like:
 }
 ```
 
-Cogitator Lens supplies Rust assembly, MIR, LLVM IR, and control-flow graph emission plus source-mapping,
-diagnostic-format, and output arguments. MIR functions and basic blocks are foldable, block targets
-are clickable, and stable span comments become source links. If the invocation does not specify a
-crate name or crate type, it uses a synthetic crate name and `lib`, which lets standalone source
-files without `main` produce artifacts. Project-specific
-arguments such as the edition, target, features, dependency search paths, and `--extern` entries
-remain the invocation's responsibility. Install `rustfilt` beside `rustc`, or configure it as the
-`demangler` auxiliary tool, to enable Rust symbol demangling.
+For standalone files, Cogitator Lens supplies required output options. Configure project-specific
+arguments such as the edition, target, features, dependencies, and `--extern` entries in the
+invocation.
 
-A standalone Python setup uses the interpreter itself as the toolchain:
+### Python
 
 ```json
 {
@@ -222,28 +137,18 @@ A standalone Python setup uses the interpreter itself as the toolchain:
 }
 ```
 
-The Python bytecode artifact invokes the selected interpreter's `dis` module. It preserves that
-interpreter's native bytecode format, adds dedicated syntax highlighting, and maps instructions back
-to their source lines. Interpreter options such as `-O`, `-B`, and `-X` remain part of the configured
-invocation; Cogitator Lens owns the `-m dis` execution mode and source argument.
+Interpreter options such as `-O`, `-B`, and `-X` belong in the configured invocation. Python code
+is compiled or parsed without being imported or executed.
 
-When Microsoft's Python extension is installed, Cogitator Lens also discovers its known Python
-environments automatically. Each resolved interpreter appears as a Python toolchain and as a
-compilation variant for workspace Python files. The interpreter selected for a file is offered first,
-and environment, selection, and Python environment-variable changes are applied without manual
-toolchain configuration.
-
-Cogitator Lens does not support Restricted Mode because producing an artifact launches the selected
-toolchain. VS Code must trust the workspace before the extension can activate.
+When Microsoft's Python extension is installed, its selected and known environments are discovered
+automatically for workspace Python files.
 
 ## Development samples
 
-Small projects for every supported source language live in [`samples`](samples/README.md). They
-include ready-to-use toolchain settings and artifact presets for exercising assembly, binary
-disassembly, front-end and intermediate artifacts, stack analysis, and control-flow graphs.
+[`samples`](samples/README.md) contains small projects and settings for supported languages and
+artifact types.
 
 ## Acknowledgements
 
-This extension is inspired by the following works:
 - [Compiler Explorer](https://github.com/mattgodbolt/compiler-explorer)
 - [vscode-disasexpl](https://github.com/dseight/vscode-disasexpl)
