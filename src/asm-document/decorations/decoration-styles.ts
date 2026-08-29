@@ -11,16 +11,16 @@ import type { OptimizationRemarkCategory } from '../../types/index.js';
 
 export const selectedLineDecoration = window.createTextEditorDecorationType({
 	isWholeLine: true,
-	backgroundColor: new ThemeColor('editor.findMatchHighlightBackground'),
-	overviewRulerColor: new ThemeColor('editorOverviewRuler.findMatchForeground'),
+	backgroundColor: new ThemeColor('coglens.selection.background'),
+	overviewRulerColor: new ThemeColor('coglens.selection.overviewRuler'),
 });
 
 export const selectedSourceRangeDecoration = window.createTextEditorDecorationType({
-	backgroundColor: new ThemeColor('editor.wordHighlightStrongBackground'),
-	borderColor: new ThemeColor('editor.wordHighlightStrongBorder'),
+	backgroundColor: new ThemeColor('coglens.sourceRange.background'),
+	borderColor: new ThemeColor('coglens.sourceRange.border'),
 	borderStyle: 'solid',
 	borderWidth: '1px',
-	overviewRulerColor: new ThemeColor('editorOverviewRuler.wordHighlightStrongForeground'),
+	overviewRulerColor: new ThemeColor('coglens.sourceRange.overviewRuler'),
 });
 
 export const unusedLineDecoration = window.createTextEditorDecorationType({
@@ -28,7 +28,31 @@ export const unusedLineDecoration = window.createTextEditorDecorationType({
 });
 
 export const stateDecoration = window.createTextEditorDecorationType({
-	after: { color: 'gray' },
+	after: { color: new ThemeColor('coglens.state.foreground') },
+});
+
+export const binaryColumnsDecoration = window.createTextEditorDecorationType({
+	before: {
+		color: new ThemeColor('coglens.binaryColumns.foreground'),
+		backgroundColor: new ThemeColor('coglens.binaryColumns.background'),
+		fontStyle: 'normal',
+		fontWeight: 'normal',
+		margin: '0 1.5em 0 0',
+	},
+});
+
+export const sourceLineBandDecorations = Array.from({ length: 6 }, (_, index) => {
+	const background = new ThemeColor(`coglens.sourceLineBand.${index + 1}Background`);
+	const marker = new ThemeColor(`coglens.sourceLineBand.${index + 1}Marker`);
+	return window.createTextEditorDecorationType({
+		isWholeLine: true,
+		backgroundColor: background,
+		borderColor: marker,
+		borderStyle: 'solid',
+		borderWidth: '0 0 0 2px',
+		overviewRulerColor: marker,
+		overviewRulerLane: OverviewRulerLane.Left,
+	});
 });
 
 function optimizationRemarkDecoration(category: OptimizationRemarkCategory) {

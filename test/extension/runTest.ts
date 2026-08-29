@@ -84,7 +84,7 @@ export async function run(): Promise<void> {
 	verifyVariantSnapshots();
 	verifyUriMapping();
 	verifyDiagnostics(workspaceFolder);
-	verifyFilterChangeSignal();
+	await verifyFilterChangeSignal();
 	verifyManualVariantConfiguration(workspaceFolder);
 	verifyAssemblyUriRoundTrip();
 	verifyArtifactNavigationProviders();
@@ -442,7 +442,7 @@ function verifyArtifactNavigationProviders(): void {
 		text: '',
 		lines: [
 			{ text: 'entry:', source: { file: sourcePath, line: 4, column: 2 } },
-			{ text: '  call helper' },
+			{ text: '  call helper', address: 16, opcodes: ['e8', '00', '00', '00', '00'], disassembly: 'call helper' },
 			{ text: 'helper:' },
 			{ text: '  ret' },
 		],
@@ -490,6 +490,19 @@ function verifyArtifactNavigationProviders(): void {
 		const hoverContent = hover.contents[0];
 		assert.ok(hoverContent instanceof vscode.MarkdownString);
 		assert.match(hoverContent.value, /main\.cpp:4:3/);
+
+		const instructionHover = provider.provideHover(
+			document,
+			new vscode.Position(1, 8),
+			cancellation.token,
+		);
+		assert.ok(instructionHover instanceof vscode.Hover);
+		const instructionContent = instructionHover.contents[0];
+		assert.ok(instructionContent instanceof vscode.MarkdownString);
+		assert.match(instructionContent.value, /\*\*call\*\*/i);
+		assert.match(instructionContent.value, /return.*address/i);
+		assert.match(instructionContent.value, /Address:.*0x10/);
+		assert.match(instructionContent.value, /Branch.*target:.*helper:/);
 
 		const symbols = provider.provideDocumentSymbols(document, cancellation.token);
 		assert.ok(Array.isArray(symbols));
@@ -1079,15 +1092,34 @@ async function assertFakeNativeStackFailure(
 	}
 }
 
-function verifyFilterChangeSignal(): void {
+async function verifyFilterChangeSignal(): Promise<void> {
 	const configurationChange = new vscode.EventEmitter<void>();
-	const configuration = testConfiguration(configurationChange);
+	let persistedOptions = defaultArtifactOptions;
+	let updateFolder: vscode.WorkspaceFolder | undefined;
+	const configuration = testConfiguration(configurationChange, {
+		getArtifactOptions: kind => kind === 'assembly' ? persistedOptions : defaultArtifactOptions,
+		updateArtifactOptions: async (kind, options, folder) => {
+			updateFolder = folder;
+			if (kind === 'assembly') {
+				persistedOptions = options;
+			}
+			configurationChange.fire();
+		},
+	});
 	const service = new CompilationService(configuration);
 	let changes = 0;
 	const subscription = service.onArtifactOptionsChanged(() => changes++);
 
 	service.setArtifactOption('assembly', 'labels', false);
 	assert.equal(changes, 1);
+	assert.equal(service.getArtifactOptions('assembly').display.labels, false);
+	await new Promise(resolve => setTimeout(resolve, 0));
+	assert.equal(updateFolder, undefined, 'Global artifact options must use workspace scope');
+	assert.equal(
+		service.getArtifactOptions('assembly').display.labels,
+		false,
+		'The persisted configuration event must not revert the first toggle',
+	);
 	service.setArtifactOption('assembly', 'labels', false);
 	assert.equal(changes, 1, 'An unchanged option should not trigger another refresh');
 

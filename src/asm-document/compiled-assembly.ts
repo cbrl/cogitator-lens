@@ -1,6 +1,6 @@
 import { Uri } from 'vscode';
 import path from 'path';
-import type { RenderedArtifactLine } from '../types/index.js';
+import type { ArtifactKind, RenderedArtifactLine } from '../types/index.js';
 import { sourceUriMap, sourceUriSet, UriMap, UriSet } from '../uri-containers.js';
 
 /**
@@ -9,6 +9,7 @@ import { sourceUriMap, sourceUriSet, UriMap, UriSet } from '../uri-containers.js
  * mapping used to highlight and dim lines in each direction.
  */
 export interface CompiledAssembly {
+	readonly kind: ArtifactKind;
 	readonly srcUri: Uri;
 	readonly asmUri: Uri;
 	readonly lines: readonly RenderedArtifactLine[];
@@ -28,6 +29,7 @@ export function getContent(assembly: CompiledAssembly): string {
 export function buildCompiledAssembly(
 	srcUri: Uri,
 	asmUri: Uri,
+	kind: ArtifactKind,
 	lines: readonly RenderedArtifactLine[],
 ): CompiledAssembly {
 	const allReferencedSrcUris = sourceUriSet();
@@ -53,5 +55,5 @@ export function buildCompiledAssembly(
 		lineMap.set(sourceLine, asmLines);
 	});
 
-	return { srcUri, asmUri, lines, allReferencedSrcUris, sourceLineMappings };
+	return { kind, srcUri, asmUri, lines, allReferencedSrcUris, sourceLineMappings };
 }

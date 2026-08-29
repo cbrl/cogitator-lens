@@ -112,8 +112,8 @@ export class CompilationService {
 		}
 		this.currentArtifactOptions.set(kind, options);
 		this.artifactOptionsChangeEmitter.fire(kind);
-		const folder = workspace.workspaceFolders?.[0];
-		void this.configuration.updateArtifactOptions(kind, options, folder);
+		// Artifact options are currently global per kind, not scoped to a workspace folder.
+		void this.configuration.updateArtifactOptions(kind, options);
 	}
 
 	getVariants(file: Uri): readonly CompilationVariant[] {

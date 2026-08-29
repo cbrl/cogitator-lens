@@ -14,17 +14,21 @@ import { asmLineHasSource, type CompiledAssembly } from './compiled-assembly.js'
 import path from 'path';
 import { equalUri } from '../utils.js';
 import {
+	binaryColumnsDecoration,
 	optimizationRemarkDecorations,
 	stackUsageDecoration,
 	selectedLineDecoration,
 	selectedSourceRangeDecoration,
 	stateDecoration,
+	sourceLineBandDecorations,
 	unusedLineDecoration,
 } from './decorations/decoration-styles.js';
 import { EditorTracker } from './decorations/editor-tracker.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
 import type { CompileHandlerStatus, CompilationDocumentState } from './compile-handler.js';
 import type {
+	ArtifactKind,
+	ArtifactOptions,
 	OptimizationRemarkLineAnnotation,
 	RenderedArtifactLine,
 	StackUsageLineAnnotation,
@@ -69,6 +73,7 @@ export class AsmDecorator {
 		asmUri: Uri,
 		asmEvent: Event<CompileHandlerStatus>,
 		configService: ConfigurationService,
+		private readonly artifactOptions: (kind: ArtifactKind) => ArtifactOptions,
 	) {
 		this.asmUri = asmUri;
 		this.srcUri = srcUri;
@@ -142,6 +147,8 @@ export class AsmDecorator {
 			// Recalculate active state now that asmData may have changed
 			this.updateActiveState();
 			this.dimUnusedSourceLines();
+			this.decorateListingColumns();
+			this.decorateSourceLineBands();
 			this.decorateAnalysisAnnotations();
 		}
 
@@ -167,14 +174,22 @@ export class AsmDecorator {
 	}
 
 	private clearDecorations(editor: TextEditor) {
-		editor.setDecorations(selectedLineDecoration, []);
-		editor.setDecorations(selectedSourceRangeDecoration, []);
-		editor.setDecorations(unusedLineDecoration, []);
+		this.clearMappingDecorations(editor);
 		editor.setDecorations(stateDecoration, []);
+		editor.setDecorations(binaryColumnsDecoration, []);
 		for (const decoration of Object.values(optimizationRemarkDecorations)) {
 			editor.setDecorations(decoration, []);
 		}
 		editor.setDecorations(stackUsageDecoration, []);
+	}
+
+	private clearMappingDecorations(editor: TextEditor): void {
+		editor.setDecorations(selectedLineDecoration, []);
+		editor.setDecorations(selectedSourceRangeDecoration, []);
+		editor.setDecorations(unusedLineDecoration, []);
+		for (const decoration of sourceLineBandDecorations) {
+			editor.setDecorations(decoration, []);
+		}
 	}
 
 	private clearAllDecorations() {
@@ -218,6 +233,71 @@ export class AsmDecorator {
 			}
 		}
     }
+
+	private decorateListingColumns(): void {
+		if (!this.asmData || this.asmData instanceof Error) {
+			return;
+		}
+		const editor = this.editorTracker.getAsmEditor(this.asmUri);
+		if (!editor || !this.artifactOptions(this.asmData.kind).display.binaryColumns) {
+			return;
+		}
+		const addressWidth = Math.max(4, ...this.asmData.lines.map(line =>
+			line.address === undefined ? 0 : line.address.toString(16).length));
+		const opcodeWidth = Math.max(0, ...this.asmData.lines.map(line =>
+			line.opcodes?.join(' ').length ?? 0));
+		const options = this.asmData.lines.flatMap((line, index) => {
+			if (
+				index >= editor.document.lineCount
+				|| (line.address === undefined && !line.opcodes?.length)
+			) {
+				return [];
+			}
+			const address = line.address === undefined
+				? ''.padStart(addressWidth)
+				: line.address.toString(16).padStart(addressWidth, '0');
+			const opcodes = (line.opcodes?.join(' ') ?? '').padEnd(opcodeWidth);
+			return [{
+				range: new Range(index, 0, index, 0),
+				renderOptions: { before: { contentText: `${address}  ${opcodes}` } },
+			}];
+		});
+		editor.setDecorations(binaryColumnsDecoration, options);
+	}
+
+	private decorateSourceLineBands(): void {
+		if (
+			!this.asmData
+			|| this.asmData instanceof Error
+			|| !this.artifactOptions(this.asmData.kind).display.sourceLineColorBands
+		) {
+			return;
+		}
+		const asmEditor = this.editorTracker.getAsmEditor(this.asmUri);
+		if (!asmEditor) {
+			return;
+		}
+		const asmRanges = sourceLineBandDecorations.map(() => [] as Range[]);
+		for (const editor of this.getAllSourceEditors()) {
+			const sourceRanges = sourceLineBandDecorations.map(() => [] as Range[]);
+			for (const [sourceLine, artifactLines] of
+				this.asmData.sourceLineMappings.get(editor.document.uri) ?? []) {
+				const band = sourceLine % sourceLineBandDecorations.length;
+				if (sourceLine >= 0 && sourceLine < editor.document.lineCount) {
+					sourceRanges[band].push(editor.document.lineAt(sourceLine).range);
+				}
+				for (const artifactLine of artifactLines) {
+					if (artifactLine >= 0 && artifactLine < asmEditor.document.lineCount) {
+						asmRanges[band].push(asmEditor.document.lineAt(artifactLine).range);
+					}
+				}
+			}
+			sourceLineBandDecorations.forEach((decoration, index) =>
+				editor.setDecorations(decoration, sourceRanges[index]));
+		}
+		sourceLineBandDecorations.forEach((decoration, index) =>
+			asmEditor.setDecorations(decoration, asmRanges[index]));
+	}
 
     private onSrcLineSelected(selectedEditor: TextEditor, highlightOnly: boolean = false): void {
 		if (!this.asmData || this.asmData instanceof Error) {
@@ -411,9 +491,15 @@ export class AsmDecorator {
 			this.dimUnusedSourceLines();
 		}
 		else {
-			// Clear all decorations if no longer active. An editor that goes out of view will automatically have
-			// its decorations cleared, but the corresponding source/assembly editor won't if it's still visible.
-			this.clearAllDecorations();
+			// Clear cross-editor mapping decorations if the pair is no longer visible. Listing-local columns,
+			// analysis annotations, and state remain useful when the artifact is open by itself.
+			for (const editor of this.getAllSourceEditors()) {
+				this.clearDecorations(editor);
+			}
+			const asmEditor = this.editorTracker.getAsmEditor(this.asmUri);
+			if (asmEditor) {
+				this.clearMappingDecorations(asmEditor);
+			}
 		}
 	}
 

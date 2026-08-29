@@ -1,0 +1,15 @@
+{
+    "$schema": "https://raw.githubusercontent.com/martinring/tmLanguage/master/tmLanguage.schema.json",
+    "name": "LLVM IR",
+    "scopeName": "source.coglens-llvm-ir",
+    "patterns": [
+        { "begin": ";", "end": "$", "name": "comment.line.semicolon.llvm" },
+        { "begin": "\"", "end": "\"", "name": "string.quoted.double.llvm", "patterns": [{ "match": "\\\\.", "name": "constant.character.escape.llvm" }] },
+        { "match": "^\\s*[-A-Za-z$._\\d]+(?=:)", "name": "entity.name.label.llvm" },
+        { "match": "[%@][-A-Za-z$._\\d]+", "name": "variable.other.llvm" },
+        { "match": "\\b(?:i\\d+|half|bfloat|float|double|fp128|x86_fp80|ptr|void|label|metadata|token)\\b", "name": "storage.type.llvm" },
+        { "match": "\\b(?:define|declare|global|alloca|load|store|getelementptr|phi|select|call|invoke|ret|br|switch|indirectbr|resume|unreachable|add|sub|mul|udiv|sdiv|fadd|fsub|fmul|icmp|fcmp|and|or|xor|shl|lshr|ashr|bitcast|trunc|zext|sext|ptrtoint)\\b", "name": "keyword.control.llvm" },
+        { "match": "\\b(?:true|false|null|undef|poison|zeroinitializer)\\b", "name": "constant.language.llvm" },
+        { "match": "[-+]?\\b(?:0x[\\da-fA-F]+|\\d+(?:\\.\\d+)?)\\b", "name": "constant.numeric.llvm" }
+    ]
+}

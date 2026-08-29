@@ -133,6 +133,7 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 				handler.asmUri,
 				handler.onDidChange,
 				this.configuration,
+				kind => this.compilationService.getArtifactOptions(kind),
 			);
 		}
 

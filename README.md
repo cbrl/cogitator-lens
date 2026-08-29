@@ -152,3 +152,17 @@ artifact types.
 
 - [Compiler Explorer](https://github.com/mattgodbolt/compiler-explorer)
 - [vscode-disasexpl](https://github.com/dseight/vscode-disasexpl)
+
+## References
+
+- [Compiler Explorer](https://compiler-explorer.com/)
+- [Compiler Explorer source](https://github.com/compiler-explorer/compiler-explorer)
+- [Clang AST documentation](https://clang.llvm.org/docs/IntroductionToTheClangAST.html)
+- [Clang command-line reference](https://clang.llvm.org/docs/ClangCommandLineReference.html)
+- [GCC developer options](https://gcc.gnu.org/onlinedocs/gcc/Developer-Options.html)
+- [GCC preprocessor options](https://gcc.gnu.org/onlinedocs/gcc/Preprocessor-Options.html)
+- [MSVC preprocessing](https://learn.microsoft.com/en-us/cpp/build/reference/p-preprocess-to-a-file?view=msvc-170)
+- [MSVC source dependencies](https://learn.microsoft.com/en-us/cpp/build/reference/sourcedependencies?view=msvc-170)
+- [rustc command-line arguments](https://doc.rust-lang.org/rustc/command-line-arguments.html)
+- [Python `ast` module](https://docs.python.org/3/library/ast.html)
+- [Dagre package](https://www.npmjs.com/package/%40dagrejs/dagre)

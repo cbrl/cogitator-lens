@@ -41,6 +41,8 @@ test('the manifest toolchain-kind enum and artifactOptions schema stay synchroni
 			untrustedWorkspaces: { supported: boolean };
 		};
 		contributes: {
+			languages: Array<{ id: string }>;
+			grammars: Array<{ language: string }>;
 			commands: Array<{ command: string }>;
 			views: { coglens: Array<{ id: string }> };
 			colors: Array<{ id: string }>;
@@ -95,6 +97,16 @@ test('the manifest toolchain-kind enum and artifactOptions schema stay synchroni
 		view.id === 'coglens.artifactDetails'));
 	assert.ok(manifest.contributes.colors.some(color =>
 		color.id === 'coglens.stackUsage.background'));
+	assert.ok(manifest.contributes.colors.some(color =>
+		color.id === 'coglens.sourceLineBand.6Marker'));
+	assert.ok(manifest.contributes.languages.some(language =>
+		language.id === 'coglens-asm'));
+	assert.ok(manifest.contributes.languages.some(language =>
+		language.id === 'coglens-llvm-ir'));
+	assert.ok(manifest.contributes.grammars.some(grammar =>
+		grammar.language === 'coglens-asm'));
+	assert.ok(manifest.contributes.grammars.some(grammar =>
+		grammar.language === 'coglens-llvm-ir'));
 	assert.match(fs.readFileSync('.vscodeignore', 'utf8'), /^test\/\*\*$/m);
 	assert.match(fs.readFileSync('.vscodeignore', 'utf8'), /^plans\/\*\*$/m);
 });

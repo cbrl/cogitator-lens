@@ -152,6 +152,7 @@ export class CompileHandler implements Disposable {
 				? buildCompiledAssembly(
 					this.srcUri,
 					this.asmUri,
+					rendered.kind,
 					rendered.toolOutputTruncated
 						? [...rendered.lines, { text: '[truncated; toolchain output was limited]' }]
 						: rendered.lines,

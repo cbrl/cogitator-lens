@@ -61,6 +61,18 @@ interface ArtifactDefinitionShape {
 }
 
 const displayOptionDescriptors = {
+	binaryColumns: {
+		id: 'binaryColumns',
+		group: 'display',
+		label: 'Show address and opcode columns',
+		description: 'Show parsed instruction addresses and encoded bytes beside the listing',
+	},
+	sourceLineColorBands: {
+		id: 'sourceLineColorBands',
+		group: 'display',
+		label: 'Show source-line color bands',
+		description: 'Use stable color bands to connect source lines with generated output',
+	},
 	labels: {
 		id: 'labels',
 		group: 'display',
@@ -127,12 +139,16 @@ const assemblyOptions = [
 		description: 'Remove excessive horizontal whitespace',
 	},
 	displayOptionDescriptors.dontMaskFilenames,
+	displayOptionDescriptors.binaryColumns,
+	displayOptionDescriptors.sourceLineColorBands,
 ] as const satisfies readonly ArtifactOptionDescriptor[];
 
 const binaryDisassemblyOptions = [
 	displayOptionDescriptors.labels,
 	displayOptionDescriptors.libraryCode,
 	displayOptionDescriptors.dontMaskFilenames,
+	displayOptionDescriptors.binaryColumns,
+	displayOptionDescriptors.sourceLineColorBands,
 ] as const satisfies readonly ArtifactOptionDescriptor[];
 
 export const artifactDefinitions = {
@@ -201,7 +217,7 @@ export const artifactDefinitions = {
 		label: 'LLVM IR',
 		filenameExtension: '.ll',
 		documentLanguage: 'artifact',
-		options: [],
+		options: [displayOptionDescriptors.sourceLineColorBands],
 		renderer: renderLlvmIr,
 		navigation: {
 			definitions: true,
