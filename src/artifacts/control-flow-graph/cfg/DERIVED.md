@@ -72,7 +72,13 @@ site in the source.
 - **MSVC `ENDP`.** Upstream keeps `ENDP` inside the function range and then
   keeps it out of its own block, leaving it as the last "instruction" of the
   block that actually returns. The directive is excluded from the range instead,
-  so the returning block is classified from its `ret`.
+  so the returning block is classified from its `ret`. Linear blocks connect
+  directly to the next block in the same function rather than reading across
+  the function range and mistaking `ENDP` for a fallthrough target.
+- **MSVC `/FAcs` code columns.** MSVC prefixes instructions with an address and
+  encoded bytes, and wraps long encodings onto byte-only continuation lines.
+  Those columns are skipped before opcode classification so jumps and returns
+  are recognized in the listing format the extension requests.
 - **Function naming.** Upstream titles a graph with the raw label line, giving
   `classify:` or `classify PROC`. The directive and trailing colon are trimmed,
   and the entry block takes the same name.

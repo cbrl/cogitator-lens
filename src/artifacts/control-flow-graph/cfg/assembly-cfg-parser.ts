@@ -152,11 +152,6 @@ export class AssemblyCfgParser {
 		return instruction.match(/\.L\d+/u)?.[0].concat(':');
 	}
 
-	/** The block identity a fallthrough into `text` lands on. */
-	protected extractBlockIdFromInstruction(text: string): string {
-		return text;
-	}
-
 	/** Separates a synthesised block name from its originating label. */
 	protected labelSeparator(): string {
 		return '@';
@@ -369,11 +364,12 @@ export class AssemblyCfgParser {
 					connect(ordinal, blocks[ordinal + 1]?.nameId, 'false');
 					break;
 				case 'linear': {
-					// The block ran off its end into whatever follows it, which is
-					// the next block's label unless the function stopped here.
-					const following = code[block.end];
-					if (following) {
-						connect(ordinal, this.extractBlockIdFromInstruction(following.text), 'fallthrough');
+					// Fallthrough is possible only within this function. Looking at
+					// `code[block.end]` for the final block crosses the half-open
+					// function range and, for MSVC, mistakes `name ENDP` for a target.
+					const next = blocks[ordinal + 1];
+					if (next) {
+						connect(ordinal, next.nameId, 'fallthrough');
 					}
 					break;
 				}

@@ -128,11 +128,11 @@ export class XtensaInstructionSetInfo extends InstructionSetInfo {
  */
 export class MsvcInstructionSetInfo extends InstructionSetInfo {
 	override isJump(instruction: string): boolean {
-		return opcodeOf(instruction).startsWith('j');
+		return opcodeOf(msvcInstruction(instruction)).startsWith('j');
 	}
 
 	override classify(instruction: string): InstructionType {
-		const opcode = opcodeOf(instruction);
+		const opcode = opcodeOf(msvcInstruction(instruction));
 		if (opcode === 'jmp') {
 			return 'unconditional-jump';
 		}
@@ -141,6 +141,22 @@ export class MsvcInstructionSetInfo extends InstructionSetInfo {
 		}
 		return opcode === 'ret' || opcode === 'retn' ? 'return' : 'linear';
 	}
+}
+
+/**
+ * Removes the address and encoded-byte columns emitted by `/FAcs`.
+ *
+ * A short instruction is written on one line, for example
+ * `0004e c3 ret 0`. Longer encodings wrap, with their mnemonic on a byte-only
+ * continuation such as `00 00 sub rsp, 144`. In either form the mnemonic is
+ * the first token after the hexadecimal byte run, not the first token in the
+ * listing line.
+ */
+function msvcInstruction(instruction: string): string {
+	return instruction.replace(
+		/^\s*(?:[0-9a-f]{5,16}\s+)?(?:[0-9a-f]{2}\s+)+/iu,
+		'',
+	);
 }
 
 /**

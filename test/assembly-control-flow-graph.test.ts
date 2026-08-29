@@ -83,6 +83,49 @@ test('MSVC graph nodes carry the source position and the artifact lines behind t
 	assert.equal(graph.nodes.every(node => node.source !== undefined), true);
 });
 
+test('MSVC /FAcs address and machine-code columns do not hide control flow', () => {
+	const listing = [
+		'; Function compile flags: /Odtp',
+		'classify PROC',
+		'$LN4@classify:',
+		'  00000\t83 f9 0a\t cmp\t ecx, 10',
+		'  00003\t0f 8e 07 00 00',
+		'\t00\t\t jle\t $LN2@classify',
+		'  00009\tb8 01 00 00 00\t mov\t eax, 1',
+		'  0000e\teb 05\t\t jmp\t SHORT $LN3@classify',
+		'$LN2@classify:',
+		'  00010\t33 c0\t\t xor\t eax, eax',
+		'$LN3@classify:',
+		'  00012\tc3\t\t ret\t 0',
+		'classify ENDP',
+	].join('\n');
+
+	const result = new MsvcAssemblyCfgParser().parse(assemblyLines(listing));
+
+	assert.deepEqual(result.diagnostics, []);
+	assert.deepEqual(result.graphs[0].edges, [
+		{ from: '$LN4@classify:', to: '$LN2@classify:', kind: 'true' },
+		{ from: '$LN4@classify:', to: '$LN4@classify:#5', kind: 'false' },
+		{ from: '$LN4@classify:#5', to: '$LN3@classify:', kind: 'unconditional' },
+		{ from: '$LN2@classify:', to: '$LN3@classify:', kind: 'fallthrough' },
+	]);
+	assert.equal(result.graphs[0].nodes.at(-1)?.terminal, 'return');
+});
+
+test('a final linear MSVC block does not fall through to its ENDP directive', () => {
+	const listing = [
+		'; Function compile flags: /Odtp',
+		'final_linear PROC',
+		'\tnop',
+		'final_linear ENDP',
+	].join('\n');
+
+	const result = new MsvcAssemblyCfgParser().parse(assemblyLines(listing));
+
+	assert.deepEqual(result.diagnostics, []);
+	assert.deepEqual(result.graphs[0].edges, []);
+});
+
 test('an indirect jump is reported instead of producing an edge to a missing block', () => {
 	// A switch jump table reaches its targets through a table load. Upstream
 	// stringifies the failed match and emits an edge to a node called `null:`,
@@ -210,6 +253,9 @@ test('instruction classification distinguishes the dialects it is asked about', 
 	assert.equal(msvc.classify('\tjmp\tSHORT $LN3@f'), 'unconditional-jump');
 	assert.equal(msvc.classify('\tjle\tSHORT $LN2@f'), 'conditional-jump');
 	assert.equal(msvc.classify('\tret\t0'), 'return');
+	assert.equal(msvc.classify('  0004a\teb 0a\t\t jmp\t SHORT $LN3@f'), 'unconditional-jump');
+	assert.equal(msvc.classify('\t00\t\t jge\t $LN2@f'), 'conditional-jump');
+	assert.equal(msvc.classify('  0004e\tc3\t\t ret\t 0'), 'return');
 	// `jmp` appears inside no other MSVC mnemonic, but `mov` must not be a jump.
 	assert.equal(msvc.classify('\tmov\teax, DWORD PTR value$[rsp]'), 'linear');
 
