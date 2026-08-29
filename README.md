@@ -161,9 +161,11 @@ active source appear under **Unmapped entries**. Stable Rust and MSVC do not exp
 stable stack report and are shown as unsupported.
 
 Control-flow graphs open in a bundled, theme-aware view with function selection, pan, zoom, fit,
-edge labels, and keyboard-accessible source navigation. GCC graphs come from the documented tree CFG
-dump, Clang-family graphs from LLVM IR, Rust graphs from MIR, and Python graphs from recursively
-inspected bytecode code objects. Python source is compiled but never executed. Only the selected
+edge labels, and keyboard-accessible source navigation. When a toolchain can build a graph from
+multiple outputs, opening the graph prompts for the representation: GCC offers its documented tree
+CFG dump or assembly, Clang-family toolchains offer LLVM IR or assembly, and Rust offers MIR, LLVM
+IR, or assembly. Python graphs come from recursively inspected bytecode code objects, and MSVC graphs
+come from assembly listings. Python source is compiled but never executed. Only the selected
 function is laid out, which keeps large translation units responsive. The graph view uses bundled
 assets exclusively and does not contact a remote rendering service. Use **Cogitator Lens: Open
 Control-Flow Graph** to open it directly; double-click a mapped node, or focus it and press Enter or
@@ -233,6 +235,12 @@ toolchain configuration.
 
 Cogitator Lens does not support Restricted Mode because producing an artifact launches the selected
 toolchain. VS Code must trust the workspace before the extension can activate.
+
+## Development samples
+
+Small projects for every supported source language live in [`samples`](samples/README.md). They
+include ready-to-use toolchain settings and artifact presets for exercising assembly, binary
+disassembly, front-end and intermediate artifacts, stack analysis, and control-flow graphs.
 
 ## Acknowledgements
 

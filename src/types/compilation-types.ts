@@ -38,6 +38,8 @@ export interface ManualCompilationVariantSettings {
 export interface ArtifactRequest {
 	variant: CompilationVariant;
 	artifactKind: ArtifactKind;
+	/** Selects the compiler output used by output-backed artifact kinds. */
+	artifactOutputId?: string;
 	presetId: string;
 	extraArguments: readonly string[];
 	options: ArtifactOptions;

@@ -59,6 +59,8 @@ export interface ArtifactDocumentIdentity {
 	readonly sourceLabel: string;
 	readonly artifactKind: ArtifactKind;
 	readonly artifactLabel: string;
+	readonly artifactOutputId?: string;
+	readonly artifactOutputLabel?: string;
 	readonly presetId: string;
 	readonly variantId: string;
 	readonly variantLabel: string;
@@ -236,6 +238,7 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 			identity.artifactKind,
 			identity.presetId,
 			this.compilationService,
+			identity.artifactOutputId,
 		);
 		const profile = this.compilationService.toolchainRegistry
 			.getToolchainById(variant.toolchainProfileId)?.profile;
@@ -245,6 +248,9 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 			sourceLabel: identity.source.fsPath,
 			artifactKind: identity.artifactKind,
 			artifactLabel: artifactDefinitions[identity.artifactKind].label,
+			...(identity.artifactOutputId
+				? { artifactOutputId: identity.artifactOutputId }
+				: {}),
 			presetId: identity.presetId,
 			variantId: variant.id,
 			variantLabel: variant.displayLabel,

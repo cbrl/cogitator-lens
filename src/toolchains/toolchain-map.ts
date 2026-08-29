@@ -90,20 +90,42 @@ export type ArtifactProducer = (
 	cancellationToken: CancellationToken,
 ) => Promise<RawArtifact>;
 
+interface ToolchainArtifactImplementation {
+	readonly producer: ArtifactProducer;
+	/** Optional toolchain-specific rendering action; otherwise the artifact default is used. */
+	readonly renderer?: (
+		raw: RawArtifact,
+		options: DisplayOptions,
+		context: ArtifactRenderContext,
+	) => RenderedArtifact;
+	readonly requiredTool?: {
+		readonly name: string;
+		readonly label: string;
+	};
+}
+
+export interface ToolchainArtifactOutput extends ToolchainArtifactImplementation {
+	/** Stable identifier persisted in artifact document URIs and production cache keys. */
+	readonly id: string;
+	readonly label: string;
+	readonly description: string;
+}
+
+type ResolvedToolchainArtifactCell =
+	| (ToolchainArtifactImplementation & { readonly status: 'available' })
+	| {
+		readonly status: 'unavailable' | 'unsupported';
+		readonly explanation: string;
+	};
+
 export type ToolchainArtifactCell =
+	| (ToolchainArtifactImplementation & {
+		readonly status: 'available';
+		readonly outputs?: never;
+	})
 	| {
 		readonly status: 'available';
-		readonly producer: ArtifactProducer;
-		/** Optional toolchain-specific rendering action; otherwise the artifact default is used. */
-		readonly renderer?: (
-			raw: RawArtifact,
-			options: DisplayOptions,
-			context: ArtifactRenderContext,
-		) => RenderedArtifact;
-		readonly requiredTool?: {
-			readonly name: string;
-			readonly label: string;
-		};
+		readonly outputs: readonly [ToolchainArtifactOutput, ...ToolchainArtifactOutput[]];
 	}
 	| {
 		readonly status: 'unavailable' | 'unsupported';
@@ -172,6 +194,32 @@ const binaryCell = (
 		label,
 	},
 });
+
+function outputArtifactCell(
+	outputs: readonly [ToolchainArtifactOutput, ...ToolchainArtifactOutput[]],
+): ToolchainArtifactCell {
+	return Object.freeze({
+		status: 'available',
+		outputs: Object.freeze([...outputs]) as readonly [
+			ToolchainArtifactOutput,
+			...ToolchainArtifactOutput[],
+		],
+	});
+}
+
+const controlFlowGraphOutput = (
+	id: string,
+	label: string,
+	description: string,
+	producer: ArtifactProducer,
+): ToolchainArtifactOutput => Object.freeze({ id, label, description, producer });
+
+const assemblyControlFlowGraphOutput = controlFlowGraphOutput(
+	'assembly',
+	'Assembly CFG',
+	'Build a machine-level graph from the compiler assembly listing.',
+	assemblyControlFlowGraphProducer,
+);
 
 function unsupportedCell(kind: ArtifactKind): ToolchainArtifactCell {
 	return {
@@ -322,10 +370,15 @@ const clangArtifacts = artifactCells({
 		status: 'available',
 		producer: nativeStackAnalysisProducer,
 	},
-	'control-flow-graph': {
-		status: 'available',
-		producer: compilerOutputProducer('control-flow-graph', llvmIrOutput),
-	},
+	'control-flow-graph': outputArtifactCell([
+		controlFlowGraphOutput(
+			'llvm-ir',
+			'LLVM IR CFG',
+			'Build a graph from the compiler LLVM IR output.',
+			compilerOutputProducer('control-flow-graph', llvmIrOutput),
+		),
+		assemblyControlFlowGraphOutput,
+	]),
 });
 
 const gccArtifacts = artifactCells({
@@ -344,10 +397,15 @@ const gccArtifacts = artifactCells({
 		status: 'available',
 		producer: nativeStackAnalysisProducer,
 	},
-	'control-flow-graph': {
-		status: 'available',
-		producer: compilerOutputProducer('control-flow-graph', gccControlFlowGraphOutput),
-	},
+	'control-flow-graph': outputArtifactCell([
+		controlFlowGraphOutput(
+			'gcc-tree',
+			'GCC tree CFG',
+			'Build a source-level graph from GCC\'s tree CFG dump.',
+			compilerOutputProducer('control-flow-graph', gccControlFlowGraphOutput),
+		),
+		assemblyControlFlowGraphOutput,
+	]),
 });
 
 const msvcArtifacts = artifactCells({
@@ -357,10 +415,9 @@ const msvcArtifacts = artifactCells({
 		status: 'available',
 		producer: msvcPreprocessedSourceProducer,
 	},
-	'control-flow-graph': {
-		status: 'available',
-		producer: assemblyControlFlowGraphProducer,
-	},
+	'control-flow-graph': outputArtifactCell([
+		assemblyControlFlowGraphOutput,
+	]),
 });
 
 const clangClArtifacts = artifactCells({
@@ -388,10 +445,15 @@ const clangClArtifacts = artifactCells({
 		status: 'available',
 		producer: clangClStackAnalysisProducer,
 	},
-	'control-flow-graph': {
-		status: 'available',
-		producer: compilerOutputProducer('control-flow-graph', clangClLlvmIrOutput),
-	},
+	'control-flow-graph': outputArtifactCell([
+		controlFlowGraphOutput(
+			'llvm-ir',
+			'LLVM IR CFG',
+			'Build a graph from the compiler LLVM IR output.',
+			compilerOutputProducer('control-flow-graph', clangClLlvmIrOutput),
+		),
+		assemblyControlFlowGraphOutput,
+	]),
 });
 
 const rustArtifacts = artifactCells({
@@ -404,10 +466,21 @@ const rustArtifacts = artifactCells({
 		status: 'available',
 		producer: compilerOutputProducer('rust-mir', rustMirOutput),
 	},
-	'control-flow-graph': {
-		status: 'available',
-		producer: compilerOutputProducer('control-flow-graph', rustMirOutput),
-	},
+	'control-flow-graph': outputArtifactCell([
+		controlFlowGraphOutput(
+			'rust-mir',
+			'Rust MIR CFG',
+			'Build a source-level graph from rustc MIR output.',
+			compilerOutputProducer('control-flow-graph', rustMirOutput),
+		),
+		controlFlowGraphOutput(
+			'llvm-ir',
+			'LLVM IR CFG',
+			'Build a graph from rustc LLVM IR output.',
+			compilerOutputProducer('control-flow-graph', rustLlvmIrOutput),
+		),
+		assemblyControlFlowGraphOutput,
+	]),
 });
 
 const pythonArtifacts = artifactCells({
@@ -425,10 +498,14 @@ const pythonArtifacts = artifactCells({
 		producer: pythonStackAnalysisProducer,
 		renderer: renderPythonStackAnalysis,
 	},
-	'control-flow-graph': {
-		status: 'available',
-		producer: pythonControlFlowGraphProducer,
-	},
+	'control-flow-graph': outputArtifactCell([
+		controlFlowGraphOutput(
+			'python-bytecode',
+			'Python bytecode CFG',
+			'Build a graph from recursively inspected Python bytecode.',
+			pythonControlFlowGraphProducer,
+		),
+	]),
 });
 
 export const toolchainDefinitions = {
@@ -603,6 +680,66 @@ export function resolveArtifactAvailability(
 	kind: ArtifactKind,
 ): ToolchainArtifactCell {
 	const cell: ToolchainArtifactCell = toolchainDefinitions[profile.kind].artifacts[kind];
+	if (cell.status === 'available' && cell.outputs) {
+		return cell;
+	}
+	return resolveImplementationAvailability(profile, cell);
+}
+
+/** The named compiler outputs from which this artifact can be produced. */
+export function getArtifactOutputChoices(
+	profile: ToolchainProfile,
+	kind: ArtifactKind,
+): readonly Pick<ToolchainArtifactOutput, 'id' | 'label' | 'description'>[] {
+	const cell = resolveArtifactAvailability(profile, kind);
+	if (cell.status !== 'available' || cell.outputs === undefined) {
+		return [];
+	}
+	return cell.outputs.map(({ id, label, description }) => ({ id, label, description }));
+}
+
+/** Resolve the producer for an explicit compiler-output selection. */
+export function resolveArtifactOutput(
+	profile: ToolchainProfile,
+	kind: ArtifactKind,
+	outputId?: string,
+): ResolvedToolchainArtifactCell {
+	const cell: ToolchainArtifactCell = toolchainDefinitions[profile.kind].artifacts[kind];
+	if (cell.status !== 'available') {
+		return resolveImplementationAvailability(profile, cell);
+	}
+	if (cell.outputs === undefined) {
+		if (outputId !== undefined) {
+			return {
+				status: 'unsupported',
+				explanation: `${artifactDefinitions[kind].label} does not accept an output selection.`,
+			};
+		}
+		return resolveImplementationAvailability(profile, cell);
+	}
+	if (outputId === undefined) {
+		return {
+			status: 'unsupported',
+			explanation: `Select an output for ${artifactDefinitions[kind].label.toLowerCase()}.`,
+		};
+	}
+	const output = cell.outputs.find(candidate => candidate.id === outputId);
+	if (output === undefined) {
+		return {
+			status: 'unsupported',
+			explanation: `${profile.displayName} does not support the ${outputId} output for ${artifactDefinitions[kind].label.toLowerCase()}.`,
+		};
+	}
+	return resolveImplementationAvailability(profile, {
+		status: 'available',
+		...output,
+	});
+}
+
+function resolveImplementationAvailability(
+	profile: ToolchainProfile,
+	cell: ResolvedToolchainArtifactCell,
+): ResolvedToolchainArtifactCell {
 	if (
 		cell.status === 'available'
 		&& cell.requiredTool

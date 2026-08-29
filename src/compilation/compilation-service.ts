@@ -37,7 +37,7 @@ import {
 	artifactDefinitions,
 	supportedArtifactKinds,
 } from '../artifacts/artifact-definitions.js';
-import { resolveArtifactAvailability } from '../toolchains/toolchain-map.js';
+import { resolveArtifactOutput } from '../toolchains/toolchain-map.js';
 import { ToolchainRegistry } from './toolchain-registry.js';
 import { CompilationConfigDatabase } from './compilation-config.js';
 import { parseToolDiagnostics } from '../diagnostics.js';
@@ -181,7 +181,11 @@ export class CompilationService {
 				explanation: `Toolchain profile not found: ${variant.toolchainProfileId}`,
 			};
 		}
-		const cell = resolveArtifactAvailability(backend.profile, artifactKind);
+		const cell = resolveArtifactOutput(
+			backend.profile,
+			artifactKind,
+			request.artifactOutputId,
+		);
 		if (cell.status !== 'available') {
 			return cell;
 		}
@@ -189,6 +193,9 @@ export class CompilationService {
 		const key = productionKey(request, source.value.state);
 		const renderContext: ArtifactRenderContext = {
 			backend,
+			...(request.artifactOutputId
+				? { artifactOutputId: request.artifactOutputId }
+				: {}),
 			source: {
 				uri: variant.source,
 				text: source.value.text,
@@ -199,7 +206,7 @@ export class CompilationService {
 			request.onInvocation?.(invocationDetails(cached.command));
 			return {
 				status: 'available',
-				artifact: await this.renderArtifact(cached, options, renderContext),
+				artifact: await this.renderArtifact(cached, options, renderContext, cell.renderer),
 			};
 		} else if (cached) {
 			this.removeRawArtifact(key);
@@ -221,7 +228,7 @@ export class CompilationService {
 			this.cacheRawArtifact(key, raw, variant.source);
 			return {
 				status: 'available',
-				artifact: await this.renderArtifact(raw, options, renderContext),
+				artifact: await this.renderArtifact(raw, options, renderContext, cell.renderer),
 			};
 		} catch (error: unknown) {
 			if (error instanceof CancellationError || cancellationToken.isCancellationRequested) {
@@ -265,8 +272,10 @@ export class CompilationService {
 		raw: RawArtifact,
 		options: ArtifactOptions,
 		context: ArtifactRenderContext,
+		outputRenderer?: import('../artifacts/artifact-definitions.js').ArtifactRenderer,
 	): Promise<RenderedArtifact> {
-		const renderer = context.backend.getArtifactRenderer(raw.kind)
+		const renderer = outputRenderer
+			?? context.backend.getArtifactRenderer(raw.kind)
 			?? artifactDefinitions[raw.kind].renderer;
 		return await renderer(raw, options.display, context);
 	}

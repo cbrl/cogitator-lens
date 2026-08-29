@@ -23,7 +23,6 @@ import type {
 	RenderedGraphArtifact,
 	ToolchainProfile,
 } from '../types/index.js';
-import { artifactDefinitions } from '../artifacts/artifact-definitions.js';
 import {
 	parseArtifactUri,
 	type ArtifactUriIdentity,
@@ -35,6 +34,7 @@ import type {
 } from '../asm-document/asm-provider.js';
 import { toComparisonKey } from '../utils.js';
 import { logChannel } from '../logger.js';
+import { getArtifactOutputChoices } from '../toolchains/toolchain-map.js';
 import {
 	parseWebviewMessage,
 	type GraphTheme,
@@ -112,7 +112,11 @@ export class GraphPanelManager implements Disposable {
 		}
 
 		const parsed = parseArtifactUri(uri);
-		if (!parsed || parsed.artifactKind !== 'control-flow-graph') {
+		if (
+			!parsed
+			|| parsed.artifactKind !== 'control-flow-graph'
+			|| !parsed.artifactOutputId
+		) {
 			throw new Error(`Invalid control-flow graph URI: ${uri.toString()}`);
 		}
 		const variant = this.compilationService.getVariants(parsed.source)
@@ -122,10 +126,14 @@ export class GraphPanelManager implements Disposable {
 		}
 		const profile = this.compilationService.toolchainRegistry
 			.getToolchainById(variant.toolchainProfileId)?.profile;
+		const artifactOutput = profile
+			? getArtifactOutputChoices(profile, parsed.artifactKind)
+				.find(output => output.id === parsed.artifactOutputId)
+			: undefined;
 		const identity = graphDocumentIdentity(uri, parsed, variant, profile);
 		const panel = window.createWebviewPanel(
 			'coglens.controlFlowGraph',
-			`${path.basename(parsed.source.fsPath)} — Control-flow graph`,
+			`${path.basename(parsed.source.fsPath)} — ${artifactOutput?.label ?? parsed.artifactOutputId}`,
 			{ viewColumn: ViewColumn.Beside, preserveFocus: true },
 			{
 				enableScripts: true,
@@ -140,6 +148,7 @@ export class GraphPanelManager implements Disposable {
 			'control-flow-graph',
 			parsed.presetId,
 			this.compilationService,
+			parsed.artifactOutputId,
 		);
 		const document: GraphPanelDocument = {
 			key,
@@ -379,12 +388,21 @@ function graphDocumentIdentity(
 	variant: CompilationVariant,
 	profile: ToolchainProfile | undefined,
 ): ArtifactDocumentIdentity {
+	if (parsed.artifactKind !== 'control-flow-graph' || !parsed.artifactOutputId) {
+		throw new Error('Control-flow graph identity requires an output selection.');
+	}
+	const artifactOutput = profile
+		? getArtifactOutputChoices(profile, parsed.artifactKind)
+			.find(output => output.id === parsed.artifactOutputId)
+		: undefined;
 	return {
 		documentUri: uri.toString(),
 		sourceUri: parsed.source.toString(),
 		sourceLabel: parsed.source.fsPath,
 		artifactKind: parsed.artifactKind,
-		artifactLabel: artifactDefinitions[parsed.artifactKind].label,
+		artifactLabel: artifactOutput?.label ?? parsed.artifactOutputId,
+		artifactOutputId: parsed.artifactOutputId,
+		artifactOutputLabel: artifactOutput?.label ?? parsed.artifactOutputId,
 		presetId: parsed.presetId,
 		variantId: variant.id,
 		variantLabel: variant.displayLabel,

@@ -14,7 +14,7 @@ import {
 test('Python bytecode producer owns module dispatch and uses stdout', async () => {
 	const cell = toolchainDefinitions.python.artifacts['python-bytecode'];
 	assert.equal(cell.status, 'available');
-	if (cell.status !== 'available') {
+	if (cell.status !== 'available' || cell.outputs !== undefined) {
 		return;
 	}
 

@@ -10,7 +10,12 @@ import { invocationDetails } from '../types/index.js';
 import type { ArtifactRenderContext } from './artifact-definitions.js';
 import type { AssemblyCfgParser } from './cfg/assembly-cfg-parser.js';
 import { toAssemblyLines } from './cfg/assembly-line.js';
-import { MsvcAssemblyCfgParser } from './cfg/assembly-dialects.js';
+import {
+	ClangAssemblyCfgParser,
+	GccAssemblyCfgParser,
+	MsvcAssemblyCfgParser,
+} from './cfg/assembly-dialects.js';
+import { InstructionSetInfo } from './cfg/instruction-sets.js';
 import { parseLlvmControlFlowGraphs } from './cfg/llvm-ir-cfg-parser.js';
 import {
 	controlFlowGraphMetrics,
@@ -59,21 +64,42 @@ function parseControlFlowGraphs(
 	context: ArtifactRenderContext,
 ): GraphParseResult {
 	const workingDirectory = raw.command.workingDirectory;
-	switch (context.backend.profile.kind) {
-		case 'gcc':
+	switch (context.artifactOutputId) {
+		case 'assembly':
+			return parseAssemblyControlFlowGraphs(
+				assemblyParser(context.backend.profile.kind),
+				raw,
+				options,
+				context,
+			);
+		case 'gcc-tree':
 			return parseGccControlFlowGraphs(raw.text, workingDirectory);
+		case 'llvm-ir':
+			return parseLlvmControlFlowGraphs(raw.text, workingDirectory);
+		case 'rust-mir':
+			return parseRustMirControlFlowGraphs(raw.text, workingDirectory);
+		case 'python-bytecode':
+			return parsePythonControlFlowGraphs(raw.text, workingDirectory);
+		case undefined:
+			throw new Error('A control-flow graph output must be selected.');
+		default:
+			throw new Error(`Unknown control-flow graph output: ${context.artifactOutputId}`);
+	}
+}
+
+function assemblyParser(kind: ArtifactRenderContext['backend']['profile']['kind']): AssemblyCfgParser {
+	switch (kind) {
+		case 'gcc':
+			return new GccAssemblyCfgParser(new InstructionSetInfo());
 		case 'clang':
 		case 'apple-clang':
-		case 'clang-cl':
-			return parseLlvmControlFlowGraphs(raw.text, workingDirectory);
 		case 'rust':
-			return parseRustMirControlFlowGraphs(raw.text, workingDirectory);
-		case 'python':
-			return parsePythonControlFlowGraphs(raw.text, workingDirectory);
+			return new ClangAssemblyCfgParser(new InstructionSetInfo());
+		case 'clang-cl':
 		case 'msvc':
-			// MSVC documents no IR dump, so the graph comes from the `/FAcs`
-			// listing it already produces for the assembly artifact.
-			return parseAssemblyControlFlowGraphs(new MsvcAssemblyCfgParser(), raw, options, context);
+			return new MsvcAssemblyCfgParser();
+		case 'python':
+			throw new Error('Python has no assembly control-flow graph output.');
 	}
 }
 

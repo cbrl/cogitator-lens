@@ -17,6 +17,7 @@ export interface ArtifactUriIdentity {
 	readonly variantId: string;
 	readonly artifactKind: ArtifactKind;
 	readonly presetId: string;
+	readonly artifactOutputId?: string;
 }
 
 export function getArtifactUri(
@@ -24,13 +25,23 @@ export function getArtifactUri(
 	variant: Pick<CompilationVariant, 'id'>,
 	artifactKind: ArtifactKind,
 	presetId: string,
+	artifactOutputId?: string,
 ): Uri {
+	if (artifactKind === 'control-flow-graph' && !artifactOutputId) {
+		throw new Error('Control-flow graph URIs require an output selection.');
+	}
+	if (artifactKind !== 'control-flow-graph' && artifactOutputId) {
+		throw new Error(`${artifactKind} URIs do not accept an output selection.`);
+	}
 	const query = new URLSearchParams({
 		source: source.toString(),
 		variant: variant.id,
 		artifact: artifactKind,
 		preset: presetId,
 	});
+	if (artifactOutputId) {
+		query.set('output', artifactOutputId);
+	}
 	return source.with({
 		scheme: artifactScheme,
 		path: artifactPath(source.path, artifactKind),
@@ -59,12 +70,14 @@ export function parseArtifactUri(uri: Uri): ArtifactUriIdentity | undefined {
 	const variantId = query.get('variant');
 	const artifactKind = query.get('artifact');
 	const presetId = query.get('preset');
+	const artifactOutputId = query.get('output') || undefined;
 	if (
 		!rawSource
 		|| !variantId
 		|| !artifactKind
 		|| !getArtifactDefinition(artifactKind)
 		|| !presetId
+		|| (artifactKind === 'control-flow-graph') !== Boolean(artifactOutputId)
 	) {
 		return undefined;
 	}
@@ -77,5 +90,6 @@ export function parseArtifactUri(uri: Uri): ArtifactUriIdentity | undefined {
 		variantId,
 		artifactKind: artifactKind as ArtifactKind,
 		presetId,
+		...(artifactOutputId ? { artifactOutputId } : {}),
 	};
 }

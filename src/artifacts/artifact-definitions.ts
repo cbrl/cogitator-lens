@@ -35,6 +35,8 @@ export interface ArtifactNavigationFeatures {
 
 export interface ArtifactRenderContext {
 	readonly backend: ToolchainBackend;
+	/** The compiler output selected for an output-backed artifact. */
+	readonly artifactOutputId?: string;
 	readonly source: {
 		readonly uri: Uri;
 		readonly text: string;

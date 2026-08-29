@@ -27,7 +27,10 @@ import {
 	partitionArtifactPickerChoices,
 	type ArtifactPickerChoice,
 } from './artifacts/artifact-picker.js';
-import { supportedLanguageIdentifiers } from './toolchains/toolchain-map.js';
+import {
+	getArtifactOutputChoices,
+	supportedLanguageIdentifiers,
+} from './toolchains/toolchain-map.js';
 import * as setup from './setup.js';
 import { GraphPanelManager } from './webview/graph-panel-manager.js';
 
@@ -241,6 +244,23 @@ async function openArtifact(
 		await window.showInformationMessage(availability.explanation);
 		return;
 	}
+	const outputChoices = getArtifactOutputChoices(backend.profile, kind);
+	let artifactOutput: (typeof outputChoices)[number] | undefined;
+	if (outputChoices.length === 1) {
+		artifactOutput = outputChoices[0];
+	} else if (outputChoices.length > 1) {
+		artifactOutput = await window.showQuickPick(
+			outputChoices.map(output => ({
+				label: output.label,
+				detail: output.description,
+				output,
+			})),
+			{ title: `${artifactDefinitions[kind].label} output` },
+		).then(choice => choice?.output);
+	}
+	if (outputChoices.length > 0 && !artifactOutput) {
+		return;
+	}
 
 	const presets = [...effectiveArtifactPresets(
 		configuration.getArtifactPresets(editor.document.uri),
@@ -260,7 +280,13 @@ async function openArtifact(
 		return;
 	}
 
-	const artifactUri = getArtifactUri(editor.document.uri, variant, kind, preset.id);
+	const artifactUri = getArtifactUri(
+		editor.document.uri,
+		variant,
+		kind,
+		preset.id,
+		artifactOutput?.id,
+	);
 	if (artifactDefinitions[kind].presentation === 'graph') {
 		await graphPanels.open(artifactUri);
 		return;

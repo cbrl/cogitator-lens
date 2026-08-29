@@ -5,8 +5,10 @@ import test from 'node:test';
 import {
 	gccControlFlowGraphOutput,
 	llvmIrOutput,
+	rustLlvmIrOutput,
 	rustMirOutput,
 } from '../src/artifacts/compiler-output-producer.js';
+import { renderControlFlowGraphArtifact } from '../src/artifacts/control-flow-graph-renderer.js';
 import {
 	controlFlowGraphMetrics,
 	validateControlFlowGraphs,
@@ -21,9 +23,13 @@ import {
 import { parseRustMirControlFlowGraphs } from '../src/artifacts/rust-mir-cfg-parser.js';
 import { renderedArtifact } from '../src/artifacts/rendered-artifact.js';
 import {
+	getArtifactOutputChoices,
 	resolveArtifactAvailability,
+	resolveArtifactOutput,
 	toolchainDefinitions,
 } from '../src/toolchains/toolchain-map.js';
+import { ToolchainBackend } from '../src/toolchains/toolchain-backend.js';
+import { defaultArtifactOptions } from '../src/types/index.js';
 import {
 	parseHostMessage,
 	parseWebviewMessage,
@@ -600,6 +606,179 @@ test('control-flow graph availability covers every planned toolchain cell', () =
 	}
 });
 
+test('toolchains advertise every supported control-flow graph output', () => {
+	const outputs = (kind: ToolchainKind) =>
+		getArtifactOutputChoices(profile(kind), 'control-flow-graph')
+			.map(output => output.id);
+
+	assert.deepEqual(outputs('gcc'), ['gcc-tree', 'assembly']);
+	for (const kind of ['clang', 'apple-clang', 'clang-cl'] as const) {
+		assert.deepEqual(outputs(kind), ['llvm-ir', 'assembly']);
+	}
+	assert.deepEqual(outputs('rust'), ['rust-mir', 'llvm-ir', 'assembly']);
+	assert.deepEqual(outputs('msvc'), ['assembly']);
+	assert.deepEqual(outputs('python'), ['python-bytecode']);
+	assert.equal(
+		resolveArtifactOutput(profile('rust'), 'control-flow-graph').status,
+		'unsupported',
+	);
+	assert.equal(
+		resolveArtifactOutput(profile('rust'), 'control-flow-graph', 'unknown').status,
+		'unsupported',
+	);
+});
+
+test('Rust control-flow graph outputs select MIR, LLVM IR, or assembly production', async () => {
+	for (const [outputId, expectedSpec] of [
+		['rust-mir', rustMirOutput],
+		['llvm-ir', rustLlvmIrOutput],
+	] as const) {
+		let receivedSpec: unknown;
+		const fakeBackend = {
+			produceCompilerOutput: async (
+				_kind: ArtifactKind,
+				_source: unknown,
+				_options: unknown,
+				spec: unknown,
+			) => {
+				receivedSpec = spec;
+				return rawArtifact('control-flow-graph', '');
+			},
+		};
+		const output = resolveArtifactOutput(profile('rust'), 'control-flow-graph', outputId);
+		assert.equal(output.status, 'available');
+		if (output.status === 'available') {
+			await output.producer(
+				fakeBackend as never,
+				{} as never,
+				{ productionOptions: { intel: false, demangle: false } },
+				{} as never,
+			);
+		}
+		assert.equal(receivedSpec, expectedSpec);
+	}
+
+	let producedAssembly = false;
+	const assemblyBackend = {
+		produceAssembly: async () => {
+			producedAssembly = true;
+			return rawArtifact('assembly', '');
+		},
+	};
+	const assembly = resolveArtifactOutput(profile('rust'), 'control-flow-graph', 'assembly');
+	assert.equal(assembly.status, 'available');
+	if (assembly.status === 'available') {
+		const raw = await assembly.producer(
+			assemblyBackend as never,
+			{} as never,
+			{ productionOptions: { intel: false, demangle: false } },
+			{} as never,
+		);
+		assert.equal(raw.kind, 'control-flow-graph');
+	}
+	assert.equal(producedAssembly, true);
+});
+
+test('selected Rust CFG outputs dispatch to their matching parsers', () => {
+	assert.throws(
+		() => renderControlFlowGraphArtifact(
+			rawArtifact('control-flow-graph', ''),
+			{} as never,
+			{
+				backend: { profile: profile('rust') } as never,
+				source: {
+					uri: { scheme: 'file', toString: () => 'file:///project/source.rs' } as never,
+					text: '',
+				},
+			},
+		),
+		/control-flow graph output must be selected/u,
+	);
+
+	const llvm = renderControlFlowGraphArtifact(
+		rawArtifact('control-flow-graph', [
+			'define void @selected() {',
+			'entry:',
+			'  ret void',
+			'}',
+		].join('\n')),
+		{} as never,
+		{
+			artifactOutputId: 'llvm-ir',
+			backend: { profile: profile('rust') } as never,
+			source: {
+				uri: { scheme: 'file', toString: () => 'file:///project/source.rs' } as never,
+				text: '',
+			},
+		},
+	);
+	assert.deepEqual(llvm.graphs.map(graph => graph.id), ['llvm:selected']);
+
+	const parsedAssembly = {
+		asm: [
+			{ text: 'selected:' },
+			{ text: '\tje\t.LBB0_1', source: { file: null, line: 1, column: 1 } },
+			{ text: '\tret', source: { file: null, line: 2, column: 1 } },
+			{ text: '.LBB0_1:' },
+			{ text: '\tret', source: { file: null, line: 3, column: 1 } },
+		],
+		labelDefinitions: {},
+	};
+	const assembly = renderControlFlowGraphArtifact(
+		rawArtifact('control-flow-graph', ''),
+		{} as never,
+		{
+			artifactOutputId: 'assembly',
+			backend: {
+				profile: profile('rust'),
+				parseAssembly: () => parsedAssembly,
+			} as never,
+			source: {
+				uri: { scheme: 'file', toString: () => 'file:///project/source.rs' } as never,
+				text: '',
+			},
+		},
+	);
+	assert.deepEqual(assembly.graphs.map(graph => graph.id), ['clang-asm:selected']);
+	assert.deepEqual(assembly.graphs[0].edges.map(edge => edge.kind), ['true', 'false']);
+});
+
+test('installed rustc assembly output produces a machine-level CFG', t => {
+	if (!commandExists('rustc')) {
+		t.diagnostic('rustc is not installed; skipping the assembly CFG integration probe');
+		return;
+	}
+	const source = path.resolve('test/fixtures/front-end/source.rs');
+	const result = childProcess.spawnSync(
+		'rustc',
+		[
+			'--crate-name=coglens_cfg_probe',
+			'--crate-type=lib',
+			'--emit=asm=-',
+			'-C',
+			'debuginfo=1',
+			source,
+		],
+		{ encoding: 'utf8', windowsHide: true },
+	);
+	assert.equal(result.status, 0, result.stderr);
+	const backend = new ToolchainBackend(profile('rust'), toolchainDefinitions.rust);
+	const rendered = renderControlFlowGraphArtifact(
+		rawArtifact('control-flow-graph', result.stdout),
+		defaultArtifactOptions.display,
+		{
+			artifactOutputId: 'assembly',
+			backend,
+			source: {
+				uri: { scheme: 'file', toString: () => `file:///${source.replaceAll('\\', '/')}` } as never,
+				text: '',
+			},
+		},
+	);
+	assert.ok(rendered.graphs.some(graph => graph.label.includes('choose')));
+	assert.ok(rendered.graphs.some(graph => graph.edges.length >= 2));
+});
+
 test('GCC CFG production owns its dump and temporary object arguments exactly', () => {
 	const temporaryDirectory = path.join('/temporary', 'coglens');
 	const outputFile = path.join(temporaryDirectory, 'output.cfg');
@@ -619,16 +798,19 @@ test('LLVM and MIR CFG cells dispatch through the expected compiler output specs
 	const cases = [
 		{
 			kind: 'clang' as const,
+			outputId: 'llvm-ir',
 			outputFilename: 'output.ll',
 			expectedArguments: ['-emit-llvm', '-S', '-gline-tables-only', '-o', 'cfg.ll'],
 		},
 		{
 			kind: 'apple-clang' as const,
+			outputId: 'llvm-ir',
 			outputFilename: 'output.ll',
 			expectedArguments: ['-emit-llvm', '-S', '-gline-tables-only', '-o', 'cfg.ll'],
 		},
 		{
 			kind: 'clang-cl' as const,
+			outputId: 'llvm-ir',
 			outputFilename: 'output.ll',
 			expectedArguments: [
 				'/clang:-emit-llvm',
@@ -640,6 +822,7 @@ test('LLVM and MIR CFG cells dispatch through the expected compiler output specs
 		},
 		{
 			kind: 'rust' as const,
+			outputId: 'rust-mir',
 			outputFilename: 'output.mir',
 			expectedArguments: [
 				'--crate-name=coglens_artifact',
@@ -679,7 +862,11 @@ test('LLVM and MIR CFG cells dispatch through the expected compiler output specs
 				return rawArtifact('control-flow-graph', '');
 			},
 		};
-		const cell = toolchainDefinitions[item.kind].artifacts['control-flow-graph'];
+		const cell = resolveArtifactOutput(
+			profile(item.kind),
+			'control-flow-graph',
+			item.outputId,
+		);
 		assert.equal(cell.status, 'available');
 		if (cell.status !== 'available') {
 			continue;

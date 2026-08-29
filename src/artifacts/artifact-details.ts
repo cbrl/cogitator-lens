@@ -33,6 +33,13 @@ export function buildArtifactDetails(
 		group('artifact', 'Artifact', [
 			value('artifact-label', 'Artifact', identity.artifactLabel),
 			value('kind', 'Kind', identity.artifactKind),
+			...(identity.artifactOutputId
+				? [value(
+					'artifact-output',
+					'Output',
+					identity.artifactOutputLabel ?? identity.artifactOutputId,
+				)]
+				: []),
 			value('source', 'Source', identity.sourceLabel),
 			value('preset', 'Preset', identity.presetId),
 			value('variant', 'Variant', identity.variantLabel),

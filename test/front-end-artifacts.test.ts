@@ -63,7 +63,7 @@ test('toolchain specifications own preprocessing and Python AST execution modes'
 		};
 		const cell = toolchainDefinitions[kind].artifacts['preprocessed-source'];
 		assert.equal(cell.status, 'available');
-		if (cell.status !== 'available') {
+		if (cell.status !== 'available' || cell.outputs !== undefined) {
 			continue;
 		}
 		await cell.producer(

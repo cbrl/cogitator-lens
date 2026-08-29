@@ -567,7 +567,9 @@ export class ToolchainBackend {
 		context: ArtifactRenderContext,
 	) => RenderedArtifact) | undefined {
 		const cell = this.definition.artifacts[kind];
-		return cell.status === 'available' ? cell.renderer : undefined;
+		return cell.status === 'available' && cell.outputs === undefined
+			? cell.renderer
+			: undefined;
 	}
 
 	private async prepareInvocation(

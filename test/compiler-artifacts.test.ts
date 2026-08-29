@@ -96,7 +96,7 @@ test('clang-cl artifact cells dispatch through their clang-compatible specificat
 	] as const) {
 		const cell = toolchainDefinitions['clang-cl'].artifacts[kind];
 		assert.equal(cell.status, 'available');
-		if (cell.status !== 'available') {
+		if (cell.status !== 'available' || cell.outputs !== undefined) {
 			continue;
 		}
 		let receivedSpec: unknown;

@@ -167,6 +167,10 @@ test('production keys exclude display options and include every production reque
 		...request,
 		presetId: 'optimized',
 	}, source), initial);
+	assert.notEqual(productionKey({
+		...request,
+		artifactOutputId: 'assembly',
+	}, source), initial);
 
 	const optionsCopy = immutableArtifactOptions(defaultArtifactOptions);
 	assert.equal(artifactOptionsEqual(defaultArtifactOptions, optionsCopy), true);

@@ -377,6 +377,29 @@ function verifyAssemblyUriRoundTrip(): void {
 	}, 'assembly', 'optimized');
 	assert.notEqual(uri.toString(), presetUri.toString());
 	assert.equal(parseArtifactUri(presetUri)?.presetId, 'optimized');
+	const graphUri = getArtifactUri(source, {
+		id: 'cmake:app:Debug/x64',
+	}, 'control-flow-graph', 'default', 'assembly');
+	assert.throws(
+		() => getArtifactUri(
+			source,
+			{ id: 'cmake:app:Debug/x64' },
+			'control-flow-graph',
+			'default',
+		),
+		/output selection/u,
+	);
+	assert.equal(parseArtifactUri(graphUri)?.artifactOutputId, 'assembly');
+	const graphWithoutOutput = graphUri.with({
+		query: new URLSearchParams([
+			...new URLSearchParams(graphUri.query).entries(),
+		].filter(([name]) => name !== 'output')).toString(),
+	});
+	assert.equal(parseArtifactUri(graphWithoutOutput), undefined);
+	assert.notEqual(
+		graphUri.toString(),
+		getArtifactUri(source, { id: 'cmake:app:Debug/x64' }, 'control-flow-graph', 'default', 'llvm-ir').toString(),
+	);
 	const remarksUri = getArtifactUri(source, {
 		id: 'cmake:app:Debug/x64',
 	}, 'optimization-remarks', 'default');

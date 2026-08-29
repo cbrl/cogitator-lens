@@ -71,6 +71,7 @@ export class CompileHandler implements Disposable {
 		private readonly artifactKind: ArtifactKind,
 		private readonly presetId: string,
 		private readonly compilationService: CompilationService,
+		private readonly artifactOutputId?: string,
 	) {
 		this.srcUri = srcUri;
 		this.asmUri = asmUri;
@@ -109,6 +110,7 @@ export class CompileHandler implements Disposable {
 			const artifact = await this.compilationService.compile({
 				variant: this.variant,
 				artifactKind: this.artifactKind,
+				...(this.artifactOutputId ? { artifactOutputId: this.artifactOutputId } : {}),
 				presetId: this.presetId,
 				extraArguments: preset.extraArguments,
 				options: {
