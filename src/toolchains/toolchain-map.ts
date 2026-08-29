@@ -76,8 +76,8 @@ import {
 import {
 	pythonStackAnalysisProducer,
 	renderPythonStackAnalysis,
-} from '../artifacts/python/python-stack-analysis.js';
-import { pythonControlFlowGraphProducer } from '../artifacts/python/python-cfg.js';
+} from '../artifacts/analysis/python-stack-analysis.js';
+import { pythonControlFlowGraphProducer } from '../artifacts/control-flow-graph/python-cfg.js';
 
 export type ToolCapabilityStatus = 'available' | 'unavailable' | 'unsupported';
 

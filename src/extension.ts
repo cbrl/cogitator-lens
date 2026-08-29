@@ -24,6 +24,7 @@ import {
 	type ArtifactPreset,
 } from './artifacts/ui/presets.js';
 import {
+	artifactPickerIcon,
 	partitionArtifactPickerChoices,
 	type ArtifactPickerChoice,
 } from './artifacts/ui/artifact-picker.js';
@@ -196,8 +197,7 @@ async function openArtifact(
 		await window.showErrorMessage('No compilation variant is available for this file.');
 		return;
 	}
-	const backend = compilationService.toolchainRegistry
-		.getToolchainById(variant.toolchainProfileId);
+	const backend = compilationService.toolchainRegistry.getToolchainById(variant.toolchainProfileId);
 	if (!backend) {
 		await window.showErrorMessage(`Toolchain profile not found: ${variant.toolchainProfileId}`);
 		return;
@@ -208,6 +208,7 @@ async function openArtifact(
 		const sections = partitionArtifactPickerChoices(
 			supportedArtifactKinds.map(artifactKind => ({
 				label: artifactDefinitions[artifactKind].label,
+				iconPath: new vscode.ThemeIcon(artifactPickerIcon(artifactKind)),
 				artifactKind,
 				availability: compilationService.toolchainRegistry
 					.getArtifactAvailability(variant.toolchainProfileId, artifactKind),

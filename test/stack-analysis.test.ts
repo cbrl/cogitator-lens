@@ -13,7 +13,7 @@ import {
 import {
 	parsePythonStackUsage,
 	pythonStackAnalysisHelper,
-} from '../src/artifacts/python/python-stack-analysis.js';
+} from '../src/artifacts/analysis/python-stack-analysis.js';
 import { ToolchainBackend } from '../src/toolchains/toolchain-backend.js';
 import {
 	resolveArtifactAvailability,

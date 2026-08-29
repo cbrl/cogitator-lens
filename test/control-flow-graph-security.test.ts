@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseLlvmControlFlowGraphs } from '../src/artifacts/control-flow-graph/cfg/llvm-ir-cfg-parser.js';
-import { parsePythonControlFlowGraphs } from '../src/artifacts/python/python-cfg.js';
+import { parsePythonControlFlowGraphs } from '../src/artifacts/control-flow-graph/python-cfg.js';
 import { validateControlFlowGraphs } from '../src/artifacts/control-flow-graph/control-flow-graph-model.js';
 import {
 	parseHostMessage,

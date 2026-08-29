@@ -23,7 +23,7 @@ import {
 	type GraphParseResult,
 } from './control-flow-graph-model.js';
 import { parseGccControlFlowGraphs } from './gcc-cfg-parser.js';
-import { parsePythonControlFlowGraphs } from '../python/python-cfg.js';
+import { parsePythonControlFlowGraphs } from '../control-flow-graph/python-cfg.js';
 import { parseRustMirControlFlowGraphs } from '../rust/rust-mir-cfg-parser.js';
 
 export function renderControlFlowGraphArtifact(

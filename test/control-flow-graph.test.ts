@@ -15,11 +15,11 @@ import {
 } from '../src/artifacts/control-flow-graph/control-flow-graph-model.js';
 import { parseGccControlFlowGraphs } from '../src/artifacts/control-flow-graph/gcc-cfg-parser.js';
 import { parseLlvmControlFlowGraphs } from '../src/artifacts/control-flow-graph/cfg/llvm-ir-cfg-parser.js';
-import { parsePythonControlFlowGraphs } from '../src/artifacts/python/python-cfg.js';
+import { parsePythonControlFlowGraphs } from '../src/artifacts/control-flow-graph/python-cfg.js';
 import {
 	pythonCfgHelper,
 	pythonControlFlowGraphProducer,
-} from '../src/artifacts/python/python-cfg.js';
+} from '../src/artifacts/control-flow-graph/python-cfg.js';
 import { parseRustMirControlFlowGraphs } from '../src/artifacts/rust/rust-mir-cfg-parser.js';
 import { renderedArtifact } from '../src/artifacts/core/rendered-artifact.js';
 import {
