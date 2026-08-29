@@ -4,11 +4,11 @@ import test from 'node:test';
 import {
 	artifactDefinitions,
 	supportedArtifactKinds,
-} from '../src/artifacts/artifact-definitions.js';
+} from '../src/artifacts/core/artifact-definitions.js';
 import {
 	effectiveArtifactPresets,
 	resolveArtifactPreset,
-} from '../src/artifacts/presets.js';
+} from '../src/artifacts/ui/presets.js';
 import {
 	supportedToolchainKinds,
 	toolchainDefinitions,

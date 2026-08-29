@@ -3,8 +3,8 @@ import type {
 	RenderedArtifactMetric,
 	RenderedArtifactLine,
 	RenderedTextArtifact,
-} from '../types/index.js';
-import { invocationDetails } from '../types/index.js';
+} from '../../types/index.js';
+import { invocationDetails } from '../../types/index.js';
 
 export function renderedArtifact(
 	raw: RawArtifact,

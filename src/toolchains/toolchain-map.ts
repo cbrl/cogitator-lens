@@ -32,13 +32,13 @@ import { stripPythonManagedArguments } from './python.js';
 import {
 	artifactDefinitions,
 	supportedArtifactKinds,
-} from '../artifacts/artifact-definitions.js';
+} from '../artifacts/core/artifact-definitions.js';
 import {
 	binaryDisassemblyProducer,
 	dumpbin,
 	gnuObjdump,
 	llvmObjdump,
-} from '../artifacts/binary-disassembly-producer.js';
+} from '../artifacts/compiler/binary-disassembly-producer.js';
 import {
 	assemblyControlFlowGraphProducer,
 	clangClLlvmIrOutput,
@@ -50,21 +50,21 @@ import {
 	llvmIrOutput,
 	rustLlvmIrOutput,
 	rustMirOutput,
-} from '../artifacts/compiler-output-producer.js';
-import { pythonBytecodeProducer } from '../artifacts/python-bytecode-producer.js';
+} from '../artifacts/compiler/compiler-output-producer.js';
+import { pythonBytecodeProducer } from '../artifacts/python/python-bytecode-producer.js';
 import {
 	pythonAstProducer,
 	stdoutArtifactProducer,
-} from '../artifacts/front-end-producers.js';
+} from '../artifacts/compiler/front-end-producers.js';
 import {
 	renderClangAst,
 	renderPythonAst,
-} from '../artifacts/ast-renderer.js';
+} from '../artifacts/compiler/ast-renderer.js';
 import {
 	optimizationRemarksRenderer,
 	parseClangOptimizationRemarks,
 	parseGccOptimizationRemarks,
-} from '../artifacts/optimization-remarks-renderer.js';
+} from '../artifacts/analysis/optimization-remarks-renderer.js';
 import {
 	parseMakeDepfile,
 	parseMsvcSourceDependencies,
@@ -72,12 +72,12 @@ import {
 import {
 	clangClStackAnalysisProducer,
 	nativeStackAnalysisProducer,
-} from '../artifacts/stack-analysis.js';
+} from '../artifacts/analysis/stack-analysis.js';
 import {
 	pythonStackAnalysisProducer,
 	renderPythonStackAnalysis,
-} from '../artifacts/python-stack-analysis.js';
-import { pythonControlFlowGraphProducer } from '../artifacts/python-cfg.js';
+} from '../artifacts/python/python-stack-analysis.js';
+import { pythonControlFlowGraphProducer } from '../artifacts/python/python-cfg.js';
 
 export type ToolCapabilityStatus = 'available' | 'unavailable' | 'unsupported';
 

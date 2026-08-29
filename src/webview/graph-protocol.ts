@@ -8,7 +8,7 @@ import {
 	graphLimits,
 	isRecord,
 	validateControlFlowGraph,
-} from '../artifacts/control-flow-graph-model.js';
+} from '../artifacts/control-flow-graph/control-flow-graph-model.js';
 
 /**
  * The discriminated message protocol between the graph panel and its webview.

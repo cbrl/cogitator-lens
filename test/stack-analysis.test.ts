@@ -4,16 +4,16 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { artifactDefinitions } from '../src/artifacts/artifact-definitions.js';
+import { artifactDefinitions } from '../src/artifacts/core/artifact-definitions.js';
 import {
 	clangClStackUsageOutput,
 	nativeStackUsageOutput,
 	parseStackUsage,
-} from '../src/artifacts/stack-analysis.js';
+} from '../src/artifacts/analysis/stack-analysis.js';
 import {
 	parsePythonStackUsage,
 	pythonStackAnalysisHelper,
-} from '../src/artifacts/python-stack-analysis.js';
+} from '../src/artifacts/python/python-stack-analysis.js';
 import { ToolchainBackend } from '../src/toolchains/toolchain-backend.js';
 import {
 	resolveArtifactAvailability,

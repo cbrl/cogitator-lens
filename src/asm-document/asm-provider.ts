@@ -22,7 +22,7 @@ import {
 	workspace,
 } from 'vscode';
 import path from 'path';
-import { artifactDefinitions } from '../artifacts/artifact-definitions.js';
+import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
 import { CompilationService } from '../compilation/index.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
 import {

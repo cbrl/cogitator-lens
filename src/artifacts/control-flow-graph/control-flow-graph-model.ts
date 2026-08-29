@@ -6,7 +6,7 @@ import type {
 	ControlFlowSourceLocation,
 	ControlFlowTerminal,
 	RenderedArtifactMetric,
-} from '../types/index.js';
+} from '../../types/index.js';
 
 /**
  * The graph model shared by the extension host and the webview bundle.

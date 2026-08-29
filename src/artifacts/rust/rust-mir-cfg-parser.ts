@@ -7,9 +7,9 @@ import type {
 	ControlFlowNode,
 	ControlFlowSourceLocation,
 	ControlFlowTerminal,
-} from '../types/index.js';
-import { compilerSourceUri, GraphIdAllocator, splitLines } from './cfg-parser-support.js';
-import type { GraphParseResult } from './control-flow-graph-model.js';
+} from '../../types/index.js';
+import { compilerSourceUri, GraphIdAllocator, splitLines } from '../control-flow-graph/cfg-parser-support.js';
+import type { GraphParseResult } from '../control-flow-graph/control-flow-graph-model.js';
 
 /**
  * Parses the stable, human-readable MIR dump emitted by rustc into function
@@ -578,4 +578,3 @@ function findClosingBracket(line: string, start: number): number {
 	}
 	return -1;
 }
-

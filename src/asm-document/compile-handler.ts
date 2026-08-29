@@ -16,7 +16,7 @@ import type {
 } from '../types/index.js';
 import { CompilationError } from '../types/index.js';
 import { buildCompiledAssembly, type CompiledAssembly } from './compiled-assembly.js';
-import { artifactDefinitions } from '../artifacts/artifact-definitions.js';
+import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
 import * as logger from '../logger.js';
 
 export interface ArtifactHandlerResult {

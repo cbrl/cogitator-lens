@@ -5,7 +5,7 @@
 
 import type { CancellationToken, Uri } from 'vscode';
 import type { ArtifactOptions } from './artifact-options.js';
-import type { ArtifactKind } from '../artifacts/artifact-definitions.js';
+import type { ArtifactKind } from '../artifacts/core/artifact-definitions.js';
 
 export interface CompilationVariant {
 	id: string;

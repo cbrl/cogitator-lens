@@ -21,7 +21,7 @@ import {
 	Uri,
 	type CancellationToken,
 } from 'vscode';
-import { artifactDefinitions } from '../artifacts/artifact-definitions.js';
+import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
 import type { RenderedTextArtifact } from '../types/index.js';
 
 type ArtifactLookup = (uri: Uri) => RenderedTextArtifact | undefined;

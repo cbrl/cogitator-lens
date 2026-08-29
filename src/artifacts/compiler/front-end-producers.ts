@@ -1,12 +1,12 @@
-import type { ArtifactProducer } from '../toolchains/toolchain-map.js';
+import type { ArtifactProducer } from '../../toolchains/toolchain-map.js';
 import {
 	ToolExitError,
 	type StdoutArtifactSpec,
-} from '../toolchains/toolchain-backend.js';
+} from '../../toolchains/toolchain-backend.js';
 import {
 	UnsupportedToolVersionError,
 	type ArtifactKind,
-} from '../types/index.js';
+} from '../../types/index.js';
 
 const pythonVersionMarker = 'COGLENS_UNSUPPORTED_PYTHON_VERSION:';
 

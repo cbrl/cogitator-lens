@@ -15,8 +15,8 @@ import type {
 	ToolchainProfile,
 	ToolchainSettings,
 } from '../types/index.js';
-import { artifactDefinitions } from '../artifacts/artifact-definitions.js';
-import type { ArtifactPreset } from '../artifacts/presets.js';
+import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
+import type { ArtifactPreset } from '../artifacts/ui/presets.js';
 import * as logger from '../logger.js';
 import {
 	parseArtifactOptions,

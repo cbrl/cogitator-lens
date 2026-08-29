@@ -13,4 +13,4 @@ export type {
 	ArtifactOptionAvailability,
 	ArtifactRenderContext,
 	ArtifactRenderer,
-} from '../artifacts/artifact-definitions.js';
+} from '../artifacts/core/artifact-definitions.js';

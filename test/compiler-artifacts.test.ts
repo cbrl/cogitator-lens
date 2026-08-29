@@ -8,11 +8,11 @@ import {
 	clangOptimizationRecord,
 	gccOptimizationRecord,
 	llvmIrOutput,
-} from '../src/artifacts/compiler-output-producer.js';
-import { artifactDefinitions } from '../src/artifacts/artifact-definitions.js';
+} from '../src/artifacts/compiler/compiler-output-producer.js';
+import { artifactDefinitions } from '../src/artifacts/core/artifact-definitions.js';
 import {
 	parseGccOptimizationRemarks,
-} from '../src/artifacts/optimization-remarks-renderer.js';
+} from '../src/artifacts/analysis/optimization-remarks-renderer.js';
 import {
 	resolveArtifactAvailability,
 	toolchainDefinitions,

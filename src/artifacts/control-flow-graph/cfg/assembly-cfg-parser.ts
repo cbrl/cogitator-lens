@@ -6,7 +6,7 @@ import type {
 	ControlFlowGraph,
 	ControlFlowNode,
 	ControlFlowSourceLocation,
-} from '../../types/index.js';
+} from '../../../types/index.js';
 import { GraphIdAllocator, NodeIdAllocator } from '../cfg-parser-support.js';
 import type { GraphParseResult } from '../control-flow-graph-model.js';
 import type { AssemblyLine } from './assembly-line.js';

@@ -2,19 +2,19 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { toAssemblyLines } from '../src/artifacts/cfg/assembly-line.js';
-import type { AssemblyLine } from '../src/artifacts/cfg/assembly-line.js';
+import { toAssemblyLines } from '../src/artifacts/control-flow-graph/cfg/assembly-line.js';
+import type { AssemblyLine } from '../src/artifacts/control-flow-graph/cfg/assembly-line.js';
 import {
 	ClangAssemblyCfgParser,
 	GccAssemblyCfgParser,
 	MsvcAssemblyCfgParser,
-} from '../src/artifacts/cfg/assembly-dialects.js';
+} from '../src/artifacts/control-flow-graph/cfg/assembly-dialects.js';
 import {
 	ArmInstructionSetInfo,
 	InstructionSetInfo,
 	MsvcInstructionSetInfo,
-} from '../src/artifacts/cfg/instruction-sets.js';
-import { validateControlFlowGraphs } from '../src/artifacts/control-flow-graph-model.js';
+} from '../src/artifacts/control-flow-graph/cfg/instruction-sets.js';
+import { validateControlFlowGraphs } from '../src/artifacts/control-flow-graph/control-flow-graph-model.js';
 import { noopPropertyGetter } from '../src/vendor/compiler-props.js';
 import { VcAsmParser } from '../src/vendor/lib/parsers/asm-parser-vc.js';
 import type { ParseFiltersAndOutputOptions } from '../src/vendor/types/features/filters.interfaces.js';

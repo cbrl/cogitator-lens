@@ -7,7 +7,7 @@ import type {
 import {
 	artifactDefinitions,
 	getArtifactDefinition,
-} from '../artifacts/artifact-definitions.js';
+} from '../artifacts/core/artifact-definitions.js';
 import { replaceExtension } from '../utils.js';
 
 export const artifactScheme = 'coglens-artifact';

@@ -1,5 +1,5 @@
-import type { ParsedAsmResultLine } from '../../vendor/types/asmresult/asmresult.interfaces.js';
-import type { ControlFlowSourceLocation } from '../../types/index.js';
+import type { ParsedAsmResultLine } from '../../../vendor/types/asmresult/asmresult.interfaces.js';
+import type { ControlFlowSourceLocation } from '../../../types/index.js';
 import { compilerSourceUri } from '../cfg-parser-support.js';
 
 /**

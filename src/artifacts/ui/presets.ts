@@ -1,4 +1,4 @@
-import type { ArtifactKind, ProductionOptions } from '../types/index.js';
+import type { ArtifactKind, ProductionOptions } from '../../types/index.js';
 
 export interface ArtifactPreset {
 	readonly id: string;

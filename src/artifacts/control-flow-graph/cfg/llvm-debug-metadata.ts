@@ -1,6 +1,6 @@
-import type { ControlFlowSourceLocation } from '../../types/index.js';
+import type { ControlFlowSourceLocation } from '../../../types/index.js';
 import { compilerSourceUri, isAbsoluteCompilerPath } from '../cfg-parser-support.js';
-import { decodeLlvmString } from '../llvm-names.js';
+import { decodeLlvmString } from '../../compiler/llvm-names.js';
 
 /**
  * Resolution of LLVM debug metadata into editor positions.

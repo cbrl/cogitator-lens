@@ -1,7 +1,7 @@
 import type {
 	ArtifactKind,
 	ArtifactOptionAvailability,
-} from '../types/index.js';
+} from '../../types/index.js';
 
 export interface ArtifactPickerChoice {
 	readonly artifactKind: ArtifactKind;

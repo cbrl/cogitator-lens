@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { partitionArtifactPickerChoices } from '../src/artifacts/artifact-picker.js';
+import { partitionArtifactPickerChoices } from '../src/artifacts/ui/artifact-picker.js';
 
 test('artifact picker hides unsupported choices and separates unavailable choices', () => {
 	const sections = partitionArtifactPickerChoices([

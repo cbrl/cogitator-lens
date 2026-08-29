@@ -29,7 +29,7 @@ import type {
 	RenderedArtifactLine,
 	StackUsageLineAnnotation,
 } from '../types/index.js';
-import { formatArtifactLineAnnotation } from '../artifacts/analysis-source-renderer.js';
+import { formatArtifactLineAnnotation } from '../artifacts/analysis/analysis-source-renderer.js';
 
 /*
 Nice-to-have features:

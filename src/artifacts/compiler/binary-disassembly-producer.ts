@@ -2,11 +2,11 @@ import type { CancellationToken, Uri } from 'vscode';
 import type {
 	CompileOptions,
 	RawArtifact,
-} from '../types/index.js';
+} from '../../types/index.js';
 import type {
 	BinaryDisassembler,
 	ToolchainBackend,
-} from '../toolchains/toolchain-backend.js';
+} from '../../toolchains/toolchain-backend.js';
 
 export function binaryDisassemblyProducer(
 	disassembler: BinaryDisassembler,

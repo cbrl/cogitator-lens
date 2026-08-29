@@ -5,9 +5,9 @@ import type {
 	DisplayOptions,
 	RawArtifact,
 	RenderedGraphArtifact,
-} from '../types/index.js';
-import { invocationDetails } from '../types/index.js';
-import type { ArtifactRenderContext } from './artifact-definitions.js';
+} from '../../types/index.js';
+import { invocationDetails } from '../../types/index.js';
+import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
 import type { AssemblyCfgParser } from './cfg/assembly-cfg-parser.js';
 import { toAssemblyLines } from './cfg/assembly-line.js';
 import {
@@ -23,8 +23,8 @@ import {
 	type GraphParseResult,
 } from './control-flow-graph-model.js';
 import { parseGccControlFlowGraphs } from './gcc-cfg-parser.js';
-import { parsePythonControlFlowGraphs } from './python-cfg.js';
-import { parseRustMirControlFlowGraphs } from './rust-mir-cfg-parser.js';
+import { parsePythonControlFlowGraphs } from '../python/python-cfg.js';
+import { parseRustMirControlFlowGraphs } from '../rust/rust-mir-cfg-parser.js';
 
 export function renderControlFlowGraphArtifact(
 	raw: RawArtifact,

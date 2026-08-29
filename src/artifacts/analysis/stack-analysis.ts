@@ -4,11 +4,11 @@ import type {
 	RawArtifact,
 	RenderedTextArtifact,
 	StackUsageQualifier,
-} from '../types/index.js';
-import type { ArtifactProducer } from '../toolchains/toolchain-map.js';
-import type { CompilerOutputSpec } from '../toolchains/toolchain-backend.js';
-import type { ArtifactRenderContext } from './artifact-definitions.js';
-import { compilerOutputProducer } from './compiler-output-producer.js';
+} from '../../types/index.js';
+import type { ArtifactProducer } from '../../toolchains/toolchain-map.js';
+import type { CompilerOutputSpec } from '../../toolchains/toolchain-backend.js';
+import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
+import { compilerOutputProducer } from '../compiler/compiler-output-producer.js';
 import {
 	type AnalysisParserDiagnostic,
 	renderAnalysisSource,

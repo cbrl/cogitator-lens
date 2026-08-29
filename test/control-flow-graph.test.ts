@@ -7,21 +7,21 @@ import {
 	llvmIrOutput,
 	rustLlvmIrOutput,
 	rustMirOutput,
-} from '../src/artifacts/compiler-output-producer.js';
-import { renderControlFlowGraphArtifact } from '../src/artifacts/control-flow-graph-renderer.js';
+} from '../src/artifacts/compiler/compiler-output-producer.js';
+import { renderControlFlowGraphArtifact } from '../src/artifacts/control-flow-graph/control-flow-graph-renderer.js';
 import {
 	controlFlowGraphMetrics,
 	validateControlFlowGraphs,
-} from '../src/artifacts/control-flow-graph-model.js';
-import { parseGccControlFlowGraphs } from '../src/artifacts/gcc-cfg-parser.js';
-import { parseLlvmControlFlowGraphs } from '../src/artifacts/cfg/llvm-ir-cfg-parser.js';
-import { parsePythonControlFlowGraphs } from '../src/artifacts/python-cfg.js';
+} from '../src/artifacts/control-flow-graph/control-flow-graph-model.js';
+import { parseGccControlFlowGraphs } from '../src/artifacts/control-flow-graph/gcc-cfg-parser.js';
+import { parseLlvmControlFlowGraphs } from '../src/artifacts/control-flow-graph/cfg/llvm-ir-cfg-parser.js';
+import { parsePythonControlFlowGraphs } from '../src/artifacts/python/python-cfg.js';
 import {
 	pythonCfgHelper,
 	pythonControlFlowGraphProducer,
-} from '../src/artifacts/python-cfg.js';
-import { parseRustMirControlFlowGraphs } from '../src/artifacts/rust-mir-cfg-parser.js';
-import { renderedArtifact } from '../src/artifacts/rendered-artifact.js';
+} from '../src/artifacts/python/python-cfg.js';
+import { parseRustMirControlFlowGraphs } from '../src/artifacts/rust/rust-mir-cfg-parser.js';
+import { renderedArtifact } from '../src/artifacts/core/rendered-artifact.js';
 import {
 	getArtifactOutputChoices,
 	resolveArtifactAvailability,

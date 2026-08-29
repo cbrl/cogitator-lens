@@ -18,15 +18,15 @@ import type { ArtifactKind } from './types/index.js';
 import {
 	artifactDefinitions,
 	supportedArtifactKinds,
-} from './artifacts/artifact-definitions.js';
+} from './artifacts/core/artifact-definitions.js';
 import {
 	effectiveArtifactPresets,
 	type ArtifactPreset,
-} from './artifacts/presets.js';
+} from './artifacts/ui/presets.js';
 import {
 	partitionArtifactPickerChoices,
 	type ArtifactPickerChoice,
-} from './artifacts/artifact-picker.js';
+} from './artifacts/ui/artifact-picker.js';
 import {
 	getArtifactOutputChoices,
 	supportedLanguageIdentifiers,

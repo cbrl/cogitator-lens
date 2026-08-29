@@ -28,12 +28,12 @@ When installed, the
 also used to discover configured CMake projects. If CMake Tools and a compilation database describe
 the same file, both choices appear in the compilation variant picker.
 
-The Cogitator Lens sidebar provides a browsable view of those variants. Opening a source file
-automatically reveals and selects it in **Project Compile Info**; the reveal button performs the
-same navigation on demand, and selecting a source entry opens it in the editor. Toolchain and
-variant entries have inline actions for the operations they support. **Artifact Details** follows
-the active Cogitator Lens artifact and shows its identity, lifecycle state, diagnostics, invocation,
-environment-variable names, and renderer metrics without recompiling it.
+The Cogitator Lens sidebar provides a browsable view of those variants. Use the reveal button to
+select the active source in **Project Compile Info** on demand; selecting a source entry opens it
+in the editor. Toolchain and variant entries have inline actions for the operations they support.
+**Artifact Details** follows the active Cogitator Lens artifact and shows its identity, lifecycle
+state, diagnostics, invocation, environment-variable names, and renderer metrics without
+recompiling it.
 
 Use `Cogitator Lens: Open Artifact` to select an artifact supported by the active compilation
 variant. Branch and label references are clickable, symbol regions can be folded, source-backed

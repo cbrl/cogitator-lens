@@ -3,11 +3,11 @@ import type {
 	ControlFlowGraph,
 	ControlFlowNode,
 	ControlFlowSourceLocation,
-} from '../types/index.js';
-import type { ArtifactProducer } from '../toolchains/toolchain-map.js';
-import { stdoutArtifactProducer } from './front-end-producers.js';
-import { compilerSourceUri, GraphIdAllocator } from './cfg-parser-support.js';
-import type { GraphParseResult } from './control-flow-graph-model.js';
+} from '../../types/index.js';
+import type { ArtifactProducer } from '../../toolchains/toolchain-map.js';
+import { stdoutArtifactProducer } from '../compiler/front-end-producers.js';
+import { compilerSourceUri, GraphIdAllocator } from '../control-flow-graph/cfg-parser-support.js';
+import type { GraphParseResult } from '../control-flow-graph/control-flow-graph-model.js';
 
 /** Python inspects compiled code objects but never imports or executes the source module. */
 export const pythonCfgHelper = String.raw`

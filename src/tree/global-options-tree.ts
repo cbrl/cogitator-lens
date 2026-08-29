@@ -12,7 +12,7 @@ import {
 	resolveArtifactAvailability,
 	resolveArtifactOptionAvailability,
 } from '../toolchains/toolchain-map.js';
-import { artifactDefinitions } from '../artifacts/artifact-definitions.js';
+import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
 
 interface SelectedArtifact {
 	readonly profile?: ToolchainProfile;

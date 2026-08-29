@@ -10,7 +10,7 @@ import {
 import {
 	artifactDefinitions,
 	supportedArtifactKinds,
-} from '../artifacts/artifact-definitions.js';
+} from '../artifacts/core/artifact-definitions.js';
 import {
 	type ConfigurationOrigin,
 	variantProviderDefinitions,

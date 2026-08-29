@@ -4,9 +4,9 @@ import type {
 	RawArtifact,
 	RenderedTextArtifact,
 	RenderedArtifactLine,
-} from '../types/index.js';
-import type { ArtifactRenderContext } from './artifact-definitions.js';
-import { renderedArtifact } from './rendered-artifact.js';
+} from '../../types/index.js';
+import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
+import { renderedArtifact } from '../core/rendered-artifact.js';
 
 const lineMarker =
 	/^\s*#(?:\s*line)?\s+(\d+)\s+"((?:\\.|[^"])*)"(?:\s+.*)?$/;

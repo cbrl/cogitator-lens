@@ -1,11 +1,11 @@
 import vscode from 'vscode';
 import {
 	artifactDefinitions,
-} from '../artifacts/artifact-definitions.js';
+} from '../artifacts/core/artifact-definitions.js';
 import {
 	buildArtifactDetails,
 	type ArtifactDetailsItem,
-} from '../artifacts/artifact-details.js';
+} from '../artifacts/ui/artifact-details.js';
 import {
 	AsmProvider,
 	type ArtifactDocumentSnapshot,

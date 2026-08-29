@@ -4,13 +4,13 @@ import type {
 	OptimizationRemarkCategory,
 	RawArtifact,
 	RenderedTextArtifact,
-} from '../types/index.js';
+} from '../../types/index.js';
 import {
 	processRawGccOptRemarks,
 	processRawLlvmOptRemarks,
-} from '../vendor/lib/optimization-remarks.js';
-import type { OptRemark } from '../vendor/static/panes/opt-view.interfaces.js';
-import type { ArtifactRenderContext } from './artifact-definitions.js';
+} from '../../vendor/lib/optimization-remarks.js';
+import type { OptRemark } from '../../vendor/static/panes/opt-view.interfaces.js';
+import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
 import {
 	renderAnalysisSource,
 	sameSourcePath,

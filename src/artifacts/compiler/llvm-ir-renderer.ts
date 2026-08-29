@@ -4,13 +4,13 @@ import type {
 	RawArtifact,
 	RenderedTextArtifact,
 	RenderedArtifactLine,
-} from '../types/index.js';
-import type { ArtifactRenderContext } from './artifact-definitions.js';
-import { LLVMIRDemangler } from '../vendor/lib/demangler/llvm.js';
-import { LlvmIrParser } from '../vendor/lib/llvm-ir.js';
-import { noopPropertyGetter } from '../vendor/compiler-props.js';
+} from '../../types/index.js';
+import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
+import { LLVMIRDemangler } from '../../vendor/lib/demangler/llvm.js';
+import { LlvmIrParser } from '../../vendor/lib/llvm-ir.js';
+import { noopPropertyGetter } from '../../vendor/compiler-props.js';
 import { decodeLlvmString } from './llvm-names.js';
-import { renderedArtifact } from './rendered-artifact.js';
+import { renderedArtifact } from '../core/rendered-artifact.js';
 
 const llvmIrParser = new LlvmIrParser(noopPropertyGetter, new LLVMIRDemangler());
 

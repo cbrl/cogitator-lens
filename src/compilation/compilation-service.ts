@@ -22,7 +22,7 @@ import type {
 	RenderedArtifact,
 	SourceState,
 } from '../types/index.js';
-import type { ArtifactRenderContext } from '../artifacts/artifact-definitions.js';
+import type { ArtifactRenderContext } from '../artifacts/core/artifact-definitions.js';
 import {
 	artifactOptionsEqual,
 	CompilationError,
@@ -36,7 +36,7 @@ import { ExecError } from '../exec.js';
 import {
 	artifactDefinitions,
 	supportedArtifactKinds,
-} from '../artifacts/artifact-definitions.js';
+} from '../artifacts/core/artifact-definitions.js';
 import { resolveArtifactOutput } from '../toolchains/toolchain-map.js';
 import { ToolchainRegistry } from './toolchain-registry.js';
 import { CompilationConfigDatabase } from './compilation-config.js';
@@ -44,7 +44,7 @@ import { parseToolDiagnostics } from '../diagnostics.js';
 import {
 	resolveArtifactPreset,
 	type ArtifactPreset,
-} from '../artifacts/presets.js';
+} from '../artifacts/ui/presets.js';
 import {
 	artifactInputComparisonKey,
 	validateArtifactInputs,
@@ -272,7 +272,7 @@ export class CompilationService {
 		raw: RawArtifact,
 		options: ArtifactOptions,
 		context: ArtifactRenderContext,
-		outputRenderer?: import('../artifacts/artifact-definitions.js').ArtifactRenderer,
+		outputRenderer?: import('../artifacts/core/artifact-definitions.js').ArtifactRenderer,
 	): Promise<RenderedArtifact> {
 		const renderer = outputRenderer
 			?? context.backend.getArtifactRenderer(raw.kind)

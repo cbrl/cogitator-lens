@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
-import { artifactDefinitions } from '../src/artifacts/artifact-definitions.js';
+import { artifactDefinitions } from '../src/artifacts/core/artifact-definitions.js';
 import { stripPythonManagedArguments } from '../src/toolchains/python.js';
 import { toolchainDefinitions } from '../src/toolchains/toolchain-map.js';
 import {

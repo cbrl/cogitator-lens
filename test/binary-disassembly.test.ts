@@ -5,14 +5,14 @@ import path from 'node:path';
 import test from 'node:test';
 import {
 	artifactDefinitions,
-} from '../src/artifacts/artifact-definitions.js';
+} from '../src/artifacts/core/artifact-definitions.js';
 import {
 	dumpbin,
 	gnuObjdump,
 	llvmObjdump,
 	normalizeDisassemblySourcePaths,
 	normalizeDumpbinOutput,
-} from '../src/artifacts/binary-disassembly-producer.js';
+} from '../src/artifacts/compiler/binary-disassembly-producer.js';
 import { ToolchainBackend } from '../src/toolchains/toolchain-backend.js';
 import {
 	createToolchainProfile,

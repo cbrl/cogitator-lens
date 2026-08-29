@@ -4,7 +4,7 @@ import {
 	buildArtifactDetails,
 	invocationDetails,
 	type ArtifactDetailsItem,
-} from '../src/artifacts/artifact-details.js';
+} from '../src/artifacts/ui/artifact-details.js';
 import type { ArtifactDocumentSnapshot } from '../src/asm-document/asm-provider.js';
 import type { CompileHandlerStatus } from '../src/asm-document/compile-handler.js';
 import type {

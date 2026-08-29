@@ -2,13 +2,13 @@ import type {
 	DisplayOptions,
 	RawArtifact,
 	RenderedTextArtifact,
-} from '../types/index.js';
-import type { ArtifactProducer } from '../toolchains/toolchain-map.js';
-import type { ArtifactRenderContext } from './artifact-definitions.js';
+} from '../../types/index.js';
+import type { ArtifactProducer } from '../../toolchains/toolchain-map.js';
+import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
 import {
 	renderStackUsage,
 	type StackUsageEntry,
-} from './stack-analysis.js';
+} from '../analysis/stack-analysis.js';
 
 export interface PythonStackUsageRecord {
 	readonly qualifiedName: string;
