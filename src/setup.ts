@@ -217,16 +217,8 @@ export function createCompilationInfoTreeView(
 		revealCommand,
 		compilationService.onVariantsChanged(() => {
 			provider.refresh();
-			void revealActiveSource();
-		}),
-		vscode.window.onDidChangeActiveTextEditor(() => void revealActiveSource()),
-		view.onDidChangeVisibility(event => {
-			if (event.visible) {
-				void revealActiveSource();
-			}
 		}),
 	);
-	void revealActiveSource();
 
 	return provider;
 }

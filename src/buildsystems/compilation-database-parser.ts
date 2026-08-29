@@ -1,6 +1,6 @@
 import path from 'path';
 import { removeSourceArgument } from '../toolchain-arguments.js';
-import { detectToolchainKind } from '../toolchain-detection.js';
+import { detectToolchainDefinition } from '../toolchains/toolchain-map.js';
 import {
 	createToolchainProfile,
 	normalizedExecutableLocalId,
@@ -107,7 +107,7 @@ function parseEntry(
 		? path.normalize(value.file)
 		: path.resolve(workingDirectory, value.file);
 	const executable = resolveExecutable(commandArguments[0], workingDirectory);
-	const compilerKind = detectToolchainKind(executable, '', platform);
+	const compilerKind = detectToolchainDefinition(executable, '', platform)?.kind;
 	if (!compilerKind) {
 		return fail(`unsupported compiler executable "${commandArguments[0]}"`);
 	}
