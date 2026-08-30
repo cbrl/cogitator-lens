@@ -34,6 +34,7 @@ import type {
 	StackUsageLineAnnotation,
 } from '../types/index.js';
 import { formatArtifactLineAnnotation } from '../artifacts/analysis/analysis-source-renderer.js';
+import { artifactSupportsOption } from '../artifacts/core/artifact-definitions.js';
 
 /*
 Nice-to-have features:
@@ -269,6 +270,7 @@ export class AsmDecorator {
 		if (
 			!this.asmData
 			|| this.asmData instanceof Error
+			|| !artifactSupportsOption(this.asmData.kind, 'sourceLineColorBands')
 			|| !this.artifactOptions(this.asmData.kind).display.sourceLineColorBands
 		) {
 			return;

@@ -334,6 +334,14 @@ export function getArtifactDefinition(kind: string): ArtifactDefinition | undefi
 		: undefined;
 }
 
+export function artifactSupportsOption(
+	kind: ArtifactKind,
+	optionId: ArtifactOptionDescriptor['id'],
+): boolean {
+	const definition: ArtifactDefinitionShape = artifactDefinitions[kind];
+	return definition.options.some(option => option.id === optionId);
+}
+
 function renderToolchainArtifact(
 	raw: RawArtifact,
 	options: DisplayOptions,
