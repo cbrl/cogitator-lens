@@ -8,7 +8,8 @@ import {
 	type TextDocument,
 	type Uri,
 } from 'vscode';
-import type { ArtifactKind, RenderedTextArtifact } from '../types/index.js';
+import type { RenderedTextArtifact } from '../types/index.js';
+import { documentationForOpcode } from './instruction-documentation.js';
 
 type ArtifactLookup = (uri: Uri) => RenderedTextArtifact | undefined;
 
@@ -36,19 +37,11 @@ interface LineToken {
 	readonly priority: number;
 }
 
-const llvmKeywords = new Set([
-	'add', 'alloca', 'and', 'ashr', 'atomicrmw', 'bitcast', 'br', 'call', 'catchpad',
-	'catchret', 'catchswitch', 'cleanupret', 'cleanuppad', 'cmpxchg', 'define', 'declare',
-	'extractelement', 'extractvalue', 'fadd', 'fcmp', 'fdiv', 'fmul', 'fneg', 'fpext',
-	'fptosi', 'fptoui', 'fptrunc', 'frem', 'fsub', 'getelementptr', 'global', 'icmp',
-	'indirectbr', 'insertelement', 'insertvalue', 'invoke', 'landingpad', 'load', 'lshr',
-	'mul', 'or', 'phi', 'ptrtoint', 'resume', 'ret', 'sdiv', 'select', 'sext', 'shl',
-	'shufflevector', 'sitofp', 'srem', 'store', 'sub', 'switch', 'trunc', 'udiv',
-	'uitofp', 'unreachable', 'urem', 'va_arg', 'xor', 'zext',
-]);
-
 /** Classifies a rendered line without reparsing compiler output or changing document text. */
-export function classifyArtifactLine(text: string, kind: ArtifactKind): readonly LineToken[] {
+export function classifyArtifactLine(
+	text: string,
+	artifact: RenderedTextArtifact,
+): readonly LineToken[] {
 	const candidates: LineToken[] = [];
 	const addMatches = (
 		re: RegExp,
@@ -64,7 +57,7 @@ export function classifyArtifactLine(text: string, kind: ArtifactKind): readonly
 		}
 	};
 
-	const isLlvm = kind === 'llvm-ir';
+	const isLlvm = artifact.kind === 'llvm-ir';
 	const commentStart = isLlvm ? text.indexOf(';') : assemblyCommentStart(text);
 	if (commentStart >= 0) {
 		candidates.push({
@@ -80,13 +73,21 @@ export function classifyArtifactLine(text: string, kind: ArtifactKind): readonly
 	if (isLlvm) {
 		addMatches(/[%@][-a-zA-Z$._\d]+/g, 'variable', 60);
 		addMatches(/\b(?:i\d+|half|bfloat|float|double|fp128|x86_fp80|ptr|void|label|metadata|token)\b/g, 'type', 55);
-		addMatches(/\b[a-z][a-z\d_]*\b/gi, 'keyword', 45, value => llvmKeywords.has(value));
+		addMatches(
+			/\b[a-z][a-z\d_]*\b/gi,
+			'keyword',
+			45,
+			value => documentationForOpcode(artifact, value) !== undefined,
+		);
 		addMatches(/^\s*[-a-zA-Z$._\d]+(?=:)/g, 'label', 70);
 	} else {
 		addMatches(/^\s*[.$_a-zA-Z][\w.$@?]*(?=:)/g, 'label', 70);
 		addMatches(/^\s*\.[a-zA-Z][\w.]*/g, 'keyword', 65);
 		const mnemonic = /^\s*(?:[a-zA-Z][\w.]*:\s*)?([a-zA-Z][\w.]*)/.exec(text);
-		if (mnemonic?.index !== undefined) {
+		if (
+			mnemonic?.index !== undefined
+			&& documentationForOpcode(artifact, mnemonic[1]) !== undefined
+		) {
 			const start = text.indexOf(mnemonic[1], mnemonic.index);
 			candidates.push({ start, length: mnemonic[1].length, type: 'keyword', priority: 65 });
 		}
@@ -119,7 +120,7 @@ export class ArtifactSemanticTokensProvider implements DocumentSemanticTokensPro
 		}
 		const builder = new SemanticTokensBuilder(artifactSemanticTokensLegend);
 		artifact.lines.forEach((line, lineNumber) => {
-			for (const token of classifyArtifactLine(line.text, artifact.kind)) {
+			for (const token of classifyArtifactLine(line.text, artifact)) {
 				builder.push(
 					lineNumber,
 					token.start,

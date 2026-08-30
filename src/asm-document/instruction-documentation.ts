@@ -59,6 +59,14 @@ export function documentationForInstruction(
 	if (!mnemonic) {
 		return undefined;
 	}
+	return documentationForOpcode(artifact, mnemonic);
+}
+
+/** Looks up an opcode directly in the docenizer-generated instruction table. */
+export function documentationForOpcode(
+	artifact: RenderedTextArtifact,
+	mnemonic: string,
+): InstructionDocumentation | undefined {
 	const namedProvider = providerForArtifact(artifact);
 	if (!namedProvider) {
 		return undefined;
