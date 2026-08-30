@@ -10,12 +10,12 @@ import type { ToolchainBackend } from '../../toolchains/toolchain-backend.js';
 import type { Uri } from 'vscode';
 import type { ParsedAsmResultLine } from '../../vendor/types/asmresult/asmresult.interfaces.js';
 import type { ParsedAsmResult } from '../../vendor/types/asmresult/asmresult.interfaces.js';
-import { renderLlvmIr } from '../compiler/llvm-ir-renderer.js';
+import { renderLlvmIr } from '../llvm-ir/llvm-ir-renderer.js';
 import { renderPythonBytecode } from '../python/python-bytecode-renderer.js';
 import { renderedArtifact } from './rendered-artifact.js';
-import { renderPreprocessedSource } from '../compiler/preprocessed-source-renderer.js';
+import { renderPreprocessedSource } from '../preprocessed-source/preprocessed-source-renderer.js';
 import { renderRustMir } from '../rust/rust-mir-renderer.js';
-import { renderNativeStackAnalysis } from '../analysis/stack-analysis.js';
+import { renderNativeStackAnalysis } from '../stack-analysis/native-stack-analysis.js';
 import { renderControlFlowGraphArtifact } from '../control-flow-graph/control-flow-graph-renderer.js';
 
 export interface ArtifactOptionDescriptor {

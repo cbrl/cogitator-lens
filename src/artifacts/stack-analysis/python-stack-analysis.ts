@@ -8,7 +8,7 @@ import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
 import {
 	renderStackUsage,
 	type StackUsageEntry,
-} from '../analysis/stack-analysis.js';
+} from './native-stack-analysis.js';
 
 export interface PythonStackUsageRecord {
 	readonly qualifiedName: string;

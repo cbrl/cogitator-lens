@@ -5,16 +5,9 @@ import type {
 	RawArtifact,
 	RenderedTextArtifact,
 } from '../../types/index.js';
-import {
-	processRawGccOptRemarks,
-	processRawLlvmOptRemarks,
-} from '../../vendor/lib/optimization-remarks.js';
 import type { OptRemark } from '../../vendor/static/panes/opt-view.interfaces.js';
 import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
-import {
-	renderAnalysisSource,
-	sameSourcePath,
-} from './analysis-source-renderer.js';
+import { renderAnalysisSource, sameSourcePath } from '../analysis/analysis-source-renderer.js';
 
 export interface OptimizationRemark {
 	readonly file?: string;
@@ -81,21 +74,7 @@ function renderOptimizationRemarks(
 	);
 }
 
-export function parseClangOptimizationRemarks(
-	text: string,
-	workingDirectory: string,
-): OptimizationRemark[] {
-	return processRawLlvmOptRemarks(text).map(remark => normalizeRemark(remark, workingDirectory));
-}
-
-export function parseGccOptimizationRemarks(
-	text: string,
-	workingDirectory: string,
-): OptimizationRemark[] {
-	return processRawGccOptRemarks(text).map(remark => normalizeRemark(remark, workingDirectory));
-}
-
-function normalizeRemark(
+export function normalizeOptimizationRemark(
 	remark: OptRemark,
 	workingDirectory: string,
 ): OptimizationRemark {
@@ -110,13 +89,13 @@ function normalizeRemark(
 		: {};
 	return {
 		...location,
-		pass: remark.Pass || inferGccPass(remark.displayString),
+		pass: remark.Pass || inferOptimizationPass(remark.displayString),
 		category: remark.optType.toLowerCase() as OptimizationRemarkCategory,
 		message: remark.displayString || remark.Name || remark.Pass,
 	};
 }
 
-function inferGccPass(message: string): string {
+function inferOptimizationPass(message: string): string {
 	if (/\b(?:inline|inlined|inlining)\b/i.test(message)) {
 		return 'inliner';
 	}

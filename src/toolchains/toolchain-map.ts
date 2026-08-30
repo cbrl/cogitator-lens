@@ -38,33 +38,35 @@ import {
 	dumpbin,
 	gnuObjdump,
 	llvmObjdump,
-} from '../artifacts/compiler/binary-disassembly-producer.js';
+} from '../artifacts/binary-disassembly/binary-disassembly-producer.js';
 import {
 	assemblyControlFlowGraphProducer,
 	clangClLlvmIrOutput,
-	clangClOptimizationRecord,
-	clangOptimizationRecord,
 	compilerOutputProducer,
-	gccOptimizationRecord,
 	gccControlFlowGraphOutput,
 	llvmIrOutput,
 	rustLlvmIrOutput,
 	rustMirOutput,
-} from '../artifacts/compiler/compiler-output-producer.js';
+} from '../artifacts/core/compiler-output-producer.js';
 import { pythonBytecodeProducer } from '../artifacts/python/python-bytecode-producer.js';
-import {
-	pythonAstProducer,
-	stdoutArtifactProducer,
-} from '../artifacts/compiler/front-end-producers.js';
+import { pythonAstProducer } from '../artifacts/ast/python-ast-producer.js';
+import { stdoutArtifactProducer } from '../artifacts/core/stdout-artifact-producer.js';
 import {
 	renderClangAst,
 	renderPythonAst,
-} from '../artifacts/compiler/ast-renderer.js';
+} from '../artifacts/ast/ast-renderer.js';
 import {
-	optimizationRemarksRenderer,
-	parseClangOptimizationRemarks,
-	parseGccOptimizationRemarks,
-} from '../artifacts/analysis/optimization-remarks-renderer.js';
+	clangOptimizationRemarksOutput,
+	renderClangOptimizationRemarks,
+} from '../artifacts/optimization-remarks/clang-optimization-remarks.js';
+import {
+	clangClOptimizationRemarksOutput,
+	renderClangClOptimizationRemarks,
+} from '../artifacts/optimization-remarks/clang-cl-optimization-remarks.js';
+import {
+	gccOptimizationRemarksOutput,
+	renderGccOptimizationRemarks,
+} from '../artifacts/optimization-remarks/gcc-optimization-remarks.js';
 import {
 	parseMakeDepfile,
 	parseMsvcSourceDependencies,
@@ -72,11 +74,11 @@ import {
 import {
 	clangClStackAnalysisProducer,
 	nativeStackAnalysisProducer,
-} from '../artifacts/analysis/stack-analysis.js';
+} from '../artifacts/stack-analysis/native-stack-analysis.js';
 import {
 	pythonStackAnalysisProducer,
 	renderPythonStackAnalysis,
-} from '../artifacts/analysis/python-stack-analysis.js';
+} from '../artifacts/stack-analysis/python-stack-analysis.js';
 import { pythonControlFlowGraphProducer } from '../artifacts/control-flow-graph/python-cfg.js';
 
 export type ToolCapabilityStatus = 'available' | 'unavailable' | 'unsupported';
@@ -363,8 +365,8 @@ const clangArtifacts = artifactCells({
 	},
 	'optimization-remarks': {
 		status: 'available',
-		producer: compilerOutputProducer('optimization-remarks', clangOptimizationRecord),
-		renderer: optimizationRemarksRenderer(parseClangOptimizationRemarks),
+		producer: compilerOutputProducer('optimization-remarks', clangOptimizationRemarksOutput),
+		renderer: renderClangOptimizationRemarks,
 	},
 	'stack-analysis': {
 		status: 'available',
@@ -390,8 +392,8 @@ const gccArtifacts = artifactCells({
 	},
 	'optimization-remarks': {
 		status: 'available',
-		producer: compilerOutputProducer('optimization-remarks', gccOptimizationRecord),
-		renderer: optimizationRemarksRenderer(parseGccOptimizationRemarks),
+		producer: compilerOutputProducer('optimization-remarks', gccOptimizationRemarksOutput),
+		renderer: renderGccOptimizationRemarks,
 	},
 	'stack-analysis': {
 		status: 'available',
@@ -438,8 +440,8 @@ const clangClArtifacts = artifactCells({
 	},
 	'optimization-remarks': {
 		status: 'available',
-		producer: compilerOutputProducer('optimization-remarks', clangClOptimizationRecord),
-		renderer: optimizationRemarksRenderer(parseClangOptimizationRemarks),
+		producer: compilerOutputProducer('optimization-remarks', clangClOptimizationRemarksOutput),
+		renderer: renderClangClOptimizationRemarks,
 	},
 	'stack-analysis': {
 		status: 'available',

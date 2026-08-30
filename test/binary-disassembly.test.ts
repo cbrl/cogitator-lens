@@ -12,7 +12,7 @@ import {
 	llvmObjdump,
 	normalizeDisassemblySourcePaths,
 	normalizeDumpbinOutput,
-} from '../src/artifacts/compiler/binary-disassembly-producer.js';
+} from '../src/artifacts/binary-disassembly/binary-disassembly-producer.js';
 import { ToolchainBackend } from '../src/toolchains/toolchain-backend.js';
 import {
 	createToolchainProfile,

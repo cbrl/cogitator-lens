@@ -1,5 +1,5 @@
 import type { ArtifactProducer } from '../../toolchains/toolchain-map.js';
-import { stdoutArtifactProducer } from '../compiler/front-end-producers.js';
+import { stdoutArtifactProducer } from '../core/stdout-artifact-producer.js';
 
 export const pythonBytecodeProducer: ArtifactProducer = stdoutArtifactProducer(
 	'python-bytecode',

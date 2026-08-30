@@ -47,7 +47,7 @@ import { toolchainDefinitions } from '../../src/toolchains/toolchain-map.js';
 import {
 	clangClStackUsageOutput,
 	nativeStackUsageOutput,
-} from '../../src/artifacts/analysis/stack-analysis.js';
+} from '../../src/artifacts/stack-analysis/native-stack-analysis.js';
 import { ExecError } from '../../src/exec.js';
 
 export async function run(): Promise<void> {

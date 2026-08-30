@@ -5,7 +5,7 @@ import type {
 	ControlFlowSourceLocation,
 } from '../../types/index.js';
 import type { ArtifactProducer } from '../../toolchains/toolchain-map.js';
-import { stdoutArtifactProducer } from '../compiler/front-end-producers.js';
+import { stdoutArtifactProducer } from '../core/stdout-artifact-producer.js';
 import { compilerSourceUri, GraphIdAllocator } from '../control-flow-graph/cfg-parser-support.js';
 import type { GraphParseResult } from '../control-flow-graph/control-flow-graph-model.js';
 

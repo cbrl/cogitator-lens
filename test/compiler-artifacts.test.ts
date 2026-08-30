@@ -4,15 +4,15 @@ import path from 'node:path';
 import test from 'node:test';
 import {
 	clangClLlvmIrOutput,
-	clangClOptimizationRecord,
-	clangOptimizationRecord,
-	gccOptimizationRecord,
 	llvmIrOutput,
-} from '../src/artifacts/compiler/compiler-output-producer.js';
-import { artifactDefinitions } from '../src/artifacts/core/artifact-definitions.js';
+} from '../src/artifacts/core/compiler-output-producer.js';
+import { clangOptimizationRemarksOutput as clangOptimizationRecord } from '../src/artifacts/optimization-remarks/clang-optimization-remarks.js';
+import { clangClOptimizationRemarksOutput as clangClOptimizationRecord } from '../src/artifacts/optimization-remarks/clang-cl-optimization-remarks.js';
 import {
+	gccOptimizationRemarksOutput as gccOptimizationRecord,
 	parseGccOptimizationRemarks,
-} from '../src/artifacts/analysis/optimization-remarks-renderer.js';
+} from '../src/artifacts/optimization-remarks/gcc-optimization-remarks.js';
+import { artifactDefinitions } from '../src/artifacts/core/artifact-definitions.js';
 import {
 	resolveArtifactAvailability,
 	toolchainDefinitions,

@@ -9,7 +9,7 @@ import type {
 } from '../../../types/index.js';
 import { GraphIdAllocator, NodeIdAllocator, splitLines } from '../cfg-parser-support.js';
 import type { GraphParseResult } from '../control-flow-graph-model.js';
-import { decodeLlvmName } from '../../compiler/llvm-names.js';
+import { decodeLlvmName } from '../../llvm-ir/llvm-names.js';
 import { parseMetadata, type MetadataTable } from './llvm-debug-metadata.js';
 
 /**

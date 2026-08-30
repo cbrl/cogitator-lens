@@ -7,10 +7,10 @@ import test from 'node:test';
 import { artifactDefinitions } from '../src/artifacts/core/artifact-definitions.js';
 import {
 	pythonAstHelper,
-} from '../src/artifacts/compiler/front-end-producers.js';
+} from '../src/artifacts/ast/python-ast-producer.js';
 import {
 	rustArtifactArguments,
-} from '../src/artifacts/compiler/compiler-output-producer.js';
+} from '../src/artifacts/core/compiler-output-producer.js';
 import { ToolchainBackend } from '../src/toolchains/toolchain-backend.js';
 import {
 	resolveArtifactAvailability,

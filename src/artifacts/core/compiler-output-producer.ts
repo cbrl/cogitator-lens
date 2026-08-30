@@ -64,40 +64,6 @@ export const clangClLlvmIrOutput: CompilerOutputSpec = Object.freeze({
 	],
 });
 
-export const clangOptimizationRecord: CompilerOutputSpec = Object.freeze({
-	outputFilename: 'output.opt.yaml',
-	optionalOutput: true,
-	arguments: (outputFile: string, temporaryDirectory: string) => [
-		'-c',
-		'-fsave-optimization-record=yaml',
-		`-foptimization-record-file=${outputFile}`,
-		'-o',
-		path.join(temporaryDirectory, 'output.o'),
-	],
-});
-
-export const clangClOptimizationRecord: CompilerOutputSpec = Object.freeze({
-	outputFilename: 'output.opt.yaml',
-	optionalOutput: true,
-	arguments: (outputFile: string, temporaryDirectory: string) => [
-		'/c',
-		'/clang:-fsave-optimization-record=yaml',
-		`/clang:-foptimization-record-file=${outputFile}`,
-		`/Fo${path.join(temporaryDirectory, 'output.obj')}`,
-	],
-});
-
-export const gccOptimizationRecord: CompilerOutputSpec = Object.freeze({
-	outputFilename: 'output.opt',
-	optionalOutput: true,
-	arguments: (outputFile: string, temporaryDirectory: string) => [
-		'-c',
-		`-fopt-info-all=${outputFile}`,
-		'-o',
-		path.join(temporaryDirectory, 'output.o'),
-	],
-});
-
 export const gccControlFlowGraphOutput: CompilerOutputSpec = Object.freeze({
 	outputFilename: 'output.cfg',
 	arguments: (outputFile: string, temporaryDirectory: string) => [

@@ -8,12 +8,12 @@ import type {
 import type { ArtifactProducer } from '../../toolchains/toolchain-map.js';
 import type { CompilerOutputSpec } from '../../toolchains/toolchain-backend.js';
 import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
-import { compilerOutputProducer } from '../compiler/compiler-output-producer.js';
+import { compilerOutputProducer } from '../core/compiler-output-producer.js';
 import {
 	type AnalysisParserDiagnostic,
 	renderAnalysisSource,
 	sameSourcePath,
-} from './analysis-source-renderer.js';
+} from '../analysis/analysis-source-renderer.js';
 
 export interface StackUsageEntry {
 	readonly sourceUri?: string;

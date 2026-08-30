@@ -9,11 +9,11 @@ import {
 	clangClStackUsageOutput,
 	nativeStackUsageOutput,
 	parseStackUsage,
-} from '../src/artifacts/analysis/stack-analysis.js';
+} from '../src/artifacts/stack-analysis/native-stack-analysis.js';
 import {
 	parsePythonStackUsage,
 	pythonStackAnalysisHelper,
-} from '../src/artifacts/analysis/python-stack-analysis.js';
+} from '../src/artifacts/stack-analysis/python-stack-analysis.js';
 import { ToolchainBackend } from '../src/toolchains/toolchain-backend.js';
 import {
 	resolveArtifactAvailability,

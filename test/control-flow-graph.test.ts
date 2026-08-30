@@ -7,7 +7,7 @@ import {
 	llvmIrOutput,
 	rustLlvmIrOutput,
 	rustMirOutput,
-} from '../src/artifacts/compiler/compiler-output-producer.js';
+} from '../src/artifacts/core/compiler-output-producer.js';
 import { renderControlFlowGraphArtifact } from '../src/artifacts/control-flow-graph/control-flow-graph-renderer.js';
 import {
 	controlFlowGraphMetrics,
