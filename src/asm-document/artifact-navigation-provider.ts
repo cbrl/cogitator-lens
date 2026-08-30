@@ -23,6 +23,7 @@ import {
 } from 'vscode';
 import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
 import type { RenderedTextArtifact } from '../types/index.js';
+import { documentationForInstruction } from './instruction-documentation.js';
 
 type ArtifactLookup = (uri: Uri) => RenderedTextArtifact | undefined;
 
@@ -92,18 +93,60 @@ export class ArtifactNavigationProvider implements
 		_token: CancellationToken,
 	): ProviderResult<Hover> {
 		const artifact = this.artifactLookup(document.uri);
-		const source = artifact?.lines[position.line]?.source;
-		if (
-			!artifact
-			|| !artifactDefinitions[artifact.kind].navigation.sourceLocations
-			|| !source?.file
-			|| source.line === null
-		) {
+		const line = artifact?.lines[position.line];
+		if (!artifact || !line) {
 			return undefined;
 		}
-		const location = `${source.file}:${source.line}${source.column === undefined ? '' : `:${source.column + 1}`}`;
 		const contents = new MarkdownString();
-		contents.appendText(`Source: ${location}`);
+		contents.isTrusted = false;
+		const documentation = documentationForInstruction(
+			artifact,
+			line.disassembly ?? line.text,
+		);
+		if (documentation) {
+			contents.appendMarkdown(`**${documentation.mnemonic}** _(${documentation.instructionSet})_ — `);
+			contents.appendText(documentation.tooltip);
+			if (documentation.url) {
+				contents.appendMarkdown(`\n\n[Instruction reference](${documentation.url})`);
+			}
+		}
+		if (line.address !== undefined || line.opcodes?.length) {
+			if (contents.value) {
+				contents.appendMarkdown('\n\n');
+			}
+			const details = [
+				line.address === undefined ? undefined : `Address: 0x${line.address.toString(16)}`,
+				line.opcodes?.length ? `Bytes: ${line.opcodes.join(' ')}` : undefined,
+			].filter((value): value is string => Boolean(value));
+			contents.appendText(details.join(' · '));
+		}
+		const link = artifact.links.find(candidate =>
+			candidate.line === position.line
+			&& position.character >= candidate.startCharacter
+			&& position.character <= candidate.endCharacter)
+			?? artifact.links.find(candidate => candidate.line === position.line);
+		if (link) {
+			const target = artifact.lines[link.targetLine]?.text.trim();
+			if (contents.value) {
+				contents.appendMarkdown('\n\n');
+			}
+			contents.appendText(`Branch target: ${target || `line ${link.targetLine + 1}`}`);
+		}
+		const source = line.source;
+		if (
+			artifactDefinitions[artifact.kind].navigation.sourceLocations
+			&& source?.file
+			&& source.line !== null
+		) {
+			if (contents.value) {
+				contents.appendMarkdown('\n\n');
+			}
+			const location = `${source.file}:${source.line}${source.column === undefined ? '' : `:${source.column + 1}`}`;
+			contents.appendText(`Source: ${location}`);
+		}
+		if (!contents.value) {
+			return undefined;
+		}
 		return new Hover(contents);
 	}
 

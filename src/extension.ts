@@ -7,6 +7,10 @@ import vscode, {
 	workspace,
 } from 'vscode';
 import { ArtifactNavigationProvider } from './asm-document/artifact-navigation-provider.js';
+import {
+	ArtifactSemanticTokensProvider,
+	artifactSemanticTokensLegend,
+} from './asm-document/artifact-semantic-tokens-provider.js';
 import { AsmProvider, getArtifactUri } from './asm-document/asm-provider.js';
 import { CmakeVariantProvider } from './buildsystems/cmake.js';
 import { CompilationDatabaseVariantProvider } from './buildsystems/compilation-database.js';
@@ -83,6 +87,11 @@ export async function activate(context: ExtensionContext): Promise<void> {
 	const symbolRegistration = vscode.languages.registerDocumentSymbolProvider(
 		{ scheme: AsmProvider.scheme },
 		navigationProvider,
+	);
+	const semanticTokensRegistration = vscode.languages.registerDocumentSemanticTokensProvider(
+		{ scheme: AsmProvider.scheme },
+		new ArtifactSemanticTokensProvider(uri => artifactProvider.getRenderedArtifact(uri)),
+		artifactSemanticTokensLegend,
 	);
 
 	const openArtifactCommand = commands.registerTextEditorCommand(
@@ -163,6 +172,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		foldingRegistration,
 		hoverRegistration,
 		symbolRegistration,
+		semanticTokensRegistration,
 		openArtifactCommand,
 		openControlFlowGraphCommand,
 		compareArtifactsCommand,

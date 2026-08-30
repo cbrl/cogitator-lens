@@ -12,6 +12,17 @@ The assembly parsers, their interfaces, `lib/properties.interfaces.ts`,
 `static/panes/opt-view.interfaces.ts`, and the interfaces under `types/` are
 unmodified upstream files.
 
+The providers under `lib/asm-docs/`, their generated lookup tables, and
+`types/assembly-docs.interfaces.ts` are also copied from upstream. The
+extension bundles the tables for AMD64, ARM32, AArch64, RISC-V64, LLVM IR, and
+Python bytecode. Their corresponding Compiler Explorer generators—and the
+other docenizers available for future artifact types—are preserved byte for
+byte under `scripts/compiler-explorer-docenizers/`. Docenizers are offline
+maintenance tools; they are never executed while the extension is running.
+
+Each generated lookup function has one semantics-preserving final
+`return undefined` for this project's `noImplicitReturns` setting.
+
 `lib/llvm-ir.ts` is the upstream LLVM IR parser with two semantics-preserving
 `return undefined` statements required by this project's `noImplicitReturns`
 setting. `npm run vendor:check` applies those two changes to the pinned upstream
@@ -41,13 +52,17 @@ vendored parsers.
 1. Pick the new Compiler Explorer commit SHA.
 2. Copy each byte-identical file listed in `scripts/vendor-check.mjs` from the
    same upstream path.
-3. Reapply the two explicit-return changes to `lib/llvm-ir.ts`, if upstream
-   still requires them.
-4. Re-extract the two optimization remark routines into
+3. Run the applicable scripts in upstream's `etc/scripts/docenizers/`, then
+   copy the refreshed providers and generated tables listed by
+   `scripts/vendor-check.mjs`. This is intentionally an offline update step;
+   users do not need network access for instruction hovers.
+4. Reapply the explicit-return changes to `lib/llvm-ir.ts` and the generated
+   documentation lookup functions, if upstream still requires them.
+5. Re-extract the two optimization remark routines into
    `lib/optimization-remarks.ts`, preserving the local exported function
    boundary.
-5. Update the pinned revision above.
-6. Run `npm run vendor:check`, `npm run check-types`, and
+6. Update the pinned revision above.
+7. Run `npm run vendor:check`, `npm run check-types`, and
    `npm run test:unit`.
 
 Do not make unrelated changes inside upstream parser files. Extension-specific

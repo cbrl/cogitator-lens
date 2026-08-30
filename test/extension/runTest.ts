@@ -500,7 +500,8 @@ function verifyArtifactNavigationProviders(): void {
 		const instructionContent = instructionHover.contents[0];
 		assert.ok(instructionContent instanceof vscode.MarkdownString);
 		assert.match(instructionContent.value, /\*\*call\*\*/i);
-		assert.match(instructionContent.value, /return.*address/i);
+		assert.match(instructionContent.value, /procedure.*linking.*information/i);
+		assert.match(instructionContent.value, /Instruction reference/);
 		assert.match(instructionContent.value, /Address:.*0x10/);
 		assert.match(instructionContent.value, /Branch.*target:.*helper:/);
 

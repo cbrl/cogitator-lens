@@ -8,6 +8,7 @@ export default [{
 	ignores: [
 		"node_modules/",
 		"src/vendor/lib/llvm-ir.ts",
+		"src/vendor/lib/asm-docs/**/*",
 		"src/vendor/lib/parsers/**/*",
 		"src/vendor/static/**/*",
 		"src/vendor/types/**/*",
