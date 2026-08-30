@@ -53,8 +53,9 @@ export async function activate(context: ExtensionContext): Promise<void> {
 	setup.createToolchainTreeView(context, compilationService.toolchainRegistry);
 	setup.createCompilationInfoTreeView(context, compilationService);
 	setup.createGlobalOptionsTreeView(context, compilationService);
+	setup.createArtifactPresetsTreeView(context, configuration);
 	setup.createArtifactDetailsTreeView(context, artifactProvider, graphPanels);
-	setup.setupCommands(context, compilationService, configuration);
+	setup.setupCommands(context, compilationService, configuration, artifactProvider);
 
 	const variantProviders: VariantProvider[] = [
 		new CmakeVariantProvider(),
@@ -141,23 +142,29 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		},
 	);
 
-	const updateSupportedSourceContext = (): Thenable<unknown> =>
+	const updateEditorContexts = (): Thenable<unknown[]> => Promise.all([
 		commands.executeCommand(
 			'setContext',
 			'coglens.supportedSource',
 			Boolean(window.activeTextEditor
 				&& isSupportedSourceDocument(window.activeTextEditor.document)),
-		);
+		),
+		commands.executeCommand(
+			'setContext',
+			'coglens.artifactDocument',
+			window.activeTextEditor?.document.uri.scheme === AsmProvider.scheme,
+		),
+	]);
 	const activeEditorSubscription = window.onDidChangeActiveTextEditor(() => {
-		void updateSupportedSourceContext();
+		void updateEditorContexts();
 	});
 	const openedDocumentSubscription = workspace.onDidOpenTextDocument(() => {
-		void updateSupportedSourceContext();
+		void updateEditorContexts();
 	});
 	const closedDocumentSubscription = workspace.onDidCloseTextDocument(() => {
-		void updateSupportedSourceContext();
+		void updateEditorContexts();
 	});
-	await updateSupportedSourceContext();
+	await updateEditorContexts();
 
 	context.subscriptions.push(
 		configuration,

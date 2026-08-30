@@ -160,7 +160,7 @@
                 {
                     "id": "coglens",
                     "title": "Cogitator Lens",
-                    "icon": "resources/gear-phi.png"
+                    "icon": "resources/gear-phi.svg"
                 }
             ]
         },
@@ -180,6 +180,11 @@
                     "id": "coglens.artifactOptions",
                     "name": "Artifact Options",
                     "icon": "$(filter)"
+                },
+                {
+                    "id": "coglens.artifactPresets",
+                    "name": "Artifact Presets",
+                    "icon": "$(symbol-parameter)"
                 },
                 {
                     "id": "coglens.artifactDetails",
@@ -282,6 +287,70 @@
                 "title": "Open Artifact Settings JSON",
                 "category": "Cogitator Lens",
                 "icon": "$(json)"
+            },
+            {
+                "command": "coglens.AddArtifactPreset",
+                "title": "Add Artifact Preset",
+                "category": "Cogitator Lens",
+                "icon": "$(add)"
+            },
+            {
+                "command": "coglens.EditArtifactPreset",
+                "title": "Edit Artifact Preset",
+                "category": "Cogitator Lens",
+                "icon": "$(edit)"
+            },
+            {
+                "command": "coglens.DeleteArtifactPreset",
+                "title": "Delete Artifact Preset",
+                "category": "Cogitator Lens",
+                "icon": "$(trash)"
+            },
+            {
+                "command": "coglens.SaveArtifactOptionsAsPreset",
+                "title": "Save Current Options as Artifact Preset",
+                "category": "Cogitator Lens",
+                "enablement": "coglens.artifactDocument",
+                "icon": "$(save-as)"
+            },
+            {
+                "command": "coglens.OpenPresetSettingsJson",
+                "title": "Open Artifact Preset Settings JSON",
+                "category": "Cogitator Lens",
+                "icon": "$(json)"
+            },
+            {
+                "command": "coglens.RefreshArtifact",
+                "title": "Refresh Artifact",
+                "category": "Cogitator Lens",
+                "enablement": "coglens.artifactDocument",
+                "icon": "$(refresh)"
+            },
+            {
+                "command": "coglens.CancelGeneration",
+                "title": "Cancel Artifact Generation",
+                "category": "Cogitator Lens",
+                "enablement": "coglens.artifactDocument",
+                "icon": "$(debug-stop)"
+            },
+            {
+                "command": "coglens.ShowLog",
+                "title": "Show Log",
+                "category": "Cogitator Lens",
+                "icon": "$(output)"
+            },
+            {
+                "command": "coglens.RevealArtifactSource",
+                "title": "Reveal Artifact Source",
+                "category": "Cogitator Lens",
+                "enablement": "coglens.artifactDocument",
+                "icon": "$(go-to-file)"
+            },
+            {
+                "command": "coglens.ShowArtifactStatus",
+                "title": "Show Artifact Status and Actions",
+                "category": "Cogitator Lens",
+                "enablement": "coglens.artifactDocument"
             }
         ],
         "configuration": [
@@ -774,6 +843,21 @@
                     "command": "coglens.OpenArtifactSettingsJson",
                     "when": "view == coglens.artifactOptions",
                     "group": "navigation@9"
+                },
+                {
+                    "command": "coglens.AddArtifactPreset",
+                    "when": "view == coglens.artifactPresets",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "coglens.SaveArtifactOptionsAsPreset",
+                    "when": "view == coglens.artifactPresets && coglens.artifactDocument",
+                    "group": "navigation@2"
+                },
+                {
+                    "command": "coglens.OpenPresetSettingsJson",
+                    "when": "view == coglens.artifactPresets",
+                    "group": "navigation@9"
                 }
             ],
             "view/item/context": [
@@ -810,9 +894,39 @@
                     "command": "coglens.DeleteCompilationVariant",
                     "when": "view == coglens.compileInfo && viewItem == manualCompilationVariant",
                     "group": "inline@2"
+                },
+                {
+                    "command": "coglens.EditArtifactPreset",
+                    "when": "view == coglens.artifactPresets && viewItem == artifactPreset",
+                    "group": "inline@1"
+                },
+                {
+                    "command": "coglens.DeleteArtifactPreset",
+                    "when": "view == coglens.artifactPresets && viewItem == artifactPreset",
+                    "group": "inline@2"
                 }
             ]
-        }
+        },
+        "keybindings": [
+            {
+                "command": "coglens.OpenArtifact",
+                "key": "ctrl+alt+a",
+                "mac": "cmd+alt+a",
+                "when": "editorTextFocus && coglens.supportedSource"
+            },
+            {
+                "command": "coglens.OpenControlFlowGraph",
+                "key": "ctrl+alt+g",
+                "mac": "cmd+alt+g",
+                "when": "editorTextFocus && coglens.supportedSource"
+            },
+            {
+                "command": "coglens.CompareArtifacts",
+                "key": "ctrl+alt+c",
+                "mac": "cmd+alt+c",
+                "when": "editorTextFocus && coglens.supportedSource"
+            }
+        ]
     },
     "scripts": {
         "vscode:prepublish": "npm run package",

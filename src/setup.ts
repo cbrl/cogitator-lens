@@ -4,8 +4,10 @@ import * as vscode from 'vscode';
 import { CompilationService, ToolchainRegistry } from './compilation/index.js';
 import { ConfigurationService } from './services/configuration-service.js';
 import type {
+	ArtifactKind,
 	CompilationVariant,
 	ManualCompilationVariantSettings,
+	ProductionOptions,
 	ToolchainProfile,
 } from './types/index.js';
 import {
@@ -23,11 +25,19 @@ import type { AsmProvider } from './asm-document/asm-provider.js';
 import { TreeNode } from './tree/treedata.js';
 import * as logger from './logger.js';
 import type { GraphPanelManager } from './webview/graph-panel-manager.js';
+import {
+	ArtifactPresetsTreeProvider,
+	ArtifactPresetTreeNode,
+	activeConfigurationScope,
+} from './tree/artifact-presets-tree.js';
+import { artifactDefinitions, supportedArtifactKinds } from './artifacts/core/artifact-definitions.js';
+import type { ArtifactPreset } from './artifacts/ui/presets.js';
 
 export function setupCommands(
 	context: vscode.ExtensionContext,
 	compilationService: CompilationService,
 	configuration: ConfigurationService,
+	artifacts: AsmProvider,
 ): void {
 	const copyText = vscode.commands.registerCommand('coglens.CopyText', async (node?: TreeNode) => {
 		const text = node?.copyText ?? node?.label;
@@ -160,10 +170,88 @@ export function setupCommands(
 		},
 	);
 
+	const addPreset = vscode.commands.registerCommand(
+		'coglens.AddArtifactPreset',
+		async (node?: ArtifactPresetTreeNode) => {
+			await configureArtifactPreset(
+				node?.scope ?? activeConfigurationScope(),
+				undefined,
+				compilationService,
+				configuration,
+			);
+		},
+	);
+	const editPreset = vscode.commands.registerCommand(
+		'coglens.EditArtifactPreset',
+		async (node?: ArtifactPresetTreeNode) => {
+			if (node?.preset) {
+				await configureArtifactPreset(
+					node.scope,
+					node.preset,
+					compilationService,
+					configuration,
+				);
+			}
+		},
+	);
+	const deletePreset = vscode.commands.registerCommand(
+		'coglens.DeleteArtifactPreset',
+		async (node?: ArtifactPresetTreeNode) => {
+			if (!node?.preset) {
+				return;
+			}
+			const confirmation = await vscode.window.showWarningMessage(
+				`Delete the artifact preset "${node.preset.id}"?`,
+				{ modal: true },
+				'Delete',
+			);
+			if (confirmation !== 'Delete') {
+				return;
+			}
+			await configuration.updateArtifactPresets(
+				configuration.getArtifactPresets(node.scope)
+					.filter(preset => preset.id !== node.preset?.id),
+				workspaceFolderFor(node.scope),
+			);
+		},
+	);
+	const saveOptionsAsPreset = vscode.commands.registerCommand(
+		'coglens.SaveArtifactOptionsAsPreset',
+		async () => saveActiveArtifactAsPreset(artifacts, compilationService, configuration),
+	);
+
+	const refreshArtifact = vscode.commands.registerCommand('coglens.RefreshArtifact', async () => {
+		if (!artifacts.refreshActiveArtifact()) {
+			await vscode.window.showInformationMessage('Focus an open text artifact to refresh it.');
+		}
+	});
+	const cancelGeneration = vscode.commands.registerCommand('coglens.CancelGeneration', async () => {
+		if (!artifacts.cancelActiveArtifact()) {
+			await vscode.window.showInformationMessage('The active artifact is not being generated.');
+		}
+	});
+	const showLog = vscode.commands.registerCommand('coglens.ShowLog', () => logger.logChannel.show());
+	const revealArtifactSource = vscode.commands.registerCommand(
+		'coglens.RevealArtifactSource',
+		async () => {
+			const snapshot = artifacts.getActiveArtifactDocumentState();
+			if (snapshot) {
+				await vscode.window.showTextDocument(vscode.Uri.parse(snapshot.identity.sourceUri), {
+					preview: false,
+				});
+			}
+		},
+	);
+	const showArtifactStatus = vscode.commands.registerCommand(
+		'coglens.ShowArtifactStatus',
+		async () => showArtifactStatusActions(artifacts),
+	);
+
 	const settingsCommands = [
 		['coglens.OpenToolchainSettingsJson', 'coglens.toolchains'],
 		['coglens.OpenCompileSettingsJson', 'coglens.compileVariants'],
 		['coglens.OpenArtifactSettingsJson', 'coglens.artifactOptions'],
+		['coglens.OpenPresetSettingsJson', 'coglens.artifactPresets'],
 	].map(([command, key]) =>
 		vscode.commands.registerCommand(command, () => openWorkspaceSettingsJson(key)));
 
@@ -175,6 +263,15 @@ export function setupCommands(
 		addVariant,
 		editVariant,
 		deleteVariant,
+		addPreset,
+		editPreset,
+		deletePreset,
+		saveOptionsAsPreset,
+		refreshArtifact,
+		cancelGeneration,
+		showLog,
+		revealArtifactSource,
+		showArtifactStatus,
 		...settingsCommands,
 	);
 }
@@ -331,49 +428,350 @@ async function inputStringArray(
 	title: string,
 	value: readonly string[],
 ): Promise<string[] | undefined> {
-	const input = await vscode.window.showInputBox({
-		title,
-		prompt: 'JSON array; each item is passed as one argument',
-		value: JSON.stringify(value),
-		validateInput: candidate => validateJson(candidate, isStringArray, 'a JSON array of strings'),
-	});
-	return input === undefined ? undefined : JSON.parse(input) as string[];
+	const result = [...value];
+	while (true) {
+		const choice = await vscode.window.showQuickPick([
+			{ label: '$(check) Done', action: 'done' as const },
+			{ label: '$(add) Add argument', action: 'add' as const },
+			...result.map((argument, index) => ({
+				label: argument || '(empty argument)',
+				description: `Argument ${index + 1}`,
+				action: 'item' as const,
+				index,
+			})),
+		], {
+			title,
+			placeHolder: 'Add, edit, remove, or reorder compiler arguments',
+			matchOnDescription: true,
+		});
+		if (!choice) {
+			return undefined;
+		}
+		if (choice.action === 'done') {
+			return result;
+		}
+		if (choice.action === 'add') {
+			const argument = await vscode.window.showInputBox({
+				title: `${title}: Add argument`,
+				prompt: 'This value is passed as one compiler argument',
+			});
+			if (argument !== undefined) {
+				result.push(argument);
+			}
+			continue;
+		}
+		const index = choice.index;
+		const action = await vscode.window.showQuickPick([
+			{ label: '$(edit) Edit', action: 'edit' as const },
+			...(index > 0 ? [{ label: '$(arrow-up) Move up', action: 'up' as const }] : []),
+			...(index < result.length - 1
+				? [{ label: '$(arrow-down) Move down', action: 'down' as const }]
+				: []),
+			{ label: '$(trash) Remove', action: 'remove' as const },
+		], { title: `${title}: ${result[index] || '(empty argument)'}` });
+		switch (action?.action) {
+			case 'edit': {
+				const argument = await vscode.window.showInputBox({
+					title: `${title}: Edit argument`,
+					value: result[index],
+				});
+				if (argument !== undefined) {
+					result[index] = argument;
+				}
+				break;
+			}
+			case 'up':
+				[result[index - 1], result[index]] = [result[index], result[index - 1]];
+				break;
+			case 'down':
+				[result[index], result[index + 1]] = [result[index + 1], result[index]];
+				break;
+			case 'remove':
+				result.splice(index, 1);
+				break;
+		}
+	}
 }
 
 async function inputStringRecord(
 	title: string,
 	value: Readonly<Record<string, string>>,
 ): Promise<Record<string, string> | undefined> {
-	const input = await vscode.window.showInputBox({
-		title,
-		prompt: 'JSON object mapping variable names to values',
-		value: JSON.stringify(value),
-		validateInput: candidate => validateJson(candidate, isStringRecord, 'a JSON object with string values'),
-	});
-	return input === undefined ? undefined : JSON.parse(input) as Record<string, string>;
-}
-
-function validateJson(
-	input: string,
-	predicate: (value: unknown) => boolean,
-	expected: string,
-): string | undefined {
-	try {
-		return predicate(JSON.parse(input)) ? undefined : `Enter ${expected}`;
-	} catch {
-		return 'Enter valid JSON';
+	const result = { ...value };
+	while (true) {
+		const entries = Object.entries(result);
+		const choice = await vscode.window.showQuickPick([
+			{ label: '$(check) Done', action: 'done' as const },
+			{ label: '$(add) Add variable', action: 'add' as const },
+			...entries.map(([name, variableValue]) => ({
+				label: name,
+				description: variableValue,
+				action: 'item' as const,
+				name,
+			})),
+		], {
+			title,
+			placeHolder: 'Add, edit, or remove environment variables',
+			matchOnDescription: true,
+		});
+		if (!choice) {
+			return undefined;
+		}
+		if (choice.action === 'done') {
+			return result;
+		}
+		if (choice.action === 'add') {
+			const entry = await inputEnvironmentEntry(title, result);
+			if (entry) {
+				result[entry.name] = entry.value;
+			}
+			continue;
+		}
+		const action = await vscode.window.showQuickPick([
+			{ label: '$(edit) Edit', action: 'edit' as const },
+			{ label: '$(trash) Remove', action: 'remove' as const },
+		], { title: `${title}: ${choice.name}` });
+		if (action?.action === 'remove') {
+			delete result[choice.name];
+		} else if (action?.action === 'edit') {
+			const entry = await inputEnvironmentEntry(title, result, choice.name);
+			if (entry) {
+				delete result[choice.name];
+				result[entry.name] = entry.value;
+			}
+		}
 	}
 }
 
-function isStringArray(value: unknown): boolean {
-	return Array.isArray(value) && value.every(item => typeof item === 'string');
+async function inputEnvironmentEntry(
+	title: string,
+	existing: Readonly<Record<string, string>>,
+	previousName?: string,
+): Promise<{ name: string; value: string } | undefined> {
+	const name = (await vscode.window.showInputBox({
+		title: `${title}: Variable name`,
+		value: previousName,
+		validateInput: candidate => {
+			const normalized = candidate.trim();
+			if (!normalized) {
+				return 'A variable name is required';
+			}
+			return normalized !== previousName && Object.hasOwn(existing, normalized)
+				? 'A variable with this name already exists'
+				: undefined;
+		},
+	}))?.trim();
+	if (!name) {
+		return undefined;
+	}
+	const variableValue = await vscode.window.showInputBox({
+		title: `${title}: ${name}`,
+		prompt: 'Environment variable value',
+		value: previousName ? existing[previousName] : '',
+	});
+	return variableValue === undefined ? undefined : { name, value: variableValue };
 }
 
-function isStringRecord(value: unknown): boolean {
-	return typeof value === 'object'
-		&& value !== null
-		&& !Array.isArray(value)
-		&& Object.values(value).every(item => typeof item === 'string');
+async function configureArtifactPreset(
+	scope: vscode.Uri | undefined,
+	existing: ArtifactPreset | undefined,
+	compilationService: CompilationService,
+	configuration: ConfigurationService,
+): Promise<void> {
+	const configured = configuration.getArtifactPresets(scope);
+	const id = (await vscode.window.showInputBox({
+		title: existing ? 'Edit Artifact Preset' : 'Add Artifact Preset',
+		prompt: 'Preset name',
+		value: existing?.id,
+		validateInput: value => {
+			const normalized = value.trim();
+			if (!normalized) {
+				return 'A name is required';
+			}
+			if (normalized === 'default') {
+				return 'The default preset is built in';
+			}
+			return normalized !== existing?.id && configured.some(preset => preset.id === normalized)
+				? 'A preset with this name already exists'
+				: undefined;
+		},
+	}))?.trim();
+	if (!id) {
+		return;
+	}
+	const artifactKind = await pickArtifactKind(existing?.artifactKind);
+	if (!artifactKind) {
+		return;
+	}
+	const extraArguments = await inputStringArray(
+		'Preset Compiler Arguments',
+		existing?.extraArguments ?? [],
+	);
+	if (!extraArguments) {
+		return;
+	}
+	const productionOptions = await pickProductionOptions(
+		artifactKind,
+		existing?.productionOptions
+			?? compilationService.getArtifactOptions(artifactKind).production,
+	);
+	if (!productionOptions) {
+		return;
+	}
+	await upsertArtifactPreset(configuration, scope, existing?.id, {
+		id,
+		artifactKind,
+		extraArguments,
+		productionOptions,
+	});
+}
+
+async function pickArtifactKind(selected?: ArtifactKind): Promise<ArtifactKind | undefined> {
+	const choice = await vscode.window.showQuickPick(
+		supportedArtifactKinds.map(kind => ({
+			label: artifactDefinitions[kind].label,
+			description: kind === selected ? 'current' : undefined,
+			artifactKind: kind,
+		})),
+		{ title: 'Artifact kind', placeHolder: 'Select the artifact this preset produces' },
+	);
+	return choice?.artifactKind;
+}
+
+async function pickProductionOptions(
+	kind: ArtifactKind,
+	current: Partial<ProductionOptions>,
+): Promise<Partial<ProductionOptions> | undefined> {
+	const descriptors = artifactDefinitions[kind].options
+		.filter(descriptor => descriptor.group === 'production');
+	if (!descriptors.length) {
+		return {};
+	}
+	const selected = await vscode.window.showQuickPick(
+		descriptors.map(descriptor => ({
+			label: descriptor.label,
+			detail: descriptor.description,
+			picked: current[descriptor.id as keyof ProductionOptions] ?? false,
+			id: descriptor.id as keyof ProductionOptions,
+		})),
+		{
+			title: `${artifactDefinitions[kind].label} Production Options`,
+			placeHolder: 'Select the options that should be enabled',
+			canPickMany: true,
+		},
+	);
+	if (!selected) {
+		return undefined;
+	}
+	const enabled = new Set(selected.map(item => item.id));
+	return Object.fromEntries(descriptors.map(descriptor => [
+		descriptor.id,
+		enabled.has(descriptor.id as keyof ProductionOptions),
+	])) as Partial<ProductionOptions>;
+}
+
+async function saveActiveArtifactAsPreset(
+	artifacts: AsmProvider,
+	compilationService: CompilationService,
+	configuration: ConfigurationService,
+): Promise<void> {
+	const snapshot = artifacts.getActiveArtifactDocumentState();
+	if (!snapshot) {
+		await vscode.window.showInformationMessage('Focus an open text artifact to save its options.');
+		return;
+	}
+	const source = vscode.Uri.parse(snapshot.identity.sourceUri);
+	const configured = configuration.getArtifactPresets(source);
+	const id = (await vscode.window.showInputBox({
+		title: 'Save Current Artifact Options as Preset',
+		prompt: 'Preset name',
+		validateInput: value => {
+			const normalized = value.trim();
+			if (!normalized) {
+				return 'A name is required';
+			}
+			if (normalized === 'default') {
+				return 'The default preset is built in';
+			}
+			return configured.some(preset => preset.id === normalized)
+				? 'A preset with this name already exists'
+				: undefined;
+		},
+	}))?.trim();
+	if (!id) {
+		return;
+	}
+	const inherited = compilationService.getArtifactPreset(
+		snapshot.identity.artifactKind,
+		snapshot.identity.presetId,
+		source,
+	);
+	await upsertArtifactPreset(configuration, source, undefined, {
+		id,
+		artifactKind: snapshot.identity.artifactKind,
+		extraArguments: [...(inherited?.extraArguments ?? [])],
+		productionOptions: {
+			...compilationService.getArtifactOptions(snapshot.identity.artifactKind).production,
+			...inherited?.productionOptions,
+		},
+	});
+	await vscode.window.showInformationMessage(`Saved artifact preset "${id}".`);
+}
+
+async function upsertArtifactPreset(
+	configuration: ConfigurationService,
+	scope: vscode.Uri | undefined,
+	previousId: string | undefined,
+	preset: ArtifactPreset,
+): Promise<void> {
+	await configuration.updateArtifactPresets([
+		...configuration.getArtifactPresets(scope)
+			.filter(candidate => candidate.id !== previousId && candidate.id !== preset.id),
+		preset,
+	], workspaceFolderFor(scope));
+}
+
+function workspaceFolderFor(scope: vscode.Uri | undefined): vscode.WorkspaceFolder | undefined {
+	return scope ? vscode.workspace.getWorkspaceFolder(scope) : vscode.workspace.workspaceFolders?.[0];
+}
+
+async function showArtifactStatusActions(artifacts: AsmProvider): Promise<void> {
+	const snapshot = artifacts.getActiveArtifactDocumentState();
+	if (!snapshot) {
+		return;
+	}
+	const choice = await vscode.window.showQuickPick([
+		{
+			label: '$(refresh) Refresh Artifact',
+			description: 'Regenerate from the current source and settings',
+			command: 'coglens.RefreshArtifact',
+		},
+		...(snapshot.status.state === 'compiling' ? [{
+			label: '$(debug-stop) Cancel Generation',
+			description: 'Stop the active compilation',
+			command: 'coglens.CancelGeneration',
+		}] : []),
+		{
+			label: '$(go-to-file) Reveal Source',
+			description: path.basename(snapshot.identity.sourceLabel),
+			command: 'coglens.RevealArtifactSource',
+		},
+		{
+			label: '$(output) Show Log',
+			description: 'Open the Cogitator Lens output channel',
+			command: 'coglens.ShowLog',
+		},
+	], {
+		title: `${snapshot.identity.artifactLabel} · ${statusLabel(snapshot.status.state)}`,
+		matchOnDescription: true,
+	});
+	if (choice) {
+		await vscode.commands.executeCommand(choice.command);
+	}
+}
+
+function statusLabel(state: import('./asm-document/compile-handler.js').CompilationDocumentState): string {
+	return state[0].toUpperCase() + state.slice(1);
 }
 
 function activeFileUri(): vscode.Uri | undefined {
@@ -427,6 +825,20 @@ export function createGlobalOptionsTreeView(
 		}),
 	);
 
+	return provider;
+}
+
+export function createArtifactPresetsTreeView(
+	context: vscode.ExtensionContext,
+	configuration: ConfigurationService,
+): ArtifactPresetsTreeProvider {
+	const provider = new ArtifactPresetsTreeProvider(configuration);
+	const view = vscode.window.createTreeView('coglens.artifactPresets', { treeDataProvider: provider });
+	context.subscriptions.push(
+		view,
+		vscode.window.onDidChangeActiveTextEditor(() => provider.refresh()),
+		configuration.onDidChange(() => provider.refresh()),
+	);
 	return provider;
 }
 

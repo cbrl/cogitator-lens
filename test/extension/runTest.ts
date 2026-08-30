@@ -32,6 +32,7 @@ import { ToolchainTreeNode } from '../../src/tree/toolchain-tree.js';
 import { getArtifactUri, parseArtifactUri } from '../../src/asm-document/artifact-uri.js';
 import { CompileHandler } from '../../src/asm-document/compile-handler.js';
 import { GlobalOptionsNode } from '../../src/tree/global-options-tree.js';
+import { ArtifactPresetTreeNode } from '../../src/tree/artifact-presets-tree.js';
 import { ArtifactNavigationProvider } from '../../src/asm-document/artifact-navigation-provider.js';
 import { ArtifactDetailsTreeProvider } from '../../src/tree/artifact-details-tree.js';
 import type {
@@ -67,6 +68,18 @@ export async function run(): Promise<void> {
 	assert.ok(registeredCommands.includes('coglens.DeleteCompilationVariant'));
 	assert.ok(registeredCommands.includes('coglens.RevealActiveSource'));
 	assert.ok(registeredCommands.includes('coglens.OpenCompileSettingsJson'));
+	for (const command of [
+		'coglens.RefreshArtifact',
+		'coglens.CancelGeneration',
+		'coglens.ShowLog',
+		'coglens.ShowArtifactStatus',
+		'coglens.AddArtifactPreset',
+		'coglens.EditArtifactPreset',
+		'coglens.DeleteArtifactPreset',
+		'coglens.SaveArtifactOptionsAsPreset',
+	]) {
+		assert.ok(registeredCommands.includes(command), `Missing registered command: ${command}`);
+	}
 
 	const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
 	assert.ok(workspaceFolder, 'Extension tests require an open workspace folder');
@@ -339,9 +352,11 @@ async function verifyCompileHandlerStates(workspaceFolder: vscode.WorkspaceFolde
 		waitForCancellation = true;
 		const cancelledUpdate = handler.update(cancellation.token);
 		await Promise.resolve();
-		cancellation.cancel();
+		assert.equal(handler.cancel(), true);
+		assert.equal(handler.cancel(), true);
 		await assert.rejects(cancelledUpdate, vscode.CancellationError);
 		assert.equal(handler.status.state, 'cancelled');
+		assert.equal(handler.cancel(), false);
 		assert.deepEqual(states, [
 			'stale',
 			'compiling',
@@ -1195,6 +1210,16 @@ function verifyTreeModels(workspaceFolder: vscode.WorkspaceFolder): void {
 	assert.equal(intel?.description, 'Inherent');
 	assert.equal(demangle?.disabled, true);
 	assert.equal(demangle?.description, 'Unavailable');
+	const presetNode = ArtifactPresetTreeNode.from({
+		id: 'optimized',
+		artifactKind: 'assembly',
+		extraArguments: ['-O3'],
+		productionOptions: { intel: true },
+	}, workspaceFolder.uri);
+	assert.equal(presetNode.treeContext, 'artifactPreset');
+	assert.equal(presetNode.description, 'Assembly');
+	assert.equal(findTreeNode(presetNode, 'Extra arguments')?.children?.[0]?.label, '-O3');
+	assert.equal(findTreeNode(presetNode, 'Production options')?.children?.[0]?.description, 'Enabled');
 
 	const coreSource = vscode.Uri.joinPath(workspaceFolder.uri, 'src', 'core', 'main.cpp');
 	const uiSource = vscode.Uri.joinPath(workspaceFolder.uri, 'src', 'ui', 'window.cpp');

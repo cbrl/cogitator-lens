@@ -96,6 +96,7 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 	) {
 		this.subscriptions = [
 			workspace.onDidCloseTextDocument(document => this.onCloseTextDocument(document)),
+			window.onDidChangeActiveTextEditor(() => this.refreshStatusBar()),
 			compilationService.onVariantsChanged(sources => {
 				for (const source of sources) {
 					for (const assembly of this.sourceToAssembly.get(source)?.values() ?? []) {
@@ -118,6 +119,8 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 			this.diagnostics,
 			this.statusBar,
 		];
+		this.statusBar.name = 'Cogitator Lens Artifact Status';
+		this.statusBar.command = 'coglens.ShowArtifactStatus';
 	}
 
 	// Implements TextDocumentContentProvider.provideTextDocumentContent. This function will be called for the given
@@ -186,6 +189,26 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 		return document
 			? { identity: document.identity, status: document.handler.status }
 			: undefined;
+	}
+
+	getActiveArtifactDocumentState(): ArtifactDocumentSnapshot | undefined {
+		const document = this.activeArtifactDocument();
+		return document
+			? { identity: document.identity, status: document.handler.status }
+			: undefined;
+	}
+
+	refreshActiveArtifact(): boolean {
+		const document = this.activeArtifactDocument();
+		if (!document) {
+			return false;
+		}
+		this.requestRefresh(document.handler.asmUri);
+		return true;
+	}
+
+	cancelActiveArtifact(): boolean {
+		return this.activeArtifactDocument()?.handler.cancel() ?? false;
 	}
 
 	requestRefresh(assemblyUri: Uri): void {
@@ -287,6 +310,7 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 			identity: documentIdentity,
 			status: handler.status,
 		});
+		this.refreshStatusBar();
 
 		return document;
 	}
@@ -301,7 +325,7 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 		} else if (status.state === 'failed') {
 			document.assembly = undefined;
 		}
-		this.updateStatusBar(document.handler, status);
+		this.refreshStatusBar();
 		this.artifactStateEmitter.fire({ identity: document.identity, status });
 	}
 
@@ -348,37 +372,52 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 		document.handler.dispose();
 		this.documents.delete(key);
 		this.rebuildDiagnostics();
-		if (this.documents.size === 0) {
-			this.statusBar.hide();
-		}
+		this.refreshStatusBar();
 	}
 
-	private updateStatusBar(handler: CompileHandler, status: CompileHandlerStatus): void {
-		const sourceName = path.basename(handler.srcUri.fsPath);
+	private activeArtifactDocument(): ArtifactDocument | undefined {
+		const uri = window.activeTextEditor?.document.uri;
+		return uri ? this.documents.get(documentKey(uri)) : undefined;
+	}
+
+	private refreshStatusBar(): void {
+		const document = this.activeArtifactDocument();
+		if (!document) {
+			this.statusBar.hide();
+			return;
+		}
+		this.updateStatusBar(document);
+	}
+
+	private updateStatusBar(document: ArtifactDocument): void {
+		const { status } = document.handler;
 		switch (status.state) {
 			case 'compiling':
-				this.statusBar.text = `$(sync~spin) Cogitator Lens: Compiling ${sourceName}`;
+				this.statusBar.text = '$(sync~spin) Compiling';
 				break;
 			case 'stale':
-				this.statusBar.text = `$(history) Cogitator Lens: Stale ${sourceName}`;
+				this.statusBar.text = '$(history) Stale';
 				break;
 			case 'cancelled':
-				this.statusBar.text = `$(circle-slash) Cogitator Lens: Cancelled ${sourceName}`;
+				this.statusBar.text = '$(circle-slash) Cancelled';
 				break;
 			case 'failed':
 				this.statusBar.text = status.truncated
-					? `$(warning) Cogitator Lens: Truncated ${sourceName}`
-					: `$(error) Cogitator Lens: Failed ${sourceName}`;
+					? '$(warning) Truncated'
+					: '$(error) Failed';
 				break;
 			case 'successful':
 				this.statusBar.text = status.truncated
-					? `$(warning) Cogitator Lens: Truncated ${sourceName}`
-					: `$(check) Cogitator Lens: Ready ${sourceName}`;
+					? '$(warning) Truncated'
+					: '$(check) Ready';
 				break;
 		}
-		this.statusBar.tooltip = status.state === 'failed'
-			? status.error.message
-			: `Artifact state: ${status.state}`;
+		this.statusBar.tooltip = [
+			`${document.identity.artifactLabel} · ${path.basename(document.identity.sourceLabel)}`,
+			`${document.identity.variantLabel} · ${document.identity.toolchainLabel}`,
+			status.state === 'failed' ? status.error.message : `State: ${status.state}`,
+			'Click for artifact actions',
+		].join('\n');
 		this.statusBar.show();
 	}
 

@@ -41,6 +41,7 @@ test('the manifest toolchain-kind enum and artifactOptions schema stay synchroni
 			untrustedWorkspaces: { supported: boolean };
 		};
 		contributes: {
+			keybindings: Array<{ command: string; when: string }>;
 			languages: Array<{ id: string }>;
 			grammars: Array<{ language: string }>;
 			commands: Array<{ command: string }>;
@@ -95,6 +96,30 @@ test('the manifest toolchain-kind enum and artifactOptions schema stay synchroni
 		command.command === 'coglens.OpenControlFlowGraph'));
 	assert.ok(manifest.contributes.views.coglens.some(view =>
 		view.id === 'coglens.artifactDetails'));
+	assert.ok(manifest.contributes.views.coglens.some(view =>
+		view.id === 'coglens.artifactPresets'));
+	for (const command of [
+		'coglens.RefreshArtifact',
+		'coglens.CancelGeneration',
+		'coglens.ShowLog',
+		'coglens.AddArtifactPreset',
+		'coglens.EditArtifactPreset',
+		'coglens.DeleteArtifactPreset',
+		'coglens.SaveArtifactOptionsAsPreset',
+	]) {
+		assert.ok(manifest.contributes.commands.some(contribution =>
+			contribution.command === command), `Missing command contribution: ${command}`);
+	}
+	assert.deepEqual(
+		manifest.contributes.keybindings.map(binding => binding.command),
+		[
+			'coglens.OpenArtifact',
+			'coglens.OpenControlFlowGraph',
+			'coglens.CompareArtifacts',
+		],
+	);
+	assert.ok(manifest.contributes.keybindings.every(binding =>
+		binding.when.includes('coglens.supportedSource')));
 	assert.ok(manifest.contributes.colors.some(color =>
 		color.id === 'coglens.stackUsage.background'));
 	assert.ok(manifest.contributes.colors.some(color =>
@@ -109,6 +134,10 @@ test('the manifest toolchain-kind enum and artifactOptions schema stay synchroni
 		grammar.language === 'coglens-llvm-ir'));
 	assert.match(fs.readFileSync('.vscodeignore', 'utf8'), /^test\/\*\*$/m);
 	assert.match(fs.readFileSync('.vscodeignore', 'utf8'), /^plans\/\*\*$/m);
+	const activityIcon = fs.readFileSync('resources/gear-phi.svg', 'utf8');
+	assert.match(activityIcon, /viewBox="0 0 24 24"/);
+	assert.match(activityIcon, /fill="currentColor"/);
+	assert.equal((activityIcon.match(/<path\b/g) ?? []).length, 1);
 });
 
 test('the default preset is total and a configured default overrides it', () => {

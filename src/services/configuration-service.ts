@@ -16,7 +16,10 @@ import type {
 	ToolchainSettings,
 } from '../types/index.js';
 import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
-import type { ArtifactPreset } from '../artifacts/ui/presets.js';
+import type {
+	ArtifactPreset,
+	ArtifactPresetConfiguration,
+} from '../artifacts/ui/presets.js';
 import * as logger from '../logger.js';
 import {
 	parseArtifactOptions,
@@ -132,6 +135,25 @@ export class ConfigurationService implements Disposable {
 				...current,
 				[kind]: serialized,
 			},
+			folder ? ConfigurationTarget.WorkspaceFolder : ConfigurationTarget.Workspace,
+		);
+	}
+
+	async updateArtifactPresets(
+		presets: readonly ArtifactPreset[],
+		folder?: WorkspaceFolder,
+	): Promise<void> {
+		const serialized = Object.fromEntries(presets.map(preset => {
+			const configuration: ArtifactPresetConfiguration = {
+				artifactKind: preset.artifactKind,
+				extraArguments: [...preset.extraArguments],
+				productionOptions: { ...preset.productionOptions },
+			};
+			return [preset.id, configuration];
+		}));
+		await workspace.getConfiguration('coglens', folder?.uri).update(
+			'artifactPresets',
+			serialized,
 			folder ? ConfigurationTarget.WorkspaceFolder : ConfigurationTarget.Workspace,
 		);
 	}

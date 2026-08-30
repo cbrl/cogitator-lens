@@ -221,6 +221,14 @@ export class CompileHandler implements Disposable {
 		}
 	}
 
+	cancel(): boolean {
+		if (!this.cancellation || this.currentStatus.state !== 'compiling') {
+			return false;
+		}
+		this.cancellation.cancel();
+		return true;
+	}
+
 	dispose(): void {
 		this.cancellation?.cancel();
 		this.cancellation?.dispose();

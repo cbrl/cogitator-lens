@@ -17,6 +17,10 @@ import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
 interface SelectedArtifact {
 	readonly profile?: ToolchainProfile;
 	readonly kind: ArtifactKind;
+	readonly source?: vscode.Uri;
+	readonly variantLabel?: string;
+	readonly presetId?: string;
+	readonly outputId?: string;
 }
 
 export class GlobalOptionsNode extends TreeNode {
@@ -91,11 +95,14 @@ export class GlobalOptionsTreeProvider extends TreeProvider<GlobalOptionsNode> {
 			return element.children;
 		}
 		const selected = this.selectedArtifact();
-		return GlobalOptionsNode.createFilterTree(
+		return [
+			bindingNode(selected),
+			...GlobalOptionsNode.createFilterTree(
 			this.compilationService.getArtifactOptions(selected.kind),
 			selected.profile,
 			selected.kind,
-		);
+			),
+		];
 	}
 
 	private selectedArtifact(): SelectedArtifact {
@@ -110,15 +117,43 @@ export class GlobalOptionsTreeProvider extends TreeProvider<GlobalOptionsNode> {
 			source = vscode.window.visibleTextEditors.find(editor =>
 				editor.document.uri.scheme === 'file')?.document.uri;
 		}
-		const variant = source ? this.compilationService.getSelectedVariant(source) : undefined;
+		const variant = identity
+			? this.compilationService.getVariants(identity.source)
+				.find(candidate => candidate.id === identity.variantId)
+			: source ? this.compilationService.getSelectedVariant(source) : undefined;
 		return {
 			kind,
+			source,
+			variantLabel: variant?.displayLabel,
+			presetId: identity?.presetId,
+			outputId: identity?.artifactOutputId,
 			profile: variant
 				? this.compilationService.toolchainRegistry
 					.getToolchainById(variant.toolchainProfileId)?.profile
 				: undefined,
 		};
 	}
+}
+
+function bindingNode(selected: SelectedArtifact): GlobalOptionsNode {
+	const artifactLabel = artifactDefinitions[selected.kind].label;
+	const toolchainLabel = selected.profile?.displayName ?? 'No toolchain selected';
+	const binding = [
+		`Artifact: ${artifactLabel}`,
+		`Output: ${selected.outputId ?? artifactLabel}`,
+		`Toolchain: ${toolchainLabel}`,
+		...(selected.variantLabel ? [`Variant: ${selected.variantLabel}`] : []),
+		...(selected.presetId ? [`Preset: ${selected.presetId}`] : []),
+		...(selected.source ? [`Source: ${selected.source.fsPath}`] : []),
+	];
+	return {
+		id: 'active-artifact-binding',
+		label: artifactLabel,
+		description: `${selected.outputId ?? 'Default output'} · ${toolchainLabel}`,
+		tooltip: binding.join('\n'),
+		nodeType: 'text',
+		iconPath: new vscode.ThemeIcon('link'),
+	};
 }
 
 function optionNode(

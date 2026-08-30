@@ -11,6 +11,7 @@ export type TreeItemSpecifier = 'checkbox' | 'subtree' | 'text';
  * and can be used to limit commands to specific menu items based on the context.
  */
 export type TreeContextSpecifier =
+	| 'artifactPreset'
 	| 'compilationSource'
 	| 'compilationVariant'
 	| 'derivedInstance'

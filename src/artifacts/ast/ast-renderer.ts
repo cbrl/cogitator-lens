@@ -106,15 +106,16 @@ export function renderClangAst(
 		node.name && isDeclarationNode(node.kind)
 			? [{ name: node.name, line: node.line }]
 			: []);
-	return {
-		...renderedArtifact(raw, output, {
-			nodeCount: completeNodes.length,
-			declarationCount: symbols.length,
-		}),
-		folds: completeNodes.flatMap(node =>
-			node.endLine > node.line ? [{ startLine: node.line, endLine: node.endLine }] : []),
-		symbols,
-	};
+
+	const artifact = renderedArtifact(raw, output, {
+		nodeCount: completeNodes.length,
+		declarationCount: symbols.length,
+	});
+	const foldedLines = completeNodes.flatMap(node =>
+		node.endLine > node.line ? [{ startLine: node.line, endLine: node.endLine }] : []
+	);
+
+	return {...artifact, folds: foldedLines, symbols};
 }
 
 export function renderPythonAst(

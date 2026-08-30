@@ -303,13 +303,23 @@ function parseFunction(
 				usedEvents.add(eventIndex);
 			}
 			const kind = event?.kind ?? edgeKindForTerminal(block, successor.target);
-			addEdge(edges, block.key, successor.target, kind, event?.label);
+			addEdge(edges, {
+				from: block.key,
+				to: successor.target,
+				kind,
+				...(event?.label === undefined ? {} : { label: event.label }),
+			});
 		}
 		for (const [eventIndex, event] of events.entries()) {
 			if (usedEvents.has(eventIndex)) {
 				continue;
 			}
-			addEdge(edges, block.key, event.target, event.kind ?? edgeKindForTerminal(block, event.target), event.label);
+			addEdge(edges, {
+				from: block.key,
+				to: event.target,
+				kind: event.kind ?? edgeKindForTerminal(block, event.target),
+				...(event.label === undefined ? {} : { label: event.label }),
+			});
 		}
 
 		// A dump normally contains a successor comment for every block.  For a
@@ -320,7 +330,7 @@ function parseFunction(
 			const index = orderedBlockKeys.indexOf(block.key);
 			const next = index >= 0 ? orderedBlockKeys[index + 1] : undefined;
 			if (next) {
-				addEdge(edges, block.key, next, 'fallthrough');
+				addEdge(edges, { from: block.key, to: next, kind: 'fallthrough' });
 			}
 		}
 	}
@@ -386,13 +396,18 @@ function blockDescriptor(reference: string): BlockDescriptor {
 
 function normalizeBlockReference(value: string): string {
 	const normalized = value.toUpperCase();
-	return normalized === 'ENTRY' || normalized === 'EXIT'
-		? normalized
-		: Number.parseInt(value, 10) === 0
-			? 'ENTRY'
-			: Number.parseInt(value, 10) === 1
-				? 'EXIT'
-				: `bb${Number.parseInt(value, 10)}`;
+	if (normalized === 'ENTRY' || normalized === 'EXIT') {
+		return normalized;
+	}
+
+	const valueInt = Number.parseInt(value, 10);
+	if (valueInt === 0) {
+		return 'ENTRY';
+	}
+	if (valueInt === 1) {
+		return 'EXIT';
+	}
+	return `bb${valueInt}`;
 }
 
 function getOrCreateBlock(
@@ -433,17 +448,15 @@ function ensureBlock(
 	return block;
 }
 
-function addEdge(
-	edges: ControlFlowEdge[],
-	from: string,
-	to: string,
-	kind: ControlFlowEdgeKind,
-	label?: string,
-): void {
-	if (edges.some(edge => edge.from === from && edge.to === to && edge.kind === kind && edge.label === label)) {
+function addEdge(edges: ControlFlowEdge[], edge: ControlFlowEdge): void {
+	if (edges.some(existing =>
+		existing.from === edge.from
+		&& existing.to === edge.to
+		&& existing.kind === edge.kind
+		&& existing.label === edge.label)) {
 		return;
 	}
-	edges.push(label === undefined ? { from, to, kind } : { from, to, kind, label });
+	edges.push(edge);
 }
 
 function edgeKindForTerminal(block: MutableBlock, target: string): ControlFlowEdgeKind {
