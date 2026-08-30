@@ -15,6 +15,7 @@ body {
 }
 
 .toolbar {
+	position: relative;
 	display: flex;
 	align-items: center;
 	gap: 6px;
@@ -26,7 +27,7 @@ body {
 
 .toolbar label { white-space: nowrap; }
 
-select, button {
+input, select, button {
 	color: var(--vscode-button-secondaryForeground);
 	background: var(--vscode-button-secondaryBackground);
 	border: 1px solid var(--vscode-dropdown-border, transparent);
@@ -35,15 +36,47 @@ select, button {
 	min-height: 28px;
 }
 
-select {
+input {
 	min-width: 220px;
 	max-width: min(46vw, 580px);
 	padding: 2px 26px 2px 8px;
 }
 
+#graph-search { min-width: 150px; max-width: 260px; }
+#layout-direction { min-width: 116px; max-width: 150px; padding: 2px 5px; }
+
+.function-picker { position: relative; }
+#function-options {
+	position: absolute;
+	z-index: 10;
+	top: calc(100% + 3px);
+	left: 0;
+	width: max-content;
+	min-width: 220px;
+	max-width: min(580px, 70vw);
+	max-height: min(360px, 60vh);
+	overflow: auto;
+	padding: 3px;
+	border: 1px solid var(--vscode-dropdown-border, var(--vscode-panel-border));
+	border-radius: 3px;
+	background: var(--vscode-editorWidget-background);
+	box-shadow: 0 3px 10px var(--vscode-widget-shadow);
+}
+.function-option {
+	display: block;
+	width: 100%;
+	padding: 4px 8px;
+	border: 0;
+	border-radius: 2px;
+	text-align: left;
+	color: var(--vscode-foreground);
+	background: transparent;
+}
+.function-option:hover, .function-option:focus { background: var(--vscode-list-hoverBackground); }
+
 button { padding: 2px 9px; cursor: pointer; }
 button:hover { background: var(--vscode-button-secondaryHoverBackground); }
-button:focus-visible, select:focus-visible, .node:focus-visible {
+button:focus-visible, input:focus-visible, select:focus-visible, .node:focus-visible {
 	outline: 2px solid var(--vscode-focusBorder);
 	outline-offset: 1px;
 }
@@ -52,28 +85,23 @@ button:focus-visible, select:focus-visible, .node:focus-visible {
 
 #stale-badge {
 	padding: 3px 7px;
+	min-height: auto;
 	border-radius: 10px;
 	color: var(--vscode-editorWarning-foreground);
 	background: var(--vscode-editorWarning-background, transparent);
 }
 
 #diagnostics {
-	position: absolute;
-	z-index: 3;
-	top: 48px;
-	right: 12px;
-	max-width: min(520px, calc(100vw - 24px));
-	max-height: 32vh;
+	max-height: 20vh;
 	overflow: auto;
-	padding: 8px 10px;
-	border: 1px solid var(--vscode-editorInfo-foreground);
-	border-radius: 4px;
+	padding: 5px 10px;
+	border-bottom: 1px solid var(--vscode-panel-border);
 	background: var(--vscode-editorWidget-background);
-	box-shadow: 0 3px 10px var(--vscode-widget-shadow);
 }
 
 .diagnostic + .diagnostic { margin-top: 5px; }
 .diagnostic.error { color: var(--vscode-errorForeground); }
+.diagnostic.warning { color: var(--vscode-editorWarning-foreground); }
 
 #graph-canvas {
 	position: relative;
@@ -111,6 +139,11 @@ button:focus-visible, select:focus-visible, .node:focus-visible {
 	stroke: var(--vscode-focusBorder);
 	stroke-width: 2.3;
 }
+.node.loop-node rect { fill: var(--vscode-editor-selectionBackground, var(--vscode-editorWidget-background)); }
+.node.unreachable { opacity: 0.46; }
+.node.incident rect, .node.search-match rect { stroke: var(--vscode-focusBorder); stroke-width: 2.8; }
+.node.path-node rect { stroke: var(--vscode-charts-orange, var(--vscode-focusBorder)); stroke-width: 2.4; }
+.node.search-muted { opacity: 0.25; }
 
 .node.terminal-return rect { stroke: var(--vscode-testing-iconPassed); }
 .node.terminal-throw rect, .node.terminal-resume rect { stroke: var(--vscode-testing-iconFailed); }
@@ -131,11 +164,15 @@ button:focus-visible, select:focus-visible, .node:focus-visible {
 	stroke-width: 1.35;
 	opacity: 0.72;
 }
+.edge.back-edge { stroke-width: 2.4; stroke-dasharray: 8 3; }
+.edge.incident { opacity: 1; stroke-width: 2.8; }
+.edge.path-edge { opacity: 1; stroke: var(--vscode-charts-orange, var(--vscode-focusBorder)); stroke-width: 2.5; }
 
 .edge-true { stroke: var(--vscode-testing-iconPassed); }
 .edge-false, .edge-exception { stroke: var(--vscode-testing-iconFailed); }
 .edge-exception { stroke-dasharray: 5 3; }
 .edge-fallthrough { stroke: var(--vscode-charts-blue); }
+.edge-unconditional { stroke-dasharray: 1 0; }
 
 .edge-label {
 	fill: var(--vscode-editor-foreground);
@@ -149,7 +186,15 @@ button:focus-visible, select:focus-visible, .node:focus-visible {
 }
 
 .legend {
+	position: absolute;
+	z-index: 4;
+	right: 0;
+	top: calc(100% + 6px);
 	display: flex;
+	padding: 7px 9px;
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 3px;
+	background: var(--vscode-editorWidget-background);
 	gap: 10px;
 	font-size: 11px;
 	color: var(--vscode-descriptionForeground);
@@ -170,9 +215,42 @@ button:focus-visible, select:focus-visible, .node:focus-visible {
 .legend-exception::before { border-top-style: dashed; }
 
 @media (max-width: 720px) {
-	.legend { display: none; }
-	select { min-width: 120px; max-width: 38vw; }
+	input { min-width: 120px; max-width: 38vw; }
+	#graph-search { display: none; }
 }
+
+#node-details {
+	position: absolute;
+	z-index: 3;
+	right: 12px;
+	bottom: 12px;
+	width: min(520px, calc(100vw - 24px));
+	max-height: 44vh;
+	overflow: auto;
+	padding: 10px;
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 4px;
+	background: var(--vscode-editorWidget-background);
+	box-shadow: 0 3px 10px var(--vscode-widget-shadow);
+}
+#node-details pre { margin: 8px 0; white-space: pre-wrap; font-family: var(--vscode-editor-font-family); }
+#close-node-details { float: right; min-width: 24px; }
+
+#minimap {
+	position: absolute;
+	z-index: 2;
+	right: 12px;
+	bottom: 12px;
+	width: 160px;
+	height: 110px;
+	border: 1px solid var(--vscode-panel-border);
+	border-radius: 3px;
+	background: var(--vscode-editorWidget-background);
+	cursor: crosshair;
+	opacity: 0.86;
+}
+#minimap .node-label, #minimap .edge-label { display: none; }
+#minimap .node rect { stroke-width: 2; }
 
 @media (prefers-reduced-motion: reduce) {
 	*, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }

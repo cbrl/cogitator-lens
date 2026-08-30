@@ -9,6 +9,7 @@ import {
 	ExtensionContext,
 	Position,
 	Range,
+	Selection,
 	Uri,
 	ViewColumn,
 	WebviewPanel,
@@ -19,6 +20,7 @@ import type { ConfigurationService } from '../services/configuration-service.js'
 import type { CompilationService } from '../compilation/index.js';
 import type {
 	CompilationVariant,
+	ControlFlowGraph,
 	ControlFlowSourceLocation,
 	RenderedGraphArtifact,
 	ToolchainProfile,
@@ -244,6 +246,23 @@ export class GraphPanelManager implements Disposable {
 				}
 				document.selectedGraphId = message.graphId;
 				break;
+			case 'refresh':
+				this.requestRefresh(document);
+				break;
+			case 'exportDot': {
+				const graph = document.artifact?.graphs.find(candidate => candidate.id === message.graphId);
+				if (graph) {
+					void this.saveExport(document, graph.label, 'dot', toDot(graph));
+				}
+				break;
+			}
+			case 'exportSvg': {
+				const graph = document.artifact?.graphs.find(candidate => candidate.id === message.graphId);
+				if (graph) {
+					void this.saveExport(document, graph.label, 'svg', message.svg);
+				}
+				break;
+			}
 			case 'openSource': {
 				const graph = document.artifact?.graphs.find(candidate => candidate.id === message.graphId);
 				const node = graph?.nodes.find(candidate => candidate.id === message.nodeId);
@@ -257,6 +276,35 @@ export class GraphPanelManager implements Disposable {
 				});
 				break;
 			}
+			case 'highlightSource': {
+				const graph = document.artifact?.graphs.find(candidate => candidate.id === message.graphId);
+				const source = graph?.nodes.find(candidate => candidate.id === message.nodeId)?.source;
+				if (source) {
+					highlightVisibleSource(source);
+				}
+				break;
+			}
+		}
+	}
+
+	private async saveExport(
+		document: GraphPanelDocument,
+		label: string,
+		extension: 'dot' | 'svg',
+		contents: string,
+	): Promise<void> {
+		const uri = await window.showSaveDialog({
+			title: `Export ${label} control-flow graph`,
+			defaultUri: exportUri(document.identity.sourceUri, `${safeFilename(label)}.${extension}`),
+			filters: extension === 'svg' ? { SVG: ['svg'] } : { Graphviz: ['dot'] },
+		});
+		if (!uri) {
+			return;
+		}
+		try {
+			await workspace.fs.writeFile(uri, new TextEncoder().encode(contents));
+		} catch (error) {
+			void window.showErrorMessage(`Could not export control-flow graph: ${String(error)}`);
 		}
 	}
 
@@ -354,23 +402,34 @@ export class GraphPanelManager implements Disposable {
 <body>
 <div class="toolbar" role="toolbar" aria-label="Control-flow graph controls">
 <label for="function-selector">Function</label>
-<select id="function-selector" aria-label="Function"></select>
+<div class="function-picker">
+<input id="function-selector" autocomplete="off" role="combobox" aria-label="Function" aria-controls="function-options" aria-expanded="false" placeholder="Filter functions">
+<div id="function-options" role="listbox" hidden></div>
+</div>
+<input id="graph-search" type="search" aria-label="Find in graph" placeholder="Find instruction or register">
+<label for="layout-direction">Layout</label>
+<select id="layout-direction" aria-label="Graph layout direction"><option value="TB">Top to bottom</option><option value="LR">Left to right</option></select>
 <button id="fit" type="button" title="Fit to view">Fit</button>
 <button id="zoom-in" type="button" title="Zoom in" aria-label="Zoom in">+</button>
 <button id="zoom-out" type="button" title="Zoom out" aria-label="Zoom out">−</button>
 <button id="reset" type="button" title="Reset view">Reset</button>
+<button id="export-svg" type="button" title="Export SVG">SVG</button>
+<button id="export-dot" type="button" title="Export Graphviz DOT">DOT</button>
 <div class="spacer"></div>
-<div class="legend" aria-label="Edge legend">
+<button id="legend-toggle" type="button" aria-expanded="false" aria-controls="edge-legend">Legend</button>
+<div id="edge-legend" class="legend" aria-label="Edge legend" hidden>
 <span class="legend-item legend-true">True</span>
 <span class="legend-item legend-false">False</span>
 <span class="legend-item legend-fallthrough">Fallthrough</span>
 <span class="legend-item legend-exception">Exception</span>
 </div>
-<span id="stale-badge" role="status" aria-live="polite" aria-atomic="true" hidden>Stale</span>
+<button id="stale-badge" type="button" title="Refresh graph" aria-label="Refresh stale graph" hidden>Stale · Refresh</button>
 </div>
-<div id="diagnostics" role="status" aria-live="polite" hidden></div>
+<details id="diagnostics" role="status" aria-live="polite" hidden><summary>Diagnostics</summary><div id="diagnostic-list"></div></details>
 <div id="graph-canvas" data-empty="true" aria-label="Control-flow graph canvas">
 <div id="empty-state" role="status">No valid function graphs were found.</div>
+<svg id="minimap" aria-label="Graph overview" viewBox="0 0 160 110"><g id="minimap-content"></g></svg>
+<aside id="node-details" role="status" aria-live="polite" hidden><button id="close-node-details" type="button" aria-label="Close block details">×</button><strong id="node-details-title"></strong><pre id="node-details-text"></pre><button id="open-node-source" type="button" hidden>Open source</button></aside>
 <svg id="graph-svg" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="Selected function control-flow graph">
 <defs><marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="context-stroke"></path></marker></defs>
 <g id="graph-viewport"></g>
@@ -379,6 +438,26 @@ export class GraphPanelManager implements Disposable {
 <script nonce="${nonce}" src="${script}"></script>
 </body>
 </html>`;
+	}
+}
+
+function toDot(graph: ControlFlowGraph): string {
+	const quote = (value: string): string => JSON.stringify(value);
+	const nodes = graph.nodes.map(node => `  ${quote(node.id)} [label=${quote(node.label)}];`);
+	const edges = graph.edges.map(edge => `  ${quote(edge.from)} -> ${quote(edge.to)} [label=${quote(edge.label ?? edge.kind)}];`);
+	return `digraph ${quote(graph.label)} {\n  rankdir=TB;\n  node [shape=box, fontname="monospace"];\n${nodes.join('\n')}\n${edges.join('\n')}\n}\n`;
+}
+
+function safeFilename(value: string): string {
+	return value.replace(/[<>:"/\\|?*\x00-\x1F]/g, '-').trim() || 'control-flow-graph';
+}
+
+function exportUri(sourceUri: string, filename: string): Uri | undefined {
+	try {
+		const source = Uri.parse(sourceUri, true);
+		return Uri.joinPath(source.with({ path: source.path.replace(/\/[^/]*$/u, '') }), filename);
+	} catch {
+		return undefined;
 	}
 }
 
@@ -441,6 +520,18 @@ async function openSource(source: ControlFlowSourceLocation): Promise<void> {
 		selection,
 	});
 	editor.revealRange(selection);
+}
+
+function highlightVisibleSource(source: ControlFlowSourceLocation): void {
+	const uri = Uri.parse(source.uri, true);
+	const editor = window.visibleTextEditors.find(candidate => candidate.document.uri.toString() === uri.toString());
+	if (!editor) {
+		return;
+	}
+	const start = new Position(source.line, source.column);
+	const requestedEnd = new Position(source.endLine ?? source.line, source.endColumn ?? source.column);
+	editor.selection = new Selection(start, requestedEnd.isBefore(start) ? start : requestedEnd);
+	editor.revealRange(editor.selection);
 }
 
 function currentTheme(): GraphTheme {

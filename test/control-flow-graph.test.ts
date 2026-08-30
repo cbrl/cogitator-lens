@@ -34,6 +34,7 @@ import {
 	parseHostMessage,
 	parseWebviewMessage,
 } from '../src/webview/graph-protocol.js';
+import { analyzeGraphStructure } from '../src/artifacts/control-flow-graph/graph-structure.js';
 import type {
 	ArtifactKind,
 	ControlFlowEdge,
@@ -987,6 +988,41 @@ test('webview graph protocol accepts exact schemas and rejects unknown or danger
 		type: 'render',
 		artifact: { ...artifact, graphs: [{ ...graph, nodes: [{ id: 'entry', label: 'entry', injected: true }] }] },
 	}), undefined);
+	assert.deepEqual(
+		parseWebviewMessage({ type: 'highlightSource', graphId: 'g', nodeId: 'entry' }),
+		{ type: 'highlightSource', graphId: 'g', nodeId: 'entry' },
+	);
+	assert.deepEqual(parseWebviewMessage({ type: 'refresh' }), { type: 'refresh' });
+	assert.deepEqual(
+		parseWebviewMessage({ type: 'exportDot', graphId: 'g' }),
+		{ type: 'exportDot', graphId: 'g' },
+	);
+	assert.equal(parseWebviewMessage({ type: 'exportSvg', graphId: 'g', svg: 'x'.repeat(10_000_001) }), undefined);
+});
+
+test('graph structure identifies natural loops and unreachable nodes', () => {
+	const controlFlowGraph: ControlFlowGraph = {
+		id: 'structure',
+		label: 'structure',
+		entryNodeId: 'entry',
+		nodes: [
+			{ id: 'entry', label: 'entry' },
+			{ id: 'loop', label: 'loop' },
+			{ id: 'body', label: 'body' },
+			{ id: 'exit', label: 'exit' },
+			{ id: 'dead', label: 'dead' },
+		],
+		edges: [
+			{ from: 'entry', to: 'loop', kind: 'unconditional' },
+			{ from: 'loop', to: 'body', kind: 'true' },
+			{ from: 'loop', to: 'exit', kind: 'false' },
+			{ from: 'body', to: 'loop', kind: 'unconditional' },
+		],
+	};
+	const structure = analyzeGraphStructure(controlFlowGraph);
+	assert.deepEqual([...structure.reachable].sort(), ['body', 'entry', 'exit', 'loop']);
+	assert.deepEqual([...structure.loopNodes].sort(), ['body', 'loop']);
+	assert.equal(structure.backEdges.size, 1);
 });
 
 test('rendered artifact migration retains text presentation explicitly', () => {

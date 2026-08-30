@@ -39,7 +39,11 @@ export type HostMessage =
 export type WebviewMessage =
 	| { readonly type: 'ready' }
 	| { readonly type: 'openSource'; readonly graphId: string; readonly nodeId: string }
-	| { readonly type: 'selectionChanged'; readonly graphId: string };
+	| { readonly type: 'highlightSource'; readonly graphId: string; readonly nodeId: string }
+	| { readonly type: 'selectionChanged'; readonly graphId: string }
+	| { readonly type: 'refresh' }
+	| { readonly type: 'exportDot'; readonly graphId: string }
+	| { readonly type: 'exportSvg'; readonly graphId: string; readonly svg: string };
 
 /**
  * Validates a message received in the browser before rendering compiler text.
@@ -87,9 +91,28 @@ export function parseWebviewMessage(value: unknown): WebviewMessage | undefined 
 				&& validId(value.nodeId)
 					? { type: 'openSource', graphId: value.graphId, nodeId: value.nodeId }
 					: undefined;
+		case 'highlightSource':
+			return exactKeys(value, ['type', 'graphId', 'nodeId'])
+				&& validId(value.graphId)
+				&& validId(value.nodeId)
+				? { type: 'highlightSource', graphId: value.graphId, nodeId: value.nodeId }
+				: undefined;
 		case 'selectionChanged':
 			return exactKeys(value, ['type', 'graphId']) && validId(value.graphId)
 				? { type: 'selectionChanged', graphId: value.graphId }
+				: undefined;
+		case 'refresh':
+			return exactKeys(value, ['type']) ? { type: 'refresh' } : undefined;
+		case 'exportDot':
+			return exactKeys(value, ['type', 'graphId']) && validId(value.graphId)
+				? { type: 'exportDot', graphId: value.graphId }
+				: undefined;
+		case 'exportSvg':
+			return exactKeys(value, ['type', 'graphId', 'svg'])
+				&& validId(value.graphId)
+				&& typeof value.svg === 'string'
+				&& value.svg.length <= 10_000_000
+				? { type: 'exportSvg', graphId: value.graphId, svg: value.svg }
 				: undefined;
 		default:
 			return undefined;
