@@ -376,6 +376,12 @@
                         "description": "Dim lines that do not contribute to the rendered artifact",
                         "scope": "resource"
                     },
+                    "coglens.synchronizeSourceAndArtifactScrolling": {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Keep visible source and artifact editors aligned while scrolling",
+                        "scope": "resource"
+                    },
                     "coglens.toolchains": {
                         "type": "array",
                         "scope": "window",
@@ -811,6 +817,11 @@
                     "command": "coglens.CompareArtifacts",
                     "group": "navigation@3",
                     "when": "resourceScheme == file && coglens.supportedSource"
+                },
+                {
+                    "command": "coglens.RevealArtifactSource",
+                    "group": "navigation@1",
+                    "when": "resourceScheme == coglens-artifact"
                 }
             ],
             "view/title": [

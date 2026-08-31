@@ -63,8 +63,21 @@ export function register(
 		vscode.commands.registerCommand('coglens.RevealArtifactSource', async () => {
 			const snapshot = artifacts.getActiveArtifactDocumentState();
 			if (snapshot) {
-				await vscode.window.showTextDocument(vscode.Uri.parse(snapshot.identity.sourceUri), {
+				const activeEditor = vscode.window.activeTextEditor;
+				const mappedSource = activeEditor
+					? artifacts.getArtifactDocumentContent(activeEditor.document.uri)
+						?.lines[activeEditor.selection.active.line]?.source
+					: undefined;
+				const hasMappedSource = Boolean(mappedSource?.file && mappedSource.line);
+				const sourceUri = hasMappedSource
+					? vscode.Uri.file(path.normalize(mappedSource!.file!))
+					: vscode.Uri.parse(snapshot.identity.sourceUri);
+				const position = hasMappedSource
+					? new vscode.Position(mappedSource!.line! - 1, mappedSource!.column ?? 0)
+					: undefined;
+				await vscode.window.showTextDocument(sourceUri, {
 					preview: false,
+					selection: position ? new vscode.Range(position, position) : undefined,
 				});
 			}
 		}),

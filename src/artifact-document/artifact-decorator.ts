@@ -7,6 +7,7 @@ import {
 	TextEditorDecorationType,
 	TextEditorRevealType,
 	TextEditorSelectionChangeEvent,
+	TextEditorVisibleRangesChangeEvent,
 	Uri,
 	window,
 	workspace,
@@ -21,6 +22,7 @@ import {
 	selectedLineDecoration,
 	selectedSourceRangeDecoration,
 	stateDecoration,
+	sourceDensityDecorations,
 	sourceLineBandDecorations,
 	unusedLineDecoration,
 } from './decorations/decoration-styles.js';
@@ -35,6 +37,13 @@ import type {
 } from '../types/index.js';
 import { formatArtifactLineAnnotation } from '../artifacts/analysis/analysis-source-renderer.js';
 import { artifactSupportsOption } from '../artifacts/core/artifact-definitions.js';
+import {
+	artifactScrollAnchor,
+	ScrollSyncSuppression,
+	sourceDensityLevel,
+	sourceLineBandIndex,
+	sourceScrollAnchor,
+} from './source-bridge.js';
 
 /*
 Nice-to-have features:
@@ -64,10 +73,10 @@ export class ArtifactDecorator {
 
 	private readonly editorTracker: EditorTracker;
 	private readonly configService: ConfigurationService;
-    private readonly registrations: Disposable;
+	private readonly registrations: Disposable;
 
 	private active: boolean = true;
-	private isDisposed: boolean = false;
+	private readonly synchronizedScroll = new ScrollSyncSuppression<TextEditor>();
 
     constructor(
 		sourceUri: Uri,
@@ -98,6 +107,9 @@ export class ArtifactDecorator {
 		const visibilityChangeRegistration = window.onDidChangeVisibleTextEditors(this.onChangeVisibleEditors.bind(this));
 
 		const selectionChangeRegistration = window.onDidChangeTextEditorSelection(this.onEditorSelectionChanged.bind(this));
+		const visibleRangesRegistration = window.onDidChangeTextEditorVisibleRanges(
+			this.onEditorVisibleRangesChanged.bind(this),
+		);
 
 		const documentChangeRegistration = workspace.onDidChangeTextDocument(event => {
 			if (equalUri(event.document.uri, this.artifactUri)) {
@@ -109,12 +121,13 @@ export class ArtifactDecorator {
             providerEventRegistration,
 			visibilityChangeRegistration,
             selectionChangeRegistration,
+			visibleRangesRegistration,
 			documentChangeRegistration,
         );
     }
 
     public dispose(): void {
-		this.isDisposed = true;
+		this.synchronizedScroll.dispose();
 		this.clearAllDecorations();
         this.registrations.dispose();
     }
@@ -138,6 +151,54 @@ export class ArtifactDecorator {
 		});
 	}
 
+	public onEditorVisibleRangesChanged(event: TextEditorVisibleRangesChangeEvent): void {
+		if (this.synchronizedScroll.shouldSuppress(event.textEditor)) {
+			return;
+		}
+		if (
+			!this.active
+			|| event.visibleRanges.length === 0
+			|| !this.configService.getSynchronizeSourceAndArtifactScrolling(this.sourceUri)
+		) {
+			return;
+		}
+
+		this.withContent(content => {
+			if (content.allReferencedSrcUris.has(event.textEditor.document.uri)) {
+				const mapping = content.sourceLineMappings.get(event.textEditor.document.uri);
+				const anchor = mapping
+					? event.visibleRanges
+						.map(range => sourceScrollAnchor(mapping, range.start.line, range.end.line))
+						.find(candidate => candidate !== undefined)
+					: undefined;
+				const artifactEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
+				if (anchor && artifactEditor && anchor.artifactLine < artifactEditor.document.lineCount) {
+					this.revealScrollAnchor(artifactEditor, anchor.artifactLine);
+				}
+				return;
+			}
+
+			if (!equalUri(event.textEditor.document.uri, this.artifactUri)) {
+				return;
+			}
+			const anchor = event.visibleRanges
+				.map(range => artifactScrollAnchor(content.lines, range.start.line, range.end.line))
+				.find(candidate => candidate !== undefined);
+			if (!anchor) {
+				return;
+			}
+			const sourceUri = Uri.file(path.normalize(anchor.file));
+			const targetMapping = content.sourceLineMappings.get(sourceUri);
+			const sourceEditor = targetMapping === undefined
+				? undefined
+				: this.getAllSourceEditors(content).find(editor =>
+					content.sourceLineMappings.get(editor.document.uri) === targetMapping);
+			if (sourceEditor && anchor.sourceLine < sourceEditor.document.lineCount) {
+				this.revealScrollAnchor(sourceEditor, anchor.sourceLine);
+			}
+		});
+	}
+
     private refreshDecorations() {
 		this.clearAllDecorations();
 
@@ -145,6 +206,7 @@ export class ArtifactDecorator {
 			// Recalculate active state now that content may have changed
 			this.updateActiveState(content);
 			this.dimUnusedSourceLines(content);
+			this.decorateSourceDensity(content);
 			this.decorateListingColumns(content);
 			this.decorateSourceLineBands(content);
 			this.decorateAnalysisAnnotations(content);
@@ -188,6 +250,11 @@ export class ArtifactDecorator {
 		for (const decoration of sourceLineBandDecorations) {
 			editor.setDecorations(decoration, []);
 		}
+		for (const bandDecorations of sourceDensityDecorations) {
+			for (const decoration of bandDecorations) {
+				editor.setDecorations(decoration, []);
+			}
+		}
 	}
 
 	private clearAllDecorations() {
@@ -227,6 +294,42 @@ export class ArtifactDecorator {
 			}
 		}
     }
+
+	private decorateSourceDensity(content: ArtifactDocumentContent): void {
+		for (const editor of this.getAllSourceEditors(content)) {
+			const mapping = content.sourceLineMappings.get(editor.document.uri);
+			if (!mapping) {
+				continue;
+			}
+			let maximum = 0;
+			for (const artifactLines of mapping.values()) {
+				maximum = Math.max(maximum, artifactLines.length);
+			}
+			const decorations = sourceDensityDecorations.map(bandDecorations =>
+				bandDecorations.map(() => [] as Array<{
+					range: Range;
+					hoverMessage: string;
+				}>));
+			for (const [sourceLine, artifactLines] of mapping) {
+				if (sourceLine < 0 || sourceLine >= editor.document.lineCount || artifactLines.length === 0) {
+					continue;
+				}
+				const band = sourceLineBandIndex(sourceLine, sourceDensityDecorations.length);
+				const level = sourceDensityLevel(
+					artifactLines.length,
+					maximum,
+					sourceDensityDecorations[band].length,
+				);
+				decorations[band][level].push({
+					range: editor.document.lineAt(sourceLine).range,
+					hoverMessage: `${artifactLines.length} generated output ${artifactLines.length === 1 ? 'line' : 'lines'}`,
+				});
+			}
+			sourceDensityDecorations.forEach((bandDecorations, band) =>
+				bandDecorations.forEach((decoration, level) =>
+					editor.setDecorations(decoration, decorations[band][level])));
+		}
+	}
 
 	private decorateListingColumns(content: ArtifactDocumentContent): void {
 		const editor = this.editorTracker.getArtifactEditor(this.artifactUri);
@@ -272,7 +375,7 @@ export class ArtifactDecorator {
 			const sourceRanges = sourceLineBandDecorations.map(() => [] as Range[]);
 			for (const [sourceLine, artifactLines] of
 				content.sourceLineMappings.get(editor.document.uri) ?? []) {
-				const band = sourceLine % sourceLineBandDecorations.length;
+				const band = sourceLineBandIndex(sourceLine, sourceLineBandDecorations.length);
 				if (sourceLine >= 0 && sourceLine < editor.document.lineCount) {
 					sourceRanges[band].push(editor.document.lineAt(sourceLine).range);
 				}
@@ -354,16 +457,15 @@ export class ArtifactDecorator {
         asmEditor.setDecorations(selectedLineDecoration, [asmLineRange]);
 		asmEditor.setDecorations(selectedSourceRangeDecoration, []);
 
-		// Highlight associated lines in source editor
+		// Highlight associated lines only in source editors the user already has visible.
         if (asmLineHasSource(asmLine)) {
 			const sourceUri = Uri.file(path.normalize(asmLine.source!.file!));
-
-			// Open the correct source document if this line of assembly refers to a different file
-			this.getOrCreateSourceEditor(sourceUri).then(targetEditor => {
-				if (this.isDisposed || asmEditor.selection.start.line !== line) {
-					return;
-				}
-
+			const targetMapping = content.sourceLineMappings.get(sourceUri);
+			const targetEditor = targetMapping === undefined
+				? undefined
+				: this.getAllSourceEditors(content).find(editor =>
+					content.sourceLineMappings.get(editor.document.uri) === targetMapping);
+			if (targetEditor) {
 				const srcLineIndex = asmLine.source!.line! - 1;
 				if (srcLineIndex < 0 || srcLineIndex >= targetEditor.document.lineCount) {
 					return;
@@ -384,18 +486,34 @@ export class ArtifactDecorator {
 				if (!highlightOnly) {
 					targetEditor.revealRange(srcLineRange, TextEditorRevealType.InCenterIfOutsideViewport);
 				}
-			}).catch(() => {
-				// Source file may no longer exist or be accessible
-			});
+			} else {
+				this.clearSourceSelectionDecorations();
+			}
         }
 		else {
 			// Clear selected line decoration when the assembly editor line doesn't correspond to a source location
-			for (let editor of this.getAllSourceEditors()) {
-				editor.setDecorations(selectedLineDecoration, []);
-				editor.setDecorations(selectedSourceRangeDecoration, []);
-			}
+			this.clearSourceSelectionDecorations();
         }
     }
+
+	private clearSourceSelectionDecorations(): void {
+		for (const editor of this.getAllSourceEditors()) {
+			editor.setDecorations(selectedLineDecoration, []);
+			editor.setDecorations(selectedSourceRangeDecoration, []);
+		}
+	}
+
+	private revealScrollAnchor(editor: TextEditor, line: number): void {
+		if (editor.visibleRanges[0]?.start.line === line) {
+			return;
+		}
+		// revealRange can emit a series of visible-range events when smooth scrolling is enabled.
+		// Keep the target suppressed until those events settle so they cannot synchronize back
+		// into the editor that initiated the scroll. The longer initial timeout is a fallback for
+		// editors that dispatch the first visible-range event asynchronously.
+		this.synchronizedScroll.begin(editor);
+		editor.revealRange(editor.document.lineAt(line).range, TextEditorRevealType.AtTop);
+	}
 
 	private updateActiveState(content?: ArtifactDocumentContent): void {
 		const sourceUris = content?.allReferencedSrcUris;
@@ -476,14 +594,6 @@ export class ArtifactDecorator {
 				this.clearMappingDecorations(asmEditor);
 			}
 		}
-	}
-
-	// Get the editor for a source document that is referenced by the current ASM document
-	private async getOrCreateSourceEditor(uri: Uri): Promise<TextEditor> {
-		return this.editorTracker.getOrCreateSourceEditor(uri, {
-			viewColumn: this.getAllSourceEditors()[0]?.viewColumn,
-			preserveFocus: true
-		});
 	}
 
 	private getAllSourceEditors(content = this.content): TextEditor[] {

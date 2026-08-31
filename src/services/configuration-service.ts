@@ -85,6 +85,11 @@ export class ConfigurationService implements Disposable {
 		return workspace.getConfiguration('coglens', uri).get('dimUnusedSourceLines', true);
 	}
 
+	getSynchronizeSourceAndArtifactScrolling(uri: Uri): boolean {
+		return workspace.getConfiguration('coglens', uri)
+			.get('synchronizeSourceAndArtifactScrolling', true);
+	}
+
 	getCompilationDatabases(scope?: Uri): readonly string[] {
 		return workspace.getConfiguration('coglens', scope).get<string[]>('compilationDatabases', []);
 	}

@@ -55,6 +55,26 @@ export const sourceLineBandDecorations = Array.from({ length: 6 }, (_, index) =>
 	});
 });
 
+const densityLevelCount = 5;
+
+/**
+ * An opaque band at the source text edge. Color matches the corresponding
+ * source-line mapping highlight; width encodes relative output density while
+ * leaving the glyph margin free for breakpoints and diagnostics.
+ */
+export const sourceDensityDecorations = sourceLineBandDecorations.map((_, bandIndex) => {
+	const color = new ThemeColor(`coglens.sourceLineBand.${bandIndex + 1}Marker`);
+	return Array.from({ length: densityLevelCount }, (_, densityIndex) =>
+		window.createTextEditorDecorationType({
+			isWholeLine: true,
+			borderColor: color,
+			borderStyle: 'solid',
+			borderWidth: `0 0 0 ${densityIndex + 1}px`,
+			overviewRulerColor: color,
+			overviewRulerLane: OverviewRulerLane.Center,
+		}));
+});
+
 function optimizationRemarkDecoration(category: OptimizationRemarkCategory) {
 	const background = new ThemeColor(
 		`coglens.optimizationRemarks.${category}Background`,
