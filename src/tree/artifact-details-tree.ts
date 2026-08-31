@@ -75,10 +75,7 @@ export class ArtifactDetailsTreeProvider extends TreeProvider<ArtifactDetailsTre
 			return [emptyState('Artifact details are not available yet.')];
 		}
 		const definition = artifactDefinitions[this.snapshot.identity.artifactKind];
-		const metricLabels = 'metricLabels' in definition
-			? definition.metricLabels
-			: undefined;
-		return buildArtifactDetails(this.snapshot, metricLabels)
+		return buildArtifactDetails(this.snapshot, definition.metricLabels)
 			.map(item => new ArtifactDetailsTreeNode(item));
 	}
 }

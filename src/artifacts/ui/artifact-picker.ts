@@ -16,24 +16,6 @@ export interface ArtifactPickerSections {
 	readonly unavailable: readonly ArtifactPickerChoice[];
 }
 
-/** Theme icon IDs for artifact kinds in the open-artifact picker. */
-export const artifactPickerIcons = {
-	assembly: 'symbol-method',
-	'binary-disassembly': 'package',
-	'preprocessed-source': 'file-code',
-	ast: 'symbol-structure',
-	'llvm-ir': 'circuit-board',
-	'rust-mir': 'symbol-namespace',
-	'optimization-remarks': 'lightbulb',
-	'stack-analysis': 'layers',
-	'python-bytecode': 'symbol-number',
-	'control-flow-graph': 'type-hierarchy',
-} as const satisfies Record<ArtifactKind, string>;
-
-export function artifactPickerIcon(kind: ArtifactKind): string {
-	return artifactPickerIcons[kind];
-}
-
 export function partitionArtifactPickerChoices(
 	choices: readonly ArtifactPickerChoice[],
 ): ArtifactPickerSections {

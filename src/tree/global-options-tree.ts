@@ -2,6 +2,7 @@ import vscode from 'vscode';
 import { CompilationService } from '../compilation/index.js';
 import type {
 	ArtifactKind,
+	ArtifactOptionDescriptor,
 	ArtifactOptionId,
 	ArtifactOptions,
 	ToolchainProfile,
@@ -53,7 +54,7 @@ export class GlobalOptionsNode extends TreeNode {
 			}];
 		}
 
-		const descriptors = artifactDefinitions[kind].options;
+		const descriptors: readonly ArtifactOptionDescriptor[] = artifactDefinitions[kind].options;
 		const production = descriptors.filter(descriptor => descriptor.group === 'production');
 		const display = descriptors.filter(descriptor => descriptor.group === 'display');
 		const groups: GlobalOptionsNode[] = [];
@@ -160,7 +161,7 @@ function optionNode(
 	options: ArtifactOptions,
 	profile: ToolchainProfile,
 	kind: ArtifactKind,
-	descriptor: (typeof artifactDefinitions)[ArtifactKind]['options'][number],
+	descriptor: ArtifactOptionDescriptor,
 ): GlobalOptionsNode {
 	const capability = resolveArtifactOptionAvailability(profile, kind, descriptor.id);
 	return {

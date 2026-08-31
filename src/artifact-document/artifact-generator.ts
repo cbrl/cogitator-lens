@@ -24,33 +24,25 @@ export interface ArtifactHandlerResult {
 	artifact: RenderedArtifact;
 }
 
-interface RetainedArtifactStatus {
+interface ArtifactStatusBase {
 	readonly assembly?: ArtifactDocumentContent;
 	readonly artifact?: RenderedArtifact;
 	readonly invocation?: InvocationDetails;
-	readonly error?: never;
 	readonly truncated: boolean;
 }
 
 export type ArtifactStatus =
-	| ({ readonly state: 'compiling' | 'stale' | 'cancelled' } & RetainedArtifactStatus)
-	| {
+	| ({ readonly state: 'compiling' | 'stale' | 'cancelled'; readonly error?: never } & ArtifactStatusBase)
+	| ({
 		readonly state: 'failed';
 		readonly error: Error;
 		readonly diagnostics: readonly import('../types/index.js').CompileDiagnostic[];
-		readonly assembly?: ArtifactDocumentContent;
-		readonly artifact?: RenderedArtifact;
-		readonly invocation?: InvocationDetails;
-		readonly truncated: boolean;
-	}
-	| {
+	} & ArtifactStatusBase)
+	| ({
 		readonly state: 'successful';
-		readonly assembly?: ArtifactDocumentContent;
 		readonly artifact: RenderedArtifact;
-		readonly invocation?: InvocationDetails;
 		readonly error?: never;
-		readonly truncated: boolean;
-	};
+	} & ArtifactStatusBase);
 
 export type ArtifactState = ArtifactStatus['state'];
 
@@ -87,13 +79,7 @@ export class ArtifactGenerator implements Disposable {
 		// no separate generation counter is needed alongside the token source.
 		const isCurrent = (): boolean => this.cancellation === cancellation;
 		const externalSubscription = externalToken.onCancellationRequested(() => cancellation.cancel());
-		this.setStatus({
-			state: 'compiling',
-			assembly: this.currentStatus.assembly,
-			artifact: this.currentStatus.artifact,
-			invocation: this.currentStatus.invocation,
-			truncated: this.currentStatus.truncated,
-		});
+		this.transition('compiling');
 
 		try {
 			const preset = this.compilationService.getArtifactPreset(
@@ -125,13 +111,7 @@ export class ArtifactGenerator implements Disposable {
 					if (!isCurrent() || cancellation.token.isCancellationRequested) {
 						return;
 					}
-					this.setStatus({
-						state: 'compiling',
-						assembly: this.currentStatus.assembly,
-						artifact: this.currentStatus.artifact,
-						invocation,
-						truncated: this.currentStatus.truncated,
-					});
+					this.transition('compiling', { invocation });
 				},
 			});
 			if (artifact.status !== 'available') {
@@ -158,8 +138,7 @@ export class ArtifactGenerator implements Disposable {
 						: rendered.lines,
 				)
 				: undefined;
-			this.setStatus({
-				state: 'successful',
+			this.transition('successful', {
 				assembly,
 				artifact: rendered,
 				invocation: this.currentStatus.invocation,
@@ -171,24 +150,14 @@ export class ArtifactGenerator implements Disposable {
 			if (isCurrent() && !(error instanceof CancellationError)) {
 				const normalized = error instanceof Error ? error : new Error(String(error));
 				logger.logChannel.error(`Compilation failed for ${this.sourceUri.fsPath}: ${normalized.stack ?? normalized.message}`);
-				this.setStatus({
-					state: 'failed',
+				this.transition('failed', {
 					error: normalized,
 					diagnostics: error instanceof CompilationError ? error.diagnostics : [],
-					assembly: this.currentStatus.assembly,
-					artifact: this.currentStatus.artifact,
-					invocation: this.currentStatus.invocation,
 					truncated: (error instanceof CompilationError && error.truncated)
 						|| this.currentStatus.truncated,
 				});
 			} else if (isCurrent()) {
-				this.setStatus({
-					state: 'cancelled',
-					assembly: this.currentStatus.assembly,
-					artifact: this.currentStatus.artifact,
-					invocation: this.currentStatus.invocation,
-					truncated: this.currentStatus.truncated,
-				});
+				this.transition('cancelled');
 			}
 
 			throw error;
@@ -211,13 +180,7 @@ export class ArtifactGenerator implements Disposable {
 
 	markStale(): void {
 		if (this.currentStatus.state !== 'stale') {
-			this.setStatus({
-				state: 'stale',
-				assembly: this.currentStatus.assembly,
-				artifact: this.currentStatus.artifact,
-				invocation: this.currentStatus.invocation,
-				truncated: this.currentStatus.truncated,
-			});
+			this.transition('stale');
 		}
 	}
 
@@ -236,7 +199,18 @@ export class ArtifactGenerator implements Disposable {
 		this.statusEvent.dispose();
 	}
 
-	private setStatus(status: ArtifactStatus): void {
+	private transition<S extends ArtifactState>(
+		state: S,
+		overrides: Partial<ArtifactStatus> = {},
+	): void {
+		const status = {
+			state,
+			assembly: this.currentStatus.assembly,
+			artifact: this.currentStatus.artifact,
+			invocation: this.currentStatus.invocation,
+			truncated: this.currentStatus.truncated,
+			...overrides,
+		} as ArtifactStatus;
 		this.currentStatus = status;
 		this.statusEvent.fire(status);
 	}

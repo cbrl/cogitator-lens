@@ -50,9 +50,22 @@ export type ArtifactRenderer = (
 	context: ArtifactRenderContext,
 ) => RenderedArtifact | Promise<RenderedArtifact>;
 
-interface ArtifactDefinitionShape {
+export type ArtifactKind =
+	| 'assembly'
+	| 'binary-disassembly'
+	| 'preprocessed-source'
+	| 'ast'
+	| 'llvm-ir'
+	| 'rust-mir'
+	| 'optimization-remarks'
+	| 'stack-analysis'
+	| 'python-bytecode'
+	| 'control-flow-graph';
+
+export interface ArtifactDefinition {
 	readonly presentation: 'text' | 'graph';
 	readonly label: string;
+	readonly icon: string;
 	readonly filenameExtension: string;
 	readonly documentLanguage: 'artifact' | 'source';
 	readonly options: readonly ArtifactOptionDescriptor[];
@@ -152,10 +165,11 @@ const binaryDisassemblyOptions = [
 	displayOptionDescriptors.sourceLineColorBands,
 ] as const satisfies readonly ArtifactOptionDescriptor[];
 
-export const artifactDefinitions = {
+const artifactDefinitionTable = {
 	assembly: {
 		presentation: 'text',
 		label: 'Assembly',
+		icon: 'symbol-method',
 		filenameExtension: '.asm',
 		documentLanguage: 'artifact',
 		options: assemblyOptions,
@@ -171,6 +185,7 @@ export const artifactDefinitions = {
 	'binary-disassembly': {
 		presentation: 'text',
 		label: 'Binary disassembly',
+		icon: 'package',
 		filenameExtension: '.disasm',
 		documentLanguage: 'artifact',
 		options: binaryDisassemblyOptions,
@@ -186,6 +201,7 @@ export const artifactDefinitions = {
 	'preprocessed-source': {
 		presentation: 'text',
 		label: 'Preprocessed source',
+		icon: 'file-code',
 		filenameExtension: '.preprocessed',
 		documentLanguage: 'source',
 		options: [displayOptionDescriptors.showIncludedFiles],
@@ -201,6 +217,7 @@ export const artifactDefinitions = {
 	ast: {
 		presentation: 'text',
 		label: 'Abstract syntax tree',
+		icon: 'symbol-structure',
 		filenameExtension: '.ast',
 		documentLanguage: 'artifact',
 		options: [displayOptionDescriptors.showSystemDeclarations],
@@ -216,6 +233,7 @@ export const artifactDefinitions = {
 	'llvm-ir': {
 		presentation: 'text',
 		label: 'LLVM IR',
+		icon: 'circuit-board',
 		filenameExtension: '.ll',
 		documentLanguage: 'artifact',
 		options: [displayOptionDescriptors.sourceLineColorBands],
@@ -231,6 +249,7 @@ export const artifactDefinitions = {
 	'rust-mir': {
 		presentation: 'text',
 		label: 'Rust MIR',
+		icon: 'symbol-namespace',
 		filenameExtension: '.mir',
 		documentLanguage: 'artifact',
 		options: [],
@@ -246,6 +265,7 @@ export const artifactDefinitions = {
 	'optimization-remarks': {
 		presentation: 'text',
 		label: 'Optimization remarks',
+		icon: 'lightbulb',
 		filenameExtension: '.opt',
 		documentLanguage: 'source',
 		options: [],
@@ -261,6 +281,7 @@ export const artifactDefinitions = {
 	'stack-analysis': {
 		presentation: 'text',
 		label: 'Stack analysis',
+		icon: 'layers',
 		filenameExtension: '.stack',
 		documentLanguage: 'source',
 		options: [],
@@ -285,6 +306,7 @@ export const artifactDefinitions = {
 	'python-bytecode': {
 		presentation: 'text',
 		label: 'Python bytecode',
+		icon: 'symbol-number',
 		filenameExtension: '.pybytecode',
 		documentLanguage: 'artifact',
 		options: [],
@@ -300,6 +322,7 @@ export const artifactDefinitions = {
 	'control-flow-graph': {
 		presentation: 'graph',
 		label: 'Control-flow graph',
+		icon: 'type-hierarchy',
 		filenameExtension: '.cfg',
 		documentLanguage: 'artifact',
 		options: [],
@@ -320,10 +343,10 @@ export const artifactDefinitions = {
 			sourceMappedNodeCount: 'Source-mapped blocks',
 		},
 	},
-} as const satisfies Record<string, ArtifactDefinitionShape>;
+} as const satisfies Record<ArtifactKind, ArtifactDefinition>;
 
-export type ArtifactKind = keyof typeof artifactDefinitions;
-export type ArtifactDefinition = (typeof artifactDefinitions)[ArtifactKind];
+export const artifactDefinitions: typeof artifactDefinitionTable
+	& Record<ArtifactKind, ArtifactDefinition> = artifactDefinitionTable;
 
 export const supportedArtifactKinds = Object.freeze(
 	Object.keys(artifactDefinitions) as ArtifactKind[],
@@ -339,7 +362,7 @@ export function artifactSupportsOption(
 	kind: ArtifactKind,
 	optionId: ArtifactOptionDescriptor['id'],
 ): boolean {
-	const definition: ArtifactDefinitionShape = artifactDefinitions[kind];
+	const definition = artifactDefinitions[kind];
 	return definition.options.some(option => option.id === optionId);
 }
 
