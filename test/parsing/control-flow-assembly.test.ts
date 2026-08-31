@@ -258,6 +258,65 @@ test('clang assembly splits blocks at LBB labels and types every edge', () => {
 	assert.ok(!graph.nodes.some((node) => node.label.includes('.cfi_startproc')));
 });
 
+test('the clang dialect reads Mach-O listings, whose compiler labels have no leading dot', () => {
+	const result = new ClangAssemblyCfgParser(new InstructionSetInfo()).parse(
+		assemblyLines([
+			'\t.section\t__TEXT,__text,regular,pure_instructions',
+			'\t.globl\t__Z8classifyi',
+			'__Z8classifyi:',
+			'Lfunc_begin0:',
+			'\t.cfi_startproc',
+			'\tmovl\t%edi, -8(%rbp)',
+			'\tcmpl\t$10, -8(%rbp)',
+			'\tjle\tLBB0_2',
+			'\tmovl\t-8(%rbp), %eax',
+			'\tjmp\tLBB0_3',
+			'LBB0_2:',
+			'\tmovl\t-8(%rbp), %eax',
+			'\tnegl\t%eax',
+			'LBB0_3:',
+			'\tmovl\t-4(%rbp), %eax',
+			'\tretq',
+			'Ltmp0:',
+			'Lfunc_end0:',
+			'\t.cfi_endproc',
+			'\t.section\t__DWARF,__debug_abbrev,regular,debug',
+			'Lsection_abbrev:',
+			'Lset0 = Ldebug_info_end0-Ldebug_info_start0',
+		]),
+	);
+
+	// Every branch resolves: an unprefixed `LBB` target is not an indirect jump.
+	assert.deepEqual(result.diagnostics, []);
+	// The compiler labels are blocks of the one function, not functions of their
+	// own, and the Mach-O debug sections contribute neither a graph nor a node.
+	assert.deepEqual(
+		result.graphs.map((graph) => graph.label),
+		['__Z8classifyi'],
+	);
+	const [graph] = result.graphs;
+	assert.deepEqual(
+		graph.nodes.map((node) => node.id),
+		['__Z8classifyi', '__Z8classifyi@4', 'LBB0_2:', 'LBB0_3:'],
+	);
+	assert.deepEqual(
+		graph.edges.map((edge) => edge.kind),
+		['true', 'false', 'unconditional', 'fallthrough'],
+	);
+	assert.equal(graph.nodes.at(-1)?.terminal, 'return');
+
+	// An ELF function may be named `Log`; only Mach-O reserves the `L` prefix, so
+	// the convention is taken from the listing and never from the host platform.
+	const elf = new ClangAssemblyCfgParser(new InstructionSetInfo()).parse(
+		assemblyLines(['Log:', '\tcmpl\t$10, -8(%rbp)', '\tjle\t.LBB0_1', '\tretq', '.LBB0_1:', '\tretq']),
+	);
+	assert.deepEqual(
+		elf.graphs.map((item) => item.label),
+		['Log'],
+	);
+	assert.deepEqual(elf.diagnostics, []);
+});
+
 test('the GCC dialect keeps only labels that own an instruction', () => {
 	const result = new GccAssemblyCfgParser(new InstructionSetInfo()).parse(
 		assemblyLines([

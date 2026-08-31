@@ -171,7 +171,10 @@ export class AssemblyCfgParser {
 			} else if (directive === '.section') {
 				// Matching the name only: extracting it would have to account for
 				// demangled names containing arbitrary punctuation.
-				useCurrentSection = /\.section\s*"?\.text/u.test(line.text);
+				// Mach-O names the same section `__TEXT,__text`, and puts debug
+				// information in  `__DWARF` sections that must be dropped just
+				// as `.debug_*` is.
+				useCurrentSection = /\.section\s*(?:"?\.text|__TEXT\s*,\s*__text)/u.test(line.text);
 			} else if (useCurrentSection) {
 				result.push(line);
 			}

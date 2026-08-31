@@ -3,6 +3,7 @@
 
 import { AssemblyCfgParser, type Range } from './assembly-cfg-parser.js';
 import type { AssemblyLine } from './assembly-line.js';
+import type { GraphParseResult } from '../control-flow-graph-model.js';
 import { InstructionSetInfo, MsvcInstructionSetInfo } from './instruction-sets.js';
 
 /**
@@ -56,23 +57,72 @@ export class GccAssemblyCfgParser extends AssemblyCfgParser {
  *
  * Block labels are `.LBB<function>_<block>` rather than `.L<n>`, and trailing
  * `#`/`//` comments are annotations rather than code.
+ *
+ * LLVM spells its private labels `.L...` when it targets ELF or COFF but `L...`
+ * when it targets Mach-O, whose assembler treats every symbol starting with `L`
+ * as a temporary. Both spellings are accepted, and the specific type is detected
+ * during parsing.
  */
 export class ClangAssemblyCfgParser extends AssemblyCfgParser {
 	static override readonly dialect = 'clang-asm';
 
+	/** Whether this listing uses Mach-O's unprefixed private labels. */
+	private machO = false;
+
+	/** The labels LLVM emits on Mach-O. */
+	private static readonly machOPrivateLabel = /^L(?:BB\d+_\d+|func_begin\d+|tmp\d+):/u;
+	private static readonly elfBlockLabel = /\.LBB\d+_\d+:/u;
+	private static readonly machOBlockLabel = /^LBB\d+_\d+:/u;
+	private static readonly elfJumpTarget = /\.LBB\d+_\d+/u;
+	private static readonly machOJumpTarget = /\bLBB\d+_\d+/u;
+
+	override parse(assembly: readonly AssemblyLine[]): GraphParseResult {
+		this.machO = assembly.some((line) => ClangAssemblyCfgParser.machOPrivateLabel.test(line.text));
+		return super.parse(assembly);
+	}
+
 	protected override filterData(assembly: readonly AssemblyLine[]): AssemblyLine[] {
-		const jumpLabel = /\.LBB\d+_\d+:/u;
 		return this.filterTextSection(assembly)
 			.filter(
 				(line) =>
-					line.text && (line.source !== undefined || jumpLabel.test(line.text) || this.isFunctionName(line)),
+					line.text &&
+					(line.source !== undefined || this.isBlockLabel(line.text) || this.isFunctionName(line)),
 			)
 			.map((line) => ({ ...line, text: stripAssemblyComment(line.text) }))
 			.filter((line) => line.text.length > 0);
 	}
 
+	/**
+	 * On Mach-O a compiler label is not distinguishable from a function name by
+	 * its leading `.`, so the private prefix is tested directly. Without this
+	 * every `LBB` label would open a new function and each block would become a
+	 * graph of its own, and the debug-section anchors LLVM emits around a
+	 * function would be presented as functions.
+	 */
+	protected override isFunctionName(line: AssemblyLine): boolean {
+		return !this.isPrivateLabel(line.text.trim()) && super.isFunctionName(line);
+	}
+
+	protected override isFunctionEnd(text: string): boolean {
+		return !this.isPrivateLabel(text) && super.isFunctionEnd(text);
+	}
+
+	protected override isBasicBlockEnd(instruction: string, previousInstruction: string): boolean {
+		return this.isBlockLabel(instruction) || previousInstruction.includes(' ret');
+	}
+
 	protected override extractJumpTarget(instruction: string): string | undefined {
-		return instruction.match(/\.LBB\d+_\d+/u)?.[0].concat(':');
+		return (this.machO ? ClangAssemblyCfgParser.machOJumpTarget : ClangAssemblyCfgParser.elfJumpTarget)
+			.exec(instruction)?.[0]
+			.concat(':');
+	}
+
+	private isBlockLabel(text: string): boolean {
+		return (this.machO ? ClangAssemblyCfgParser.machOBlockLabel : ClangAssemblyCfgParser.elfBlockLabel).test(text);
+	}
+
+	private isPrivateLabel(text: string): boolean {
+		return this.machO ? text.startsWith('L') : text.startsWith('.L');
 	}
 }
 
