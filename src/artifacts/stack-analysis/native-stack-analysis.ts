@@ -199,11 +199,21 @@ function parseStackUsageLocation(value: string, workingDirectory: string): Nativ
 	return { functionName: value.trim() };
 }
 
+/**
+ * A .su record carries whichever path convention the compiler that wrote it
+ * used, so the convention is read from the path text rather than from the host.
+ * `path.win32.isAbsolute` also accepts a leading slash, which on a POSIX host
+ * would rewrite a POSIX path's separators and stop it matching its own source.
+ */
 function resolveSourcePath(filename: string, workingDirectory: string): string {
-	if (path.win32.isAbsolute(filename)) {
+	if (isWindowsAbsolute(filename)) {
 		return path.win32.normalize(filename);
 	}
 	return path.normalize(path.isAbsolute(filename) ? filename : path.resolve(workingDirectory, filename));
+}
+
+function isWindowsAbsolute(value: string): boolean {
+	return /^[A-Za-z]:[\\/]/u.test(value) || value.startsWith('\\\\');
 }
 
 function normalizeNativeQualifier(value: string): 'static' | 'dynamic' | 'dynamic-bounded' | undefined {
