@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { getArtifactUri, type ArtifactDocumentProvider } from '../artifact-document/artifact-document-provider.js';
 import { artifactDefinitions, supportedArtifactKinds } from '../artifacts/core/artifact-definitions.js';
 import {
+	needsArtifactOutputPicker,
 	partitionArtifactPickerChoices,
 	type ArtifactPickerChoice,
 } from '../artifacts/ui/artifact-picker.js';
@@ -148,12 +149,13 @@ async function openArtifact(
 		return;
 	}
 	const outputChoices = getArtifactOutputChoices(backend.profile, kind);
-	const artifactOutput = outputChoices.length === 1
-		? outputChoices[0]
-		: await pickFrom(outputChoices, output => ({
+	let artifactOutput = outputChoices.length === 1 ? outputChoices[0] : undefined;
+	if (needsArtifactOutputPicker(outputChoices)) {
+		artifactOutput = await pickFrom(outputChoices, output => ({
 			label: output.label,
 			detail: output.description,
 		}), { title: `${artifactDefinitions[kind].label} output` });
+	}
 	if (outputChoices.length > 0 && !artifactOutput) {
 		return;
 	}

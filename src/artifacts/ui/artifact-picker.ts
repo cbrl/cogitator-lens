@@ -24,3 +24,7 @@ export function partitionArtifactPickerChoices(
 		unavailable: choices.filter(choice => choice.availability.status === 'unavailable'),
 	};
 }
+
+export function needsArtifactOutputPicker(choices: readonly unknown[]): boolean {
+	return choices.length > 1;
+}
