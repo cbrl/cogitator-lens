@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
-import { parseCompilationDatabase } from '../src/buildsystems/compilation-database-parser.js';
+import { parseCompilationDatabase } from '../../src/buildsystems/compilation-database-parser.js';
 
 test('parses arguments entries, resolves relative files, and preserves producer-owned arguments', () => {
 	const databasePath = path.resolve('workspace', 'build', 'compile_commands.json');
@@ -119,10 +119,11 @@ test('logs and skips malformed databases and entries', () => {
 	assert.equal(messages.length, 5);
 	assert.ok(messages.every((message, index) => message.startsWith(`entry ${index}:`)));
 
+	// A database that is not JSON at all is reported once, not once per entry.
 	const jsonMessages: string[] = [];
 	assert.deepEqual(
 		parseCompilationDatabase('{', databasePath, 'linux', (message) => jsonMessages.push(message)),
 		[],
 	);
-	assert.match(jsonMessages[0], /invalid JSON/);
+	assert.equal(jsonMessages.length, 1);
 });

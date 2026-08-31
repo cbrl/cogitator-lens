@@ -14,17 +14,32 @@ export interface InstructionDocumentation {
 	readonly url: string;
 }
 
+/**
+ * The name reported for each documentation set.
+ *
+ * Kept as a table so a caller can name the instruction set it expects without
+ * repeating the display text.
+ */
+export const instructionSetLabels = {
+	amd64: 'x86 / AMD64',
+	aarch64: 'AArch64',
+	arm32: 'ARM32',
+	riscv64: 'RISC-V',
+	llvmIr: 'LLVM IR',
+	pythonBytecode: 'Python bytecode',
+} as const;
+
 interface NamedProvider {
 	readonly label: string;
 	readonly provider: BaseAssemblyDocumentationProvider;
 }
 
 const llvmProvider: NamedProvider = {
-	label: 'LLVM IR',
+	label: instructionSetLabels.llvmIr,
 	provider: new LLVMDocumentationProvider(),
 };
 const pythonProvider: NamedProvider = {
-	label: 'Python bytecode',
+	label: instructionSetLabels.pythonBytecode,
 	provider: new PythonDocumentationProvider(),
 };
 
@@ -32,10 +47,10 @@ const pythonProvider: NamedProvider = {
 // gets the extension's conventional host target. Distinctive opcodes in a
 // normal listing cause the scoring below to select the actual instruction set.
 const assemblyProviders: readonly NamedProvider[] = [
-	{ label: 'x86 / AMD64', provider: new Amd64DocumentationProvider() },
-	{ label: 'AArch64', provider: new ArmArch64DocumentationProvider() },
-	{ label: 'ARM32', provider: new Arm32DocumentationProvider() },
-	{ label: 'RISC-V', provider: new Riscv64DocumentationProvider() },
+	{ label: instructionSetLabels.amd64, provider: new Amd64DocumentationProvider() },
+	{ label: instructionSetLabels.aarch64, provider: new ArmArch64DocumentationProvider() },
+	{ label: instructionSetLabels.arm32, provider: new Arm32DocumentationProvider() },
+	{ label: instructionSetLabels.riscv64, provider: new Riscv64DocumentationProvider() },
 ];
 
 const inferredProviders = new WeakMap<RenderedTextArtifact, NamedProvider>();

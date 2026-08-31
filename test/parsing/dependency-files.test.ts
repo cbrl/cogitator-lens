@@ -1,0 +1,46 @@
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import test from 'node:test';
+import { parseMakeDepfile, parseMsvcSourceDependencies } from '../../src/compilation/artifact-inputs.js';
+
+test('Make depfiles handle continuations, escaped spaces, multiple targets, and drive letters', () => {
+	const parsed = parseMakeDepfile(
+		[
+			'output.o output.d: src/main.cpp include/a\\ header.h \\',
+			' include/next.h',
+			'C:\\build\\other.o: C:\\src\\other.cpp C:\\src\\with\\ space.h',
+		].join('\n'),
+		path.resolve('/project'),
+	);
+
+	for (const expected of [
+		path.join('src', 'main.cpp'),
+		path.join('include', 'a header.h'),
+		path.join('include', 'next.h'),
+		'other.cpp',
+		'with space.h',
+	]) {
+		assert.ok(
+			parsed.some((filename) => filename.includes(expected)),
+			`dependency ${expected} was lost`,
+		);
+	}
+});
+
+test('MSVC source-dependency JSON accepts documented source and include fields only', () => {
+	const dependencies = parseMsvcSourceDependencies(
+		JSON.stringify({
+			Version: '1.2',
+			Data: {
+				Source: 'src/main.cpp',
+				Includes: ['include/a.h'],
+				ImportedModules: [{ Name: 'ignored' }],
+			},
+		}),
+		path.resolve('/project'),
+	);
+
+	assert.equal(dependencies.length, 2);
+	assert.ok(dependencies.some((filename) => filename.endsWith(path.join('include', 'a.h'))));
+	assert.deepEqual(parseMsvcSourceDependencies('not json', '/project'), []);
+});

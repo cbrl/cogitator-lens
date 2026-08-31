@@ -54,29 +54,17 @@ export async function run(): Promise<void> {
 	assert.ok(extension, 'Cogitator Lens extension was not discovered');
 	await extension.activate();
 
-	const registeredCommands = await vscode.commands.getCommands(true);
-	assert.ok(registeredCommands.includes('coglens.OpenArtifact'));
-	assert.ok(registeredCommands.includes('coglens.OpenControlFlowGraph'));
-	assert.ok(registeredCommands.includes('coglens.CompareArtifacts'));
-	assert.ok(registeredCommands.includes('coglens.PickCompilationVariant'));
-	assert.ok(registeredCommands.includes('coglens.CreateWorkspaceOverride'));
-	assert.ok(registeredCommands.includes('coglens.DeleteToolchain'));
-	assert.ok(registeredCommands.includes('coglens.AddCompilationVariant'));
-	assert.ok(registeredCommands.includes('coglens.EditCompilationVariant'));
-	assert.ok(registeredCommands.includes('coglens.DeleteCompilationVariant'));
-	assert.ok(registeredCommands.includes('coglens.RevealActiveSource'));
-	assert.ok(registeredCommands.includes('coglens.OpenCompileSettingsJson'));
-	for (const command of [
-		'coglens.RefreshArtifact',
-		'coglens.CancelGeneration',
-		'coglens.ShowLog',
-		'coglens.ShowArtifactStatus',
-		'coglens.AddArtifactPreset',
-		'coglens.EditArtifactPreset',
-		'coglens.DeleteArtifactPreset',
-		'coglens.SaveArtifactOptionsAsPreset',
-	]) {
-		assert.ok(registeredCommands.includes(command), `Missing registered command: ${command}`);
+	// Every command the manifest contributes must actually be registered, so neither
+	// list has to be repeated here.
+	const registeredCommands = new Set(await vscode.commands.getCommands(true));
+	const contributedCommands = (
+		JSON.parse(fs.readFileSync(path.join(extension.extensionPath, 'package.json'), 'utf8')) as {
+			contributes: { commands: Array<{ command: string }> };
+		}
+	).contributes.commands;
+	assert.ok(contributedCommands.length > 0);
+	for (const { command } of contributedCommands) {
+		assert.ok(registeredCommands.has(command), `Contributed command is not registered: ${command}`);
 	}
 	await verifyAdditionalSourceLanguageIds();
 
