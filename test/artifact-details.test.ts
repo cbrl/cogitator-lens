@@ -5,8 +5,8 @@ import {
 	invocationDetails,
 	type ArtifactDetailsItem,
 } from '../src/artifacts/ui/artifact-details.js';
-import type { ArtifactDocumentSnapshot } from '../src/asm-document/asm-provider.js';
-import type { CompileHandlerStatus } from '../src/asm-document/compile-handler.js';
+import type { ArtifactDocumentSnapshot } from '../src/artifact-document/artifact-identity.js';
+import type { ArtifactStatus } from '../src/artifact-document/artifact-generator.js';
 import type {
 	ArtifactCommand,
 	RawArtifact,
@@ -66,7 +66,7 @@ test('artifact details expose deterministic identity, status, invocation, enviro
 });
 
 test('artifact details represent all lifecycle states without requiring an artifact', () => {
-	const statuses: Array<[CompileHandlerStatus, string]> = [
+	const statuses: Array<[ArtifactStatus, string]> = [
 		[{ state: 'stale', truncated: false }, 'Not generated'],
 		[{ state: 'compiling', truncated: false }, 'Generating'],
 		[{ state: 'cancelled', truncated: false }, 'Cancelled'],
@@ -106,7 +106,7 @@ test('failed artifact details retain the sanitized invocation prepared before ex
 	);
 });
 
-function successfulStatus(withDiagnostics = true): CompileHandlerStatus {
+function successfulStatus(withDiagnostics = true): ArtifactStatus {
 	const raw: RawArtifact = {
 		kind: 'stack-analysis',
 		text: '',
@@ -153,7 +153,7 @@ function successfulStatus(withDiagnostics = true): CompileHandlerStatus {
 	};
 }
 
-function snapshot(status: CompileHandlerStatus): ArtifactDocumentSnapshot {
+function snapshot(status: ArtifactStatus): ArtifactDocumentSnapshot {
 	return {
 		identity: {
 			documentUri: 'coglens-artifact:/project/source.stack.cpp',

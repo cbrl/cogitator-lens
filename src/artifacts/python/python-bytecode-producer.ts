@@ -1,9 +1,10 @@
 import type { ArtifactProducer } from '../../toolchains/toolchain-map.js';
-import { stdoutArtifactProducer } from '../core/stdout-artifact-producer.js';
+import { artifactProducer } from '../core/compiler-output-producer.js';
 
-export const pythonBytecodeProducer: ArtifactProducer = stdoutArtifactProducer(
+export const pythonBytecodeProducer: ArtifactProducer = artifactProducer(
 	'python-bytecode',
 	{
+		output: 'stdout',
 		arguments: () => ['-m', 'dis'],
 	},
 );

@@ -29,16 +29,14 @@ import {
 	CompilationInfoTreeProvider,
 } from '../../src/tree/compilation-info-tree.js';
 import { ToolchainTreeNode } from '../../src/tree/toolchain-tree.js';
-import { getArtifactUri, parseArtifactUri } from '../../src/asm-document/artifact-uri.js';
-import { CompileHandler } from '../../src/asm-document/compile-handler.js';
+import { getArtifactUri, parseArtifactUri } from '../../src/artifact-document/artifact-uri.js';
+import { ArtifactGenerator } from '../../src/artifact-document/artifact-generator.js';
 import { GlobalOptionsNode } from '../../src/tree/global-options-tree.js';
 import { ArtifactPresetTreeNode } from '../../src/tree/artifact-presets-tree.js';
-import { ArtifactNavigationProvider } from '../../src/asm-document/artifact-navigation-provider.js';
+import { ArtifactNavigationProvider } from '../../src/artifact-document/artifact-navigation-provider.js';
 import { ArtifactDetailsTreeProvider } from '../../src/tree/artifact-details-tree.js';
-import type {
-	ArtifactDocumentSnapshot,
-	AsmProvider,
-} from '../../src/asm-document/asm-provider.js';
+import type { ArtifactDocumentSnapshot } from '../../src/artifact-document/artifact-identity.js';
+import type { ArtifactDocumentProvider } from '../../src/artifact-document/artifact-document-provider.js';
 import {
 	MissingToolOutputError,
 	ToolchainBackend,
@@ -50,6 +48,11 @@ import {
 	nativeStackUsageOutput,
 } from '../../src/artifacts/stack-analysis/native-stack-analysis.js';
 import { ExecError } from '../../src/exec.js';
+
+const extensionToolchainHost = {
+	log() {},
+	parseDiagnostics: parseToolDiagnostics,
+};
 
 export async function run(): Promise<void> {
 	const extension = vscode.extensions.getExtension('cbrl.coglens');
@@ -103,7 +106,7 @@ export async function run(): Promise<void> {
 	verifyArtifactNavigationProviders();
 	await verifyDisplayFilterCaching(workspaceFolder);
 	await verifyMissingSourceIsUnavailable(workspaceFolder);
-	await verifyCompileHandlerStates(workspaceFolder);
+	await verifyArtifactGeneratorStates(workspaceFolder);
 	await verifyNativeStackProduction(workspaceFolder);
 	await verifyArtifactDetailsTree(workspaceFolder);
 	await verifyCompilationDatabaseVariantProvider(workspaceFolder);
@@ -258,7 +261,7 @@ async function verifyPythonEnvironmentVariantProvider(
 	}
 }
 
-async function verifyCompileHandlerStates(workspaceFolder: vscode.WorkspaceFolder): Promise<void> {
+async function verifyArtifactGeneratorStates(workspaceFolder: vscode.WorkspaceFolder): Promise<void> {
 	const source = vscode.Uri.joinPath(workspaceFolder.uri, 'state-test.cpp');
 	const variant = compilationVariant('state:test', source, 'State test');
 	const assemblyUri = getArtifactUri(source, variant, 'assembly', 'default');
@@ -329,7 +332,7 @@ async function verifyCompileHandlerStates(workspaceFolder: vscode.WorkspaceFolde
 			};
 		},
 	} as unknown as CompilationService;
-	const handler = new CompileHandler(
+	const handler = new ArtifactGenerator(
 		source,
 		assemblyUri,
 		variant,
@@ -816,7 +819,7 @@ async function verifyArtifactDetailsTree(
 	const artifacts = {
 		getArtifactDocumentState: (uri: vscode.Uri) =>
 			uri.toString() === artifactUri.toString() ? snapshot : undefined,
-	} as unknown as AsmProvider;
+	} as unknown as ArtifactDocumentProvider;
 	const provider = new ArtifactDetailsTreeProvider(artifacts);
 	provider.setActiveDocument(vscode.Uri.file(source.fsPath));
 	assert.match(provider.getChildren()[0].label ?? '', /Open a Cogitator Lens artifact/);
@@ -927,9 +930,9 @@ async function runFakeClangClStackProducer(
 		dependencyCollection: _dependencyCollection,
 		...definition
 	} = toolchainDefinitions['clang-cl'];
-	const backend = new ToolchainBackend(profile, definition);
+	const backend = new ToolchainBackend(profile, definition, extensionToolchainHost);
 	try {
-		return await backend.produceCompilerOutput(
+		return await backend.produceArtifact(
 			'stack-analysis',
 			vscode.Uri.file(path.join(repositoryRoot, 'test/fixtures/binary/source.cpp')),
 			{
@@ -962,9 +965,9 @@ async function verifyFakeNativeStackCancellation(repositoryRoot: string): Promis
 		environment: {},
 		tools: {},
 	};
-	const backend = new ToolchainBackend(profile, toolchainDefinitions.gcc);
+	const backend = new ToolchainBackend(profile, toolchainDefinitions.gcc, extensionToolchainHost);
 	try {
-		const pending = backend.produceCompilerOutput(
+		const pending = backend.produceArtifact(
 			'stack-analysis',
 			vscode.Uri.file(path.join(repositoryRoot, 'test/fixtures/binary/source.cpp')),
 			{
@@ -1021,10 +1024,10 @@ async function runFakeNativeStackProducer(
 			environment: {},
 			tools: {},
 		};
-		const backend = new ToolchainBackend(profile, toolchainDefinitions.gcc);
+		const backend = new ToolchainBackend(profile, toolchainDefinitions.gcc, extensionToolchainHost);
 		try {
 			let observedInvocation: import('../../src/types/index.js').InvocationDetails | undefined;
-			const raw = await backend.produceCompilerOutput(
+			const raw = await backend.produceArtifact(
 				'stack-analysis',
 				vscode.Uri.file(path.join(repositoryRoot, 'test/fixtures/binary/source.cpp')),
 				{
@@ -1082,9 +1085,9 @@ async function assertFakeNativeStackFailure(
 			environment: {},
 			tools: {},
 		};
-		const backend = new ToolchainBackend(profile, toolchainDefinitions.gcc);
+		const backend = new ToolchainBackend(profile, toolchainDefinitions.gcc, extensionToolchainHost);
 		await assert.rejects(
-			backend.produceCompilerOutput(
+			backend.produceArtifact(
 				'stack-analysis',
 				vscode.Uri.file(path.join(repositoryRoot, 'test/fixtures/binary/source.cpp')),
 				{

@@ -1,11 +1,10 @@
 import path from 'node:path';
-import type { CompilerOutputSpec } from '../../toolchains/toolchain-backend.js';
+import type { ArtifactOutputSpec } from '../../toolchains/toolchain-backend.js';
 import { parseClangOptimizationRemarks } from './clang-optimization-remarks.js';
 import { optimizationRemarksRenderer } from './optimization-remarks-renderer.js';
 
-export const clangClOptimizationRemarksOutput: CompilerOutputSpec = Object.freeze({
-	outputFilename: 'output.opt.yaml',
-	optionalOutput: true,
+export const clangClOptimizationRemarksOutput: ArtifactOutputSpec = Object.freeze({
+	output: { filename: 'output.opt.yaml', optional: true },
 	arguments: (outputFile: string, temporaryDirectory: string) => [
 		'/c', '/clang:-fsave-optimization-record=yaml',
 		`/clang:-foptimization-record-file=${outputFile}`,

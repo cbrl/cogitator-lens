@@ -10,7 +10,7 @@ import {
 	window,
 	workspace,
 } from 'vscode';
-import { asmLineHasSource, type CompiledAssembly } from './compiled-assembly.js';
+import { asmLineHasSource, type ArtifactDocumentContent } from './artifact-document-content.js';
 import path from 'path';
 import { equalUri } from '../utils.js';
 import {
@@ -25,7 +25,7 @@ import {
 } from './decorations/decoration-styles.js';
 import { EditorTracker } from './decorations/editor-tracker.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
-import type { CompileHandlerStatus, CompilationDocumentState } from './compile-handler.js';
+import type { ArtifactStatus, ArtifactState } from './artifact-generator.js';
 import type {
 	ArtifactKind,
 	ArtifactOptions,
@@ -48,18 +48,18 @@ Nice-to-have features:
 
 /**
  * Manages decorations for assembly documents, including dimming unused source lines and highlighting corresponding
- * lines between source and assembly. Each instance of AsmDecorator is associated with one assembly document and its
+ * lines between source and assembly. Each instance of ArtifactDecorator is associated with one assembly document and its
  * referenced source documents.
  *
  * Decorations are only active when the assembly document is visible along with at least one of its referenced source
  * documents.
  */
-export class AsmDecorator {
-	private readonly srcUri: Uri;
-	private readonly asmUri: Uri;
+export class ArtifactDecorator {
+	private readonly sourceUri: Uri;
+	private readonly artifactUri: Uri;
 
-	private asmData: CompiledAssembly | Error | undefined;
-	private compilationState: CompilationDocumentState = 'stale';
+	private content: ArtifactDocumentContent | Error | undefined;
+	private compilationState: ArtifactState = 'stale';
 	private truncated = false;
 
 	private readonly editorTracker: EditorTracker;
@@ -70,14 +70,14 @@ export class AsmDecorator {
 	private isDisposed: boolean = false;
 
     constructor(
-		srcUri: Uri,
-		asmUri: Uri,
-		asmEvent: Event<CompileHandlerStatus>,
+		sourceUri: Uri,
+		artifactUri: Uri,
+		asmEvent: Event<ArtifactStatus>,
 		configService: ConfigurationService,
 		private readonly artifactOptions: (kind: ArtifactKind) => ArtifactOptions,
 	) {
-		this.asmUri = asmUri;
-		this.srcUri = srcUri;
+		this.artifactUri = artifactUri;
+		this.sourceUri = sourceUri;
 		this.editorTracker = new EditorTracker();
 		this.configService = configService;
 
@@ -88,9 +88,9 @@ export class AsmDecorator {
 			this.compilationState = status.state;
 			this.truncated = status.truncated;
 			if (status.assembly) {
-				this.asmData = status.assembly;
+				this.content = status.assembly;
 			} else if (status.error) {
-				this.asmData = status.error;
+				this.content = status.error;
 			}
 			this.refreshDecorations();
         });
@@ -100,7 +100,7 @@ export class AsmDecorator {
 		const selectionChangeRegistration = window.onDidChangeTextEditorSelection(this.onEditorSelectionChanged.bind(this));
 
 		const documentChangeRegistration = workspace.onDidChangeTextDocument(event => {
-			if (equalUri(event.document.uri, this.asmUri)) {
+			if (equalUri(event.document.uri, this.artifactUri)) {
 				this.refreshDecorations();
 			}
 		});
@@ -129,14 +129,14 @@ export class AsmDecorator {
 			return;
 		}
 
-		if (!this.asmData || this.asmData instanceof Error) {
+		if (!this.content || this.content instanceof Error) {
 			return;
 		}
 
-		if (this.asmData.allReferencedSrcUris.has(event.textEditor.document.uri)) {
+		if (this.content.allReferencedSrcUris.has(event.textEditor.document.uri)) {
 			this.onSrcLineSelected(event.textEditor);
 		}
-		else if (equalUri(event.textEditor.document.uri, this.asmUri)) {
+		else if (equalUri(event.textEditor.document.uri, this.artifactUri)) {
 			this.onAsmLineSelected(event.textEditor);
 		}
     }
@@ -144,8 +144,8 @@ export class AsmDecorator {
     private refreshDecorations() {
 		this.clearAllDecorations();
 
-		if (this.asmData && !(this.asmData instanceof Error)) {
-			// Recalculate active state now that asmData may have changed
+		if (this.content && !(this.content instanceof Error)) {
+			// Recalculate active state now that content may have changed
 			this.updateActiveState();
 			this.dimUnusedSourceLines();
 			this.decorateListingColumns();
@@ -155,7 +155,7 @@ export class AsmDecorator {
 
 		// Treat as if the user selected the current line of the first editor (only highlights the line, doesn't scroll)
 		// TODO: use active editor instead of the first visible source editor?
-		if (this.asmData && !(this.asmData instanceof Error) && this.asmData.lines.length > 0) {
+		if (this.content && !(this.content instanceof Error) && this.content.lines.length > 0) {
 			const sourceEditor = this.getAllSourceEditors()[0];
 			if (sourceEditor) {
 				this.onSrcLineSelected(sourceEditor, true);
@@ -164,7 +164,7 @@ export class AsmDecorator {
 
 		const stateText = this.stateDecorationText();
 		if (stateText) {
-			const asmEditor = this.editorTracker.getAsmEditor(this.asmUri);
+			const asmEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
 			asmEditor?.setDecorations(stateDecoration, [{
 				range: new Range(0, 0, 0, 0),
 				renderOptions: {
@@ -198,21 +198,21 @@ export class AsmDecorator {
 			this.clearDecorations(editor);
 		}
 
-		const asmEditor = this.editorTracker.getAsmEditor(this.asmUri);
+		const asmEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
 		if (asmEditor !== undefined) {
 			this.clearDecorations(asmEditor);
 		}
 	}
 
     private dimUnusedSourceLines() {
-		if (!this.asmData || this.asmData instanceof Error) {
+		if (!this.content || this.content instanceof Error) {
 			return;
 		}
-		const asmData = this.asmData;
+		const content = this.content;
 		const getUnusedLines = (document: TextDocument) => {
 			const unusedLines: Range[] = [];
 
-			const map = asmData.sourceLineMappings.get(document.uri);
+			const map = content.sourceLineMappings.get(document.uri);
 			if (map === undefined) {
 				return unusedLines;
 			}
@@ -236,18 +236,18 @@ export class AsmDecorator {
     }
 
 	private decorateListingColumns(): void {
-		if (!this.asmData || this.asmData instanceof Error) {
+		if (!this.content || this.content instanceof Error) {
 			return;
 		}
-		const editor = this.editorTracker.getAsmEditor(this.asmUri);
-		if (!editor || !this.artifactOptions(this.asmData.kind).display.binaryColumns) {
+		const editor = this.editorTracker.getArtifactEditor(this.artifactUri);
+		if (!editor || !this.artifactOptions(this.content.kind).display.binaryColumns) {
 			return;
 		}
-		const addressWidth = Math.max(4, ...this.asmData.lines.map(line =>
+		const addressWidth = Math.max(4, ...this.content.lines.map(line =>
 			line.address === undefined ? 0 : line.address.toString(16).length));
-		const opcodeWidth = Math.max(0, ...this.asmData.lines.map(line =>
+		const opcodeWidth = Math.max(0, ...this.content.lines.map(line =>
 			line.opcodes?.join(' ').length ?? 0));
-		const options = this.asmData.lines.flatMap((line, index) => {
+		const options = this.content.lines.flatMap((line, index) => {
 			if (
 				index >= editor.document.lineCount
 				|| (line.address === undefined && !line.opcodes?.length)
@@ -268,14 +268,14 @@ export class AsmDecorator {
 
 	private decorateSourceLineBands(): void {
 		if (
-			!this.asmData
-			|| this.asmData instanceof Error
-			|| !artifactSupportsOption(this.asmData.kind, 'sourceLineColorBands')
-			|| !this.artifactOptions(this.asmData.kind).display.sourceLineColorBands
+			!this.content
+			|| this.content instanceof Error
+			|| !artifactSupportsOption(this.content.kind, 'sourceLineColorBands')
+			|| !this.artifactOptions(this.content.kind).display.sourceLineColorBands
 		) {
 			return;
 		}
-		const asmEditor = this.editorTracker.getAsmEditor(this.asmUri);
+		const asmEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
 		if (!asmEditor) {
 			return;
 		}
@@ -283,7 +283,7 @@ export class AsmDecorator {
 		for (const editor of this.getAllSourceEditors()) {
 			const sourceRanges = sourceLineBandDecorations.map(() => [] as Range[]);
 			for (const [sourceLine, artifactLines] of
-				this.asmData.sourceLineMappings.get(editor.document.uri) ?? []) {
+				this.content.sourceLineMappings.get(editor.document.uri) ?? []) {
 				const band = sourceLine % sourceLineBandDecorations.length;
 				if (sourceLine >= 0 && sourceLine < editor.document.lineCount) {
 					sourceRanges[band].push(editor.document.lineAt(sourceLine).range);
@@ -302,20 +302,20 @@ export class AsmDecorator {
 	}
 
     private onSrcLineSelected(selectedEditor: TextEditor, highlightOnly: boolean = false): void {
-		if (!this.asmData || this.asmData instanceof Error) {
+		if (!this.content || this.content instanceof Error) {
 			return;
 		}
 
-		const asmEditor = this.editorTracker.getAsmEditor(this.asmUri);
+		const asmEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
 
 		if (asmEditor === undefined) {
 			return;
 		}
 
-		const asmData = this.asmData;
+		const content = this.content;
 		const getSelectedLines = (srcFile: Uri, line: number) => {
 			const asmLinesRanges: Range[] = [];
-			const mapped = asmData.sourceLineMappings.get(srcFile)?.get(line);
+			const mapped = content.sourceLineMappings.get(srcFile)?.get(line);
 
 			if (mapped !== undefined) {
 				for (let line of mapped) {
@@ -352,15 +352,15 @@ export class AsmDecorator {
     }
 
     private onAsmLineSelected(asmEditor: TextEditor, highlightOnly: boolean = false): void {
-		if (!this.asmData || this.asmData instanceof Error) {
+		if (!this.content || this.content instanceof Error) {
 			return;
 		}
 
 		const line = asmEditor.selection.start.line;
-		if (line < 0 || line >= this.asmData.lines.length || line >= asmEditor.document.lineCount) {
+		if (line < 0 || line >= this.content.lines.length || line >= asmEditor.document.lineCount) {
 			return;
 		}
-        const asmLine = this.asmData.lines[line];
+        const asmLine = this.content.lines[line];
 
 		// Highlight selected line in ASM editor
         const asmLineRange = asmEditor.document.lineAt(line).range;
@@ -369,10 +369,10 @@ export class AsmDecorator {
 
 		// Highlight associated lines in source editor
         if (asmLineHasSource(asmLine)) {
-			const srcUri = Uri.file(path.normalize(asmLine.source!.file!));
+			const sourceUri = Uri.file(path.normalize(asmLine.source!.file!));
 
 			// Open the correct source document if this line of assembly refers to a different file
-			this.getOrCreateSourceEditor(srcUri).then(targetEditor => {
+			this.getOrCreateSourceEditor(sourceUri).then(targetEditor => {
 				if (this.isDisposed || asmEditor.selection.start.line !== line) {
 					return;
 				}
@@ -411,31 +411,31 @@ export class AsmDecorator {
     }
 
 	private updateActiveState(): void {
-		if (!this.asmData || this.asmData instanceof Error) {
+		if (!this.content || this.content instanceof Error) {
 			this.active = false;
 			return;
 		}
 
-		const srcUris = this.asmData.allReferencedSrcUris;
+		const sourceUris = this.content.allReferencedSrcUris;
 		const editors = window.visibleTextEditors;
 
 		// Active if the assembly editor is visible and one of the associated source editors is visible
-		const hasAsmEditor = editors.some(editor => equalUri(editor.document.uri, this.asmUri));
-		const hasAnySourceEditor = editors.some(e => srcUris.has(e.document.uri));
+		const hasAsmEditor = editors.some(editor => equalUri(editor.document.uri, this.artifactUri));
+		const hasAnySourceEditor = editors.some(e => sourceUris.has(e.document.uri));
 
 		this.active = hasAsmEditor && hasAnySourceEditor;
 	}
 
 	private decorateAnalysisAnnotations(): void {
-		if (!this.asmData || this.asmData instanceof Error) {
+		if (!this.content || this.content instanceof Error) {
 			return;
 		}
-		const editor = this.editorTracker.getAsmEditor(this.asmUri);
+		const editor = this.editorTracker.getArtifactEditor(this.artifactUri);
 		if (!editor) {
 			return;
 		}
 		for (const [category, decoration] of Object.entries(optimizationRemarkDecorations)) {
-			const options = this.asmData.lines.flatMap((line, index) => {
+			const options = this.content.lines.flatMap((line, index) => {
 				if (index >= editor.document.lineCount) {
 					return [];
 				}
@@ -460,7 +460,7 @@ export class AsmDecorator {
 			editor.setDecorations(decoration, options);
 		}
 
-		const stackOptions = this.asmData.lines.flatMap((line, index) => {
+		const stackOptions = this.content.lines.flatMap((line, index) => {
 			if (index >= editor.document.lineCount) {
 				return [];
 			}
@@ -498,7 +498,7 @@ export class AsmDecorator {
 			for (const editor of this.getAllSourceEditors()) {
 				this.clearDecorations(editor);
 			}
-			const asmEditor = this.editorTracker.getAsmEditor(this.asmUri);
+			const asmEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
 			if (asmEditor) {
 				this.clearMappingDecorations(asmEditor);
 			}
@@ -514,11 +514,11 @@ export class AsmDecorator {
 	}
 
 	private getAllSourceEditors(): TextEditor[] {
-		if (!this.asmData || this.asmData instanceof Error) {
+		if (!this.content || this.content instanceof Error) {
 			return [];
 		}
 
-		return this.editorTracker.getSourceEditors(this.asmData.allReferencedSrcUris);
+		return this.editorTracker.getSourceEditors(this.content.allReferencedSrcUris);
 	}
 
 	private stateDecorationText(): string | undefined {

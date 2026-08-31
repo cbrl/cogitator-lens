@@ -1,5 +1,5 @@
 import vscode from 'vscode';
-import { parseArtifactUri } from '../asm-document/artifact-uri.js';
+import { parseArtifactUri } from '../artifact-document/artifact-uri.js';
 import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
 import type { ArtifactPreset } from '../artifacts/ui/presets.js';
 import { ConfigurationService } from '../services/configuration-service.js';

@@ -1,5 +1,5 @@
 /**
- * Text editor decoration styles shared by every AsmDecorator instance.
+ * Text editor decoration styles shared by every ArtifactDecorator instance.
  */
 
 import {

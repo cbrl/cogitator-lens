@@ -15,66 +15,66 @@ import type {
 	RenderedArtifact,
 } from '../types/index.js';
 import { CompilationError } from '../types/index.js';
-import { buildCompiledAssembly, type CompiledAssembly } from './compiled-assembly.js';
+import { buildArtifactDocumentContent, type ArtifactDocumentContent } from './artifact-document-content.js';
 import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
 import * as logger from '../logger.js';
 
 export interface ArtifactHandlerResult {
-	assembly?: CompiledAssembly;
+	assembly?: ArtifactDocumentContent;
 	artifact: RenderedArtifact;
 }
 
 interface RetainedArtifactStatus {
-	readonly assembly?: CompiledAssembly;
+	readonly assembly?: ArtifactDocumentContent;
 	readonly artifact?: RenderedArtifact;
 	readonly invocation?: InvocationDetails;
 	readonly error?: never;
 	readonly truncated: boolean;
 }
 
-export type CompileHandlerStatus =
+export type ArtifactStatus =
 	| ({ readonly state: 'compiling' | 'stale' | 'cancelled' } & RetainedArtifactStatus)
 	| {
 		readonly state: 'failed';
 		readonly error: Error;
 		readonly diagnostics: readonly import('../types/index.js').CompileDiagnostic[];
-		readonly assembly?: CompiledAssembly;
+		readonly assembly?: ArtifactDocumentContent;
 		readonly artifact?: RenderedArtifact;
 		readonly invocation?: InvocationDetails;
 		readonly truncated: boolean;
 	}
 	| {
 		readonly state: 'successful';
-		readonly assembly?: CompiledAssembly;
+		readonly assembly?: ArtifactDocumentContent;
 		readonly artifact: RenderedArtifact;
 		readonly invocation?: InvocationDetails;
 		readonly error?: never;
 		readonly truncated: boolean;
 	};
 
-export type CompilationDocumentState = CompileHandlerStatus['state'];
+export type ArtifactState = ArtifactStatus['state'];
 
-export class CompileHandler implements Disposable {
-	readonly srcUri: Uri;
-	readonly asmUri: Uri;
-	private readonly statusEvent = new EventEmitter<CompileHandlerStatus>();
+export class ArtifactGenerator implements Disposable {
+	readonly sourceUri: Uri;
+	readonly artifactUri: Uri;
+	private readonly statusEvent = new EventEmitter<ArtifactStatus>();
 	private cancellation?: CancellationTokenSource;
-	private currentStatus: CompileHandlerStatus = {
+	private currentStatus: ArtifactStatus = {
 		state: 'stale',
 		truncated: false,
 	};
 
 	constructor(
-		srcUri: Uri,
-		asmUri: Uri,
+		sourceUri: Uri,
+		artifactUri: Uri,
 		private readonly variant: CompilationVariant,
 		private readonly artifactKind: ArtifactKind,
 		private readonly presetId: string,
 		private readonly compilationService: CompilationService,
 		private readonly artifactOutputId?: string,
 	) {
-		this.srcUri = srcUri;
-		this.asmUri = asmUri;
+		this.sourceUri = sourceUri;
+		this.artifactUri = artifactUri;
 	}
 
 	async update(externalToken: CancellationToken): Promise<ArtifactHandlerResult> {
@@ -99,7 +99,7 @@ export class CompileHandler implements Disposable {
 			const preset = this.compilationService.getArtifactPreset(
 				this.artifactKind,
 				this.presetId,
-				this.srcUri,
+				this.sourceUri,
 			);
 			if (!preset) {
 				throw new CompilationError(
@@ -149,9 +149,9 @@ export class CompileHandler implements Disposable {
 				);
 			}
 			const assembly = rendered.presentation === 'text'
-				? buildCompiledAssembly(
-					this.srcUri,
-					this.asmUri,
+				? buildArtifactDocumentContent(
+					this.sourceUri,
+					this.artifactUri,
 					rendered.kind,
 					rendered.toolOutputTruncated
 						? [...rendered.lines, { text: '[truncated; toolchain output was limited]' }]
@@ -170,7 +170,7 @@ export class CompileHandler implements Disposable {
 		} catch (error) {
 			if (isCurrent() && !(error instanceof CancellationError)) {
 				const normalized = error instanceof Error ? error : new Error(String(error));
-				logger.logChannel.error(`Compilation failed for ${this.srcUri.fsPath}: ${normalized.stack ?? normalized.message}`);
+				logger.logChannel.error(`Compilation failed for ${this.sourceUri.fsPath}: ${normalized.stack ?? normalized.message}`);
 				this.setStatus({
 					state: 'failed',
 					error: normalized,
@@ -201,11 +201,11 @@ export class CompileHandler implements Disposable {
 		}
 	}
 
-	get onDidChange(): Event<CompileHandlerStatus> {
+	get onDidChange(): Event<ArtifactStatus> {
 		return this.statusEvent.event;
 	}
 
-	get status(): CompileHandlerStatus {
+	get status(): ArtifactStatus {
 		return this.currentStatus;
 	}
 
@@ -236,7 +236,7 @@ export class CompileHandler implements Disposable {
 		this.statusEvent.dispose();
 	}
 
-	private setStatus(status: CompileHandlerStatus): void {
+	private setStatus(status: ArtifactStatus): void {
 		this.currentStatus = status;
 		this.statusEvent.fire(status);
 	}

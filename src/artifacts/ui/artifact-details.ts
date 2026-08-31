@@ -1,5 +1,5 @@
-import type { ArtifactDocumentSnapshot } from '../../asm-document/asm-provider.js';
-import type { CompileHandlerStatus } from '../../asm-document/compile-handler.js';
+import type { ArtifactDocumentSnapshot } from '../../artifact-document/artifact-identity.js';
+import type { ArtifactStatus } from '../../artifact-document/artifact-generator.js';
 import type {
 	CompileDiagnostic,
 	InvocationDetails,
@@ -81,12 +81,12 @@ export function buildArtifactDetails(
 	]);
 }
 
-function retainedArtifact(status: CompileHandlerStatus): RenderedArtifact | undefined {
+function retainedArtifact(status: ArtifactStatus): RenderedArtifact | undefined {
 	return status.artifact;
 }
 
 function currentDiagnostics(
-	status: CompileHandlerStatus,
+	status: ArtifactStatus,
 	artifact: RenderedArtifact | undefined,
 ): readonly CompileDiagnostic[] {
 	if (status.state !== 'failed') {
@@ -110,7 +110,7 @@ function currentDiagnostics(
 	});
 }
 
-function statusLabel(status: CompileHandlerStatus): string {
+function statusLabel(status: ArtifactStatus): string {
 	switch (status.state) {
 		case 'compiling': return 'Generating';
 		case 'successful':

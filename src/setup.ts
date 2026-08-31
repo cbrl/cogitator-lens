@@ -21,7 +21,7 @@ import {
 } from './tree/compilation-info-tree.js';
 import { GlobalOptionsTreeProvider } from './tree/global-options-tree.js';
 import { ArtifactDetailsTreeProvider } from './tree/artifact-details-tree.js';
-import type { AsmProvider } from './asm-document/asm-provider.js';
+import type { ArtifactDocumentProvider } from './artifact-document/artifact-document-provider.js';
 import { TreeNode } from './tree/treedata.js';
 import * as logger from './logger.js';
 import type { GraphPanelManager } from './webview/graph-panel-manager.js';
@@ -37,7 +37,7 @@ export function setupCommands(
 	context: vscode.ExtensionContext,
 	compilationService: CompilationService,
 	configuration: ConfigurationService,
-	artifacts: AsmProvider,
+	artifacts: ArtifactDocumentProvider,
 ): void {
 	const copyText = vscode.commands.registerCommand('coglens.CopyText', async (node?: TreeNode) => {
 		const text = node?.copyText ?? node?.label;
@@ -671,7 +671,7 @@ async function pickProductionOptions(
 }
 
 async function saveActiveArtifactAsPreset(
-	artifacts: AsmProvider,
+	artifacts: ArtifactDocumentProvider,
 	compilationService: CompilationService,
 	configuration: ConfigurationService,
 ): Promise<void> {
@@ -735,7 +735,7 @@ function workspaceFolderFor(scope: vscode.Uri | undefined): vscode.WorkspaceFold
 	return scope ? vscode.workspace.getWorkspaceFolder(scope) : vscode.workspace.workspaceFolders?.[0];
 }
 
-async function showArtifactStatusActions(artifacts: AsmProvider): Promise<void> {
+async function showArtifactStatusActions(artifacts: ArtifactDocumentProvider): Promise<void> {
 	const snapshot = artifacts.getActiveArtifactDocumentState();
 	if (!snapshot) {
 		return;
@@ -770,7 +770,7 @@ async function showArtifactStatusActions(artifacts: AsmProvider): Promise<void> 
 	}
 }
 
-function statusLabel(state: import('./asm-document/compile-handler.js').CompilationDocumentState): string {
+function statusLabel(state: import('./artifact-document/artifact-generator.js').ArtifactState): string {
 	return state[0].toUpperCase() + state.slice(1);
 }
 
@@ -844,7 +844,7 @@ export function createArtifactPresetsTreeView(
 
 export function createArtifactDetailsTreeView(
 	context: vscode.ExtensionContext,
-	artifacts: AsmProvider,
+	artifacts: ArtifactDocumentProvider,
 	graphs?: GraphPanelManager,
 ): ArtifactDetailsTreeProvider {
 	const provider = new ArtifactDetailsTreeProvider(artifacts);

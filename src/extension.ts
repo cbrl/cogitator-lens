@@ -6,12 +6,12 @@ import vscode, {
 	window,
 	workspace,
 } from 'vscode';
-import { ArtifactNavigationProvider } from './asm-document/artifact-navigation-provider.js';
+import { ArtifactNavigationProvider } from './artifact-document/artifact-navigation-provider.js';
 import {
 	ArtifactSemanticTokensProvider,
 	artifactSemanticTokensLegend,
-} from './asm-document/artifact-semantic-tokens-provider.js';
-import { AsmProvider, getArtifactUri } from './asm-document/asm-provider.js';
+} from './artifact-document/artifact-semantic-tokens-provider.js';
+import { ArtifactDocumentProvider, getArtifactUri } from './artifact-document/artifact-document-provider.js';
 import { CmakeVariantProvider } from './buildsystems/cmake.js';
 import { CompilationDatabaseVariantProvider } from './buildsystems/compilation-database.js';
 import { PythonEnvironmentVariantProvider } from './buildsystems/python-environments.js';
@@ -45,7 +45,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		configuration,
 		context.workspaceState,
 	);
-	const artifactProvider = new AsmProvider(compilationService, configuration);
+	const artifactProvider = new ArtifactDocumentProvider(compilationService, configuration);
 	const graphPanels = new GraphPanelManager(context, compilationService, configuration);
 	const navigationProvider = new ArtifactNavigationProvider(uri =>
 		artifactProvider.getRenderedArtifact(uri));
@@ -66,31 +66,31 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		provider.onSnapshot(snapshot => compilationService.reconcileProviderSnapshot(snapshot)));
 
 	const contentProvider = workspace.registerTextDocumentContentProvider(
-		AsmProvider.scheme,
+		ArtifactDocumentProvider.scheme,
 		artifactProvider,
 	);
 	const definitionRegistration = vscode.languages.registerDefinitionProvider(
-		{ scheme: AsmProvider.scheme },
+		{ scheme: ArtifactDocumentProvider.scheme },
 		navigationProvider,
 	);
 	const linkRegistration = vscode.languages.registerDocumentLinkProvider(
-		{ scheme: AsmProvider.scheme },
+		{ scheme: ArtifactDocumentProvider.scheme },
 		navigationProvider,
 	);
 	const foldingRegistration = vscode.languages.registerFoldingRangeProvider(
-		{ scheme: AsmProvider.scheme },
+		{ scheme: ArtifactDocumentProvider.scheme },
 		navigationProvider,
 	);
 	const hoverRegistration = vscode.languages.registerHoverProvider(
-		{ scheme: AsmProvider.scheme },
+		{ scheme: ArtifactDocumentProvider.scheme },
 		navigationProvider,
 	);
 	const symbolRegistration = vscode.languages.registerDocumentSymbolProvider(
-		{ scheme: AsmProvider.scheme },
+		{ scheme: ArtifactDocumentProvider.scheme },
 		navigationProvider,
 	);
 	const semanticTokensRegistration = vscode.languages.registerDocumentSemanticTokensProvider(
-		{ scheme: AsmProvider.scheme },
+		{ scheme: ArtifactDocumentProvider.scheme },
 		new ArtifactSemanticTokensProvider(uri => artifactProvider.getRenderedArtifact(uri)),
 		artifactSemanticTokensLegend,
 	);
@@ -152,7 +152,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		commands.executeCommand(
 			'setContext',
 			'coglens.artifactDocument',
-			window.activeTextEditor?.document.uri.scheme === AsmProvider.scheme,
+			window.activeTextEditor?.document.uri.scheme === ArtifactDocumentProvider.scheme,
 		),
 	]);
 	const activeEditorSubscription = window.onDidChangeActiveTextEditor(() => {
@@ -196,7 +196,7 @@ async function openArtifact(
 	editor: vscode.TextEditor,
 	requestedKind: ArtifactKind | undefined,
 	compilationService: CompilationService,
-	artifactProvider: AsmProvider,
+	artifactProvider: ArtifactDocumentProvider,
 	graphPanels: GraphPanelManager,
 	configuration: ConfigurationService,
 ): Promise<void> {

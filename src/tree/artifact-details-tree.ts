@@ -7,9 +7,9 @@ import {
 	type ArtifactDetailsItem,
 } from '../artifacts/ui/artifact-details.js';
 import {
-	AsmProvider,
-	type ArtifactDocumentSnapshot,
-} from '../asm-document/asm-provider.js';
+	ArtifactDocumentProvider,
+} from '../artifact-document/artifact-document-provider.js';
+import type { ArtifactDocumentSnapshot } from '../artifact-document/artifact-identity.js';
 import { TreeNode, TreeProvider } from './treedata.js';
 
 export class ArtifactDetailsTreeNode extends TreeNode {
@@ -34,12 +34,12 @@ export class ArtifactDetailsTreeProvider extends TreeProvider<ArtifactDetailsTre
 	private activeDocumentUri?: string;
 	private snapshot?: ArtifactDocumentSnapshot;
 
-	constructor(private readonly artifacts: AsmProvider) {
+	constructor(private readonly artifacts: ArtifactDocumentProvider) {
 		super();
 	}
 
 	setActiveDocument(uri: vscode.Uri | undefined): void {
-		if (!uri || uri.scheme !== AsmProvider.scheme) {
+		if (!uri || uri.scheme !== ArtifactDocumentProvider.scheme) {
 			this.activeDocumentUri = undefined;
 			this.snapshot = undefined;
 			this.refresh();

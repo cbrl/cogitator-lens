@@ -1,11 +1,10 @@
 import path from 'node:path';
-import type { CompilerOutputSpec } from '../../toolchains/toolchain-backend.js';
+import type { ArtifactOutputSpec } from '../../toolchains/toolchain-backend.js';
 import { processRawGccOptRemarks } from '../../vendor/lib/optimization-remarks.js';
 import { normalizeOptimizationRemark, optimizationRemarksRenderer } from './optimization-remarks-renderer.js';
 
-export const gccOptimizationRemarksOutput: CompilerOutputSpec = Object.freeze({
-	outputFilename: 'output.opt',
-	optionalOutput: true,
+export const gccOptimizationRemarksOutput: ArtifactOutputSpec = Object.freeze({
+	output: { filename: 'output.opt', optional: true },
 	arguments: (outputFile: string, temporaryDirectory: string) => [
 		'-c', `-fopt-info-all=${outputFile}`,
 		'-o', path.join(temporaryDirectory, 'output.o'),

@@ -28,7 +28,6 @@ import type { ConfigurationService } from '../services/configuration-service.js'
 import {
 	CompilationError,
 	type CompileDiagnostic,
-	type ArtifactKind,
 	type RenderedTextArtifact,
 } from '../types/index.js';
 import { toComparisonKey } from '../utils.js';
@@ -38,52 +37,34 @@ import {
 	getArtifactUri,
 	parseArtifactUri,
 } from './artifact-uri.js';
-import { AsmDecorator } from './asm-decorator.js';
-import { getContent, type CompiledAssembly } from './compiled-assembly.js';
-import { CompileHandler } from './compile-handler.js';
-import type { CompileHandlerStatus } from './compile-handler.js';
+import { ArtifactDecorator } from './artifact-decorator.js';
+import { getContent, type ArtifactDocumentContent } from './artifact-document-content.js';
+import { ArtifactGenerator } from './artifact-generator.js';
+import type { ArtifactStatus } from './artifact-generator.js';
+import type {
+	ArtifactDocumentIdentity,
+	ArtifactDocumentSnapshot,
+} from './artifact-identity.js';
 
 interface ArtifactDocument {
 	readonly identity: ArtifactDocumentIdentity;
-	readonly handler: CompileHandler;
+	readonly handler: ArtifactGenerator;
 	readonly watcher: Disposable;
-	decorator?: AsmDecorator;
-	assembly?: CompiledAssembly;
+	decorator?: ArtifactDecorator;
+	assembly?: ArtifactDocumentContent;
 	pendingRefresh?: ReturnType<typeof setTimeout>;
 	diagnostics: readonly CompileDiagnostic[];
-}
-
-export interface ArtifactDocumentIdentity {
-	readonly documentUri: string;
-	readonly sourceUri: string;
-	readonly sourceLabel: string;
-	readonly artifactKind: ArtifactKind;
-	readonly artifactLabel: string;
-	readonly artifactOutputId?: string;
-	readonly artifactOutputLabel?: string;
-	readonly presetId: string;
-	readonly variantId: string;
-	readonly variantLabel: string;
-	readonly toolchainId: string;
-	readonly toolchainLabel: string;
-	readonly toolchainKind: string;
-	readonly renderedIdentity: string;
-}
-
-export interface ArtifactDocumentSnapshot {
-	readonly identity: ArtifactDocumentIdentity;
-	readonly status: CompileHandlerStatus;
 }
 
 function documentKey(uri: Uri): string {
 	return toComparisonKey(uri, true, process.platform === 'win32');
 }
 
-export class AsmProvider implements TextDocumentContentProvider, Disposable {
+export class ArtifactDocumentProvider implements TextDocumentContentProvider, Disposable {
 	static readonly scheme = artifactScheme;
 
 	private readonly documents = new Map<string, ArtifactDocument>();
-	private readonly sourceToAssembly = sourceUriMap<UriSet>();
+	private readonly sourceToArtifacts = sourceUriMap<UriSet>();
 	private readonly changeEmitter = new EventEmitter<Uri>();
 	private readonly artifactStateEmitter = new EventEmitter<ArtifactDocumentSnapshot>();
 	private readonly diagnostics: DiagnosticCollection = languages.createDiagnosticCollection('coglens');
@@ -99,19 +80,19 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 			window.onDidChangeActiveTextEditor(() => this.refreshStatusBar()),
 			compilationService.onVariantsChanged(sources => {
 				for (const source of sources) {
-					for (const assembly of this.sourceToAssembly.get(source)?.values() ?? []) {
+					for (const assembly of this.sourceToArtifacts.get(source)?.values() ?? []) {
 						this.requestRefresh(assembly);
 					}
 				}
 			}),
 			compilationService.onArtifactOptionsChanged(() => {
 				for (const document of this.documents.values()) {
-					this.requestRefresh(document.handler.asmUri);
+					this.requestRefresh(document.handler.artifactUri);
 				}
 			}),
 			configuration.onDidChange(() => {
 				for (const document of this.documents.values()) {
-					this.requestRefresh(document.handler.asmUri);
+					this.requestRefresh(document.handler.artifactUri);
 				}
 			}),
 			this.changeEmitter,
@@ -131,9 +112,9 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 		const handler = document.handler;
 
 		if (!document.decorator) {
-			document.decorator = new AsmDecorator(
-				handler.srcUri,
-				handler.asmUri,
+			document.decorator = new ArtifactDecorator(
+				handler.sourceUri,
+				handler.artifactUri,
 				handler.onDidChange,
 				this.configuration,
 				kind => this.compilationService.getArtifactOptions(kind),
@@ -174,7 +155,7 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 		return this.artifactStateEmitter.event;
 	}
 
-	getCompiledAssembly(uri: Uri): CompiledAssembly | undefined {
+	getArtifactDocumentContent(uri: Uri): ArtifactDocumentContent | undefined {
 		return this.documents.get(documentKey(uri))?.assembly;
 	}
 
@@ -203,7 +184,7 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 		if (!document) {
 			return false;
 		}
-		this.requestRefresh(document.handler.asmUri);
+		this.requestRefresh(document.handler.artifactUri);
 		return true;
 	}
 
@@ -255,7 +236,7 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 		if (!variant) {
 			throw new CompilationError(`Compilation variant is no longer available: ${identity.variantId}`);
 		}
-		const handler = new CompileHandler(
+		const handler = new ArtifactGenerator(
 			identity.source,
 			assemblyUri,
 			variant,
@@ -284,10 +265,10 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 			renderedIdentity: assemblyUri.toString(),
 		};
 
-		let assemblyUris = this.sourceToAssembly.get(identity.source);
+		let assemblyUris = this.sourceToArtifacts.get(identity.source);
 		if (!assemblyUris) {
 			assemblyUris = sourceUriSet();
-			this.sourceToAssembly.set(identity.source, assemblyUris);
+			this.sourceToArtifacts.set(identity.source, assemblyUris);
 		}
 		assemblyUris.add(assemblyUri);
 
@@ -315,7 +296,7 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 		return document;
 	}
 
-	private onHandlerStatus(assemblyUri: Uri, status: CompileHandlerStatus): void {
+	private onHandlerStatus(assemblyUri: Uri, status: ArtifactStatus): void {
 		const document = this.documents.get(documentKey(assemblyUri));
 		if (!document) {
 			return;
@@ -363,10 +344,10 @@ export class AsmProvider implements TextDocumentContentProvider, Disposable {
 		document.watcher.dispose();
 		document.decorator?.dispose();
 
-		const assemblyUris = this.sourceToAssembly.get(document.handler.srcUri);
+		const assemblyUris = this.sourceToArtifacts.get(document.handler.sourceUri);
 		assemblyUris?.delete(uri);
 		if (assemblyUris?.size === 0) {
-			this.sourceToAssembly.delete(document.handler.srcUri);
+			this.sourceToArtifacts.delete(document.handler.sourceUri);
 		}
 
 		document.handler.dispose();

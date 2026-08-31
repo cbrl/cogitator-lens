@@ -26,11 +26,12 @@ export const pythonAstProducer: ArtifactProducer = async (
 	cancellationToken,
 ) => {
 	try {
-		return await backend.produceStdoutArtifact(
+		return await backend.produceArtifact(
 			'ast',
 			source,
 			options,
 			{
+				output: 'stdout',
 				arguments: () => ['-I', '-c', pythonAstHelper],
 			},
 			cancellationToken,

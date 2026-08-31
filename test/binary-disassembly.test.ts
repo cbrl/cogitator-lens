@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { testToolchainHost } from './toolchain-host.js';
 import {
 	artifactDefinitions,
 } from '../src/artifacts/core/artifact-definitions.js';
@@ -118,7 +119,7 @@ test('profile creation discovers and merges named auxiliary tools', () => {
 });
 
 test('GNU disassembly renders addresses, bytes, links, source mappings, symbols, and size', () => {
-	const backend = new ToolchainBackend(profile('gcc'), toolchainDefinitions.gcc);
+	const backend = new ToolchainBackend(profile('gcc'), toolchainDefinitions.gcc, testToolchainHost);
 	const raw = rawArtifact(platformFixture('test/fixtures/binary/gnu-objdump.txt'));
 	const rendered = artifactDefinitions['binary-disassembly'].renderer(
 		raw,
@@ -147,7 +148,7 @@ test('dumpbin output is adapted before using the common raw-assembly parser', ()
 	assert.match(normalized, /9 <\?entry@@YAHH@Z>:/);
 	assert.match(normalized, /call\s+0+ <\?helper@@YAHH@Z>/);
 
-	const backend = new ToolchainBackend(profile('msvc'), toolchainDefinitions.msvc);
+	const backend = new ToolchainBackend(profile('msvc'), toolchainDefinitions.msvc, testToolchainHost);
 	const rendered = artifactDefinitions['binary-disassembly'].renderer(
 		rawArtifact(normalized),
 		defaultArtifactOptions.display,
@@ -163,7 +164,7 @@ test('dumpbin output is adapted before using the common raw-assembly parser', ()
 });
 
 test('malformed disassembler output produces a valid empty normalized artifact', () => {
-	const backend = new ToolchainBackend(profile('gcc'), toolchainDefinitions.gcc);
+	const backend = new ToolchainBackend(profile('gcc'), toolchainDefinitions.gcc, testToolchainHost);
 	const rendered = artifactDefinitions['binary-disassembly'].renderer(
 		rawArtifact('not disassembly'),
 		defaultArtifactOptions.display,

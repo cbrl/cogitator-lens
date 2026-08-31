@@ -42,7 +42,7 @@ import {
 import {
 	assemblyControlFlowGraphProducer,
 	clangClLlvmIrOutput,
-	compilerOutputProducer,
+	artifactProducer,
 	gccControlFlowGraphOutput,
 	llvmIrOutput,
 	rustLlvmIrOutput,
@@ -50,7 +50,6 @@ import {
 } from '../artifacts/core/compiler-output-producer.js';
 import { pythonBytecodeProducer } from '../artifacts/python/python-bytecode-producer.js';
 import { pythonAstProducer } from '../artifacts/ast/python-ast-producer.js';
-import { stdoutArtifactProducer } from '../artifacts/core/stdout-artifact-producer.js';
 import {
 	renderClangAst,
 	renderPythonAst,
@@ -325,15 +324,16 @@ const rustDependencyCollection: DependencyCollectionSpec = Object.freeze({
 	parse: parseMakeDepfile,
 });
 
-const gnuPreprocessedSourceProducer = stdoutArtifactProducer(
+const gnuPreprocessedSourceProducer = artifactProducer(
 	'preprocessed-source',
-	{ arguments: () => ['-E'] },
+	{ output: 'stdout', arguments: () => ['-E'] },
 );
-const msvcPreprocessedSourceProducer = stdoutArtifactProducer(
+const msvcPreprocessedSourceProducer = artifactProducer(
 	'preprocessed-source',
-	{ arguments: () => ['/E'] },
+	{ output: 'stdout', arguments: () => ['/E'] },
 );
-const clangAstProducer = stdoutArtifactProducer('ast', {
+const clangAstProducer = artifactProducer('ast', {
+	output: 'stdout',
 	arguments: () => ['-Xclang', '-ast-dump', '-fsyntax-only'],
 	acceptOutputOnError: true,
 });
@@ -361,11 +361,11 @@ const clangArtifacts = artifactCells({
 	},
 	'llvm-ir': {
 		status: 'available',
-		producer: compilerOutputProducer('llvm-ir', llvmIrOutput),
+		producer: artifactProducer('llvm-ir', llvmIrOutput),
 	},
 	'optimization-remarks': {
 		status: 'available',
-		producer: compilerOutputProducer('optimization-remarks', clangOptimizationRemarksOutput),
+		producer: artifactProducer('optimization-remarks', clangOptimizationRemarksOutput),
 		renderer: renderClangOptimizationRemarks,
 	},
 	'stack-analysis': {
@@ -377,7 +377,7 @@ const clangArtifacts = artifactCells({
 			'llvm-ir',
 			'LLVM IR CFG',
 			'Build a graph from the compiler LLVM IR output.',
-			compilerOutputProducer('control-flow-graph', llvmIrOutput),
+			artifactProducer('control-flow-graph', llvmIrOutput),
 		),
 		assemblyControlFlowGraphOutput,
 	]),
@@ -392,7 +392,7 @@ const gccArtifacts = artifactCells({
 	},
 	'optimization-remarks': {
 		status: 'available',
-		producer: compilerOutputProducer('optimization-remarks', gccOptimizationRemarksOutput),
+		producer: artifactProducer('optimization-remarks', gccOptimizationRemarksOutput),
 		renderer: renderGccOptimizationRemarks,
 	},
 	'stack-analysis': {
@@ -404,7 +404,7 @@ const gccArtifacts = artifactCells({
 			'gcc-tree',
 			'GCC tree CFG',
 			'Build a source-level graph from GCC\'s tree CFG dump.',
-			compilerOutputProducer('control-flow-graph', gccControlFlowGraphOutput),
+			artifactProducer('control-flow-graph', gccControlFlowGraphOutput),
 		),
 		assemblyControlFlowGraphOutput,
 	]),
@@ -436,11 +436,11 @@ const clangClArtifacts = artifactCells({
 	},
 	'llvm-ir': {
 		status: 'available',
-		producer: compilerOutputProducer('llvm-ir', clangClLlvmIrOutput),
+		producer: artifactProducer('llvm-ir', clangClLlvmIrOutput),
 	},
 	'optimization-remarks': {
 		status: 'available',
-		producer: compilerOutputProducer('optimization-remarks', clangClOptimizationRemarksOutput),
+		producer: artifactProducer('optimization-remarks', clangClOptimizationRemarksOutput),
 		renderer: renderClangClOptimizationRemarks,
 	},
 	'stack-analysis': {
@@ -452,7 +452,7 @@ const clangClArtifacts = artifactCells({
 			'llvm-ir',
 			'LLVM IR CFG',
 			'Build a graph from the compiler LLVM IR output.',
-			compilerOutputProducer('control-flow-graph', clangClLlvmIrOutput),
+			artifactProducer('control-flow-graph', clangClLlvmIrOutput),
 		),
 		assemblyControlFlowGraphOutput,
 	]),
@@ -462,24 +462,24 @@ const rustArtifacts = artifactCells({
 	assembly: assemblyCell,
 	'llvm-ir': {
 		status: 'available',
-		producer: compilerOutputProducer('llvm-ir', rustLlvmIrOutput),
+		producer: artifactProducer('llvm-ir', rustLlvmIrOutput),
 	},
 	'rust-mir': {
 		status: 'available',
-		producer: compilerOutputProducer('rust-mir', rustMirOutput),
+		producer: artifactProducer('rust-mir', rustMirOutput),
 	},
 	'control-flow-graph': outputArtifactCell([
 		controlFlowGraphOutput(
 			'rust-mir',
 			'Rust MIR CFG',
 			'Build a source-level graph from rustc MIR output.',
-			compilerOutputProducer('control-flow-graph', rustMirOutput),
+			artifactProducer('control-flow-graph', rustMirOutput),
 		),
 		controlFlowGraphOutput(
 			'llvm-ir',
 			'LLVM IR CFG',
 			'Build a graph from rustc LLVM IR output.',
-			compilerOutputProducer('control-flow-graph', rustLlvmIrOutput),
+			artifactProducer('control-flow-graph', rustLlvmIrOutput),
 		),
 		assemblyControlFlowGraphOutput,
 	]),

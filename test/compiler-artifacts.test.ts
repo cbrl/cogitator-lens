@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import { testToolchainHost } from './toolchain-host.js';
 import {
 	clangClLlvmIrOutput,
 	llvmIrOutput,
@@ -101,7 +102,7 @@ test('clang-cl artifact cells dispatch through their clang-compatible specificat
 		}
 		let receivedSpec: unknown;
 		const fakeBackend = {
-			produceCompilerOutput: async (
+			produceArtifact: async (
 				artifactKind: ArtifactKind,
 				_source: unknown,
 				_options: unknown,
@@ -316,7 +317,7 @@ function availability(
 }
 
 function backend(kind: ToolchainKind): ToolchainBackend {
-	return new ToolchainBackend(profile(kind), toolchainDefinitions[kind]);
+	return new ToolchainBackend(profile(kind), toolchainDefinitions[kind], testToolchainHost);
 }
 
 function renderContext(

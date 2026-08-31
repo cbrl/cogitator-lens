@@ -6,7 +6,7 @@ import type {
 	RawArtifact,
 } from '../../types/index.js';
 import type {
-	CompilerOutputSpec,
+	ArtifactOutputSpec,
 	ToolchainBackend,
 } from '../../toolchains/toolchain-backend.js';
 import type { ArtifactProducer } from '../../toolchains/toolchain-map.js';
@@ -29,9 +29,9 @@ export const assemblyControlFlowGraphProducer: ArtifactProducer = async (
 	kind: 'control-flow-graph',
 });
 
-export function compilerOutputProducer(
+export function artifactProducer(
 	kind: ArtifactKind,
-	spec: CompilerOutputSpec,
+	spec: ArtifactOutputSpec,
 ): ArtifactProducer {
 	return (
 		backend: ToolchainBackend,
@@ -39,11 +39,11 @@ export function compilerOutputProducer(
 		options: CompileOptions,
 		cancellationToken: CancellationToken,
 	): Promise<RawArtifact> =>
-		backend.produceCompilerOutput(kind, source, options, spec, cancellationToken);
+		backend.produceArtifact(kind, source, options, spec, cancellationToken);
 }
 
-export const llvmIrOutput: CompilerOutputSpec = Object.freeze({
-	outputFilename: 'output.ll',
+export const llvmIrOutput: ArtifactOutputSpec = Object.freeze({
+	output: { filename: 'output.ll' },
 	arguments: (outputFile: string) => [
 		'-emit-llvm',
 		'-S',
@@ -53,8 +53,8 @@ export const llvmIrOutput: CompilerOutputSpec = Object.freeze({
 	],
 });
 
-export const clangClLlvmIrOutput: CompilerOutputSpec = Object.freeze({
-	outputFilename: 'output.ll',
+export const clangClLlvmIrOutput: ArtifactOutputSpec = Object.freeze({
+	output: { filename: 'output.ll' },
 	arguments: (outputFile: string) => [
 		'/clang:-emit-llvm',
 		'/clang:-S',
@@ -64,8 +64,8 @@ export const clangClLlvmIrOutput: CompilerOutputSpec = Object.freeze({
 	],
 });
 
-export const gccControlFlowGraphOutput: CompilerOutputSpec = Object.freeze({
-	outputFilename: 'output.cfg',
+export const gccControlFlowGraphOutput: ArtifactOutputSpec = Object.freeze({
+	output: { filename: 'output.cfg' },
 	arguments: (outputFile: string, temporaryDirectory: string) => [
 		'-c',
 		`-fdump-tree-cfg=${outputFile}`,
@@ -74,14 +74,14 @@ export const gccControlFlowGraphOutput: CompilerOutputSpec = Object.freeze({
 	],
 });
 
-export const rustMirOutput: CompilerOutputSpec = Object.freeze({
-	outputFilename: 'output.mir',
+export const rustMirOutput: ArtifactOutputSpec = Object.freeze({
+	output: { filename: 'output.mir' },
 	arguments: (outputFile: string, _temporaryDirectory: string, providerArguments: readonly string[]) =>
 		rustArtifactArguments('mir', outputFile, providerArguments),
 });
 
-export const rustLlvmIrOutput: CompilerOutputSpec = Object.freeze({
-	outputFilename: 'output.ll',
+export const rustLlvmIrOutput: ArtifactOutputSpec = Object.freeze({
+	output: { filename: 'output.ll' },
 	arguments: (outputFile: string, _temporaryDirectory: string, providerArguments: readonly string[]) =>
 		rustArtifactArguments('llvm-ir', outputFile, providerArguments),
 });

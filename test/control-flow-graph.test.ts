@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import childProcess from 'node:child_process';
 import path from 'node:path';
 import test from 'node:test';
+import { testToolchainHost } from './toolchain-host.js';
 import {
 	gccControlFlowGraphOutput,
 	llvmIrOutput,
@@ -636,7 +637,7 @@ test('Rust control-flow graph outputs select MIR, LLVM IR, or assembly productio
 	] as const) {
 		let receivedSpec: unknown;
 		const fakeBackend = {
-			produceCompilerOutput: async (
+			produceArtifact: async (
 				_kind: ArtifactKind,
 				_source: unknown,
 				_options: unknown,
@@ -763,7 +764,7 @@ test('installed rustc assembly output produces a machine-level CFG', t => {
 		{ encoding: 'utf8', windowsHide: true },
 	);
 	assert.equal(result.status, 0, result.stderr);
-	const backend = new ToolchainBackend(profile('rust'), toolchainDefinitions.rust);
+	const backend = new ToolchainBackend(profile('rust'), toolchainDefinitions.rust, testToolchainHost);
 	const rendered = renderControlFlowGraphArtifact(
 		rawArtifact('control-flow-graph', result.stdout),
 		defaultArtifactOptions.display,
@@ -783,7 +784,7 @@ test('installed rustc assembly output produces a machine-level CFG', t => {
 test('GCC CFG production owns its dump and temporary object arguments exactly', () => {
 	const temporaryDirectory = path.join('/temporary', 'coglens');
 	const outputFile = path.join(temporaryDirectory, 'output.cfg');
-	assert.equal(gccControlFlowGraphOutput.outputFilename, 'output.cfg');
+	assert.deepEqual(gccControlFlowGraphOutput.output, { filename: 'output.cfg' });
 	assert.deepEqual(
 		gccControlFlowGraphOutput.arguments(outputFile, temporaryDirectory, ['-fdump-tree-cfg=provider.cfg']),
 		[
@@ -840,12 +841,12 @@ test('LLVM and MIR CFG cells dispatch through the expected compiler output specs
 		let receivedOutputFilename: string | undefined;
 		let receivedArguments: readonly string[] | undefined;
 		const fakeBackend = {
-			produceCompilerOutput: async (
+			produceArtifact: async (
 				kind: ArtifactKind,
 				_source: unknown,
 				_options: unknown,
 				spec: {
-					outputFilename: string;
+					output: 'stdout' | { filename: string };
 					arguments: (
 						outputFile: string,
 						temporaryDirectory: string,
@@ -854,7 +855,9 @@ test('LLVM and MIR CFG cells dispatch through the expected compiler output specs
 				},
 			) => {
 				receivedKind = kind;
-				receivedOutputFilename = spec.outputFilename;
+				receivedOutputFilename = spec.output === 'stdout'
+					? undefined
+					: spec.output.filename;
 				receivedArguments = spec.arguments(
 				item.outputFilename === 'output.mir' ? 'cfg.mir' : 'cfg.ll',
 				'/temporary',
@@ -898,15 +901,24 @@ test('LLVM and MIR CFG cells dispatch through the expected compiler output specs
 test('Python CFG producer owns isolated execution arguments and compiles the fixture without executing it', async t => {
 	let receivedKind: ArtifactKind | undefined;
 	let receivedArguments: readonly string[] | undefined;
+	let receivedOutput: unknown;
 	const fakeBackend = {
-		produceStdoutArtifact: async (
+		produceArtifact: async (
 			kind: ArtifactKind,
 			_source: unknown,
 			_options: unknown,
-			spec: { arguments: (temporaryDirectory: string, providerArguments: readonly string[]) => readonly string[] },
+			spec: {
+				output: unknown;
+				arguments: (
+					outputFile: string,
+					temporaryDirectory: string,
+					providerArguments: readonly string[],
+				) => readonly string[];
+			},
 		) => {
 			receivedKind = kind;
-			receivedArguments = spec.arguments('/temporary', []);
+			receivedOutput = spec.output;
+			receivedArguments = spec.arguments('', '/temporary', []);
 			return rawArtifact('control-flow-graph', '');
 		},
 	};
@@ -917,6 +929,7 @@ test('Python CFG producer owns isolated execution arguments and compiles the fix
 		{} as never,
 	);
 	assert.equal(receivedKind, 'control-flow-graph');
+	assert.equal(receivedOutput, 'stdout');
 	assert.deepEqual(receivedArguments, ['-I', '-c', pythonCfgHelper]);
 	assert.match(pythonCfgHelper, /compile\(source,filename,"exec"/u);
 	assert.doesNotMatch(pythonCfgHelper, /import_module|exec\(/u);

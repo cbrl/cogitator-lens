@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import childProcess from 'node:child_process';
 import test from 'node:test';
+import { testToolchainHost } from './toolchain-host.js';
 import { artifactDefinitions } from '../src/artifacts/core/artifact-definitions.js';
 import {
 	pythonAstHelper,
@@ -42,22 +43,26 @@ test('toolchain specifications own preprocessing and Python AST execution modes'
 	for (const [kind, expected] of [
 		['gcc', ['-E']],
 		['msvc', ['/E']],
-	] as const) {
+		] as const) {
 		let received: readonly string[] = [];
+		let receivedOutput: unknown;
 		const fakeBackend = {
 			profile: { kind },
-			produceStdoutArtifact: async (
+			produceArtifact: async (
 				_artifactKind: ArtifactKind,
 				_source: unknown,
 				_options: unknown,
 				spec: {
+					output: unknown;
 					arguments: (
+						outputFile: string,
 						temporaryDirectory: string,
 						providerArguments: readonly string[],
 					) => readonly string[];
 				},
 			) => {
-				received = spec.arguments('/temporary', []);
+				receivedOutput = spec.output;
+				received = spec.arguments('', '/temporary', []);
 				return rawArtifact('preprocessed-source', '');
 			},
 		};
@@ -72,6 +77,7 @@ test('toolchain specifications own preprocessing and Python AST execution modes'
 			{ productionOptions: defaultArtifactOptions.production },
 			{} as never,
 		);
+		assert.equal(receivedOutput, 'stdout');
 		assert.deepEqual(received, expected);
 	}
 	assert.match(pythonAstHelper, /tokenize\.open/);
@@ -300,7 +306,7 @@ function renderContext(
 	sourceText = '',
 ): ArtifactRenderContext {
 	return {
-		backend: new ToolchainBackend(profile(kind), toolchainDefinitions[kind]),
+		backend: new ToolchainBackend(profile(kind), toolchainDefinitions[kind], testToolchainHost),
 		source: {
 			uri: { fsPath: sourceFile } as never,
 			text: sourceText,

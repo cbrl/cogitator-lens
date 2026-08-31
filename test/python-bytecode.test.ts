@@ -20,20 +20,24 @@ test('Python bytecode producer owns module dispatch and uses stdout', async () =
 
 	let receivedKind: ArtifactKind | undefined;
 	let receivedArguments: readonly string[] | undefined;
+	let receivedOutput: unknown;
 	const fakeBackend = {
-		produceStdoutArtifact: async (
+		produceArtifact: async (
 			kind: ArtifactKind,
 			_source: unknown,
 			_options: unknown,
 			spec: {
+				output: unknown;
 				arguments: (
+					outputFile: string,
 					temporaryDirectory: string,
 					providerArguments: readonly string[],
 				) => readonly string[];
 			},
 		) => {
 			receivedKind = kind;
-			receivedArguments = spec.arguments('/temporary', []);
+			receivedOutput = spec.output;
+			receivedArguments = spec.arguments('', '/temporary', []);
 			return rawArtifact('');
 		},
 	};
@@ -45,6 +49,7 @@ test('Python bytecode producer owns module dispatch and uses stdout', async () =
 		{} as never,
 	);
 	assert.equal(receivedKind, 'python-bytecode');
+	assert.equal(receivedOutput, 'stdout');
 	assert.deepEqual(receivedArguments, ['-m', 'dis']);
 });
 

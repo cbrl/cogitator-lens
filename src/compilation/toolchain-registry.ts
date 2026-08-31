@@ -11,6 +11,8 @@ import {
 } from '../toolchains/toolchain-map.js';
 import type { ConfigurationOrigin } from '../buildsystems/variant-provider.js';
 import { structurallyEqual } from '../utils.js';
+import { parseToolDiagnostics } from '../diagnostics.js';
+import { logChannel } from '../logger.js';
 
 interface RegistryEntry {
 	origin: ConfigurationOrigin;
@@ -104,7 +106,12 @@ export class ToolchainRegistry implements Disposable {
 		return {
 			origin,
 			profile,
-			backend: new ToolchainBackend(profile, definition),
+			backend: new ToolchainBackend(profile, definition, {
+				log(message, level = 'info') {
+					logChannel[level](message);
+				},
+				parseDiagnostics: parseToolDiagnostics,
+			}),
 		};
 	}
 }

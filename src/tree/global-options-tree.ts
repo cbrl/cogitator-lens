@@ -6,7 +6,7 @@ import type {
 	ArtifactOptions,
 	ToolchainProfile,
 } from '../types/index.js';
-import { parseArtifactUri } from '../asm-document/artifact-uri.js';
+import { parseArtifactUri } from '../artifact-document/artifact-uri.js';
 import { TreeNode, TreeProvider } from './treedata.js';
 import {
 	resolveArtifactAvailability,

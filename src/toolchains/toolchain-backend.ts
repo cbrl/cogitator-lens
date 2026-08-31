@@ -14,6 +14,7 @@ import type {
 	RawArtifact,
 	ArtifactRenderContext,
 	RenderedArtifact,
+	CompileDiagnostic,
 } from '../types/index.js';
 import { samePath } from '../toolchain-arguments.js';
 import * as exec from '../exec.js';
@@ -52,19 +53,22 @@ export interface BinaryDisassembler {
 	readonly normalizeOutput?: (output: string) => string;
 }
 
-export interface CompilerOutputSpec {
-	readonly outputFilename: string;
-	readonly optionalOutput?: boolean;
-	readonly arguments: (
-		outputFile: string,
-		temporaryDirectory: string,
-		providerArguments: readonly string[],
-	) => readonly string[];
+export interface ToolchainHost {
+	log(message: string, level?: 'info' | 'debug'): void;
+	parseDiagnostics(
+		output: string,
+		source: Uri,
+		workingDirectory: string,
+	): readonly CompileDiagnostic[];
 }
 
-export interface StdoutArtifactSpec {
-	/** Builds the arguments owned by this artifact action after provider arguments are sanitized. */
+export interface ArtifactOutputSpec {
+	readonly output: 'stdout' | {
+		readonly filename: string;
+		readonly optional?: boolean;
+	};
 	readonly arguments: (
+		outputFile: string,
 		temporaryDirectory: string,
 		providerArguments: readonly string[],
 	) => readonly string[];
@@ -102,8 +106,7 @@ const flagsWithSeparateValues = new Set([
 	'/Fi',
 	'/sourceDependencies',
 ]);
-const flagsWithJoinedValues =
-	/^(?:-o|-MF|-MT|-MQ|-dumpdir=|\/[Ff][OoAaDdIi]|\/[Ss]ource[Dd]ependencies:).+/;
+const flagsWithJoinedValues = /^(?:-o|-MF|-MT|-MQ|-dumpdir=|\/[Ff][OoAaDdIi]|\/[Ss]ource[Dd]ependencies:).+/;
 const artifactOutputFlags = /^(?:-emit-llvm|-fdump-tree-cfg(?:-[^=]+)*(?:=.*)?|-save-temps(?:=.*)?|-f(?:no-)?stack-usage|-fsave-optimization-record(?:=.*)?|-foptimization-record-file(?:=.*)?|-fopt-info(?:-[^=]+)?(?:=.*)?|\/clang:-(?:emit-llvm|S|gline-tables-only|save-temps(?:=.*)?|f(?:no-)?stack-usage|fsave-optimization-record(?:=.*)?|foptimization-record-file(?:=.*)?))$/;
 const compilerManagedFlags = new Set([
 	'-S',
@@ -207,9 +210,15 @@ interface PreparedInvocation {
 	readonly started: number;
 }
 
+interface ToolchainRun {
+	readonly invocation: PreparedInvocation;
+	readonly result: exec.ExecResult;
+}
+
 export class ToolchainBackend {
 	readonly profile: ToolchainProfile;
 	private readonly definition: ToolchainDefinition;
+	private readonly host: ToolchainHost;
 	private readonly asmParser?: AsmParser;
 	// Binary disassembly is always GNU objdump-style text (GNU/LLVM objdump, or dumpbin
 	// normalized to that shape by binary-disassembly-producer.ts), regardless of which
@@ -218,9 +227,10 @@ export class ToolchainBackend {
 	// `VcAsmParser`, whose own binary-mode parsing is an unimplemented upstream stub).
 	private readonly binaryAsmParser: AsmParser = new AsmParser(noopPropertyGetter);
 
-	constructor(profile: ToolchainProfile, definition: ToolchainDefinition) {
+	constructor(profile: ToolchainProfile, definition: ToolchainDefinition, host: ToolchainHost) {
 		this.profile = profile;
 		this.definition = definition;
+		this.host = host;
 		this.asmParser = definition.createParser?.();
 	}
 
@@ -233,72 +243,26 @@ export class ToolchainBackend {
 			throw new Error(`${this.profile.displayName} has no assembly production capability.`);
 		}
 		const outputArguments = this.definition.outputArguments;
-		return withTemporaryDirectory('coglens-', async temporaryDirectory => {
-			const outputFile = path.join(temporaryDirectory, 'output.asm');
-			const invocation = await this.prepareInvocation(
-				source,
-				options,
-				providerArguments => [
+		return this.produceArtifactWithTransform(
+			'assembly',
+			source,
+			options,
+			{
+				output: { filename: 'output.asm' },
+				arguments: (outputFile, _temporaryDirectory, providerArguments) => [
 					...this.outputOptionArguments(options.productionOptions),
 					...outputArguments('assembly', outputFile, providerArguments),
 				],
-				cancellationToken,
-			);
-
-			const { logChannel } = await import('../logger.js');
-			logChannel.info(`Compiling ${source.fsPath} with ${this.profile.displayName}`);
-			logChannel.info(`Command: ${this.profile.executable} ${invocation.argumentsList.join(' ')}`);
-			logChannel.debug(`Environment overrides: ${invocation.overriddenNames.join(', ') || '(none)'}`);
-
-			const result = await exec.execute(this.profile.executable, invocation.argumentsList, {
-				cwd: invocation.workingDirectory,
-				env: invocation.preparedEnvironment,
-				cancellationToken,
-			});
-			if (result.returnCode !== 0) {
-				throw new ToolExitError(
-					`Toolchain exited with code ${result.returnCode}`,
-					result.returnCode,
-					result.stdout,
-					result.stderr,
-				);
-			}
-
-			const assembly = await readBoundedArtifactFile(outputFile);
-			const text = await this.postProcessAssembly(
-				assembly,
+			},
+			cancellationToken,
+			(text, invocation) => this.postProcessAssembly(
+				text,
 				options.productionOptions,
 				invocation.preparedEnvironment,
 				invocation.workingDirectory,
 				cancellationToken,
-			);
-			const inputMetadata = await this.collectDependencyInputs(
-				source,
-				invocation,
-				temporaryDirectory,
-				cancellationToken,
-			);
-			const { parseToolDiagnostics } = await import('../diagnostics.js');
-			return {
-				kind: 'assembly',
-				text,
-				diagnostics: parseToolDiagnostics(
-					`${result.stderr}\n${result.stdout}`,
-					source,
-					invocation.workingDirectory,
-				),
-				durationMs: performance.now() - invocation.started,
-				generatedAt: Date.now(),
-				truncated: false,
-				...inputMetadata,
-				command: {
-					executable: this.profile.executable,
-					arguments: invocation.argumentsList,
-					environmentVariableNames: invocation.environmentVariableNames,
-					workingDirectory: invocation.workingDirectory,
-				},
-			};
-		});
+			),
+		);
 	}
 
 	async produceBinaryDisassembly(
@@ -314,7 +278,7 @@ export class ToolchainBackend {
 		const objectFilename = this.definition.objectFilename;
 		return withTemporaryDirectory('coglens-', async temporaryDirectory => {
 			const objectFile = path.join(temporaryDirectory, objectFilename);
-			const invocation = await this.prepareInvocation(
+			const { invocation, result: compilerResult } = await this.run(
 				source,
 				options,
 				providerArguments =>
@@ -326,25 +290,6 @@ export class ToolchainBackend {
 				throw new Error(`${this.profile.displayName} has no ${disassembler.tool} auxiliary tool.`);
 			}
 
-			const { logChannel } = await import('../logger.js');
-			logChannel.info(`Compiling ${source.fsPath} to an object file with ${this.profile.displayName}`);
-			logChannel.info(`Command: ${this.profile.executable} ${invocation.argumentsList.join(' ')}`);
-			logChannel.debug(`Environment overrides: ${invocation.overriddenNames.join(', ') || '(none)'}`);
-
-			const compilerResult = await exec.execute(this.profile.executable, invocation.argumentsList, {
-				cwd: invocation.workingDirectory,
-				env: invocation.preparedEnvironment,
-				cancellationToken,
-			});
-			if (compilerResult.returnCode !== 0) {
-				throw new ToolExitError(
-					`Toolchain exited with code ${compilerResult.returnCode}`,
-					compilerResult.returnCode,
-					compilerResult.stdout,
-					compilerResult.stderr,
-				);
-			}
-
 			const disassemblerArguments = disassembler.arguments(objectFile);
 			this.reportInvocation(
 				options,
@@ -352,7 +297,7 @@ export class ToolchainBackend {
 				disassemblerExecutable,
 				disassemblerArguments,
 			);
-			logChannel.info(`Command: ${disassemblerExecutable} ${disassemblerArguments.join(' ')}`);
+			this.host.log(`Command: ${disassemblerExecutable} ${disassemblerArguments.join(' ')}`);
 			const disassemblerResult = await exec.execute(disassemblerExecutable, disassemblerArguments, {
 				cwd: invocation.workingDirectory,
 				env: invocation.preparedEnvironment,
@@ -376,39 +321,49 @@ export class ToolchainBackend {
 				temporaryDirectory,
 				cancellationToken,
 			);
-			const { parseToolDiagnostics } = await import('../diagnostics.js');
-			return {
-				kind: 'binary-disassembly',
+			return this.buildRawArtifact(
+				'binary-disassembly',
 				text,
-				diagnostics: parseToolDiagnostics(
-					[compilerResult.stderr, compilerResult.stdout, disassemblerResult.stderr].join('\n'),
-					source,
-					invocation.workingDirectory,
-				),
-				durationMs: performance.now() - invocation.started,
-				generatedAt: Date.now(),
-				truncated: false,
-				...inputMetadata,
-				command: {
-					executable: disassemblerExecutable,
-					arguments: disassemblerArguments,
-					environmentVariableNames: invocation.environmentVariableNames,
-					workingDirectory: invocation.workingDirectory,
-				},
-			};
+				[compilerResult.stderr, compilerResult.stdout, disassemblerResult.stderr].join('\n'),
+				source,
+				invocation,
+				inputMetadata,
+				disassemblerExecutable,
+				disassemblerArguments,
+			);
 		});
 	}
 
-	async produceCompilerOutput(
+	async produceArtifact(
 		kind: ArtifactKind,
 		source: Uri,
 		options: CompileOptions,
-		spec: CompilerOutputSpec,
+		spec: ArtifactOutputSpec,
 		cancellationToken: CancellationToken,
 	): Promise<RawArtifact> {
+		return this.produceArtifactWithTransform(
+			kind,
+			source,
+			options,
+			spec,
+			cancellationToken,
+			text => text,
+		);
+	}
+
+	private async produceArtifactWithTransform(
+		kind: ArtifactKind,
+		source: Uri,
+		options: CompileOptions,
+		spec: ArtifactOutputSpec,
+		cancellationToken: CancellationToken,
+		transform: (text: string, invocation: PreparedInvocation) => Promise<string> | string,
+	): Promise<RawArtifact> {
 		return withTemporaryDirectory('coglens-', async temporaryDirectory => {
-			const outputFile = path.join(temporaryDirectory, spec.outputFilename);
-			const invocation = await this.prepareInvocation(
+			const outputFile = spec.output === 'stdout'
+				? ''
+				: path.join(temporaryDirectory, spec.output.filename);
+			const { invocation, result } = await this.run(
 				source,
 				options,
 				providerArguments => spec.arguments(
@@ -417,118 +372,29 @@ export class ToolchainBackend {
 					providerArguments,
 				),
 				cancellationToken,
+				spec.acceptOutputOnError,
 			);
-
-			const { logChannel } = await import('../logger.js');
-			logChannel.info(`Producing ${kind} for ${source.fsPath} with ${this.profile.displayName}`);
-			logChannel.info(`Command: ${this.profile.executable} ${invocation.argumentsList.join(' ')}`);
-			logChannel.debug(`Environment overrides: ${invocation.overriddenNames.join(', ') || '(none)'}`);
-
-			const result = await exec.execute(this.profile.executable, invocation.argumentsList, {
-				cwd: invocation.workingDirectory,
-				env: invocation.preparedEnvironment,
-				cancellationToken,
-			});
-			if (result.returnCode !== 0) {
-				throw new ToolExitError(
-					`Toolchain exited with code ${result.returnCode}`,
-					result.returnCode,
-					result.stdout,
-					result.stderr,
-				);
-			}
-
-			const text = await readBoundedArtifactFile(outputFile, spec.optionalOutput);
+			const rawText = spec.output === 'stdout'
+				? result.stdout
+				: await readBoundedArtifactFile(outputFile, spec.output.optional);
+			const text = await transform(rawText, invocation);
 			const inputMetadata = await this.collectDependencyInputs(
 				source,
 				invocation,
 				temporaryDirectory,
 				cancellationToken,
 			);
-			const { parseToolDiagnostics } = await import('../diagnostics.js');
-			return {
+			const diagnosticOutput = spec.output === 'stdout'
+				? result.stderr
+				: `${result.stderr}\n${result.stdout}`;
+			return this.buildRawArtifact(
 				kind,
 				text,
-				diagnostics: parseToolDiagnostics(
-					`${result.stderr}\n${result.stdout}`,
-					source,
-					invocation.workingDirectory,
-				),
-				durationMs: performance.now() - invocation.started,
-				generatedAt: Date.now(),
-				truncated: false,
-				...inputMetadata,
-				command: {
-					executable: this.profile.executable,
-					arguments: invocation.argumentsList,
-					environmentVariableNames: invocation.environmentVariableNames,
-					workingDirectory: invocation.workingDirectory,
-				},
-			};
-		});
-	}
-
-	async produceStdoutArtifact(
-		kind: ArtifactKind,
-		source: Uri,
-		options: CompileOptions,
-		spec: StdoutArtifactSpec,
-		cancellationToken: CancellationToken,
-	): Promise<RawArtifact> {
-		return withTemporaryDirectory('coglens-', async temporaryDirectory => {
-			const invocation = await this.prepareInvocation(
-				source,
-				options,
-				providerArguments =>
-					spec.arguments(temporaryDirectory, providerArguments),
-				cancellationToken,
-			);
-
-			const { logChannel } = await import('../logger.js');
-			logChannel.info(`Producing ${kind} for ${source.fsPath} with ${this.profile.displayName}`);
-			logChannel.info(`Command: ${this.profile.executable} ${invocation.argumentsList.join(' ')}`);
-			logChannel.debug(`Environment overrides: ${invocation.overriddenNames.join(', ') || '(none)'}`);
-
-			const result = await exec.execute(this.profile.executable, invocation.argumentsList, {
-				cwd: invocation.workingDirectory,
-				env: invocation.preparedEnvironment,
-				cancellationToken,
-			});
-			if (result.returnCode !== 0 && !(spec.acceptOutputOnError && result.stdout)) {
-				throw new ToolExitError(
-					`Toolchain exited with code ${result.returnCode}`,
-					result.returnCode,
-					result.stdout,
-					result.stderr,
-				);
-			}
-
-			const inputMetadata = await this.collectDependencyInputs(
+				diagnosticOutput,
 				source,
 				invocation,
-				temporaryDirectory,
-				cancellationToken,
+				inputMetadata,
 			);
-			const { parseToolDiagnostics } = await import('../diagnostics.js');
-			return {
-				kind,
-				text: result.stdout,
-				diagnostics: parseToolDiagnostics(
-					result.stderr,
-					source,
-					invocation.workingDirectory,
-				),
-				durationMs: performance.now() - invocation.started,
-				generatedAt: Date.now(),
-				truncated: false,
-				...inputMetadata,
-				command: {
-					executable: this.profile.executable,
-					arguments: invocation.argumentsList,
-					environmentVariableNames: invocation.environmentVariableNames,
-					workingDirectory: invocation.workingDirectory,
-				},
-			};
 		});
 	}
 
@@ -552,9 +418,7 @@ export class ToolchainBackend {
 	): RenderedArtifact {
 		const renderer = this.getArtifactRenderer(raw.kind);
 		if (!renderer) {
-			throw new Error(
-				`${this.profile.displayName} has no ${raw.kind} rendering capability.`,
-			);
+			throw new Error(`${this.profile.displayName} has no ${raw.kind} rendering capability.`);
 		}
 		return renderer(raw, options, context);
 	}
@@ -570,6 +434,73 @@ export class ToolchainBackend {
 		return cell.status === 'available' && cell.outputs === undefined
 			? cell.renderer
 			: undefined;
+	}
+
+	private async run(
+		source: Uri,
+		options: CompileOptions,
+		ownedArguments: (providerArguments: readonly string[]) => readonly string[],
+		cancellationToken: CancellationToken,
+		acceptOutputOnError = false,
+	): Promise<ToolchainRun> {
+		const invocation = await this.prepareInvocation(
+			source,
+			options,
+			ownedArguments,
+			cancellationToken,
+		);
+		this.host.log(`Producing an artifact for ${source.fsPath} with ${this.profile.displayName}`);
+		this.host.log(`Command: ${this.profile.executable} ${invocation.argumentsList.join(' ')}`);
+		this.host.log(
+			`Environment overrides: ${invocation.overriddenNames.join(', ') || '(none)'}`,
+			'debug',
+		);
+
+		const result = await exec.execute(this.profile.executable, invocation.argumentsList, {
+			cwd: invocation.workingDirectory,
+			env: invocation.preparedEnvironment,
+			cancellationToken,
+		});
+		if (result.returnCode !== 0 && !(acceptOutputOnError && result.stdout)) {
+			throw new ToolExitError(
+				`Toolchain exited with code ${result.returnCode}`,
+				result.returnCode,
+				result.stdout,
+				result.stderr,
+			);
+		}
+		return { invocation, result };
+	}
+
+	private buildRawArtifact(
+		kind: ArtifactKind,
+		text: string,
+		diagnosticOutput: string,
+		source: Uri,
+		invocation: PreparedInvocation,
+		inputMetadata: ArtifactInputMetadata,
+		executable = this.profile.executable,
+		args: readonly string[] = invocation.argumentsList,
+	): RawArtifact {
+		return {
+			kind,
+			text,
+			diagnostics: this.host.parseDiagnostics(
+				diagnosticOutput,
+				source,
+				invocation.workingDirectory,
+			),
+			durationMs: performance.now() - invocation.started,
+			generatedAt: Date.now(),
+			truncated: false,
+			...inputMetadata,
+			command: {
+				executable,
+				arguments: args,
+				environmentVariableNames: invocation.environmentVariableNames,
+				workingDirectory: invocation.workingDirectory,
+			},
+		};
 	}
 
 	private async prepareInvocation(
@@ -728,10 +659,7 @@ export class ToolchainBackend {
 	}
 }
 
-async function readBoundedArtifactFile(
-	filename: string,
-	optional = false,
-): Promise<string> {
+async function readBoundedArtifactFile(filename: string, optional = false): Promise<string> {
 	let handle: fs.promises.FileHandle;
 	try {
 		handle = await fs.promises.open(filename, 'r');

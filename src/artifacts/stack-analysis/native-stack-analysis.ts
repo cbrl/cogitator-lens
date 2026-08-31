@@ -6,9 +6,9 @@ import type {
 	StackUsageQualifier,
 } from '../../types/index.js';
 import type { ArtifactProducer } from '../../toolchains/toolchain-map.js';
-import type { CompilerOutputSpec } from '../../toolchains/toolchain-backend.js';
+import type { ArtifactOutputSpec } from '../../toolchains/toolchain-backend.js';
 import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
-import { compilerOutputProducer } from '../core/compiler-output-producer.js';
+import { artifactProducer } from '../core/compiler-output-producer.js';
 import {
 	type AnalysisParserDiagnostic,
 	renderAnalysisSource,
@@ -30,8 +30,8 @@ export interface StackUsageParseResult {
 	readonly diagnostics: readonly AnalysisParserDiagnostic[];
 }
 
-export const nativeStackUsageOutput: CompilerOutputSpec = Object.freeze({
-	outputFilename: 'output.su',
+export const nativeStackUsageOutput: ArtifactOutputSpec = Object.freeze({
+	output: { filename: 'output.su' },
 	arguments: (_outputFile: string, temporaryDirectory: string) => [
 		'-c',
 		'-fstack-usage',
@@ -43,8 +43,8 @@ export const nativeStackUsageOutput: CompilerOutputSpec = Object.freeze({
 	],
 });
 
-export const clangClStackUsageOutput: CompilerOutputSpec = Object.freeze({
-	outputFilename: 'output.su',
+export const clangClStackUsageOutput: ArtifactOutputSpec = Object.freeze({
+	output: { filename: 'output.su' },
 	arguments: (_outputFile: string, temporaryDirectory: string) => [
 		'/c',
 		'/clang:-fstack-usage',
@@ -59,12 +59,12 @@ export const clangClStackUsageOutput: CompilerOutputSpec = Object.freeze({
 	],
 });
 
-export const nativeStackAnalysisProducer: ArtifactProducer = compilerOutputProducer(
+export const nativeStackAnalysisProducer: ArtifactProducer = artifactProducer(
 	'stack-analysis',
 	nativeStackUsageOutput,
 );
 
-export const clangClStackAnalysisProducer: ArtifactProducer = compilerOutputProducer(
+export const clangClStackAnalysisProducer: ArtifactProducer = artifactProducer(
 	'stack-analysis',
 	clangClStackUsageOutput,
 );

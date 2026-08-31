@@ -3,7 +3,7 @@ import test from 'node:test';
 import {
 	documentationForInstruction,
 	instructionMnemonic,
-} from '../src/asm-document/instruction-documentation.js';
+} from '../src/artifact-document/instruction-documentation.js';
 import type {
 	ArtifactKind,
 	RenderedArtifactLine,

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
+import { testToolchainHost } from './toolchain-host.js';
 import {
 	artifactDefinitions,
 	supportedArtifactKinds,
@@ -233,6 +234,7 @@ test('assembly rendering maps parsed lines without a binary-mode disassembly fal
 			tools: {},
 		},
 		toolchainDefinitions.gcc,
+		testToolchainHost,
 	);
 	const raw: RawArtifact = {
 		kind: 'assembly',

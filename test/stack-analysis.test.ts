@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { testToolchainHost } from './toolchain-host.js';
 import { artifactDefinitions } from '../src/artifacts/core/artifact-definitions.js';
 import {
 	clangClStackUsageOutput,
@@ -288,7 +289,7 @@ test('Python stack renderer keeps VM-slot units explicit', () => {
 			{ qualifiedName: 'answer', firstLine: 2, stackSize: 7, nesting: [] },
 		],
 	}));
-	const backend = new ToolchainBackend(profile('python'), toolchainDefinitions.python);
+	const backend = new ToolchainBackend(profile('python'), toolchainDefinitions.python, testToolchainHost);
 	const rendered = backend.renderArtifact(
 		raw,
 		defaultArtifactOptions.display,
@@ -332,7 +333,7 @@ function renderContext(
 	text: string,
 ): ArtifactRenderContext {
 	return {
-		backend: new ToolchainBackend(profile(kind), toolchainDefinitions[kind]),
+		backend: new ToolchainBackend(profile(kind), toolchainDefinitions[kind], testToolchainHost),
 		source: { uri: { fsPath: sourceFile } as never, text },
 	};
 }

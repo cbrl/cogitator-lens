@@ -5,7 +5,7 @@ import type {
 	ControlFlowSourceLocation,
 } from '../../types/index.js';
 import type { ArtifactProducer } from '../../toolchains/toolchain-map.js';
-import { stdoutArtifactProducer } from '../core/stdout-artifact-producer.js';
+import { artifactProducer } from '../core/compiler-output-producer.js';
 import { compilerSourceUri, GraphIdAllocator } from '../control-flow-graph/cfg-parser-support.js';
 import type { GraphParseResult } from '../control-flow-graph/control-flow-graph-model.js';
 
@@ -86,9 +86,10 @@ def code_record(code,qualified_name):
 print(json.dumps({"codeObjects":code_record(root,"<module>")},separators=(",",":")))
 `.trim();
 
-export const pythonControlFlowGraphProducer: ArtifactProducer = stdoutArtifactProducer(
+export const pythonControlFlowGraphProducer: ArtifactProducer = artifactProducer(
 	'control-flow-graph',
 	{
+		output: 'stdout',
 		arguments: () => ['-I', '-c', pythonCfgHelper],
 	},
 );

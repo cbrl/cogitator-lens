@@ -45,11 +45,11 @@ export const pythonStackAnalysisProducer: ArtifactProducer = async (
 	options,
 	cancellationToken,
 ) => {
-	const raw = await backend.produceStdoutArtifact(
+	const raw = await backend.produceArtifact(
 		'stack-analysis',
 		source,
 		options,
-		{ arguments: () => ['-I', '-c', pythonStackAnalysisHelper] },
+		{ output: 'stdout', arguments: () => ['-I', '-c', pythonStackAnalysisHelper] },
 		cancellationToken,
 	);
 	const records = parsePythonStackUsage(raw.text);

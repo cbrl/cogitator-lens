@@ -28,12 +28,12 @@ import type {
 import {
 	parseArtifactUri,
 	type ArtifactUriIdentity,
-} from '../asm-document/artifact-uri.js';
-import { CompileHandler, type CompileHandlerStatus } from '../asm-document/compile-handler.js';
+} from '../artifact-document/artifact-uri.js';
+import { ArtifactGenerator, type ArtifactStatus } from '../artifact-document/artifact-generator.js';
 import type {
 	ArtifactDocumentIdentity,
 	ArtifactDocumentSnapshot,
-} from '../asm-document/asm-provider.js';
+} from '../artifact-document/artifact-identity.js';
 import { toComparisonKey } from '../utils.js';
 import { logChannel } from '../logger.js';
 import { getArtifactOutputChoices } from '../toolchains/toolchain-map.js';
@@ -48,7 +48,7 @@ interface GraphPanelDocument {
 	readonly key: string;
 	readonly uri: Uri;
 	readonly identity: ArtifactDocumentIdentity;
-	readonly handler: CompileHandler;
+	readonly handler: ArtifactGenerator;
 	readonly panel: WebviewPanel;
 	subscriptions: Disposable;
 	artifact?: RenderedGraphArtifact;
@@ -143,7 +143,7 @@ export class GraphPanelManager implements Disposable {
 				localResourceRoots: [Uri.joinPath(this.context.extensionUri, 'dist', 'webview')],
 			},
 		);
-		const handler = new CompileHandler(
+		const handler = new ArtifactGenerator(
 			parsed.source,
 			uri,
 			variant,
@@ -207,13 +207,13 @@ export class GraphPanelManager implements Disposable {
 		try {
 			await document.handler.update(cancellation.token);
 		} catch {
-			// CompileHandler publishes the retained/failure state used by the panel and details view.
+			// ArtifactGenerator publishes the retained/failure state used by the panel and details view.
 		} finally {
 			cancellation.dispose();
 		}
 	}
 
-	private acceptStatus(document: GraphPanelDocument, status: CompileHandlerStatus): void {
+	private acceptStatus(document: GraphPanelDocument, status: ArtifactStatus): void {
 		if (status.artifact?.presentation === 'graph') {
 			document.artifact = status.artifact;
 			if (!status.artifact.graphs.some(graph => graph.id === document.selectedGraphId)) {
@@ -308,7 +308,7 @@ export class GraphPanelManager implements Disposable {
 		}
 	}
 
-	private postRender(document: GraphPanelDocument, status: CompileHandlerStatus): void {
+	private postRender(document: GraphPanelDocument, status: ArtifactStatus): void {
 		if (!document.ready) {
 			return;
 		}
@@ -493,7 +493,7 @@ function graphDocumentIdentity(
 }
 
 function diagnosticMessages(
-	status: CompileHandlerStatus,
+	status: ArtifactStatus,
 	artifact?: RenderedGraphArtifact,
 ): string[] {
 	const messages = [

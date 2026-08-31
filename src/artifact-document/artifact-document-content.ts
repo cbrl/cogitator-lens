@@ -8,10 +8,10 @@ import { sourceUriMap, sourceUriSet, UriMap, UriSet } from '../uri-containers.js
  * all source documents it references, and the source-line -> assembly-line
  * mapping used to highlight and dim lines in each direction.
  */
-export interface CompiledAssembly {
+export interface ArtifactDocumentContent {
 	readonly kind: ArtifactKind;
-	readonly srcUri: Uri;
-	readonly asmUri: Uri;
+	readonly sourceUri: Uri;
+	readonly artifactUri: Uri;
 	readonly lines: readonly RenderedArtifactLine[];
 	readonly allReferencedSrcUris: UriSet;
 	readonly sourceLineMappings: UriMap<Map<number, number[]>>;
@@ -22,16 +22,16 @@ export function asmLineHasSource(line: RenderedArtifactLine): boolean {
 	return line.source?.file != null && line.source?.line != null;
 }
 
-export function getContent(assembly: CompiledAssembly): string {
+export function getContent(assembly: ArtifactDocumentContent): string {
 	return assembly.lines.map(line => line.text).join('\n');
 }
 
-export function buildCompiledAssembly(
-	srcUri: Uri,
-	asmUri: Uri,
+export function buildArtifactDocumentContent(
+	sourceUri: Uri,
+	artifactUri: Uri,
 	kind: ArtifactKind,
 	lines: readonly RenderedArtifactLine[],
-): CompiledAssembly {
+): ArtifactDocumentContent {
 	const allReferencedSrcUris = sourceUriSet();
 	const sourceLineMappings = sourceUriMap<Map<number, number[]>>();
 
@@ -55,5 +55,5 @@ export function buildCompiledAssembly(
 		lineMap.set(sourceLine, asmLines);
 	});
 
-	return { kind, srcUri, asmUri, lines, allReferencedSrcUris, sourceLineMappings };
+	return { kind, sourceUri, artifactUri, lines, allReferencedSrcUris, sourceLineMappings };
 }
