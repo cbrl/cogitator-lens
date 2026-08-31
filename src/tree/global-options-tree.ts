@@ -14,6 +14,7 @@ import {
 	resolveArtifactOptionAvailability,
 } from '../toolchains/toolchain-map.js';
 import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
+import { groupNode, messageNode } from './tree-helpers.js';
 
 interface SelectedArtifact {
 	readonly profile?: ToolchainProfile;
@@ -24,21 +25,22 @@ interface SelectedArtifact {
 	readonly outputId?: string;
 }
 
-export class GlobalOptionsNode extends TreeNode {
-	declare children?: GlobalOptionsNode[];
+export interface GlobalOptionsNode extends TreeNode {
 	artifactKind?: ArtifactKind;
+}
 
-	static createFilterTree(
-		options: ArtifactOptions,
-		profile?: ToolchainProfile,
-		kind: ArtifactKind = 'assembly',
-	): GlobalOptionsNode[] {
+export function buildArtifactOptionsTree(
+	options: ArtifactOptions,
+	profile?: ToolchainProfile,
+	kind: ArtifactKind = 'assembly',
+): GlobalOptionsNode[] {
 		if (!profile) {
 			return [{
-				label: 'No toolchain selected',
-				description: 'Open a supported source file',
-				tooltip: 'Open a source file with a compilation variant to configure artifact options.',
-				nodeType: 'text',
+				...messageNode(
+					'No toolchain selected',
+					'Open a supported source file',
+					'Open a source file with a compilation variant to configure artifact options.',
+				),
 				disabled: true,
 			}];
 		}
@@ -59,31 +61,22 @@ export class GlobalOptionsNode extends TreeNode {
 		const display = descriptors.filter(descriptor => descriptor.group === 'display');
 		const groups: GlobalOptionsNode[] = [];
 		if (production.length) {
-			groups.push({
-				label: 'Production Options',
-				nodeType: 'subtree',
-				iconPath: new vscode.ThemeIcon('settings-gear'),
-				children: production.map(descriptor =>
-					optionNode(options, profile, kind, descriptor)),
-			});
+			groups.push(groupNode(
+				'Production Options',
+				'settings-gear',
+				production.map(descriptor => optionNode(options, profile, kind, descriptor)),
+			));
 		}
 		if (display.length) {
-			groups.push({
-				label: 'Display Options',
-				nodeType: 'subtree',
-				iconPath: new vscode.ThemeIcon('filter'),
-				children: display.map(descriptor =>
-					optionNode(options, profile, kind, descriptor)),
-			});
+			groups.push(groupNode(
+				'Display Options',
+				'filter',
+				display.map(descriptor => optionNode(options, profile, kind, descriptor)),
+			));
 		}
 		return groups.length
 			? groups
-			: [{
-				label: 'No options',
-				description: artifactDefinitions[kind].label,
-				nodeType: 'text',
-			}];
-	}
+			: [messageNode('No options', artifactDefinitions[kind].label)];
 }
 
 export class GlobalOptionsTreeProvider extends TreeProvider<GlobalOptionsNode> {
@@ -98,7 +91,7 @@ export class GlobalOptionsTreeProvider extends TreeProvider<GlobalOptionsNode> {
 		const selected = this.selectedArtifact();
 		return [
 			bindingNode(selected),
-			...GlobalOptionsNode.createFilterTree(
+			...buildArtifactOptionsTree(
 			this.compilationService.getArtifactOptions(selected.kind),
 			selected.profile,
 			selected.kind,

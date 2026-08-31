@@ -11,23 +11,24 @@ import {
 } from '../artifact-document/artifact-document-provider.js';
 import type { ArtifactDocumentSnapshot } from '../artifact-document/artifact-identity.js';
 import { TreeNode, TreeProvider } from './treedata.js';
+import { messageNode } from './tree-helpers.js';
 
-export class ArtifactDetailsTreeNode extends TreeNode {
-	readonly id: string;
-	declare children?: ArtifactDetailsTreeNode[];
+export interface ArtifactDetailsTreeNode extends TreeNode {
+}
 
-	constructor(item: ArtifactDetailsItem) {
-		super();
-		this.id = item.id;
-		this.label = item.label;
-		this.description = item.value;
-		this.tooltip = item.value !== undefined ? `${item.label}: ${item.value}` : item.label;
-		this.copyText = item.copyText;
-		this.children = item.children?.map(child => new ArtifactDetailsTreeNode(child));
-		this.nodeType = this.children ? 'subtree' : 'text';
-		this.treeContext = item.copyText !== undefined ? 'text' : undefined;
-		this.iconPath = this.children ? groupIcon(item.id) : undefined;
-	}
+function buildArtifactDetailsTreeNode(item: ArtifactDetailsItem): ArtifactDetailsTreeNode {
+	const children = item.children?.map(buildArtifactDetailsTreeNode);
+	return {
+		id: item.id,
+		label: item.label,
+		description: item.value,
+		tooltip: item.value !== undefined ? `${item.label}: ${item.value}` : item.label,
+		copyText: item.copyText,
+		children,
+		nodeType: children ? 'subtree' : 'text',
+		treeContext: item.copyText !== undefined ? 'text' : undefined,
+		iconPath: children ? groupIcon(item.id) : undefined,
+	};
 }
 
 export class ArtifactDetailsTreeProvider extends TreeProvider<ArtifactDetailsTreeNode> {
@@ -76,14 +77,12 @@ export class ArtifactDetailsTreeProvider extends TreeProvider<ArtifactDetailsTre
 		}
 		const definition = artifactDefinitions[this.snapshot.identity.artifactKind];
 		return buildArtifactDetails(this.snapshot, definition.metricLabels)
-			.map(item => new ArtifactDetailsTreeNode(item));
+			.map(buildArtifactDetailsTreeNode);
 	}
 }
 
 function emptyState(label: string): ArtifactDetailsTreeNode {
-	const node = new ArtifactDetailsTreeNode({ id: 'empty', label });
-	node.disabled = true;
-	return node;
+	return { id: 'empty', ...messageNode(label), disabled: true };
 }
 
 function groupIcon(id: string): vscode.ThemeIcon {

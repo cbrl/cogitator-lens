@@ -19,7 +19,7 @@ export type TreeContextSpecifier =
 	| 'text'
 	| 'userToolchain';
 
-export class TreeNode {
+export interface TreeNode {
 	/** Stable identity used to preserve tree rows across refreshes. */
 	id?: string;
 

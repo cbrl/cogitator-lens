@@ -25,14 +25,15 @@ import { parseToolDiagnostics } from '../../src/diagnostics.js';
 import { CompilationService } from '../../src/compilation/compilation-service.js';
 import type { ConfigurationService } from '../../src/services/configuration-service.js';
 import {
-	CompilationInfoTreeNode,
+	buildCompilationInfoTree,
+	type CompilationInfoTreeNode,
 	CompilationInfoTreeProvider,
 } from '../../src/tree/compilation-info-tree.js';
-import { ToolchainTreeNode } from '../../src/tree/toolchain-tree.js';
+import { buildToolchainTreeNode, type ToolchainTreeNode } from '../../src/tree/toolchain-tree.js';
 import { getArtifactUri, parseArtifactUri } from '../../src/artifact-document/artifact-uri.js';
 import { ArtifactGenerator } from '../../src/artifact-document/artifact-generator.js';
-import { GlobalOptionsNode } from '../../src/tree/global-options-tree.js';
-import { ArtifactPresetTreeNode } from '../../src/tree/artifact-presets-tree.js';
+import { buildArtifactOptionsTree, type GlobalOptionsNode } from '../../src/tree/global-options-tree.js';
+import { buildArtifactPresetTreeNode, type ArtifactPresetTreeNode } from '../../src/tree/artifact-presets-tree.js';
 import { ArtifactNavigationProvider } from '../../src/artifact-document/artifact-navigation-provider.js';
 import { ArtifactDetailsTreeProvider } from '../../src/tree/artifact-details-tree.js';
 import type { ArtifactDocumentSnapshot } from '../../src/artifact-document/artifact-identity.js';
@@ -1186,7 +1187,7 @@ function verifyTreeModels(workspaceFolder: vscode.WorkspaceFolder): void {
 		...toolchainProfile('cmake:gcc', '-O2'),
 		tools: { demangler: process.execPath },
 	};
-	const compilerNode = ToolchainTreeNode.from(profile, 'cmake');
+	const compilerNode = buildToolchainTreeNode(profile, 'cmake');
 	assert.equal(compilerNode.description, 'CMake');
 	for (const expectedGroup of [
 		'Toolchain information',
@@ -1197,11 +1198,11 @@ function verifyTreeModels(workspaceFolder: vscode.WorkspaceFolder): void {
 		assert.ok(findTreeNode(compilerNode, expectedGroup), `Missing toolchain tree group: ${expectedGroup}`);
 	}
 
-	const optionRoots = GlobalOptionsNode.createFilterTree(defaultArtifactOptions, profile);
+	const optionRoots = buildArtifactOptionsTree(defaultArtifactOptions, profile);
 	const outputOptions = optionRoots.find(node => node.label === 'Production Options');
 	assert.equal(outputOptions?.children?.find(node => node.label === 'Intel syntax')?.disabled, false);
 	assert.equal(outputOptions?.children?.find(node => node.label === 'Demangle symbols')?.disabled, false);
-	const msvcOptions = GlobalOptionsNode.createFilterTree(defaultArtifactOptions, {
+	const msvcOptions = buildArtifactOptionsTree(defaultArtifactOptions, {
 		...profile,
 		kind: 'msvc',
 		tools: {},
@@ -1213,7 +1214,7 @@ function verifyTreeModels(workspaceFolder: vscode.WorkspaceFolder): void {
 	assert.equal(intel?.description, 'Inherent');
 	assert.equal(demangle?.disabled, true);
 	assert.equal(demangle?.description, 'Unavailable');
-	const presetNode = ArtifactPresetTreeNode.from({
+	const presetNode = buildArtifactPresetTreeNode({
 		id: 'optimized',
 		artifactKind: 'assembly',
 		extraArguments: ['-O3'],
@@ -1252,7 +1253,7 @@ function verifyTreeModels(workspaceFolder: vscode.WorkspaceFolder): void {
 		},
 	} as unknown as CompilationService;
 
-	const roots = CompilationInfoTreeNode.build(compilationService);
+	const roots = buildCompilationInfoTree(compilationService);
 	assert.equal(roots.length, 1);
 	assert.equal(roots[0].label, workspaceFolder.name);
 	const project = directChild(roots[0], 'DemoProject');
