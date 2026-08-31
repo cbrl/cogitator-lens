@@ -31,7 +31,7 @@ export function toComparisonKey(
 ): string {
 	return uri
 		.with({
-			path: ignorePathCase ? uri.path.toLowerCase() : undefined, //'undefined' will result in no change to the segment
+			path: ignorePathCase ? uri.path.toLowerCase() : undefined, // 'undefined' will result in no change to the segment
 			fragment: ignoreFragment ? '' : undefined,
 		})
 		.toString();
