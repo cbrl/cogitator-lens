@@ -48,11 +48,8 @@ import {
 	resolveArtifactPreset,
 	type ArtifactPreset,
 } from '../artifacts/ui/presets.js';
-import {
-	artifactInputComparisonKey,
-	validateArtifactInputs,
-} from './artifact-inputs.js';
-import { pathToFileURL } from 'node:url';
+import { validateArtifactInputs } from './artifact-inputs.js';
+import { RawArtifactCache } from './raw-artifact-cache.js';
 
 export class CompilationService {
 	readonly toolchainRegistry: ToolchainRegistry;
@@ -60,9 +57,7 @@ export class CompilationService {
 	private readonly changeEmitter = new EventEmitter<readonly Uri[]>();
 	private readonly artifactOptionsChangeEmitter = new EventEmitter<ArtifactKind>();
 	private readonly subscriptions: Disposable[] = [];
-	private readonly rawArtifactCache = new Map<string, RawArtifact>();
-	private readonly inputToRawCacheKeys = new Map<string, Set<string>>();
-	private readonly rawCacheKeyToSource = new Map<string, Uri>();
+	private readonly rawArtifactCache = new RawArtifactCache();
 	private readonly currentArtifactOptions = new Map<ArtifactKind, ArtifactOptions>();
 
 	readonly onVariantsChanged: Event<readonly Uri[]> = this.changeEmitter.event;
@@ -82,13 +77,13 @@ export class CompilationService {
 			configuration.onDidChange(() => this.reloadUserConfiguration()),
 			this.variants.onDidChange(sources => this.changeEmitter.fire(sources)),
 			this.toolchainRegistry.onDidChange(() => {
-				this.clearRawArtifactCache();
+				this.rawArtifactCache.clear();
 				this.changeEmitter.fire(this.variantsSources());
 			}),
 			inputWatcher,
-			inputWatcher.onDidChange(uri => this.evictInput(uri)),
-			inputWatcher.onDidDelete(uri => this.evictInput(uri)),
-			inputWatcher.onDidCreate(uri => this.evictInput(uri)),
+			inputWatcher.onDidChange(uri => this.handleInputChange(uri)),
+			inputWatcher.onDidDelete(uri => this.handleInputChange(uri)),
+			inputWatcher.onDidCreate(uri => this.handleInputChange(uri)),
 		);
 	}
 
@@ -212,7 +207,7 @@ export class CompilationService {
 				artifact: await this.renderArtifact(cached, options, renderContext, cell.renderer),
 			};
 		} else if (cached) {
-			this.removeRawArtifact(key);
+			this.rawArtifactCache.delete(key);
 		}
 
 		try {
@@ -228,7 +223,7 @@ export class CompilationService {
 				},
 				cancellationToken,
 			);
-			this.cacheRawArtifact(key, raw, variant.source);
+			this.rawArtifactCache.set(key, raw, variant.source);
 			return {
 				status: 'available',
 				artifact: await this.renderArtifact(raw, options, renderContext, cell.renderer),
@@ -268,7 +263,7 @@ export class CompilationService {
 		this.artifactOptionsChangeEmitter.dispose();
 		this.variants.dispose();
 		this.toolchainRegistry.dispose();
-		this.clearRawArtifactCache();
+		this.rawArtifactCache.clear();
 	}
 
 	private async renderArtifact(
@@ -330,53 +325,10 @@ export class CompilationService {
 		return `coglens.variant.${file.toString()}`;
 	}
 
-	private cacheRawArtifact(key: string, artifact: RawArtifact, source: Uri): void {
-		this.removeRawArtifact(key);
-		this.rawArtifactCache.set(key, artifact);
-		this.rawCacheKeyToSource.set(key, source);
-		for (const input of artifact.inputs) {
-			const inputKey = artifactInputComparisonKey(input.uri);
-			const keys = this.inputToRawCacheKeys.get(inputKey) ?? new Set<string>();
-			keys.add(key);
-			this.inputToRawCacheKeys.set(inputKey, keys);
-		}
-	}
-
-	private removeRawArtifact(key: string): void {
-		const artifact = this.rawArtifactCache.get(key);
-		if (!artifact) {
-			return;
-		}
-		this.rawArtifactCache.delete(key);
-		this.rawCacheKeyToSource.delete(key);
-		for (const input of artifact.inputs) {
-			const inputKey = artifactInputComparisonKey(input.uri);
-			const keys = this.inputToRawCacheKeys.get(inputKey);
-			keys?.delete(key);
-			if (keys?.size === 0) {
-				this.inputToRawCacheKeys.delete(inputKey);
-			}
-		}
-	}
-
-	private clearRawArtifactCache(): void {
-		this.rawArtifactCache.clear();
-		this.inputToRawCacheKeys.clear();
-		this.rawCacheKeyToSource.clear();
-	}
-
-	private evictInput(uri: Uri): void {
-		const inputKey = artifactInputComparisonKey(pathToFileURL(uri.fsPath).href);
-		const affectedSources = new Map<string, Uri>();
-		for (const key of [...(this.inputToRawCacheKeys.get(inputKey) ?? [])]) {
-			const source = this.rawCacheKeyToSource.get(key);
-			if (source) {
-				affectedSources.set(source.toString(), source);
-			}
-			this.removeRawArtifact(key);
-		}
-		if (affectedSources.size > 0) {
-			this.changeEmitter.fire([...affectedSources.values()]);
+	private handleInputChange(uri: Uri): void {
+		const affectedSources = this.rawArtifactCache.evictInput(uri);
+		if (affectedSources.length > 0) {
+			this.changeEmitter.fire(affectedSources);
 		}
 	}
 }

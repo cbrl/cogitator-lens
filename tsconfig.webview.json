@@ -11,8 +11,9 @@
 	"include": [
 		"webview-src/**/*.ts",
 		"src/webview/graph-protocol.ts",
-		"src/artifacts/control-flow-graph-model.ts",
+		"src/artifacts/control-flow-graph/control-flow-graph-model.ts",
+		"src/artifacts/control-flow-graph/graph-structure.ts",
 		"src/types/**/*.ts",
-		"src/artifacts/artifact-definitions.ts"
+		"src/artifacts/core/artifact-definitions.ts"
 	]
 }
