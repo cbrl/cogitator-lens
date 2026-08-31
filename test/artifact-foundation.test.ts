@@ -13,6 +13,7 @@ import {
 import {
 	supportedToolchainKinds,
 	toolchainDefinitions,
+	type ToolchainDefinition,
 } from '../src/toolchains/toolchain-map.js';
 import { ToolchainBackend } from '../src/toolchains/toolchain-backend.js';
 import {
@@ -33,6 +34,25 @@ test('artifact and toolchain tables define the complete cross-product', () => {
 		assert.ok(definition.languageIdentifiers.length > 0);
 		assert.ok(Object.values(definition.artifacts).some(cell => cell.status === 'available'));
 	}
+});
+
+test('control-flow graph outputs own parsers compatible with their toolchains', () => {
+	for (const toolchainKind of supportedToolchainKinds) {
+		const definition: ToolchainDefinition = toolchainDefinitions[toolchainKind];
+		const cell = definition.artifacts['control-flow-graph'];
+		if (cell.status !== 'available') {
+			continue;
+		}
+		assert.ok(cell.outputs);
+		for (const output of cell.outputs ?? []) {
+			assert.equal(typeof output.parseGraphs, 'function');
+			if (output.id === 'assembly') {
+				assert.equal(typeof definition.createCfgParser, 'function');
+			}
+		}
+	}
+	const pythonDefinition: ToolchainDefinition = toolchainDefinitions.python;
+	assert.equal(pythonDefinition.createCfgParser, undefined);
 });
 
 test('the manifest toolchain-kind enum and artifactOptions schema stay synchronized with the code tables', () => {

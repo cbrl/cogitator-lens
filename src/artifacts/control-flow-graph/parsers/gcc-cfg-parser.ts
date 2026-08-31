@@ -4,9 +4,9 @@ import type {
 	ControlFlowGraph,
 	ControlFlowNode,
 	ControlFlowSourceLocation,
-} from '../../types/index.js';
-import { compilerSourceUri, GraphIdAllocator, splitLines } from './cfg-parser-support.js';
-import type { GraphParseResult } from './control-flow-graph-model.js';
+} from '../../../types/index.js';
+import { compilerSourceUri, GraphIdAllocator, splitLines } from '../cfg-parser-support.js';
+import type { GraphParseResult } from '../control-flow-graph-model.js';
 
 /**
  * Parse the textual CFG emitted by GCC's tree dump pass.

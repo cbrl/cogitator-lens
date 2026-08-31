@@ -37,7 +37,10 @@ import {
 	artifactDefinitions,
 	supportedArtifactKinds,
 } from '../artifacts/core/artifact-definitions.js';
-import { resolveArtifactOutput } from '../toolchains/toolchain-map.js';
+import {
+	resolveArtifactOutput,
+	type ToolchainArtifactOutput,
+} from '../toolchains/toolchain-map.js';
 import { ToolchainRegistry } from './toolchain-registry.js';
 import { CompilationConfigDatabase } from './compilation-config.js';
 import { parseToolDiagnostics } from '../diagnostics.js';
@@ -194,7 +197,7 @@ export class CompilationService {
 		const renderContext: ArtifactRenderContext = {
 			backend,
 			...(request.artifactOutputId
-				? { artifactOutputId: request.artifactOutputId }
+				? { artifactOutput: cell as ToolchainArtifactOutput }
 				: {}),
 			source: {
 				uri: variant.source,

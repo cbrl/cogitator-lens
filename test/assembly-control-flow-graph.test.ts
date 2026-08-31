@@ -2,18 +2,18 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
-import { toAssemblyLines } from '../src/artifacts/control-flow-graph/cfg/assembly-line.js';
-import type { AssemblyLine } from '../src/artifacts/control-flow-graph/cfg/assembly-line.js';
+import { toAssemblyLines } from '../src/artifacts/control-flow-graph/parsers/assembly-line.js';
+import type { AssemblyLine } from '../src/artifacts/control-flow-graph/parsers/assembly-line.js';
 import {
 	ClangAssemblyCfgParser,
 	GccAssemblyCfgParser,
 	MsvcAssemblyCfgParser,
-} from '../src/artifacts/control-flow-graph/cfg/assembly-dialects.js';
+} from '../src/artifacts/control-flow-graph/parsers/assembly-dialects.js';
 import {
 	ArmInstructionSetInfo,
 	InstructionSetInfo,
 	MsvcInstructionSetInfo,
-} from '../src/artifacts/control-flow-graph/cfg/instruction-sets.js';
+} from '../src/artifacts/control-flow-graph/parsers/instruction-sets.js';
 import { validateControlFlowGraphs } from '../src/artifacts/control-flow-graph/control-flow-graph-model.js';
 import { noopPropertyGetter } from '../src/vendor/compiler-props.js';
 import { VcAsmParser } from '../src/vendor/lib/parsers/asm-parser-vc.js';

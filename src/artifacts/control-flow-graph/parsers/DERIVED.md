@@ -94,13 +94,13 @@ site in the source.
 
 ## Parsers deliberately not derived from upstream
 
-- **GCC** (`../gcc-cfg-parser.ts`) reads `-fdump-tree-cfg`. Upstream's
+- **GCC** (`gcc-cfg-parser.ts`) reads `-fdump-tree-cfg`. Upstream's
   `cfg-parsers/gcc.ts` parses assembly, which is a different and less
   source-legible view. The assembly dialect is available here as
   `GccAssemblyCfgParser` if a machine-level view is wanted later.
-- **Rust MIR** (`../rust-mir-cfg-parser.ts`) has no upstream equivalent; rustc
+- **Rust MIR** (`rust-mir-cfg-parser.ts`) has no upstream equivalent; rustc
   reaches upstream CFGs through the LLVM or assembly path.
-- **Python** (`../python-cfg.ts`) uses structured `dis` metadata from the running
+- **Python** (`python-cfg-parser.ts`) uses structured `dis` metadata from the running
   interpreter. Upstream's `cfg-parsers/python.ts` regex-scans `dis` text and
   branches on interpreter version (`>>` markers for 3.12 and earlier, `L<n>:`
   labels for 3.13).

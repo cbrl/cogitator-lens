@@ -49,6 +49,7 @@ import {
 	rustMirOutput,
 } from '../artifacts/core/compiler-output-producer.js';
 import { pythonBytecodeProducer } from '../artifacts/python/python-bytecode-producer.js';
+import { pythonControlFlowGraphProducer } from '../artifacts/python/python-cfg-producer.js';
 import { pythonAstProducer } from '../artifacts/ast/python-ast-producer.js';
 import {
 	renderClangAst,
@@ -78,7 +79,19 @@ import {
 	pythonStackAnalysisProducer,
 	renderPythonStackAnalysis,
 } from '../artifacts/stack-analysis/python-stack-analysis.js';
-import { pythonControlFlowGraphProducer } from '../artifacts/control-flow-graph/python-cfg.js';
+import type { GraphParseResult } from '../artifacts/control-flow-graph/control-flow-graph-model.js';
+import { toAssemblyLines } from '../artifacts/control-flow-graph/parsers/assembly-line.js';
+import {
+	ClangAssemblyCfgParser,
+	GccAssemblyCfgParser,
+	MsvcAssemblyCfgParser,
+} from '../artifacts/control-flow-graph/parsers/assembly-dialects.js';
+import { InstructionSetInfo } from '../artifacts/control-flow-graph/parsers/instruction-sets.js';
+import { parseGccControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/gcc-cfg-parser.js';
+import { parseLlvmControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/llvm-ir-cfg-parser.js';
+import { parsePythonControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/python-cfg-parser.js';
+import { parseRustMirControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/rust-mir-cfg-parser.js';
+import type { AssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/assembly-cfg-parser.js';
 
 export type ToolCapabilityStatus = 'available' | 'unavailable' | 'unsupported';
 
@@ -110,10 +123,16 @@ export interface ToolchainArtifactOutput extends ToolchainArtifactImplementation
 	readonly id: string;
 	readonly label: string;
 	readonly description: string;
+	readonly parseGraphs?: (
+		raw: RawArtifact,
+		options: DisplayOptions,
+		context: ArtifactRenderContext,
+	) => GraphParseResult;
 }
 
 type ResolvedToolchainArtifactCell =
-	| (ToolchainArtifactImplementation & { readonly status: 'available' })
+	| (ToolchainArtifactImplementation & { readonly status: 'available'; readonly id?: never })
+	| (ToolchainArtifactOutput & { readonly status: 'available' })
 	| {
 		readonly status: 'unavailable' | 'unsupported';
 		readonly explanation: string;
@@ -152,6 +171,7 @@ export interface ToolchainDefinitionShape {
 		workingDirectory: string,
 	) => readonly string[];
 	readonly createParser?: () => AsmParser;
+	readonly createCfgParser?: () => AssemblyCfgParser;
 	readonly prepareEnvironment?: (
 		profile: ToolchainProfile,
 		environment: NodeJS.ProcessEnv,
@@ -213,13 +233,30 @@ const controlFlowGraphOutput = (
 	label: string,
 	description: string,
 	producer: ArtifactProducer,
-): ToolchainArtifactOutput => Object.freeze({ id, label, description, producer });
+	parseGraphs: NonNullable<ToolchainArtifactOutput['parseGraphs']>,
+): ToolchainArtifactOutput => Object.freeze({ id, label, description, producer, parseGraphs });
+
+const parseAssemblyControlFlowGraphs: NonNullable<ToolchainArtifactOutput['parseGraphs']> = (
+	raw,
+	options,
+	context,
+) => {
+	const parsedAssembly = context.backend.parseAssembly(raw.text, options);
+	const lines = toAssemblyLines(
+		parsedAssembly.asm,
+		context.source.uri.toString(),
+		raw.command.workingDirectory,
+	);
+	const definition: ToolchainDefinitionShape = toolchainDefinitions[context.backend.profile.kind];
+	return definition.createCfgParser!().parse(lines);
+};
 
 const assemblyControlFlowGraphOutput = controlFlowGraphOutput(
 	'assembly',
 	'Assembly CFG',
 	'Build a machine-level graph from the compiler assembly listing.',
 	assemblyControlFlowGraphProducer,
+	parseAssemblyControlFlowGraphs,
 );
 
 function unsupportedCell(kind: ArtifactKind): ToolchainArtifactCell {
@@ -378,6 +415,7 @@ const clangArtifacts = artifactCells({
 			'LLVM IR CFG',
 			'Build a graph from the compiler LLVM IR output.',
 			artifactProducer('control-flow-graph', llvmIrOutput),
+			(raw) => parseLlvmControlFlowGraphs(raw.text, raw.command.workingDirectory),
 		),
 		assemblyControlFlowGraphOutput,
 	]),
@@ -405,6 +443,7 @@ const gccArtifacts = artifactCells({
 			'GCC tree CFG',
 			'Build a source-level graph from GCC\'s tree CFG dump.',
 			artifactProducer('control-flow-graph', gccControlFlowGraphOutput),
+			(raw) => parseGccControlFlowGraphs(raw.text, raw.command.workingDirectory),
 		),
 		assemblyControlFlowGraphOutput,
 	]),
@@ -453,6 +492,7 @@ const clangClArtifacts = artifactCells({
 			'LLVM IR CFG',
 			'Build a graph from the compiler LLVM IR output.',
 			artifactProducer('control-flow-graph', clangClLlvmIrOutput),
+			(raw) => parseLlvmControlFlowGraphs(raw.text, raw.command.workingDirectory),
 		),
 		assemblyControlFlowGraphOutput,
 	]),
@@ -474,12 +514,14 @@ const rustArtifacts = artifactCells({
 			'Rust MIR CFG',
 			'Build a source-level graph from rustc MIR output.',
 			artifactProducer('control-flow-graph', rustMirOutput),
+			(raw) => parseRustMirControlFlowGraphs(raw.text, raw.command.workingDirectory),
 		),
 		controlFlowGraphOutput(
 			'llvm-ir',
 			'LLVM IR CFG',
 			'Build a graph from rustc LLVM IR output.',
 			artifactProducer('control-flow-graph', rustLlvmIrOutput),
+			(raw) => parseLlvmControlFlowGraphs(raw.text, raw.command.workingDirectory),
 		),
 		assemblyControlFlowGraphOutput,
 	]),
@@ -506,6 +548,7 @@ const pythonArtifacts = artifactCells({
 			'Python bytecode CFG',
 			'Build a graph from recursively inspected Python bytecode.',
 			pythonControlFlowGraphProducer,
+			(raw) => parsePythonControlFlowGraphs(raw.text, raw.command.workingDirectory),
 		),
 	]),
 });
@@ -522,6 +565,7 @@ export const toolchainDefinitions = {
 		outputArguments: gnuOutputArguments(['-g1']),
 		dependencyCollection: gnuDependencyCollection,
 		createParser: defaultAsmParser,
+		createCfgParser: () => new GccAssemblyCfgParser(new InstructionSetInfo()),
 		discoverTools: toolDiscoverer({ demangler: 'c++filt', disassembler: 'objdump' }),
 		artifacts: gccArtifacts,
 	},
@@ -535,6 +579,7 @@ export const toolchainDefinitions = {
 		outputArguments: clangClOutputArguments,
 		dependencyCollection: msvcDependencyCollection,
 		createParser: defaultAsmParser,
+		createCfgParser: () => new ClangAssemblyCfgParser(new InstructionSetInfo()),
 		prepareEnvironment: captureWindowsEnvironment,
 		demangle: windowsDemangle,
 		discoverTools: toolDiscoverer({ demangler: 'llvm-cxxfilt', disassembler: 'llvm-objdump' }),
@@ -550,6 +595,7 @@ export const toolchainDefinitions = {
 		outputArguments: msvcOutputArguments,
 		dependencyCollection: msvcDependencyCollection,
 		createParser: createMsvcAsmParser,
+		createCfgParser: () => new MsvcAssemblyCfgParser(),
 		prepareEnvironment: captureWindowsEnvironment,
 		demangle: windowsDemangle,
 		discoverTools: toolDiscoverer({ demangler: 'undname', disassembler: 'dumpbin' }),
@@ -566,6 +612,7 @@ export const toolchainDefinitions = {
 		outputArguments: gnuOutputArguments(['-gline-tables-only']),
 		dependencyCollection: gnuDependencyCollection,
 		createParser: defaultAsmParser,
+		createCfgParser: () => new ClangAssemblyCfgParser(new InstructionSetInfo()),
 		discoverTools: toolDiscoverer({ demangler: 'llvm-cxxfilt', disassembler: 'llvm-objdump' }),
 		artifacts: clangArtifacts,
 	},
@@ -580,6 +627,7 @@ export const toolchainDefinitions = {
 		outputArguments: gnuOutputArguments(['-gline-tables-only']),
 		dependencyCollection: gnuDependencyCollection,
 		createParser: defaultAsmParser,
+		createCfgParser: () => new ClangAssemblyCfgParser(new InstructionSetInfo()),
 		discoverTools: toolDiscoverer({ demangler: 'llvm-cxxfilt', disassembler: 'llvm-objdump' }),
 		artifacts: clangArtifacts,
 	},
@@ -598,6 +646,7 @@ export const toolchainDefinitions = {
 		stripOwnedArguments: stripRustManagedArguments,
 		dependencyCollection: rustDependencyCollection,
 		createParser: defaultAsmParser,
+		createCfgParser: () => new ClangAssemblyCfgParser(new InstructionSetInfo()),
 		discoverTools: toolDiscoverer({ demangler: 'rustfilt' }),
 		artifacts: rustArtifacts,
 	},

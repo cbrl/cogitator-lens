@@ -7,6 +7,7 @@ import type {
 	RenderedTextArtifact,
 } from '../../types/index.js';
 import type { ToolchainBackend } from '../../toolchains/toolchain-backend.js';
+import type { ToolchainArtifactOutput } from '../../toolchains/toolchain-map.js';
 import type { Uri } from 'vscode';
 import type { ParsedAsmResultLine } from '../../vendor/types/asmresult/asmresult.interfaces.js';
 import type { ParsedAsmResult } from '../../vendor/types/asmresult/asmresult.interfaces.js';
@@ -35,8 +36,8 @@ export interface ArtifactNavigationFeatures {
 
 export interface ArtifactRenderContext {
 	readonly backend: ToolchainBackend;
-	/** The compiler output selected for an output-backed artifact. */
-	readonly artifactOutputId?: string;
+	/** The resolved compiler output selected for an output-backed artifact. */
+	readonly artifactOutput?: ToolchainArtifactOutput;
 	readonly source: {
 		readonly uri: Uri;
 		readonly text: string;

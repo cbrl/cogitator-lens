@@ -14,14 +14,14 @@ import {
 	controlFlowGraphMetrics,
 	validateControlFlowGraphs,
 } from '../src/artifacts/control-flow-graph/control-flow-graph-model.js';
-import { parseGccControlFlowGraphs } from '../src/artifacts/control-flow-graph/gcc-cfg-parser.js';
-import { parseLlvmControlFlowGraphs } from '../src/artifacts/control-flow-graph/cfg/llvm-ir-cfg-parser.js';
-import { parsePythonControlFlowGraphs } from '../src/artifacts/control-flow-graph/python-cfg.js';
+import { parseGccControlFlowGraphs } from '../src/artifacts/control-flow-graph/parsers/gcc-cfg-parser.js';
+import { parseLlvmControlFlowGraphs } from '../src/artifacts/control-flow-graph/parsers/llvm-ir-cfg-parser.js';
+import { parsePythonControlFlowGraphs } from '../src/artifacts/control-flow-graph/parsers/python-cfg-parser.js';
 import {
 	pythonCfgHelper,
 	pythonControlFlowGraphProducer,
-} from '../src/artifacts/control-flow-graph/python-cfg.js';
-import { parseRustMirControlFlowGraphs } from '../src/artifacts/rust/rust-mir-cfg-parser.js';
+} from '../src/artifacts/python/python-cfg-producer.js';
+import { parseRustMirControlFlowGraphs } from '../src/artifacts/control-flow-graph/parsers/rust-mir-cfg-parser.js';
 import { renderedArtifact } from '../src/artifacts/core/rendered-artifact.js';
 import {
 	getArtifactOutputChoices,
@@ -682,21 +682,6 @@ test('Rust control-flow graph outputs select MIR, LLVM IR, or assembly productio
 });
 
 test('selected Rust CFG outputs dispatch to their matching parsers', () => {
-	assert.throws(
-		() => renderControlFlowGraphArtifact(
-			rawArtifact('control-flow-graph', ''),
-			{} as never,
-			{
-				backend: { profile: profile('rust') } as never,
-				source: {
-					uri: { scheme: 'file', toString: () => 'file:///project/source.rs' } as never,
-					text: '',
-				},
-			},
-		),
-		/control-flow graph output must be selected/u,
-	);
-
 	const llvm = renderControlFlowGraphArtifact(
 		rawArtifact('control-flow-graph', [
 			'define void @selected() {',
@@ -706,7 +691,7 @@ test('selected Rust CFG outputs dispatch to their matching parsers', () => {
 		].join('\n')),
 		{} as never,
 		{
-			artifactOutputId: 'llvm-ir',
+			artifactOutput: graphOutput('rust', 'llvm-ir'),
 			backend: { profile: profile('rust') } as never,
 			source: {
 				uri: { scheme: 'file', toString: () => 'file:///project/source.rs' } as never,
@@ -730,7 +715,7 @@ test('selected Rust CFG outputs dispatch to their matching parsers', () => {
 		rawArtifact('control-flow-graph', ''),
 		{} as never,
 		{
-			artifactOutputId: 'assembly',
+			artifactOutput: graphOutput('rust', 'assembly'),
 			backend: {
 				profile: profile('rust'),
 				parseAssembly: () => parsedAssembly,
@@ -769,7 +754,7 @@ test('installed rustc assembly output produces a machine-level CFG', t => {
 		rawArtifact('control-flow-graph', result.stdout),
 		defaultArtifactOptions.display,
 		{
-			artifactOutputId: 'assembly',
+			artifactOutput: graphOutput('rust', 'assembly'),
 			backend,
 			source: {
 				uri: { scheme: 'file', toString: () => `file:///${source.replaceAll('\\', '/')}` } as never,
@@ -1079,6 +1064,14 @@ function profile(kind: ToolchainKind): ToolchainProfile {
 		environment: {},
 		tools: {},
 	};
+}
+
+function graphOutput(kind: ToolchainKind, outputId: string) {
+	const output = resolveArtifactOutput(profile(kind), 'control-flow-graph', outputId);
+	if (output.status !== 'available' || output.id === undefined) {
+		throw new Error(`Missing ${outputId} control-flow graph output for ${kind}.`);
+	}
+	return output;
 }
 
 function commandExists(command: string): boolean {
