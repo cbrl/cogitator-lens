@@ -1,12 +1,5 @@
 import path from 'node:path';
-import {
-	Disposable,
-	Event,
-	EventEmitter,
-	RelativePattern,
-	Uri,
-	workspace,
-} from 'vscode';
+import { Disposable, Event, EventEmitter, RelativePattern, Uri, workspace } from 'vscode';
 import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
 import type { CompilationService } from '../compilation/index.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
@@ -46,23 +39,26 @@ export function buildArtifactIdentity(
 	variant: CompilationVariant,
 	profile: ToolchainProfile | undefined,
 ): ArtifactDocumentIdentity {
-	const artifactOutput = parsed.artifactOutputId && profile
-		? getArtifactOutputChoices(profile, parsed.artifactKind)
-			.find(output => output.id === parsed.artifactOutputId)
-		: undefined;
-	const artifactLabel = artifactOutput?.label
-		?? parsed.artifactOutputId
-		?? artifactDefinitions[parsed.artifactKind].label;
+	const artifactOutput =
+		parsed.artifactOutputId && profile
+			? getArtifactOutputChoices(profile, parsed.artifactKind).find(
+					(output) => output.id === parsed.artifactOutputId,
+				)
+			: undefined;
+	const artifactLabel =
+		artifactOutput?.label ?? parsed.artifactOutputId ?? artifactDefinitions[parsed.artifactKind].label;
 	return {
 		documentUri: uri.toString(),
 		sourceUri: parsed.source.toString(),
 		sourceLabel: parsed.source.fsPath,
 		artifactKind: parsed.artifactKind,
 		artifactLabel,
-		...(parsed.artifactOutputId ? {
-			artifactOutputId: parsed.artifactOutputId,
-			artifactOutputLabel: artifactLabel,
-		} : {}),
+		...(parsed.artifactOutputId
+			? {
+					artifactOutputId: parsed.artifactOutputId,
+					artifactOutputLabel: artifactLabel,
+				}
+			: {}),
 		presetId: parsed.presetId,
 		variantId: variant.id,
 		variantLabel: variant.displayLabel,
@@ -86,15 +82,15 @@ export class ArtifactDocumentRegistry implements Disposable {
 		configuration: ConfigurationService,
 	) {
 		this.subscriptions = Disposable.from(
-			compilationService.onVariantsChanged(sources => {
-				const changed = new Set(sources.map(source => source.toString()));
+			compilationService.onVariantsChanged((sources) => {
+				const changed = new Set(sources.map((source) => source.toString()));
 				for (const document of this.documents.values()) {
 					if (changed.has(document.parsed.source.toString())) {
 						this.requestRefresh(document.uri);
 					}
 				}
 			}),
-			compilationService.onArtifactOptionsChanged(kind => {
+			compilationService.onArtifactOptionsChanged((kind) => {
 				for (const document of this.documents.values()) {
 					if (document.parsed.artifactKind === kind) {
 						this.requestRefresh(document.uri);
@@ -125,13 +121,13 @@ export class ArtifactDocumentRegistry implements Disposable {
 		if (!parsed) {
 			throw new CompilationError(`Invalid artifact document URI: ${uri.toString()}`);
 		}
-		const variant = this.compilationService.getVariants(parsed.source)
-			.find(candidate => candidate.id === parsed.variantId);
+		const variant = this.compilationService
+			.getVariants(parsed.source)
+			.find((candidate) => candidate.id === parsed.variantId);
 		if (!variant) {
 			throw new CompilationError(`Compilation variant is no longer available: ${parsed.variantId}`);
 		}
-		const profile = this.compilationService.toolchainRegistry
-			.getToolchainById(variant.toolchainProfileId)?.profile;
+		const profile = this.compilationService.toolchainRegistry.getToolchainById(variant.toolchainProfileId)?.profile;
 		const handler = new ArtifactGenerator(
 			parsed.source,
 			uri,
@@ -141,10 +137,9 @@ export class ArtifactDocumentRegistry implements Disposable {
 			this.compilationService,
 			parsed.artifactOutputId,
 		);
-		const watcher = workspace.createFileSystemWatcher(new RelativePattern(
-			Uri.file(path.dirname(parsed.source.fsPath)),
-			path.basename(parsed.source.fsPath),
-		));
+		const watcher = workspace.createFileSystemWatcher(
+			new RelativePattern(Uri.file(path.dirname(parsed.source.fsPath)), path.basename(parsed.source.fsPath)),
+		);
 		const document: RegisteredArtifactDocument = {
 			uri,
 			parsed,
@@ -156,7 +151,7 @@ export class ArtifactDocumentRegistry implements Disposable {
 		document.subscriptions = Disposable.from(
 			watcher,
 			watcher.onDidChange(() => this.requestRefresh(uri)),
-			handler.onDidChange(status => {
+			handler.onDidChange((status) => {
 				registration.onStatus?.(document, status);
 				this.stateEmitter.fire({ identity: document.identity, status });
 			}),

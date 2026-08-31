@@ -82,8 +82,10 @@ export class AssemblyCfgParser {
 	/** Keeps the lines that carry code, dropping directives and stray labels. */
 	protected filterData(assembly: readonly AssemblyLine[]): AssemblyLine[] {
 		const jumpLabel = /\.L\d+:/u;
-		return this.filterTextSection(assembly).filter(line =>
-			line.text && (line.source !== undefined || jumpLabel.test(line.text) || this.isFunctionName(line)));
+		return this.filterTextSection(assembly).filter(
+			(line) =>
+				line.text && (line.source !== undefined || jumpLabel.test(line.text) || this.isFunctionName(line)),
+		);
 	}
 
 	protected splitToFunctions(assembly: readonly AssemblyLine[]): Range[] {
@@ -120,9 +122,7 @@ export class AssemblyCfgParser {
 	}
 
 	protected isFunctionEnd(text: string): boolean {
-		return text[0] !== ' '
-			&& (text[0] !== '.' || text.startsWith('.omp_'))
-			&& text.includes(':');
+		return text[0] !== ' ' && (text[0] !== '.' || text.startsWith('.omp_')) && text.includes(':');
 	}
 
 	protected isBasicBlockEnd(instruction: string, previousInstruction: string): boolean {
@@ -186,8 +186,7 @@ export class AssemblyCfgParser {
 		graphIds: GraphIdAllocator,
 		diagnostics: string[],
 	): ControlFlowGraph | undefined {
-		const blocks = this.splitToLabelledBlocks(code, fn, name)
-			.flatMap(block => this.splitAtBranches(block));
+		const blocks = this.splitToLabelledBlocks(code, fn, name).flatMap((block) => this.splitAtBranches(block));
 		if (blocks.length === 0) {
 			return undefined;
 		}
@@ -216,11 +215,7 @@ export class AssemblyCfgParser {
 		};
 	}
 
-	private splitToLabelledBlocks(
-		code: readonly AssemblyLine[],
-		fn: Range,
-		functionName: string,
-	): LabelledBlock[] {
+	private splitToLabelledBlocks(code: readonly AssemblyLine[], fn: Range, functionName: string): LabelledBlock[] {
 		let cursor = fn.start;
 		if (cursor === fn.end) {
 			return [];
@@ -251,7 +246,7 @@ export class AssemblyCfgParser {
 			cursor++;
 		}
 		result.push({ ...current, end: fn.end });
-		return result.filter(block => block.end > block.start);
+		return result.filter((block) => block.end > block.start);
 	}
 
 	/**
@@ -268,9 +263,7 @@ export class AssemblyCfgParser {
 			return [{ nameId: block.nameId, start: block.start, end: block.end }];
 		}
 
-		const result: CanonicalBlock[] = [
-			{ nameId: block.nameId, start: block.start, end: positions[0] + 1 },
-		];
+		const result: CanonicalBlock[] = [{ nameId: block.nameId, start: block.start, end: positions[0] + 1 }];
 		for (const [index, position] of positions.entries()) {
 			result.push({
 				nameId: `${block.nameId}${this.labelSeparator()}${position + 1}`,
@@ -301,28 +294,24 @@ export class AssemblyCfgParser {
 			}
 			const separator = this.labelSeparator();
 			const cut = block.nameId.indexOf(separator);
-			next.nameId = cut === -1
-				? `${block.nameId}${separator}${block.end}`
-				: `${block.nameId.slice(0, cut + 1)}${block.end}`;
+			next.nameId =
+				cut === -1
+					? `${block.nameId}${separator}${block.end}`
+					: `${block.nameId.slice(0, cut + 1)}${block.end}`;
 		}
 	}
 
-	private makeNode(
-		id: string,
-		code: readonly AssemblyLine[],
-		block: CanonicalBlock,
-	): ControlFlowNode {
+	private makeNode(id: string, code: readonly AssemblyLine[], block: CanonicalBlock): ControlFlowNode {
 		const lines = code.slice(block.start, block.end);
 		const header = block.nameId.includes(':') ? block.nameId : `${block.nameId}:`;
-		const source = lines.find(line => line.source)?.source;
-		const terminal = this.instructionSet.classify(lines.at(-1)?.text ?? '') === 'return'
-			? 'return' as const
-			: undefined;
+		const source = lines.find((line) => line.source)?.source;
+		const terminal =
+			this.instructionSet.classify(lines.at(-1)?.text ?? '') === 'return' ? ('return' as const) : undefined;
 		return {
 			id,
-			label: `${header}\n${lines.map(line => line.text).join('\n')}`,
+			label: `${header}\n${lines.map((line) => line.text).join('\n')}`,
 			...(source ? { source: source satisfies ControlFlowSourceLocation } : {}),
-			referencedArtifactLines: lines.map(line => line.artifactLine),
+			referencedArtifactLines: lines.map((line) => line.artifactLine),
 			...(terminal ? { terminal } : {}),
 		};
 	}
@@ -340,9 +329,9 @@ export class AssemblyCfgParser {
 			const to = target === undefined ? undefined : nodeIdByName.get(target);
 			if (to === undefined) {
 				diagnostics.push(
-					`Assembly function ${JSON.stringify(functionName)}, block ${
-						JSON.stringify(blocks[fromOrdinal].nameId)
-					}: ${
+					`Assembly function ${JSON.stringify(functionName)}, block ${JSON.stringify(
+						blocks[fromOrdinal].nameId,
+					)}: ${
 						target === undefined
 							? 'the branch target is not statically known'
 							: `no block named ${JSON.stringify(target)} exists`

@@ -2,7 +2,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { ArtifactProducer } from './toolchain-map.js';
 
-const goFunctionPattern = /^\s*func\s+(?:\(\s*(?:[\p{L}_][\p{L}\p{N}_]*\s+)?(\*?\s*[\p{L}_][\p{L}\p{N}_]*)\s*\)\s*)?([\p{L}_][\p{L}\p{N}_]*)\s*\(/gmu;
+const goFunctionPattern =
+	/^\s*func\s+(?:\(\s*(?:[\p{L}_][\p{L}\p{N}_]*\s+)?(\*?\s*[\p{L}_][\p{L}\p{N}_]*)\s*\)\s*)?([\p{L}_][\p{L}\p{N}_]*)\s*\(/gmu;
 const goPackagePattern = /^\s*package\s+([\p{L}_][\p{L}\p{N}_]*)\b/mu;
 
 export function goOutputArguments(
@@ -17,13 +18,7 @@ export function goOutputArguments(
 		return providerArguments[index - 1] === '-gcflags' ? argument : value;
 	}, undefined);
 	return target === 'assembly'
-		? [
-			'build',
-			'-a',
-			`-gcflags=${configuredGcFlags ? `${configuredGcFlags} ` : ''}-S`,
-			'-o',
-			outputFile,
-		]
+		? ['build', '-a', `-gcflags=${configuredGcFlags ? `${configuredGcFlags} ` : ''}-S`, '-o', outputFile]
 		: ['build', '-o', outputFile];
 }
 
@@ -37,9 +32,9 @@ export function stripGoManagedArguments(
 	for (let index = 0; index < args.length; index++) {
 		const argument = args[index];
 		if (
-			(index === 0 && ['build', 'run', 'install'].includes(argument))
-			|| (index <= 1 && args[0] === 'tool' && ['tool', 'compile'].includes(argument))
-			|| path.resolve(workingDirectory, argument) === source
+			(index === 0 && ['build', 'run', 'install'].includes(argument)) ||
+			(index <= 1 && args[0] === 'tool' && ['tool', 'compile'].includes(argument)) ||
+			path.resolve(workingDirectory, argument) === source
 		) {
 			continue;
 		}
@@ -55,57 +50,61 @@ export function stripGoManagedArguments(
 	return result;
 }
 
-export const goAssemblyProducer: ArtifactProducer = (
-	backend,
-	source,
-	options,
-	cancellationToken,
-) => backend.produceArtifact('assembly', source, options, {
-	output: 'stderr',
-	arguments: (_outputFile, temporaryDirectory, providerArguments) =>
-		goOutputArguments('assembly', path.join(temporaryDirectory, 'output.exe'), providerArguments),
-}, cancellationToken);
+export const goAssemblyProducer: ArtifactProducer = (backend, source, options, cancellationToken) =>
+	backend.produceArtifact(
+		'assembly',
+		source,
+		options,
+		{
+			output: 'stderr',
+			arguments: (_outputFile, temporaryDirectory, providerArguments) =>
+				goOutputArguments('assembly', path.join(temporaryDirectory, 'output.exe'), providerArguments),
+		},
+		cancellationToken,
+	);
 
-export const goSsaControlFlowGraphProducer: ArtifactProducer = async (
-	backend,
-	source,
-	options,
-	cancellationToken,
-) => {
+export const goSsaControlFlowGraphProducer: ArtifactProducer = async (backend, source, options, cancellationToken) => {
 	const configured = options.env?.GOSSAFUNC ?? backend.profile.environment.GOSSAFUNC;
-	const functionName = configured?.replace(/\+$/u, '') || await inferGoSsaFunction(source.fsPath);
+	const functionName = configured?.replace(/\+$/u, '') || (await inferGoSsaFunction(source.fsPath));
 	if (!functionName) {
 		throw new Error(
 			'No Go function could be selected for GOSSAFUNC. Configure GOSSAFUNC in the toolchain or invocation environment.',
 		);
 	}
-	return backend.produceArtifact('control-flow-graph', source, {
-		...options,
-		env: {
-			...options.env,
-			GOSSAFUNC: `${functionName}+`,
+	return backend.produceArtifact(
+		'control-flow-graph',
+		source,
+		{
+			...options,
+			env: {
+				...options.env,
+				GOSSAFUNC: `${functionName}+`,
+			},
 		},
-	}, {
-		output: 'stderr',
-		environment: temporaryDirectory => ({ GOSSADIR: temporaryDirectory }),
-		arguments: (_outputFile, temporaryDirectory) => [
-			'build',
-			'-a',
-			'-o',
-			path.join(temporaryDirectory, 'output.exe'),
-		],
-	}, cancellationToken);
+		{
+			output: 'stderr',
+			environment: (temporaryDirectory) => ({ GOSSADIR: temporaryDirectory }),
+			arguments: (_outputFile, temporaryDirectory) => [
+				'build',
+				'-a',
+				'-o',
+				path.join(temporaryDirectory, 'output.exe'),
+			],
+		},
+		cancellationToken,
+	);
 };
 
 export async function inferGoSsaFunction(filename: string): Promise<string | undefined> {
 	const source = await fs.readFile(filename, 'utf8');
-	const functions = [...source.matchAll(goFunctionPattern)].map(match => ({
+	const functions = [...source.matchAll(goFunctionPattern)].map((match) => ({
 		receiver: match[1]?.replaceAll(/\s+/gu, ''),
 		name: match[2],
 	}));
-	const selected = functions.find(candidate => !candidate.receiver && candidate.name !== 'init')
-		?? functions.find(candidate => candidate.name !== 'init')
-		?? functions[0];
+	const selected =
+		functions.find((candidate) => !candidate.receiver && candidate.name !== 'init') ??
+		functions.find((candidate) => candidate.name !== 'init') ??
+		functions[0];
 	const packageName = goPackagePattern.exec(source)?.[1];
 	if (!selected) {
 		return undefined;

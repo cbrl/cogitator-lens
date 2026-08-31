@@ -25,12 +25,18 @@ export function effectiveArtifactPresets(
 	return new Map([
 		['default', defaultArtifactPreset(artifactKind)],
 		...configured
-			.filter(preset => preset.artifactKind === artifactKind)
-			.map(preset => [preset.id, Object.freeze({
-			...preset,
-			extraArguments: Object.freeze([...preset.extraArguments]),
-			productionOptions: Object.freeze({ ...preset.productionOptions }),
-		})] as const),
+			.filter((preset) => preset.artifactKind === artifactKind)
+			.map(
+				(preset) =>
+					[
+						preset.id,
+						Object.freeze({
+							...preset,
+							extraArguments: Object.freeze([...preset.extraArguments]),
+							productionOptions: Object.freeze({ ...preset.productionOptions }),
+						}),
+					] as const,
+			),
 	]);
 }
 

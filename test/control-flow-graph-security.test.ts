@@ -3,15 +3,8 @@ import test from 'node:test';
 import { parseLlvmControlFlowGraphs } from '../src/artifacts/control-flow-graph/parsers/llvm-ir-cfg-parser.js';
 import { parsePythonControlFlowGraphs } from '../src/artifacts/control-flow-graph/parsers/python-cfg-parser.js';
 import { validateControlFlowGraphs } from '../src/artifacts/control-flow-graph/control-flow-graph-model.js';
-import {
-	parseHostMessage,
-	parseWebviewMessage,
-} from '../src/webview/graph-protocol.js';
-import type {
-	ControlFlowGraph,
-	ControlFlowNode,
-	ControlFlowSourceLocation,
-} from '../src/types/index.js';
+import { parseHostMessage, parseWebviewMessage } from '../src/webview/graph-protocol.js';
+import type { ControlFlowGraph, ControlFlowNode, ControlFlowSourceLocation } from '../src/types/index.js';
 
 const maximumPosition = 0x7fff_ffff;
 
@@ -45,10 +38,14 @@ test('CFG validation and host protocol constrain source URI schemes and ranges',
 		assert.equal(result.graphs.length, 0, `${id} source should be rejected`);
 	}
 
-	assert.ok(parseHostMessage(hostMessage([
-		graph('file', { uri: 'file:///workspace/main.c', line: 0, column: 0 }),
-		graph('remote', { uri: 'vscode-remote://ssh-remote+host/workspace/main.c', line: 0, column: 0 }),
-	])));
+	assert.ok(
+		parseHostMessage(
+			hostMessage([
+				graph('file', { uri: 'file:///workspace/main.c', line: 0, column: 0 }),
+				graph('remote', { uri: 'vscode-remote://ssh-remote+host/workspace/main.c', line: 0, column: 0 }),
+			]),
+		),
+	);
 	for (const source of [
 		{ uri: 'http://example.invalid/main.c', line: 0, column: 0 },
 		{ uri: 'file:///workspace/main.c', line: maximumPosition + 1, column: 0 },
@@ -107,39 +104,31 @@ test('webview graph protocol rejects dangerous extras while preserving markup as
 });
 
 test('compiler parser graph IDs do not shift when an unrelated function is inserted', () => {
-	const targetLlvm = [
-		'define void @target() {',
-		'entry:',
-		'  ret void',
-		'}',
-	].join('\n');
-	const unrelatedLlvm = [
-		'define void @unrelated() {',
-		'entry:',
-		'  ret void',
-		'}',
-	].join('\n');
+	const targetLlvm = ['define void @target() {', 'entry:', '  ret void', '}'].join('\n');
+	const unrelatedLlvm = ['define void @unrelated() {', 'entry:', '  ret void', '}'].join('\n');
 	const withoutPrefix = parseLlvmControlFlowGraphs(targetLlvm, '/workspace');
 	const withPrefix = parseLlvmControlFlowGraphs(`${unrelatedLlvm}\n${targetLlvm}`, '/workspace');
-	assert.equal(withoutPrefix.graphs.find(graph => graph.label === 'target')?.id, 'llvm:target');
-	assert.equal(withPrefix.graphs.find(graph => graph.label === 'target')?.id, 'llvm:target');
+	assert.equal(withoutPrefix.graphs.find((graph) => graph.label === 'target')?.id, 'llvm:target');
+	assert.equal(withPrefix.graphs.find((graph) => graph.label === 'target')?.id, 'llvm:target');
 
-	const pythonInstructions = [{
-		offset: 0,
-		opname: 'RETURN_VALUE',
-		argrepr: '',
-		startsLine: 1,
-		line: 1,
-		endLine: 1,
-		column: 0,
-		endColumn: 1,
-		isJumpTarget: false,
-		isJump: false,
-		conditional: false,
-		target: null,
-		terminal: true,
-		return: true,
-	}];
+	const pythonInstructions = [
+		{
+			offset: 0,
+			opname: 'RETURN_VALUE',
+			argrepr: '',
+			startsLine: 1,
+			line: 1,
+			endLine: 1,
+			column: 0,
+			endColumn: 1,
+			isJumpTarget: false,
+			isJump: false,
+			conditional: false,
+			target: null,
+			terminal: true,
+			return: true,
+		},
+	];
 	const pythonObject = (name: string) => ({
 		name,
 		filename: 'source.py',
@@ -155,14 +144,11 @@ test('compiler parser graph IDs do not shift when an unrelated function is inser
 		JSON.stringify({ codeObjects: [pythonObject('unrelated'), pythonObject('target')] }),
 		'/workspace',
 	);
-	assert.equal(pythonWithoutPrefix.graphs.find(graph => graph.label === 'target')?.id, 'python:target');
-	assert.equal(pythonWithPrefix.graphs.find(graph => graph.label === 'target')?.id, 'python:target');
+	assert.equal(pythonWithoutPrefix.graphs.find((graph) => graph.label === 'target')?.id, 'python:target');
+	assert.equal(pythonWithPrefix.graphs.find((graph) => graph.label === 'target')?.id, 'python:target');
 });
 
-function graph(
-	id: string,
-	source?: ControlFlowSourceLocation,
-): ControlFlowGraph {
+function graph(id: string, source?: ControlFlowSourceLocation): ControlFlowGraph {
 	const node: ControlFlowNode = {
 		id: 'entry',
 		label: 'entry',

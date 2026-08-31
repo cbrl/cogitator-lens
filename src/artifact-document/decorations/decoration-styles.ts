@@ -2,11 +2,7 @@
  * Text editor decoration styles shared by every ArtifactDecorator instance.
  */
 
-import {
-	OverviewRulerLane,
-	window,
-	ThemeColor,
-} from 'vscode';
+import { OverviewRulerLane, window, ThemeColor } from 'vscode';
 import type { OptimizationRemarkCategory } from '../../types/index.js';
 
 export const selectedLineDecoration = window.createTextEditorDecorationType({
@@ -72,13 +68,12 @@ export const sourceDensityDecorations = sourceLineBandDecorations.map((_, bandIn
 			borderWidth: `0 0 0 ${densityIndex + 1}px`,
 			overviewRulerColor: color,
 			overviewRulerLane: OverviewRulerLane.Center,
-		}));
+		}),
+	);
 });
 
 function optimizationRemarkDecoration(category: OptimizationRemarkCategory) {
-	const background = new ThemeColor(
-		`coglens.optimizationRemarks.${category}Background`,
-	);
+	const background = new ThemeColor(`coglens.optimizationRemarks.${category}Background`);
 	return window.createTextEditorDecorationType({
 		after: {
 			backgroundColor: background,

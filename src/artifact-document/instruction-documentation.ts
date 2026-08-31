@@ -2,10 +2,7 @@ import type { ArtifactKind, RenderedTextArtifact } from '../types/index.js';
 import type { AssemblyInstructionInfo } from '../vendor/types/assembly-docs.interfaces.js';
 import type { BaseAssemblyDocumentationProvider } from '../vendor/lib/asm-docs/base.js';
 import { Amd64DocumentationProvider } from '../vendor/lib/asm-docs/amd64.js';
-import {
-	Arm32DocumentationProvider,
-	ArmArch64DocumentationProvider,
-} from '../vendor/lib/asm-docs/arm.js';
+import { Arm32DocumentationProvider, ArmArch64DocumentationProvider } from '../vendor/lib/asm-docs/arm.js';
 import { LLVMDocumentationProvider } from '../vendor/lib/asm-docs/llvm.js';
 import { PythonDocumentationProvider } from '../vendor/lib/asm-docs/python.js';
 import { Riscv64DocumentationProvider } from '../vendor/lib/asm-docs/riscv64.js';
@@ -80,19 +77,20 @@ export function instructionMnemonic(kind: ArtifactKind, text: string): string | 
 		// dis output: optional source line, current/jump markers, bytecode offset,
 		// then the uppercase opcode.
 		return /^\s*(?:\d+\s+)?(?:(?:-->)?\s*(?:>>)?\s*)?(?:\d+\s+)?([A-Z][A-Z0-9_]*)\b/u
-			.exec(text)?.[1]?.toLowerCase();
+			.exec(text)?.[1]
+			?.toLowerCase();
 	}
 	if (kind === 'llvm-ir') {
 		// Cover both terminators and value-producing instructions, including the
 		// call instruction's optional tail-call marker.
 		return /^\s*(?:[%@](?:[-\w.$]+|"[^"]+")\s*=\s*)?(?:(?:musttail|notail|tail)\s+)?([a-z][\w.]*)\b/iu
-			.exec(text)?.[1]?.toLowerCase();
+			.exec(text)?.[1]
+			?.toLowerCase();
 	}
 	if (kind !== 'assembly' && kind !== 'binary-disassembly') {
 		return undefined;
 	}
-	return /^\s*(?:[.$_a-zA-Z][\w.$@?]*:\s*)?([a-zA-Z][\w.]*)/u
-		.exec(text)?.[1]?.toLowerCase();
+	return /^\s*(?:[.$_a-zA-Z][\w.$@?]*:\s*)?([a-zA-Z][\w.]*)/u.exec(text)?.[1]?.toLowerCase();
 }
 
 function providerForArtifact(artifact: RenderedTextArtifact): NamedProvider | undefined {
@@ -129,8 +127,8 @@ function inferAssemblyProvider(artifact: RenderedTextArtifact): NamedProvider {
 	const scores = assemblyProviders.map(() => 0);
 	for (const mnemonic of mnemonics) {
 		const matches = assemblyProviders
-			.map((candidate, index) => candidate.provider.getInstructionInformation(mnemonic) ? index : -1)
-			.filter(index => index >= 0);
+			.map((candidate, index) => (candidate.provider.getInstructionInformation(mnemonic) ? index : -1))
+			.filter((index) => index >= 0);
 		for (const index of matches) {
 			// An opcode present in one set is stronger evidence than ADD/MOV-style
 			// mnemonics shared by several architectures.

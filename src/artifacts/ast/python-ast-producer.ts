@@ -1,10 +1,6 @@
 import type { ArtifactProducer } from '../../toolchains/toolchain-map.js';
-import {
-	ToolExitError,
-} from '../../toolchains/toolchain-backend.js';
-import {
-	UnsupportedToolVersionError,
-} from '../../types/index.js';
+import { ToolExitError } from '../../toolchains/toolchain-backend.js';
+import { UnsupportedToolVersionError } from '../../types/index.js';
 
 const pythonVersionMarker = 'COGLENS_UNSUPPORTED_PYTHON_VERSION:';
 
@@ -19,12 +15,7 @@ const pythonAstHelper = [
 	'print(ast.dump(tree,indent=2,include_attributes=True))',
 ].join(';');
 
-export const pythonAstProducer: ArtifactProducer = async (
-	backend,
-	source,
-	options,
-	cancellationToken,
-) => {
+export const pythonAstProducer: ArtifactProducer = async (backend, source, options, cancellationToken) => {
 	try {
 		return await backend.produceArtifact(
 			'ast',

@@ -1,12 +1,4 @@
-import {
-	CancellationError,
-	Disposable,
-	Event,
-	EventEmitter,
-	Memento,
-	Uri,
-	workspace,
-} from 'vscode';
+import { CancellationError, Disposable, Event, EventEmitter, Memento, Uri, workspace } from 'vscode';
 import fs from 'fs';
 import path from 'path';
 import type { ConfigurationService } from '../services/configuration-service.js';
@@ -33,21 +25,12 @@ import {
 } from '../types/index.js';
 import { ToolExitError } from '../toolchains/toolchain-backend.js';
 import { ExecError } from '../exec.js';
-import {
-	artifactDefinitions,
-	supportedArtifactKinds,
-} from '../artifacts/core/artifact-definitions.js';
-import {
-	resolveArtifactOutput,
-	type ToolchainArtifactOutput,
-} from '../toolchains/toolchain-map.js';
+import { artifactDefinitions, supportedArtifactKinds } from '../artifacts/core/artifact-definitions.js';
+import { resolveArtifactOutput, type ToolchainArtifactOutput } from '../toolchains/toolchain-map.js';
 import { ToolchainRegistry } from './toolchain-registry.js';
 import { CompilationConfigDatabase } from './compilation-config.js';
 import { parseToolDiagnostics } from '../diagnostics.js';
-import {
-	resolveArtifactPreset,
-	type ArtifactPreset,
-} from '../artifacts/ui/presets.js';
+import { resolveArtifactPreset, type ArtifactPreset } from '../artifacts/ui/presets.js';
 import { validateArtifactInputs } from './artifact-inputs.js';
 import { RawArtifactCache } from './raw-artifact-cache.js';
 
@@ -75,15 +58,15 @@ export class CompilationService {
 		const inputWatcher = workspace.createFileSystemWatcher('**/*');
 		this.subscriptions.push(
 			configuration.onDidChange(() => this.reloadUserConfiguration()),
-			this.variants.onDidChange(sources => this.changeEmitter.fire(sources)),
+			this.variants.onDidChange((sources) => this.changeEmitter.fire(sources)),
 			this.toolchainRegistry.onDidChange(() => {
 				this.rawArtifactCache.clear();
 				this.changeEmitter.fire(this.variantsSources());
 			}),
 			inputWatcher,
-			inputWatcher.onDidChange(uri => this.handleInputChange(uri)),
-			inputWatcher.onDidDelete(uri => this.handleInputChange(uri)),
-			inputWatcher.onDidCreate(uri => this.handleInputChange(uri)),
+			inputWatcher.onDidChange((uri) => this.handleInputChange(uri)),
+			inputWatcher.onDidDelete((uri) => this.handleInputChange(uri)),
+			inputWatcher.onDidCreate((uri) => this.handleInputChange(uri)),
 		);
 	}
 
@@ -101,9 +84,7 @@ export class CompilationService {
 		const production = Object.hasOwn(current.production, id)
 			? { ...current.production, [id]: value }
 			: current.production;
-		const display = Object.hasOwn(current.display, id)
-			? { ...current.display, [id]: value }
-			: current.display;
+		const display = Object.hasOwn(current.display, id) ? { ...current.display, [id]: value } : current.display;
 		const options = immutableArtifactOptions({ production, display });
 		if (artifactOptionsEqual(current, options)) {
 			return;
@@ -145,11 +126,14 @@ export class CompilationService {
 
 	reconcileProviderSnapshot(snapshot: ProviderSnapshot): void {
 		this.toolchainRegistry.reconcile(snapshot.provider, snapshot.toolchainProfiles);
-		this.variants.reconcile(snapshot.provider, snapshot.variants.map(variant => ({
-			...variant,
-			toolchainProfileId: ToolchainRegistry.profileId(snapshot.provider, variant.toolchainProfileId),
-		})));
-		const sources = new Map(snapshot.variants.map(variant => [variant.source.toString(), variant.source]));
+		this.variants.reconcile(
+			snapshot.provider,
+			snapshot.variants.map((variant) => ({
+				...variant,
+				toolchainProfileId: ToolchainRegistry.profileId(snapshot.provider, variant.toolchainProfileId),
+			})),
+		);
+		const sources = new Map(snapshot.variants.map((variant) => [variant.source.toString(), variant.source]));
 		for (const source of sources.values()) {
 			const persisted = this.workspaceState?.get<string>(this.selectionKey(source));
 			if (persisted) {
@@ -179,11 +163,7 @@ export class CompilationService {
 				explanation: `Toolchain profile not found: ${variant.toolchainProfileId}`,
 			};
 		}
-		const cell = resolveArtifactOutput(
-			backend.profile,
-			artifactKind,
-			request.artifactOutputId,
-		);
+		const cell = resolveArtifactOutput(backend.profile, artifactKind, request.artifactOutputId);
 		if (cell.status !== 'available') {
 			return cell;
 		}
@@ -191,16 +171,14 @@ export class CompilationService {
 		const key = productionKey(request, source.value.state);
 		const renderContext: ArtifactRenderContext = {
 			backend,
-			...(request.artifactOutputId
-				? { artifactOutput: cell as ToolchainArtifactOutput }
-				: {}),
+			...(request.artifactOutputId ? { artifactOutput: cell as ToolchainArtifactOutput } : {}),
 			source: {
 				uri: variant.source,
 				text: source.value.text,
 			},
 		};
 		const cached = this.rawArtifactCache.get(key);
-		if (cached && await validateArtifactInputs(cached.inputs)) {
+		if (cached && (await validateArtifactInputs(cached.inputs))) {
 			request.onInvocation?.(invocationDetails(cached.command));
 			return {
 				status: 'available',
@@ -258,7 +236,7 @@ export class CompilationService {
 	}
 
 	dispose(): void {
-		this.subscriptions.forEach(subscription => subscription.dispose());
+		this.subscriptions.forEach((subscription) => subscription.dispose());
 		this.changeEmitter.dispose();
 		this.artifactOptionsChangeEmitter.dispose();
 		this.variants.dispose();
@@ -272,19 +250,21 @@ export class CompilationService {
 		context: ArtifactRenderContext,
 		outputRenderer?: import('../artifacts/core/artifact-definitions.js').ArtifactRenderer,
 	): Promise<RenderedArtifact> {
-		const renderer = outputRenderer
-			?? context.backend.getArtifactRenderer(raw.kind)
-			?? artifactDefinitions[raw.kind].renderer;
+		const renderer =
+			outputRenderer ?? context.backend.getArtifactRenderer(raw.kind) ?? artifactDefinitions[raw.kind].renderer;
 		return await renderer(raw, options.display, context);
 	}
 
 	private reloadUserConfiguration(): void {
 		this.toolchainRegistry.reconcile('user', this.configuration.getToolchains());
-		this.variants.reconcile('manual', this.configuration.getManualCompilationVariants().map(variant => ({
-			...variant,
-			provider: 'manual',
-			source: Uri.file(variant.source),
-		})));
+		this.variants.reconcile(
+			'manual',
+			this.configuration.getManualCompilationVariants().map((variant) => ({
+				...variant,
+				provider: 'manual',
+				source: Uri.file(variant.source),
+			})),
+		);
 		for (const kind of supportedArtifactKinds) {
 			const options = this.configuration.getArtifactOptions(kind);
 			if (!artifactOptionsEqual(this.getArtifactOptions(kind), options)) {
@@ -308,9 +288,8 @@ export class CompilationService {
 			provider: 'default',
 			source: file,
 			toolchainProfileId: backend.profile.id,
-			workingDirectory: info.workingDirectory
-				?? workspace.getWorkspaceFolder(file)?.uri.fsPath
-				?? path.dirname(file.fsPath),
+			workingDirectory:
+				info.workingDirectory ?? workspace.getWorkspaceFolder(file)?.uri.fsPath ?? path.dirname(file.fsPath),
 			arguments: info.args,
 			environment: info.env ?? {},
 			displayLabel: `Default (${backend.profile.displayName})`,
@@ -333,16 +312,14 @@ export class CompilationService {
 	}
 }
 
-async function readSourceSnapshot(
-	source: Uri,
-): Promise<
+async function readSourceSnapshot(source: Uri): Promise<
 	| {
-		readonly ok: true;
-		readonly value: {
-			readonly state: SourceState;
-			readonly text: string;
-		};
-	}
+			readonly ok: true;
+			readonly value: {
+				readonly state: SourceState;
+				readonly text: string;
+			};
+	  }
 	| { readonly ok: false; readonly explanation: string }
 > {
 	try {

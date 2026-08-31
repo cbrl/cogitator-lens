@@ -1,33 +1,33 @@
 {
-	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-	"name": "Python Bytecode",
-	"scopeName": "source.python-bytecode",
-	"patterns": [
-		{
-			"match": "^Disassembly of (.+):$",
-			"captures": {
-				"1": {
-					"name": "entity.name.function.python-bytecode"
-				}
-			}
-		},
-		{
-			"match": "\\b(?:CACHE|CALL|EXTENDED_ARG|JUMP|LOAD|POP|PUSH|RESUME|RETURN|STORE|UNPACK|YIELD)[A-Z0-9_]*\\b|\\b[A-Z][A-Z0-9_]{2,}\\b",
-			"name": "keyword.control.python-bytecode"
-		},
-		{
-			"match": "(?<![A-Za-z_])\\d+(?![A-Za-z_])",
-			"name": "constant.numeric.python-bytecode"
-		},
-		{
-			"begin": "'",
-			"end": "'",
-			"name": "string.quoted.single.python-bytecode"
-		},
-		{
-			"begin": "\"",
-			"end": "\"",
-			"name": "string.quoted.double.python-bytecode"
-		}
-	]
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Python Bytecode",
+  "scopeName": "source.python-bytecode",
+  "patterns": [
+    {
+      "match": "^Disassembly of (.+):$",
+      "captures": {
+        "1": {
+          "name": "entity.name.function.python-bytecode"
+        }
+      }
+    },
+    {
+      "match": "\\b(?:CACHE|CALL|EXTENDED_ARG|JUMP|LOAD|POP|PUSH|RESUME|RETURN|STORE|UNPACK|YIELD)[A-Z0-9_]*\\b|\\b[A-Z][A-Z0-9_]{2,}\\b",
+      "name": "keyword.control.python-bytecode"
+    },
+    {
+      "match": "(?<![A-Za-z_])\\d+(?![A-Za-z_])",
+      "name": "constant.numeric.python-bytecode"
+    },
+    {
+      "begin": "'",
+      "end": "'",
+      "name": "string.quoted.single.python-bytecode"
+    },
+    {
+      "begin": "\"",
+      "end": "\"",
+      "name": "string.quoted.double.python-bytecode"
+    }
+  ]
 }

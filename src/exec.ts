@@ -37,7 +37,11 @@ const defaultTimeoutMs = 60_000;
 const defaultMaxOutputBytes = 50 * 1024 * 1024;
 const defaultTerminationGraceMs = 2_000;
 
-export async function execute(command: string, args: readonly string[], options: ExecOptions = {}): Promise<ExecResult> {
+export async function execute(
+	command: string,
+	args: readonly string[],
+	options: ExecOptions = {},
+): Promise<ExecResult> {
 	const {
 		timeoutMs = defaultTimeoutMs,
 		maxOutputBytes = defaultMaxOutputBytes,
@@ -111,25 +115,26 @@ export async function execute(command: string, args: readonly string[], options:
 			target.push(data);
 		};
 
-		process.stdout?.on('data', chunk => append(stdout, chunk));
-		process.stderr?.on('data', chunk => append(stderr, chunk));
-		process.stdin?.on('error', error => {
+		process.stdout?.on('data', (chunk) => append(stdout, chunk));
+		process.stderr?.on('data', (chunk) => append(stderr, chunk));
+		process.stdin?.on('error', (error) => {
 			if ((error as NodeJS.ErrnoException).code !== 'EPIPE') {
 				fail('spawn', `Failed to write process input: ${error.message}`);
 			}
 		});
 		process.stdin?.end(stdin);
 
-		timeout = timeoutMs > 0
-			? setTimeout(() => fail('timeout', `Process timed out after ${timeoutMs} ms`), timeoutMs)
-			: undefined;
+		timeout =
+			timeoutMs > 0
+				? setTimeout(() => fail('timeout', `Process timed out after ${timeoutMs} ms`), timeoutMs)
+				: undefined;
 		timeout?.unref();
 
 		cancellation = cancellationToken?.onCancellationRequested(() => {
 			fail('cancelled', 'Process execution was cancelled');
 		});
 
-		process.once('error', error => {
+		process.once('error', (error) => {
 			if (settled) {
 				return;
 			}
@@ -142,7 +147,7 @@ export async function execute(command: string, args: readonly string[], options:
 			reject(new ExecError('spawn', `Failed to start "${command}": ${error.message}`));
 		});
 
-		process.once('close', code => {
+		process.once('close', (code) => {
 			if (settled) {
 				return;
 			}

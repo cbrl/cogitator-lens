@@ -4,10 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { execute } from '../src/exec.js';
-import {
-	visualStudioDiscoveryArguments,
-	visualStudioEnvironmentCandidates,
-} from '../src/toolchains/msvc.js';
+import { visualStudioDiscoveryArguments, visualStudioEnvironmentCandidates } from '../src/toolchains/msvc.js';
 
 test('discovers Visual Studio environments for MSVC-compatible compilers', () => {
 	for (const [compiler, script] of [
@@ -25,7 +22,7 @@ test('discovers Visual Studio environments for MSVC-compatible compilers', () =>
 	assert.ok(visualStudioDiscoveryArguments.includes('-prerelease'));
 });
 
-test('cmd can call a quoted environment script path verbatim', async context => {
+test('cmd can call a quoted environment script path verbatim', async (context) => {
 	if (process.platform !== 'win32') {
 		context.skip('Windows command-processor behavior is only applicable on Windows.');
 		return;
@@ -39,12 +36,7 @@ test('cmd can call a quoted environment script path verbatim', async context => 
 	const script = path.join(directory, 'capture environment.cmd');
 	try {
 		await fs.promises.writeFile(script, '@echo off\r\necho environment-captured\r\n');
-		const result = await execute(commandProcessor, [
-			'/d',
-			'/s',
-			'/c',
-			`call "${script}"`,
-		], {
+		const result = await execute(commandProcessor, ['/d', '/s', '/c', `call "${script}"`], {
 			windowsVerbatimArguments: true,
 		});
 		assert.equal(result.returnCode, 0);
@@ -60,10 +52,12 @@ function findWindowsCommandProcessor(): string | undefined {
 	const candidates = [
 		configured,
 		systemRoot ? path.join(systemRoot, 'System32', 'cmd.exe') : undefined,
-		...((process.env.PATH ?? '').split(path.delimiter)
+		...(process.env.PATH ?? '')
+			.split(path.delimiter)
 			.filter(Boolean)
-			.map(directory => path.join(directory, 'cmd.exe'))),
+			.map((directory) => path.join(directory, 'cmd.exe')),
 	];
-	return candidates.find((candidate): candidate is string =>
-		typeof candidate === 'string' && fs.existsSync(candidate));
+	return candidates.find(
+		(candidate): candidate is string => typeof candidate === 'string' && fs.existsSync(candidate),
+	);
 }

@@ -29,12 +29,9 @@ export async function activate(context: ExtensionContext): Promise<void> {
 	const configuration = new ConfigurationService();
 	const compilationService = new CompilationService(configuration, context.workspaceState);
 	const artifactRegistry = new ArtifactDocumentRegistry(compilationService, configuration);
-	const artifactProvider = new ArtifactDocumentProvider(
-		compilationService, configuration, artifactRegistry,
-	);
+	const artifactProvider = new ArtifactDocumentProvider(compilationService, configuration, artifactRegistry);
 	const graphPanels = new GraphPanelManager(context, artifactRegistry);
-	const navigationProvider = new ArtifactNavigationProvider(uri =>
-		artifactProvider.getRenderedArtifact(uri));
+	const navigationProvider = new ArtifactNavigationProvider((uri) => artifactProvider.getRenderedArtifact(uri));
 
 	createToolchainTreeView(context, compilationService.toolchainRegistry);
 	createCompilationInfoTreeView(context, compilationService);
@@ -57,12 +54,15 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		new CompilationDatabaseVariantProvider(configuration),
 		new PythonEnvironmentVariantProvider(),
 	];
-	const providerSubscriptions = variantProviders.map(provider =>
-		provider.onSnapshot(snapshot => compilationService.reconcileProviderSnapshot(snapshot))
+	const providerSubscriptions = variantProviders.map((provider) =>
+		provider.onSnapshot((snapshot) => compilationService.reconcileProviderSnapshot(snapshot)),
 	);
 
 	const documentSelector = { scheme: ArtifactDocumentProvider.scheme };
-	const contentProvider = workspace.registerTextDocumentContentProvider(ArtifactDocumentProvider.scheme, artifactProvider);
+	const contentProvider = workspace.registerTextDocumentContentProvider(
+		ArtifactDocumentProvider.scheme,
+		artifactProvider,
+	);
 	const definitionRegistration = vscode.languages.registerDefinitionProvider(documentSelector, navigationProvider);
 	const linkRegistration = vscode.languages.registerDocumentLinkProvider(documentSelector, navigationProvider);
 	const foldingRegistration = vscode.languages.registerFoldingRangeProvider(documentSelector, navigationProvider);
@@ -70,23 +70,26 @@ export async function activate(context: ExtensionContext): Promise<void> {
 	const symbolRegistration = vscode.languages.registerDocumentSymbolProvider(documentSelector, navigationProvider);
 	const semanticTokensRegistration = vscode.languages.registerDocumentSemanticTokensProvider(
 		documentSelector,
-		new ArtifactSemanticTokensProvider(uri => artifactProvider.getRenderedArtifact(uri)),
+		new ArtifactSemanticTokensProvider((uri) => artifactProvider.getRenderedArtifact(uri)),
 		artifactSemanticTokensLegend,
 	);
 
-	const updateEditorContexts = (): Thenable<unknown[]> => Promise.all([
-		commands.executeCommand(
-			'setContext',
-			'coglens.supportedSource',
-			Boolean(window.activeTextEditor
-				&& artifactCommands.isSupportedSourceDocument(window.activeTextEditor.document)),
-		),
-		commands.executeCommand(
-			'setContext',
-			'coglens.artifactDocument',
-			window.activeTextEditor?.document.uri.scheme === ArtifactDocumentProvider.scheme,
-		),
-	]);
+	const updateEditorContexts = (): Thenable<unknown[]> =>
+		Promise.all([
+			commands.executeCommand(
+				'setContext',
+				'coglens.supportedSource',
+				Boolean(
+					window.activeTextEditor &&
+					artifactCommands.isSupportedSourceDocument(window.activeTextEditor.document),
+				),
+			),
+			commands.executeCommand(
+				'setContext',
+				'coglens.artifactDocument',
+				window.activeTextEditor?.document.uri.scheme === ArtifactDocumentProvider.scheme,
+			),
+		]);
 	const activeEditorSubscription = window.onDidChangeActiveTextEditor(() => {
 		void updateEditorContexts();
 	});
@@ -118,5 +121,5 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		closedDocumentSubscription,
 	);
 
-	await Promise.all(variantProviders.map(provider => provider.initialize()));
+	await Promise.all(variantProviders.map((provider) => provider.initialize()));
 }

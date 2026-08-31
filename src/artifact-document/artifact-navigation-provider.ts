@@ -27,12 +27,9 @@ import { documentationForInstruction } from './instruction-documentation.js';
 
 type ArtifactLookup = (uri: Uri) => RenderedTextArtifact | undefined;
 
-export class ArtifactNavigationProvider implements
-	DefinitionProvider,
-	DocumentLinkProvider,
-	FoldingRangeProvider,
-	HoverProvider,
-	DocumentSymbolProvider {
+export class ArtifactNavigationProvider
+	implements DefinitionProvider, DocumentLinkProvider, FoldingRangeProvider, HoverProvider, DocumentSymbolProvider
+{
 	constructor(private readonly artifactLookup: ArtifactLookup) {}
 
 	provideDefinition(
@@ -43,36 +40,28 @@ export class ArtifactNavigationProvider implements
 		const artifact = this.artifactLookup(document.uri);
 		const source = artifact?.lines[position.line]?.source;
 		if (
-			!artifact
-			|| !artifactDefinitions[artifact.kind].navigation.definitions
-			|| !source?.file
-			|| source.line === null
+			!artifact ||
+			!artifactDefinitions[artifact.kind].navigation.definitions ||
+			!source?.file ||
+			source.line === null
 		) {
 			return undefined;
 		}
-		return new Location(
-			Uri.file(path.normalize(source.file)),
-			new Position(source.line - 1, source.column ?? 0),
-		);
+		return new Location(Uri.file(path.normalize(source.file)), new Position(source.line - 1, source.column ?? 0));
 	}
 
-	provideDocumentLinks(
-		document: TextDocument,
-		_token: CancellationToken,
-	): ProviderResult<DocumentLink[]> {
+	provideDocumentLinks(document: TextDocument, _token: CancellationToken): ProviderResult<DocumentLink[]> {
 		const artifact = this.artifactLookup(document.uri);
 		if (!artifact || !artifactDefinitions[artifact.kind].navigation.links) {
 			return undefined;
 		}
-		return artifact.links.map(link => new DocumentLink(
-			new Range(
-				link.line,
-				link.startCharacter,
-				link.line,
-				link.endCharacter,
-			),
-			document.uri.with({ fragment: `L${link.targetLine + 1}` }),
-		));
+		return artifact.links.map(
+			(link) =>
+				new DocumentLink(
+					new Range(link.line, link.startCharacter, link.line, link.endCharacter),
+					document.uri.with({ fragment: `L${link.targetLine + 1}` }),
+				),
+		);
 	}
 
 	provideFoldingRanges(
@@ -84,14 +73,10 @@ export class ArtifactNavigationProvider implements
 		if (!artifact || !artifactDefinitions[artifact.kind].navigation.folds) {
 			return undefined;
 		}
-		return artifact.folds.map(fold => new FoldingRange(fold.startLine, fold.endLine));
+		return artifact.folds.map((fold) => new FoldingRange(fold.startLine, fold.endLine));
 	}
 
-	provideHover(
-		document: TextDocument,
-		position: Position,
-		_token: CancellationToken,
-	): ProviderResult<Hover> {
+	provideHover(document: TextDocument, position: Position, _token: CancellationToken): ProviderResult<Hover> {
 		const artifact = this.artifactLookup(document.uri);
 		const line = artifact?.lines[position.line];
 		if (!artifact || !line) {
@@ -99,10 +84,7 @@ export class ArtifactNavigationProvider implements
 		}
 		const contents = new MarkdownString();
 		contents.isTrusted = false;
-		const documentation = documentationForInstruction(
-			artifact,
-			line.disassembly ?? line.text,
-		);
+		const documentation = documentationForInstruction(artifact, line.disassembly ?? line.text);
 		if (documentation) {
 			contents.appendMarkdown(`**${documentation.mnemonic}** _(${documentation.instructionSet})_ — `);
 			contents.appendText(documentation.tooltip);
@@ -120,11 +102,13 @@ export class ArtifactNavigationProvider implements
 			].filter((value): value is string => Boolean(value));
 			contents.appendText(details.join(' · '));
 		}
-		const link = artifact.links.find(candidate =>
-			candidate.line === position.line
-			&& position.character >= candidate.startCharacter
-			&& position.character <= candidate.endCharacter)
-			?? artifact.links.find(candidate => candidate.line === position.line);
+		const link =
+			artifact.links.find(
+				(candidate) =>
+					candidate.line === position.line &&
+					position.character >= candidate.startCharacter &&
+					position.character <= candidate.endCharacter,
+			) ?? artifact.links.find((candidate) => candidate.line === position.line);
 		if (link) {
 			const target = artifact.lines[link.targetLine]?.text.trim();
 			if (contents.value) {
@@ -133,11 +117,7 @@ export class ArtifactNavigationProvider implements
 			contents.appendText(`Branch target: ${target || `line ${link.targetLine + 1}`}`);
 		}
 		const source = line.source;
-		if (
-			artifactDefinitions[artifact.kind].navigation.sourceLocations
-			&& source?.file
-			&& source.line !== null
-		) {
+		if (artifactDefinitions[artifact.kind].navigation.sourceLocations && source?.file && source.line !== null) {
 			if (contents.value) {
 				contents.appendMarkdown('\n\n');
 			}
@@ -150,15 +130,12 @@ export class ArtifactNavigationProvider implements
 		return new Hover(contents);
 	}
 
-	provideDocumentSymbols(
-		document: TextDocument,
-		_token: CancellationToken,
-	): ProviderResult<DocumentSymbol[]> {
+	provideDocumentSymbols(document: TextDocument, _token: CancellationToken): ProviderResult<DocumentSymbol[]> {
 		const artifact = this.artifactLookup(document.uri);
 		if (!artifact || !artifactDefinitions[artifact.kind].navigation.symbols) {
 			return undefined;
 		}
-		return artifact.symbols.flatMap(symbol => {
+		return artifact.symbols.flatMap((symbol) => {
 			const line = artifact.lines[symbol.line];
 			if (!line) {
 				return [];

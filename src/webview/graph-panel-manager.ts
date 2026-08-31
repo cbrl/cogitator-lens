@@ -16,15 +16,9 @@ import {
 	window,
 	workspace,
 } from 'vscode';
-import type {
-	ControlFlowGraph,
-	ControlFlowSourceLocation,
-	RenderedGraphArtifact,
-} from '../types/index.js';
+import type { ControlFlowGraph, ControlFlowSourceLocation, RenderedGraphArtifact } from '../types/index.js';
 import type { ArtifactStatus } from '../artifact-document/artifact-generator.js';
-import type {
-	ArtifactDocumentSnapshot,
-} from '../artifact-document/artifact-identity.js';
+import type { ArtifactDocumentSnapshot } from '../artifact-document/artifact-identity.js';
 import {
 	artifactDocumentKey,
 	ArtifactDocumentRegistry,
@@ -61,7 +55,7 @@ export class GraphPanelManager implements Disposable {
 	) {
 		this.subscriptions = Disposable.from(
 			window.onDidChangeActiveColorTheme(() => {
-				this.documents.forEach(document => this.postTheme(document));
+				this.documents.forEach((document) => this.postTheme(document));
 			}),
 			this.activeEmitter,
 		);
@@ -88,7 +82,7 @@ export class GraphPanelManager implements Disposable {
 		}
 
 		const registered = this.registry.open(uri, {
-			refresh: registryDocument => {
+			refresh: (registryDocument) => {
 				const current = this.documents.get(artifactDocumentKey(registryDocument.uri));
 				if (current) {
 					void this.refresh(current);
@@ -102,10 +96,7 @@ export class GraphPanelManager implements Disposable {
 			},
 		});
 		const parsed = registered.parsed;
-		if (
-			parsed.artifactKind !== 'control-flow-graph'
-			|| !parsed.artifactOutputId
-		) {
+		if (parsed.artifactKind !== 'control-flow-graph' || !parsed.artifactOutputId) {
 			this.registry.unregister(uri);
 			throw new Error(`Invalid control-flow graph URI: ${uri.toString()}`);
 		}
@@ -127,8 +118,8 @@ export class GraphPanelManager implements Disposable {
 		};
 		panel.webview.html = this.html(panel);
 		const subscriptions = Disposable.from(
-			panel.webview.onDidReceiveMessage(message => this.acceptMessage(document, message)),
-			panel.onDidChangeViewState(event => {
+			panel.webview.onDidReceiveMessage((message) => this.acceptMessage(document, message)),
+			panel.onDidChangeViewState((event) => {
 				if (event.webviewPanel.active) {
 					this.setActive(document);
 				} else if (this.activeDocument === document) {
@@ -171,7 +162,7 @@ export class GraphPanelManager implements Disposable {
 	private acceptStatus(document: GraphPanelDocument, status: ArtifactStatus): void {
 		if (status.artifact?.presentation === 'graph') {
 			document.artifact = status.artifact;
-			if (!status.artifact.graphs.some(graph => graph.id === document.selectedGraphId)) {
+			if (!status.artifact.graphs.some((graph) => graph.id === document.selectedGraphId)) {
 				document.selectedGraphId = status.artifact.graphs[0]?.id;
 			}
 		}
@@ -194,7 +185,7 @@ export class GraphPanelManager implements Disposable {
 				this.postRender(document, document.registered.handler.status);
 				break;
 			case 'selectionChanged':
-				if (!document.artifact?.graphs.some(graph => graph.id === message.graphId)) {
+				if (!document.artifact?.graphs.some((graph) => graph.id === message.graphId)) {
 					logChannel.debug('Ignored stale control-flow graph selection.');
 					return;
 				}
@@ -204,35 +195,35 @@ export class GraphPanelManager implements Disposable {
 				this.requestRefresh(document);
 				break;
 			case 'exportDot': {
-				const graph = document.artifact?.graphs.find(candidate => candidate.id === message.graphId);
+				const graph = document.artifact?.graphs.find((candidate) => candidate.id === message.graphId);
 				if (graph) {
 					void this.saveExport(document, graph.label, 'dot', toDot(graph));
 				}
 				break;
 			}
 			case 'exportSvg': {
-				const graph = document.artifact?.graphs.find(candidate => candidate.id === message.graphId);
+				const graph = document.artifact?.graphs.find((candidate) => candidate.id === message.graphId);
 				if (graph) {
 					void this.saveExport(document, graph.label, 'svg', message.svg);
 				}
 				break;
 			}
 			case 'openSource': {
-				const graph = document.artifact?.graphs.find(candidate => candidate.id === message.graphId);
-				const node = graph?.nodes.find(candidate => candidate.id === message.nodeId);
+				const graph = document.artifact?.graphs.find((candidate) => candidate.id === message.graphId);
+				const node = graph?.nodes.find((candidate) => candidate.id === message.nodeId);
 				const source = node?.source;
 				if (!source) {
 					logChannel.debug('Ignored stale or unmapped control-flow graph source request.');
 					return;
 				}
-				void openSource(source).catch(error => {
+				void openSource(source).catch((error) => {
 					logChannel.warn(`Could not open control-flow graph source ${source.uri}: ${String(error)}`);
 				});
 				break;
 			}
 			case 'highlightSource': {
-				const graph = document.artifact?.graphs.find(candidate => candidate.id === message.graphId);
-				const source = graph?.nodes.find(candidate => candidate.id === message.nodeId)?.source;
+				const graph = document.artifact?.graphs.find((candidate) => candidate.id === message.graphId);
+				const source = graph?.nodes.find((candidate) => candidate.id === message.nodeId)?.source;
 				if (source) {
 					highlightVisibleSource(source);
 				}
@@ -290,7 +281,7 @@ export class GraphPanelManager implements Disposable {
 	}
 
 	private postMessage(document: GraphPanelDocument, message: HostMessage): void {
-		void document.panel.webview.postMessage(message).then(undefined, error => {
+		void document.panel.webview.postMessage(message).then(undefined, (error) => {
 			logChannel.debug(`Control-flow graph panel message was not delivered: ${String(error)}`);
 		});
 	}
@@ -323,18 +314,12 @@ export class GraphPanelManager implements Disposable {
 	private html(panel: WebviewPanel): string {
 		const webview = panel.webview;
 		const nonce = randomUUID().replaceAll('-', '');
-		const script = webview.asWebviewUri(Uri.joinPath(
-			this.context.extensionUri,
-			'dist',
-			'webview',
-			'control-flow-graph.js',
-		));
-		const style = webview.asWebviewUri(Uri.joinPath(
-			this.context.extensionUri,
-			'dist',
-			'webview',
-			'control-flow-graph.css',
-		));
+		const script = webview.asWebviewUri(
+			Uri.joinPath(this.context.extensionUri, 'dist', 'webview', 'control-flow-graph.js'),
+		);
+		const style = webview.asWebviewUri(
+			Uri.joinPath(this.context.extensionUri, 'dist', 'webview', 'control-flow-graph.css'),
+		);
 		const csp = [
 			"default-src 'none'",
 			`img-src ${webview.cspSource} data:`,
@@ -394,8 +379,10 @@ export class GraphPanelManager implements Disposable {
 
 function toDot(graph: ControlFlowGraph): string {
 	const quote = (value: string): string => JSON.stringify(value);
-	const nodes = graph.nodes.map(node => `  ${quote(node.id)} [label=${quote(node.label)}];`);
-	const edges = graph.edges.map(edge => `  ${quote(edge.from)} -> ${quote(edge.to)} [label=${quote(edge.label ?? edge.kind)}];`);
+	const nodes = graph.nodes.map((node) => `  ${quote(node.id)} [label=${quote(node.label)}];`);
+	const edges = graph.edges.map(
+		(edge) => `  ${quote(edge.from)} -> ${quote(edge.to)} [label=${quote(edge.label ?? edge.kind)}];`,
+	);
 	return `digraph ${quote(graph.label)} {\n  rankdir=TB;\n  node [shape=box, fontname="monospace"];\n${nodes.join('\n')}\n${edges.join('\n')}\n}\n`;
 }
 
@@ -412,15 +399,10 @@ function exportUri(sourceUri: string, filename: string): Uri | undefined {
 	}
 }
 
-function diagnosticMessages(
-	status: ArtifactStatus,
-	artifact?: RenderedGraphArtifact,
-): string[] {
+function diagnosticMessages(status: ArtifactStatus, artifact?: RenderedGraphArtifact): string[] {
 	const messages = [
-		...(artifact?.diagnostics ?? []).map(diagnostic => diagnostic.message),
-		...(status.state === 'failed'
-			? status.diagnostics.map(diagnostic => diagnostic.message)
-			: []),
+		...(artifact?.diagnostics ?? []).map((diagnostic) => diagnostic.message),
+		...(status.state === 'failed' ? status.diagnostics.map((diagnostic) => diagnostic.message) : []),
 	];
 	return [...new Set(messages)];
 }
@@ -444,7 +426,7 @@ async function openSource(source: ControlFlowSourceLocation): Promise<void> {
 
 function highlightVisibleSource(source: ControlFlowSourceLocation): void {
 	const uri = Uri.parse(source.uri, true);
-	const editor = window.visibleTextEditors.find(candidate => candidate.document.uri.toString() === uri.toString());
+	const editor = window.visibleTextEditors.find((candidate) => candidate.document.uri.toString() === uri.toString());
 	if (!editor) {
 		return;
 	}
@@ -456,8 +438,11 @@ function highlightVisibleSource(source: ControlFlowSourceLocation): void {
 
 function currentTheme(): GraphTheme {
 	switch (window.activeColorTheme.kind) {
-		case ColorThemeKind.Light: return 'light';
-		case ColorThemeKind.Dark: return 'dark';
-		default: return 'high-contrast';
+		case ColorThemeKind.Light:
+			return 'light';
+		case ColorThemeKind.Dark:
+			return 'dark';
+		default:
+			return 'high-contrast';
 	}
 }

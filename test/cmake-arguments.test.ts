@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { flattenCmakeArguments } from '../src/buildsystems/cmake-arguments.js';
-import {
-	getToolchainDefinition,
-	supportedToolchainKinds,
-} from '../src/toolchains/toolchain-map.js';
+import { getToolchainDefinition, supportedToolchainKinds } from '../src/toolchains/toolchain-map.js';
 
 test('CMake flattens include paths and definitions after provider arguments', () => {
 	for (const kind of supportedToolchainKinds) {

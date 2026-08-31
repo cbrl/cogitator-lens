@@ -15,7 +15,7 @@ export function analyzeGraphStructure(graph: ControlFlowGraph): GraphStructure {
 	const outgoing = adjacency(graph.edges, 'from', 'to');
 	const incoming = adjacency(graph.edges, 'to', 'from');
 	const reachable = walk(entry, outgoing);
-	const nodeIds = graph.nodes.map(node => node.id).filter(id => reachable.has(id));
+	const nodeIds = graph.nodes.map((node) => node.id).filter((id) => reachable.has(id));
 	const dominators = new Map<string, Set<string>>();
 	for (const id of nodeIds) {
 		dominators.set(id, id === entry ? new Set([id]) : new Set(nodeIds));
@@ -27,10 +27,11 @@ export function analyzeGraphStructure(graph: ControlFlowGraph): GraphStructure {
 			if (id === entry) {
 				continue;
 			}
-			const predecessors = (incoming.get(id) ?? []).filter(predecessor => reachable.has(predecessor));
-			const next = predecessors.length === 0
-				? new Set([id])
-				: intersection(predecessors.map(predecessor => dominators.get(predecessor) ?? new Set()));
+			const predecessors = (incoming.get(id) ?? []).filter((predecessor) => reachable.has(predecessor));
+			const next =
+				predecessors.length === 0
+					? new Set([id])
+					: intersection(predecessors.map((predecessor) => dominators.get(predecessor) ?? new Set()));
 			next.add(id);
 			if (!sameSet(next, dominators.get(id)!)) {
 				dominators.set(id, next);
@@ -52,11 +53,7 @@ export function analyzeGraphStructure(graph: ControlFlowGraph): GraphStructure {
 	return { reachable, backEdges, loopNodes };
 }
 
-function adjacency(
-	edges: readonly ControlFlowEdge[],
-	key: 'from' | 'to',
-	value: 'from' | 'to',
-): Map<string, string[]> {
+function adjacency(edges: readonly ControlFlowEdge[], key: 'from' | 'to', value: 'from' | 'to'): Map<string, string[]> {
 	const result = new Map<string, string[]>();
 	for (const edge of edges) {
 		const values = result.get(edge[key]) ?? [];
@@ -66,7 +63,11 @@ function adjacency(
 	return result;
 }
 
-function walk(start: string, adjacencyMap: ReadonlyMap<string, readonly string[]>, initial = new Set<string>()): Set<string> {
+function walk(
+	start: string,
+	adjacencyMap: ReadonlyMap<string, readonly string[]>,
+	initial = new Set<string>(),
+): Set<string> {
 	const visited = new Set(initial);
 	const pending = [start];
 	while (pending.length) {
@@ -84,9 +85,9 @@ function walk(start: string, adjacencyMap: ReadonlyMap<string, readonly string[]
 
 function intersection(sets: readonly ReadonlySet<string>[]): Set<string> {
 	const [first, ...rest] = sets;
-	return new Set([...first ?? []].filter(value => rest.every(set => set.has(value))));
+	return new Set([...(first ?? [])].filter((value) => rest.every((set) => set.has(value))));
 }
 
 function sameSet(left: ReadonlySet<string>, right: ReadonlySet<string>): boolean {
-	return left.size === right.size && [...left].every(value => right.has(value));
+	return left.size === right.size && [...left].every((value) => right.has(value));
 }

@@ -1,10 +1,5 @@
 import path from 'node:path';
-import type {
-	DisplayOptions,
-	RawArtifact,
-	RenderedTextArtifact,
-	RenderedArtifactLine,
-} from '../../types/index.js';
+import type { DisplayOptions, RawArtifact, RenderedTextArtifact, RenderedArtifactLine } from '../../types/index.js';
 import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
 
@@ -36,9 +31,9 @@ export function renderRustMir(
 		}
 		const span = spanLocation.exec(text);
 		if (span) {
-			const filename = path.normalize(path.isAbsolute(span[1])
-				? span[1]
-				: path.resolve(raw.command.workingDirectory, span[1]));
+			const filename = path.normalize(
+				path.isAbsolute(span[1]) ? span[1] : path.resolve(raw.command.workingDirectory, span[1]),
+			);
 			currentSource = {
 				file: filename,
 				line: Number.parseInt(span[2], 10),
@@ -48,28 +43,30 @@ export function renderRustMir(
 		lines.push({ text, source: currentSource });
 	}
 
-	const definitions = new Map(blocks.map(block => [block.name, block.line]));
+	const definitions = new Map(blocks.map((block) => [block.name, block.line]));
 	const links = lines.flatMap((line, lineIndex) => {
 		const ownDefinition = basicBlock.exec(line.text)?.[1];
-		return [...line.text.matchAll(blockReference)].flatMap(match => {
+		return [...line.text.matchAll(blockReference)].flatMap((match) => {
 			const name = match[0];
 			const targetLine = definitions.get(name);
 			return name !== ownDefinition && targetLine !== undefined
-				? [{
-					line: lineIndex,
-					startCharacter: match.index,
-					endCharacter: match.index + name.length,
-					targetLine,
-				}]
+				? [
+						{
+							line: lineIndex,
+							startCharacter: match.index,
+							endCharacter: match.index + name.length,
+							targetLine,
+						},
+					]
 				: [];
 		});
 	});
 	const folds = [
-		...functions.flatMap(item => {
+		...functions.flatMap((item) => {
 			const endLine = findClosingBrace(textLines, item.line);
 			return endLine > item.line ? [{ startLine: item.line, endLine }] : [];
 		}),
-		...blocks.flatMap(item => {
+		...blocks.flatMap((item) => {
 			const endLine = findClosingBrace(textLines, item.line);
 			return endLine > item.line ? [{ startLine: item.line, endLine }] : [];
 		}),

@@ -50,9 +50,7 @@ function sourceLocation(
 	if (!source || source.line === null || source.line <= 0) {
 		return undefined;
 	}
-	const uri = source.file === null
-		? mainSourceUri
-		: compilerSourceUri(source.file, workingDirectory);
+	const uri = source.file === null ? mainSourceUri : compilerSourceUri(source.file, workingDirectory);
 	return {
 		uri,
 		// Assembly parsers report one-based positions; editor positions are zero-based.

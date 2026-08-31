@@ -1,8 +1,4 @@
-import type {
-	ControlFlowEdge,
-	ControlFlowGraph,
-	ControlFlowNode,
-} from '../../../types/index.js';
+import type { ControlFlowEdge, ControlFlowGraph, ControlFlowNode } from '../../../types/index.js';
 import { GraphIdAllocator, splitLines } from '../cfg-parser-support.js';
 import type { GraphParseResult } from '../control-flow-graph-model.js';
 
@@ -23,10 +19,7 @@ const blockPattern = /^\s*(b\d+):(?:\s+.*)?$/u;
 const sourceLinePattern = /\([+]?([1-9]\d*)\)/u;
 
 /** Parses the final textual SSA snapshot emitted by `GOSSAFUNC=<name>+`. */
-export function parseGoSsaControlFlowGraphs(
-	text: string,
-	sourceUri: string,
-): GraphParseResult {
+export function parseGoSsaControlFlowGraphs(text: string, sourceUri: string): GraphParseResult {
 	const lines = splitLines(text);
 	const latest = new Map<string, Snapshot>();
 	const order: string[] = [];
@@ -80,7 +73,7 @@ export function parseGoSsaControlFlowGraphs(
 
 	const diagnostics: string[] = [];
 	const graphIds = new GraphIdAllocator('go-ssa');
-	const graphs = order.flatMap(name => {
+	const graphs = order.flatMap((name) => {
 		const candidate = latest.get(name)!;
 		const graph = graphFromSnapshot(candidate, sourceUri, graphIds, diagnostics);
 		return graph ? [graph] : [];
@@ -99,21 +92,23 @@ function graphFromSnapshot(
 	graphIds: GraphIdAllocator,
 	diagnostics: string[],
 ): ControlFlowGraph | undefined {
-	const ids = new Set(snapshot.blocks.map(block => block.id));
-	const nodes: ControlFlowNode[] = snapshot.blocks.map(block => {
+	const ids = new Set(snapshot.blocks.map((block) => block.id));
+	const nodes: ControlFlowNode[] = snapshot.blocks.map((block) => {
 		const terminator = withoutSourcePosition(block.text.at(-1) ?? '');
 		const terminal = /^Ret\b/u.test(terminator)
-			? 'return' as const
+			? ('return' as const)
 			: /^(?:Exit|Invalid)\b/u.test(terminator)
-				? 'unreachable' as const
+				? ('unreachable' as const)
 				: undefined;
 		return {
 			id: block.id,
 			label: block.text.join('\n'),
 			referencedArtifactLines: block.lines,
-			...(block.firstSourceLine === undefined ? {} : {
-				source: { uri: sourceUri, line: block.firstSourceLine, column: 0 },
-			}),
+			...(block.firstSourceLine === undefined
+				? {}
+				: {
+						source: { uri: sourceUri, line: block.firstSourceLine, column: 0 },
+					}),
 			...(terminal ? { terminal } : {}),
 		};
 	});
@@ -125,8 +120,8 @@ function graphFromSnapshot(
 	for (const block of snapshot.blocks) {
 		const terminator = withoutSourcePosition(block.text.at(-1) ?? '');
 		const targets = [...terminator.matchAll(/\b(b\d+)\b/gu)]
-			.map(match => match[1])
-			.filter(target => target !== block.id);
+			.map((match) => match[1])
+			.filter((target) => target !== block.id);
 		for (const [index, target] of [...new Set(targets)].entries()) {
 			if (!ids.has(target)) {
 				diagnostics.push(

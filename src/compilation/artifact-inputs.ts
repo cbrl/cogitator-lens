@@ -31,10 +31,7 @@ export function parseMakeDepfile(text: string, workingDirectory: string): string
  * header-unit fields are intentionally ignored until they can be resolved to
  * stable local file identities.
  */
-export function parseMsvcSourceDependencies(
-	text: string,
-	workingDirectory: string,
-): string[] {
+export function parseMsvcSourceDependencies(text: string, workingDirectory: string): string[] {
 	let parsed: unknown;
 	try {
 		parsed = JSON.parse(text);
@@ -62,65 +59,64 @@ export async function snapshotArtifactInputs(
 		[sourceFile, ...(coverage === 'complete' ? dependencies : [])],
 		workingDirectory,
 	);
-	const inputs = await Promise.all(paths.map(async filename => {
-		try {
-			const stat = await fs.promises.stat(filename);
-			return Object.freeze({
-				uri: pathToFileURL(filename).href,
-				size: stat.size,
-				mtimeMs: stat.mtimeMs,
-			});
-		} catch {
-			// Retaining an unreadable path guarantees that the entry cannot
-			// validate as a cache hit later.
-			return Object.freeze({
-				uri: pathToFileURL(filename).href,
-				size: -1,
-				mtimeMs: -1,
-			});
-		}
-	}));
+	const inputs = await Promise.all(
+		paths.map(async (filename) => {
+			try {
+				const stat = await fs.promises.stat(filename);
+				return Object.freeze({
+					uri: pathToFileURL(filename).href,
+					size: stat.size,
+					mtimeMs: stat.mtimeMs,
+				});
+			} catch {
+				// Retaining an unreadable path guarantees that the entry cannot
+				// validate as a cache hit later.
+				return Object.freeze({
+					uri: pathToFileURL(filename).href,
+					size: -1,
+					mtimeMs: -1,
+				});
+			}
+		}),
+	);
 	return {
 		inputs: Object.freeze(inputs),
 		dependencyCoverage: coverage,
 	};
 }
 
-export async function validateArtifactInputs(
-	inputs: readonly ArtifactInputState[],
-): Promise<boolean> {
+export async function validateArtifactInputs(inputs: readonly ArtifactInputState[]): Promise<boolean> {
 	if (inputs.length === 0) {
 		return false;
 	}
-	return (await Promise.all(inputs.map(async input => {
-		try {
-			const stat = await fs.promises.stat(fileURLToPath(input.uri));
-			return stat.isFile()
-				&& stat.size === input.size
-				&& stat.mtimeMs === input.mtimeMs;
-		} catch {
-			return false;
-		}
-	}))).every(Boolean);
+	return (
+		await Promise.all(
+			inputs.map(async (input) => {
+				try {
+					const stat = await fs.promises.stat(fileURLToPath(input.uri));
+					return stat.isFile() && stat.size === input.size && stat.mtimeMs === input.mtimeMs;
+				} catch {
+					return false;
+				}
+			}),
+		)
+	).every(Boolean);
 }
 
 export function artifactInputComparisonKey(uri: string): string {
 	return process.platform === 'win32' ? uri.toLowerCase() : uri;
 }
 
-function normalizeDependencyPaths(
-	values: readonly string[],
-	workingDirectory: string,
-): string[] {
+function normalizeDependencyPaths(values: readonly string[], workingDirectory: string): string[] {
 	const byKey = new Map<string, string>();
 	for (const value of values) {
 		const trimmed = value.trim();
 		if (!trimmed || trimmed === '\\') {
 			continue;
 		}
-		const absolute = path.normalize(isAbsoluteOnAnyPlatform(trimmed)
-			? trimmed
-			: path.resolve(workingDirectory, trimmed));
+		const absolute = path.normalize(
+			isAbsoluteOnAnyPlatform(trimmed) ? trimmed : path.resolve(workingDirectory, trimmed),
+		);
 		const key = process.platform === 'win32' ? absolute.toLowerCase() : absolute;
 		if (!byKey.has(key)) {
 			byKey.set(key, absolute);
@@ -148,9 +144,10 @@ function findRuleSeparator(rule: string): number {
 		if (character !== ':' || isEscaped(rule, index)) {
 			continue;
 		}
-		const driveLetter = index === tokenStart + 1
-			&& /[A-Za-z]/.test(rule[tokenStart])
-			&& (rule[index + 1] === '\\' || rule[index + 1] === '/');
+		const driveLetter =
+			index === tokenStart + 1 &&
+			/[A-Za-z]/.test(rule[tokenStart]) &&
+			(rule[index + 1] === '\\' || rule[index + 1] === '/');
 		if (!driveLetter) {
 			return index;
 		}

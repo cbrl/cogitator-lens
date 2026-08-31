@@ -4,9 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { testToolchainHost } from './toolchain-host.js';
-import {
-	artifactDefinitions,
-} from '../src/artifacts/core/artifact-definitions.js';
+import { artifactDefinitions } from '../src/artifacts/core/artifact-definitions.js';
 import {
 	dumpbin,
 	gnuObjdump,
@@ -21,11 +19,7 @@ import {
 	resolveArtifactAvailability,
 	toolchainDefinitions,
 } from '../src/toolchains/toolchain-map.js';
-import type {
-	ArtifactRenderContext,
-	RawArtifact,
-	ToolchainProfile,
-} from '../src/types/index.js';
+import type { ArtifactRenderContext, RawArtifact, ToolchainProfile } from '../src/types/index.js';
 import { defaultArtifactOptions } from '../src/types/index.js';
 
 test('binary command construction is toolchain-owned and shell-free', () => {
@@ -53,12 +47,7 @@ test('binary command construction is toolchain-owned and shell-free', () => {
 		'/Z7',
 		'/Foartifact.obj',
 	]);
-	assert.deepEqual(gnuObjdump.arguments('artifact with spaces.o'), [
-		'-d',
-		'-l',
-		'-w',
-		'artifact with spaces.o',
-	]);
+	assert.deepEqual(gnuObjdump.arguments('artifact with spaces.o'), ['-d', '-l', '-w', 'artifact with spaces.o']);
 	assert.deepEqual(llvmObjdump.arguments('artifact with spaces.o'), [
 		'--disassemble',
 		'--line-numbers',
@@ -79,28 +68,16 @@ test('binary availability requires the disassembler declared by the artifact cel
 		...missing,
 		tools: { disassembler: process.execPath },
 	};
-	assert.equal(
-		resolveArtifactAvailability(configured, 'binary-disassembly').status,
-		'available',
-	);
-	assert.equal(
-		resolveArtifactAvailability(profile('rust'), 'binary-disassembly').status,
-		'unsupported',
-	);
+	assert.equal(resolveArtifactAvailability(configured, 'binary-disassembly').status, 'available');
+	assert.equal(resolveArtifactAvailability(profile('rust'), 'binary-disassembly').status, 'unsupported');
 });
 
 test('profile creation discovers and merges named auxiliary tools', () => {
 	const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'coglens-tools-'));
 	try {
 		const executable = path.join(directory, process.platform === 'win32' ? 'gcc.exe' : 'gcc');
-		const demangler = path.join(
-			directory,
-			process.platform === 'win32' ? 'c++filt.exe' : 'c++filt',
-		);
-		const disassembler = path.join(
-			directory,
-			process.platform === 'win32' ? 'objdump.exe' : 'objdump',
-		);
+		const demangler = path.join(directory, process.platform === 'win32' ? 'c++filt.exe' : 'c++filt');
+		const disassembler = path.join(directory, process.platform === 'win32' ? 'objdump.exe' : 'objdump');
 		for (const file of [executable, demangler, disassembler]) {
 			fs.writeFileSync(file, '');
 		}
@@ -127,22 +104,21 @@ test('GNU disassembly renders addresses, bytes, links, source mappings, symbols,
 		renderContext(backend),
 	);
 
-	assert.ok(rendered.lines.some(line =>
-		line.address === 1
-		&& line.opcodes?.length === 5
-		&& line.disassembly?.includes('call')));
-	assert.ok(rendered.sourceLocations.some(location => location.sourceLine === 7));
-	assert.ok(rendered.links.some(link => link.targetLine >= 0));
-	assert.ok(rendered.symbols.some(symbol => symbol.name === 'helper'));
-	assert.ok(rendered.folds.some(fold => fold.endLine > fold.startLine));
+	assert.ok(
+		rendered.lines.some(
+			(line) => line.address === 1 && line.opcodes?.length === 5 && line.disassembly?.includes('call'),
+		),
+	);
+	assert.ok(rendered.sourceLocations.some((location) => location.sourceLine === 7));
+	assert.ok(rendered.links.some((link) => link.targetLine >= 0));
+	assert.ok(rendered.symbols.some((symbol) => symbol.name === 'helper'));
+	assert.ok(rendered.folds.some((fold) => fold.endLine > fold.startLine));
 	assert.equal(rendered.metrics.codeSizeBytes, 11);
 	assert.equal(rendered.metrics.instructionCount, 5);
 });
 
 test('dumpbin output is adapted before using the common raw-assembly parser', () => {
-	const normalized = normalizeDumpbinOutput(
-		platformFixture('test/fixtures/binary/dumpbin.txt'),
-	);
+	const normalized = normalizeDumpbinOutput(platformFixture('test/fixtures/binary/dumpbin.txt'));
 	assert.match(normalized, /0 <\?helper@@YAHH@Z>:/);
 	assert.match(normalized, /0: 55\s+push/);
 	assert.match(normalized, /9 <\?entry@@YAHH@Z>:/);
@@ -154,13 +130,10 @@ test('dumpbin output is adapted before using the common raw-assembly parser', ()
 		defaultArtifactOptions.display,
 		renderContext(backend),
 	);
-	assert.ok(rendered.lines.some(line => line.address === 9 && line.opcodes?.length === 3));
-	assert.ok(rendered.sourceLocations.some(location => location.sourceLine === 3));
-	assert.ok(rendered.links.some(link => link.targetLine >= 0));
-	assert.equal(
-		normalizeDisassemblySourcePaths('c:\\project path\\source.cpp:12'),
-		'C:/project path/source.cpp:12',
-	);
+	assert.ok(rendered.lines.some((line) => line.address === 9 && line.opcodes?.length === 3));
+	assert.ok(rendered.sourceLocations.some((location) => location.sourceLine === 3));
+	assert.ok(rendered.links.some((link) => link.targetLine >= 0));
+	assert.equal(normalizeDisassemblySourcePaths('c:\\project path\\source.cpp:12'), 'C:/project path/source.cpp:12');
 });
 
 test('malformed disassembler output produces a valid empty normalized artifact', () => {
@@ -218,7 +191,5 @@ function rawArtifact(text: string): RawArtifact {
 
 function platformFixture(filename: string): string {
 	const text = fs.readFileSync(filename, 'utf8');
-	return process.platform === 'win32'
-		? text
-		: text.replaceAll('C:/project', '/project');
+	return process.platform === 'win32' ? text : text.replaceAll('C:/project', '/project');
 }

@@ -4,10 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as vscode from 'vscode';
-import type {
-	PythonExtension,
-	ResolvedEnvironment,
-} from '@vscode/python-extension';
+import type { PythonExtension, ResolvedEnvironment } from '@vscode/python-extension';
 import { CompilationDatabaseVariantProvider } from '../../src/buildsystems/compilation-database.js';
 import { PythonEnvironmentVariantProvider } from '../../src/buildsystems/python-environments.js';
 import { CompilationConfigDatabase } from '../../src/compilation/compilation-config.js';
@@ -38,11 +35,7 @@ import { ArtifactNavigationProvider } from '../../src/artifact-document/artifact
 import { ArtifactDetailsTreeProvider } from '../../src/tree/artifact-details-tree.js';
 import type { ArtifactDocumentSnapshot } from '../../src/artifact-document/artifact-identity.js';
 import type { ArtifactDocumentProvider } from '../../src/artifact-document/artifact-document-provider.js';
-import {
-	MissingToolOutputError,
-	ToolchainBackend,
-	ToolExitError,
-} from '../../src/toolchains/toolchain-backend.js';
+import { MissingToolOutputError, ToolchainBackend, ToolExitError } from '../../src/toolchains/toolchain-backend.js';
 import { toolchainDefinitions } from '../../src/toolchains/toolchain-map.js';
 import {
 	clangClStackUsageOutput,
@@ -146,16 +139,21 @@ async function verifyCompilationDatabaseVariantProvider(workspaceFolder: vscode.
 	});
 	const service = new CompilationService(configuration);
 	const monitor = new CompilationDatabaseVariantProvider(configuration);
-	const monitorSubscription = monitor.onSnapshot(snapshot =>
-		service.reconcileProviderSnapshot(snapshot));
+	const monitorSubscription = monitor.onSnapshot((snapshot) => service.reconcileProviderSnapshot(snapshot));
 
 	try {
-		await fs.promises.writeFile(databasePath, JSON.stringify([{
-			directory: temporaryDirectory,
-			file: source.fsPath,
-			arguments: ['g++', '-O2', '-c', source.fsPath, '-o', 'main.o'],
-			output: 'main.o',
-		}]), 'utf8');
+		await fs.promises.writeFile(
+			databasePath,
+			JSON.stringify([
+				{
+					directory: temporaryDirectory,
+					file: source.fsPath,
+					arguments: ['g++', '-O2', '-c', source.fsPath, '-o', 'main.o'],
+					output: 'main.o',
+				},
+			]),
+			'utf8',
+		);
 		await workspaceConfiguration.update(
 			'compilationDatabases',
 			[databasePath],
@@ -166,21 +164,27 @@ async function verifyCompilationDatabaseVariantProvider(workspaceFolder: vscode.
 		service.reconcileProviderSnapshot({
 			provider: 'cmake',
 			toolchainProfiles: [cmakeProfile],
-			variants: [{
-				...compilationVariant('cmake:main', source, 'CMake'),
-				toolchainProfileId: cmakeProfile.id,
-			}],
+			variants: [
+				{
+					...compilationVariant('cmake:main', source, 'CMake'),
+					toolchainProfileId: cmakeProfile.id,
+				},
+			],
 		});
 
 		await monitor.initialize();
-		const providers = service.getVariants(source).map(variant => variant.provider).sort();
+		const providers = service
+			.getVariants(source)
+			.map((variant) => variant.provider)
+			.sort();
 		assert.deepEqual(
 			providers,
 			['cmake', 'compilation-database'],
 			'CMake and compilation database variants should coexist for one source',
 		);
-		const databaseVariant = service.getVariants(source)
-			.find(variant => variant.provider === 'compilation-database');
+		const databaseVariant = service
+			.getVariants(source)
+			.find((variant) => variant.provider === 'compilation-database');
 		assert.ok(databaseVariant);
 		assert.deepEqual(databaseVariant.arguments, ['-O2', '-c', '-o', 'main.o']);
 		assert.equal(databaseVariant.workingDirectory, temporaryDirectory);
@@ -188,7 +192,7 @@ async function verifyCompilationDatabaseVariantProvider(workspaceFolder: vscode.
 		await fs.promises.rm(databasePath);
 		await monitor.refresh();
 		assert.deepEqual(
-			service.getVariants(source).map(variant => variant.provider),
+			service.getVariants(source).map((variant) => variant.provider),
 			['cmake'],
 			'Deleting a database should remove only that provider snapshot',
 		);
@@ -206,9 +210,7 @@ async function verifyCompilationDatabaseVariantProvider(workspaceFolder: vscode.
 	}
 }
 
-async function verifyPythonEnvironmentVariantProvider(
-	workspaceFolder: vscode.WorkspaceFolder,
-): Promise<void> {
+async function verifyPythonEnvironmentVariantProvider(workspaceFolder: vscode.WorkspaceFolder): Promise<void> {
 	const executable = vscode.Uri.file(path.join(workspaceFolder.uri.fsPath, '.venv', 'python.exe'));
 	const environment: ResolvedEnvironment = {
 		id: 'test-environment',
@@ -254,7 +256,7 @@ async function verifyPythonEnvironmentVariantProvider(
 	} as unknown as PythonExtension;
 	const provider = new PythonEnvironmentVariantProvider(async () => api);
 	let snapshot: import('../../src/types/index.js').ProviderSnapshot | undefined;
-	const subscription = provider.onSnapshot(value => {
+	const subscription = provider.onSnapshot((value) => {
 		snapshot = value;
 	});
 
@@ -265,8 +267,9 @@ async function verifyPythonEnvironmentVariantProvider(
 		assert.equal(snapshot.provider, 'python-environments');
 		assert.equal(snapshot.toolchainProfiles.length, 1);
 		assert.equal(snapshot.toolchainProfiles[0].executable, executable.fsPath);
-		const fixture = snapshot.variants.find(variant =>
-			variant.source.fsPath.endsWith(path.join('test', 'fixtures', 'python', 'source-mapping.py')));
+		const fixture = snapshot.variants.find((variant) =>
+			variant.source.fsPath.endsWith(path.join('test', 'fixtures', 'python', 'source-mapping.py')),
+		);
 		assert.ok(fixture, 'Python environment discovery should create variants for workspace Python files');
 		assert.equal(fixture.toolchainProfileId, snapshot.toolchainProfiles[0].id);
 		assert.equal(fixture.environment.PYTHONPATH, workspaceFolder.uri.fsPath);
@@ -351,16 +354,9 @@ async function verifyArtifactGeneratorStates(workspaceFolder: vscode.WorkspaceFo
 			};
 		},
 	} as unknown as CompilationService;
-	const handler = new ArtifactGenerator(
-		source,
-		assemblyUri,
-		variant,
-		'assembly',
-		'default',
-		compilationService,
-	);
+	const handler = new ArtifactGenerator(source, assemblyUri, variant, 'assembly', 'default', compilationService);
 	const states: string[] = [handler.status.state];
-	const subscription = handler.onDidChange(status => states.push(status.state));
+	const subscription = handler.onDidChange((status) => states.push(status.state));
 	const cancellation = new vscode.CancellationTokenSource();
 	try {
 		await handler.update(cancellation.token);
@@ -399,9 +395,14 @@ async function verifyArtifactGeneratorStates(workspaceFolder: vscode.WorkspaceFo
 
 function verifyAssemblyUriRoundTrip(): void {
 	const source = vscode.Uri.file('/project/path with spaces/main.cpp');
-	const uri = getArtifactUri(source, {
-		id: 'cmake:app:Debug/x64',
-	}, 'assembly', 'default');
+	const uri = getArtifactUri(
+		source,
+		{
+			id: 'cmake:app:Debug/x64',
+		},
+		'assembly',
+		'default',
+	);
 	const identity = parseArtifactUri(uri);
 	assert.ok(identity);
 	assert.equal(identity.source.toString(), source.toString());
@@ -409,37 +410,48 @@ function verifyAssemblyUriRoundTrip(): void {
 	assert.equal(identity.artifactKind, 'assembly');
 	assert.equal(identity.presetId, 'default');
 	assert.match(uri.path, /main\.asm$/);
-	const presetUri = getArtifactUri(source, {
-		id: 'cmake:app:Debug/x64',
-	}, 'assembly', 'optimized');
+	const presetUri = getArtifactUri(
+		source,
+		{
+			id: 'cmake:app:Debug/x64',
+		},
+		'assembly',
+		'optimized',
+	);
 	assert.notEqual(uri.toString(), presetUri.toString());
 	assert.equal(parseArtifactUri(presetUri)?.presetId, 'optimized');
-	const graphUri = getArtifactUri(source, {
-		id: 'cmake:app:Debug/x64',
-	}, 'control-flow-graph', 'default', 'assembly');
+	const graphUri = getArtifactUri(
+		source,
+		{
+			id: 'cmake:app:Debug/x64',
+		},
+		'control-flow-graph',
+		'default',
+		'assembly',
+	);
 	assert.throws(
-		() => getArtifactUri(
-			source,
-			{ id: 'cmake:app:Debug/x64' },
-			'control-flow-graph',
-			'default',
-		),
+		() => getArtifactUri(source, { id: 'cmake:app:Debug/x64' }, 'control-flow-graph', 'default'),
 		/output selection/u,
 	);
 	assert.equal(parseArtifactUri(graphUri)?.artifactOutputId, 'assembly');
 	const graphWithoutOutput = graphUri.with({
-		query: new URLSearchParams([
-			...new URLSearchParams(graphUri.query).entries(),
-		].filter(([name]) => name !== 'output')).toString(),
+		query: new URLSearchParams(
+			[...new URLSearchParams(graphUri.query).entries()].filter(([name]) => name !== 'output'),
+		).toString(),
 	});
 	assert.equal(parseArtifactUri(graphWithoutOutput), undefined);
 	assert.notEqual(
 		graphUri.toString(),
 		getArtifactUri(source, { id: 'cmake:app:Debug/x64' }, 'control-flow-graph', 'default', 'llvm-ir').toString(),
 	);
-	const remarksUri = getArtifactUri(source, {
-		id: 'cmake:app:Debug/x64',
-	}, 'optimization-remarks', 'default');
+	const remarksUri = getArtifactUri(
+		source,
+		{
+			id: 'cmake:app:Debug/x64',
+		},
+		'optimization-remarks',
+		'default',
+	);
 	assert.match(remarksUri.path, /main\.opt\.cpp$/);
 	assert.equal(parseArtifactUri(remarksUri)?.artifactKind, 'optimization-remarks');
 	const pythonUri = getArtifactUri(
@@ -450,9 +462,14 @@ function verifyAssemblyUriRoundTrip(): void {
 	);
 	assert.match(pythonUri.path, /main\.pybytecode$/);
 	assert.equal(parseArtifactUri(pythonUri)?.artifactKind, 'python-bytecode');
-	const stackUri = getArtifactUri(source, {
-		id: 'cmake:app:Debug/x64',
-	}, 'stack-analysis', 'default');
+	const stackUri = getArtifactUri(
+		source,
+		{
+			id: 'cmake:app:Debug/x64',
+		},
+		'stack-analysis',
+		'default',
+	);
 	assert.match(stackUri.path, /main\.stack\.cpp$/);
 	assert.equal(parseArtifactUri(stackUri)?.artifactKind, 'stack-analysis');
 	assert.equal(parseArtifactUri(vscode.Uri.file('/project/main.cpp')), undefined);
@@ -485,23 +502,26 @@ function verifyArtifactNavigationProviders(): void {
 		],
 		sourceLocations: [{ line: 0, uri: sourcePath, sourceLine: 4 }],
 		links: [{ line: 1, startCharacter: 7, endCharacter: 13, targetLine: 2 }],
-		folds: [{ startLine: 0, endLine: 1 }, { startLine: 2, endLine: 3 }],
-		symbols: [{ name: 'entry', line: 0 }, { name: 'helper', line: 2 }],
+		folds: [
+			{ startLine: 0, endLine: 1 },
+			{ startLine: 2, endLine: 3 },
+		],
+		symbols: [
+			{ name: 'entry', line: 0 },
+			{ name: 'helper', line: 2 },
+		],
 		metrics: {},
 		raw: '',
 		truncated: false,
 		toolOutputTruncated: false,
 	};
-	const provider = new ArtifactNavigationProvider(uri =>
-		uri.toString() === documentUri.toString() ? artifact : undefined);
+	const provider = new ArtifactNavigationProvider((uri) =>
+		uri.toString() === documentUri.toString() ? artifact : undefined,
+	);
 	const document = { uri: documentUri } as vscode.TextDocument;
 	const cancellation = new vscode.CancellationTokenSource();
 	try {
-		const definition = provider.provideDefinition(
-			document,
-			new vscode.Position(0, 0),
-			cancellation.token,
-		);
+		const definition = provider.provideDefinition(document, new vscode.Position(0, 0), cancellation.token);
 		assert.ok(definition instanceof vscode.Location);
 		assert.equal(definition.range.start.line, 3);
 
@@ -510,29 +530,23 @@ function verifyArtifactNavigationProviders(): void {
 		assert.equal(links[0].target?.fragment, 'L3');
 		assert.equal(links[0].range.start.character, 7);
 
-		const folds = provider.provideFoldingRanges(
-			document,
-			{} as vscode.FoldingContext,
-			cancellation.token,
-		);
+		const folds = provider.provideFoldingRanges(document, {} as vscode.FoldingContext, cancellation.token);
 		assert.ok(Array.isArray(folds));
-		assert.deepEqual(folds.map(fold => [fold.start, fold.end]), [[0, 1], [2, 3]]);
-
-		const hover = provider.provideHover(
-			document,
-			new vscode.Position(0, 0),
-			cancellation.token,
+		assert.deepEqual(
+			folds.map((fold) => [fold.start, fold.end]),
+			[
+				[0, 1],
+				[2, 3],
+			],
 		);
+
+		const hover = provider.provideHover(document, new vscode.Position(0, 0), cancellation.token);
 		assert.ok(hover instanceof vscode.Hover);
 		const hoverContent = hover.contents[0];
 		assert.ok(hoverContent instanceof vscode.MarkdownString);
 		assert.match(hoverContent.value, /main\.cpp:4:3/);
 
-		const instructionHover = provider.provideHover(
-			document,
-			new vscode.Position(1, 8),
-			cancellation.token,
-		);
+		const instructionHover = provider.provideHover(document, new vscode.Position(1, 8), cancellation.token);
 		assert.ok(instructionHover instanceof vscode.Hover);
 		const instructionContent = instructionHover.contents[0];
 		assert.ok(instructionContent instanceof vscode.MarkdownString);
@@ -544,7 +558,10 @@ function verifyArtifactNavigationProviders(): void {
 
 		const symbols = provider.provideDocumentSymbols(document, cancellation.token);
 		assert.ok(Array.isArray(symbols));
-		assert.deepEqual(symbols.map(symbol => symbol.name), ['entry', 'helper']);
+		assert.deepEqual(
+			symbols.map((symbol) => symbol.name),
+			['entry', 'helper'],
+		);
 	} finally {
 		cancellation.dispose();
 	}
@@ -562,7 +579,7 @@ async function verifyDisplayFilterCaching(workspaceFolder: vscode.WorkspaceFolde
 	const dependency = vscode.Uri.joinPath(workspaceFolder.uri, 'coglens-cache-dependency.h');
 	fs.writeFileSync(dependency.fsPath, 'one\n');
 	let toolchainRuns = 0;
-	backend.produceAssembly = async source => {
+	backend.produceAssembly = async (source) => {
 		toolchainRuns++;
 		const input = fs.statSync(source.fsPath);
 		const dependencyInput = fs.statSync(dependency.fsPath);
@@ -575,15 +592,18 @@ async function verifyDisplayFilterCaching(workspaceFolder: vscode.WorkspaceFolde
 			durationMs: 1,
 			generatedAt: 0,
 			truncated: toolchainRuns === 2,
-			inputs: [{
-				uri: pathToFileURL(source.fsPath).href,
-				size: input.size,
-				mtimeMs: input.mtimeMs,
-			}, {
-				uri: pathToFileURL(dependency.fsPath).href,
-				size: dependencyInput.size,
-				mtimeMs: dependencyInput.mtimeMs,
-			}],
+			inputs: [
+				{
+					uri: pathToFileURL(source.fsPath).href,
+					size: input.size,
+					mtimeMs: input.mtimeMs,
+				},
+				{
+					uri: pathToFileURL(dependency.fsPath).href,
+					size: dependencyInput.size,
+					mtimeMs: dependencyInput.mtimeMs,
+				},
+			],
 			dependencyCoverage: 'complete',
 			command: {
 				executable: profile.executable,
@@ -656,16 +676,11 @@ async function verifyDisplayFilterCaching(workspaceFolder: vscode.WorkspaceFolde
 	fs.rmSync(dependency.fsPath, { force: true });
 }
 
-async function verifyMissingSourceIsUnavailable(
-	workspaceFolder: vscode.WorkspaceFolder,
-): Promise<void> {
+async function verifyMissingSourceIsUnavailable(workspaceFolder: vscode.WorkspaceFolder): Promise<void> {
 	const configurationChange = new vscode.EventEmitter<void>();
 	const configuration = testConfiguration(configurationChange);
 	const service = new CompilationService(configuration);
-	service.toolchainRegistry.reconcile(
-		'user',
-		[toolchainProfile('missing-source', '-O2')],
-	);
+	service.toolchainRegistry.reconcile('user', [toolchainProfile('missing-source', '-O2')]);
 	const registered = { id: ToolchainRegistry.profileId('user', 'missing-source') };
 	const backend = service.toolchainRegistry.getToolchainById(registered.id);
 	assert.ok(backend);
@@ -674,10 +689,7 @@ async function verifyMissingSourceIsUnavailable(
 		runs++;
 		throw new Error('Producer must not run for a missing source');
 	};
-	const source = vscode.Uri.joinPath(
-		workspaceFolder.uri,
-		'definitely-missing-source.cpp',
-	);
+	const source = vscode.Uri.joinPath(workspaceFolder.uri, 'definitely-missing-source.cpp');
 	const variant = compilationVariant('test:missing-source', source, 'Missing source');
 	variant.toolchainProfileId = registered.id;
 	const cancellation = new vscode.CancellationTokenSource();
@@ -728,11 +740,17 @@ function verifyVariantSnapshots(): void {
 	database.reconcile('cmake', [first, second]);
 	assert.equal(database.getVariants(source).length, 2);
 	database.reconcile('cmake', [second, first]);
-	assert.deepEqual(database.getVariants(source).map(item => item.id), [second.id, first.id]);
+	assert.deepEqual(
+		database.getVariants(source).map((item) => item.id),
+		[second.id, first.id],
+	);
 	assert.equal(database.selectVariant(source, second.id), true);
 	assert.equal(database.getSelectedVariant(source)?.id, second.id);
 	database.reconcile('cmake', [first]);
-	assert.deepEqual(database.getVariants(source).map(item => item.id), [first.id]);
+	assert.deepEqual(
+		database.getVariants(source).map((item) => item.id),
+		[first.id],
+	);
 	assert.equal(database.getSelectedVariant(source)?.id, first.id);
 	database.dispose();
 }
@@ -747,11 +765,15 @@ function verifyUriMapping(): void {
 function verifyDiagnostics(workspaceFolder: vscode.WorkspaceFolder): void {
 	const workingDirectory = vscode.Uri.joinPath(workspaceFolder.uri, 'build').fsPath;
 	const fallback = vscode.Uri.joinPath(workspaceFolder.uri, 'src', 'main.cpp');
-	const diagnostics = parseToolDiagnostics([
-		'../src/main.cpp:4:7: error: expected expression',
-		'../src/main.cpp(8,3): warning C4100: unreferenced parameter',
-		'template(12): required from here while evaluating error traits',
-	].join('\n'), fallback, workingDirectory);
+	const diagnostics = parseToolDiagnostics(
+		[
+			'../src/main.cpp:4:7: error: expected expression',
+			'../src/main.cpp(8,3): warning C4100: unreferenced parameter',
+			'template(12): required from here while evaluating error traits',
+		].join('\n'),
+		fallback,
+		workingDirectory,
+	);
 	assert.equal(diagnostics.length, 2);
 	assert.equal(diagnostics[0].uri.fsPath, path.resolve(workingDirectory, '..', 'src', 'main.cpp'));
 	assert.equal(diagnostics[0].line, 3);
@@ -760,12 +782,16 @@ function verifyDiagnostics(workspaceFolder: vscode.WorkspaceFolder): void {
 	assert.equal(diagnostics[1].line, 7);
 	assert.equal(diagnostics[1].severity, 'warning');
 
-	const rustDiagnostics = parseToolDiagnostics([
-		'error[E0308]: mismatched types',
-		`  --> ${path.join(workingDirectory, 'source.rs')}:5:9`,
-		'warning: unused variable: `value`',
-		`  --> ${path.join(workingDirectory, 'source.rs')}:8:13`,
-	].join('\n'), fallback, workingDirectory);
+	const rustDiagnostics = parseToolDiagnostics(
+		[
+			'error[E0308]: mismatched types',
+			`  --> ${path.join(workingDirectory, 'source.rs')}:5:9`,
+			'warning: unused variable: `value`',
+			`  --> ${path.join(workingDirectory, 'source.rs')}:8:13`,
+		].join('\n'),
+		fallback,
+		workingDirectory,
+	);
 	assert.equal(rustDiagnostics.length, 2);
 	assert.equal(rustDiagnostics[0].line, 4);
 	assert.equal(rustDiagnostics[0].column, 8);
@@ -773,21 +799,23 @@ function verifyDiagnostics(workspaceFolder: vscode.WorkspaceFolder): void {
 	assert.equal(rustDiagnostics[0].message, '[E0308] mismatched types');
 	assert.equal(rustDiagnostics[1].severity, 'warning');
 
-	const pythonDiagnostics = parseToolDiagnostics([
-		`  File "${path.join(workingDirectory, 'source.py')}", line 3`,
-		'    value =',
-		'           ^',
-		'SyntaxError: invalid syntax',
-	].join('\n'), fallback, workingDirectory);
+	const pythonDiagnostics = parseToolDiagnostics(
+		[
+			`  File "${path.join(workingDirectory, 'source.py')}", line 3`,
+			'    value =',
+			'           ^',
+			'SyntaxError: invalid syntax',
+		].join('\n'),
+		fallback,
+		workingDirectory,
+	);
 	assert.equal(pythonDiagnostics.length, 1);
 	assert.equal(pythonDiagnostics[0].line, 2);
 	assert.equal(pythonDiagnostics[0].column, 7);
 	assert.equal(pythonDiagnostics[0].message, 'SyntaxError: invalid syntax');
 }
 
-async function verifyArtifactDetailsTree(
-	workspaceFolder: vscode.WorkspaceFolder,
-): Promise<void> {
+async function verifyArtifactDetailsTree(workspaceFolder: vscode.WorkspaceFolder): Promise<void> {
 	const source = vscode.Uri.joinPath(workspaceFolder.uri, 'details.cpp');
 	const variant = compilationVariant('details:debug', source, 'Details Debug');
 	const artifactUri = getArtifactUri(source, variant, 'stack-analysis', 'default');
@@ -844,17 +872,17 @@ async function verifyArtifactDetailsTree(
 	assert.match(provider.getChildren()[0].label ?? '', /Open a Cogitator Lens artifact/);
 	provider.setActiveDocument(artifactUri);
 	const roots = provider.getChildren();
-	assert.deepEqual(roots.map(node => node.label), [
-		'Artifact',
-		'Status',
-		'Invocation',
-		'Environment',
-		'Metrics',
-	]);
-	const environment = roots.find(node => node.label === 'Environment');
-	assert.deepEqual(environment?.children?.map(node => node.label), ['API_KEY', 'TOKEN']);
+	assert.deepEqual(
+		roots.map((node) => node.label),
+		['Artifact', 'Status', 'Invocation', 'Environment', 'Metrics'],
+	);
+	const environment = roots.find((node) => node.label === 'Environment');
+	assert.deepEqual(
+		environment?.children?.map((node) => node.label),
+		['API_KEY', 'TOKEN'],
+	);
 	assert.doesNotMatch(JSON.stringify(roots), /secret-value/);
-	const metric = roots.find(node => node.label === 'Metrics')?.children?.[0];
+	const metric = roots.find((node) => node.label === 'Metrics')?.children?.[0];
 	assert.ok(metric);
 	const previousClipboard = await vscode.env.clipboard.readText();
 	try {
@@ -865,27 +893,21 @@ async function verifyArtifactDetailsTree(
 	}
 }
 
-async function verifyNativeStackProduction(
-	workspaceFolder: vscode.WorkspaceFolder,
-): Promise<void> {
+async function verifyNativeStackProduction(workspaceFolder: vscode.WorkspaceFolder): Promise<void> {
 	const root = workspaceFolder.uri.fsPath;
 	const raw = await runFakeNativeStackProducer(root, []);
 	assert.match(raw.text, /fake_function\(\)\s+16\s+static/);
 	assert.equal(raw.dependencyCoverage, 'complete');
 	assert.equal(raw.inputs.length, 1);
 	assert.ok(raw.command.environmentVariableNames.includes('COGLENS_FAKE_TRACE'));
-	assert.deepEqual(
-		raw.command.environmentVariableNames,
-		[...raw.command.environmentVariableNames].sort(),
-	);
+	assert.deepEqual(raw.command.environmentVariableNames, [...raw.command.environmentVariableNames].sort());
 	const output = raw.command.arguments[raw.command.arguments.indexOf('-o') + 1];
 	assert.equal(fs.existsSync(path.dirname(output)), false);
 
 	const lto = await runFakeNativeStackProducer(root, ['-flto=auto']);
 	assert.ok(lto.command.arguments.includes('-flto=auto'));
 	assert.ok(
-		lto.command.arguments.indexOf('-fno-lto')
-		> lto.command.arguments.indexOf('-flto=auto'),
+		lto.command.arguments.indexOf('-fno-lto') > lto.command.arguments.indexOf('-flto=auto'),
 		'stack analysis must disable CMake-provided LTO after provider arguments',
 	);
 	assert.match(lto.text, /fake_function\(\)\s+16\s+static/);
@@ -921,10 +943,7 @@ async function verifyNativeStackProduction(
 	assert.notEqual(clangClOutputIndex, -1);
 	const clangClOutput = clangCl.command.arguments[clangClOutputIndex + 1];
 	assert.match(clangClOutput, /^\/clang:/);
-	assert.equal(
-		fs.existsSync(path.dirname(clangClOutput.replace(/^\/clang:/, ''))),
-		false,
-	);
+	assert.equal(fs.existsSync(path.dirname(clangClOutput.replace(/^\/clang:/, ''))), false);
 
 	await verifyFakeNativeStackCancellation(root);
 }
@@ -938,9 +957,7 @@ async function runFakeClangClStackProducer(
 		displayName: 'Fake stack clang-cl',
 		kind: 'clang-cl',
 		executable: 'node',
-		defaultArguments: [
-			path.join(repositoryRoot, 'test/fixtures/stack-analysis/fake-compiler.cjs'),
-		],
+		defaultArguments: [path.join(repositoryRoot, 'test/fixtures/stack-analysis/fake-compiler.cjs')],
 		environment: {},
 		tools: {},
 	};
@@ -1001,10 +1018,7 @@ async function verifyFakeNativeStackCancellation(repositoryRoot: string): Promis
 		await waitForFile(trace);
 		const temporaryDirectory = await fs.promises.readFile(trace, 'utf8');
 		cancellation.cancel();
-		await assert.rejects(
-			pending,
-			(error: unknown) => error instanceof ExecError && error.kind === 'cancelled',
-		);
+		await assert.rejects(pending, (error: unknown) => error instanceof ExecError && error.kind === 'cancelled');
 		assert.equal(fs.existsSync(temporaryDirectory), false);
 	} finally {
 		cancellation.cancel();
@@ -1019,7 +1033,7 @@ async function waitForFile(filename: string): Promise<void> {
 		if (Date.now() >= deadline) {
 			throw new Error(`Timed out waiting for fixture trace: ${filename}`);
 		}
-		await new Promise(resolve => setTimeout(resolve, 10));
+		await new Promise((resolve) => setTimeout(resolve, 10));
 	}
 }
 
@@ -1054,7 +1068,7 @@ async function runFakeNativeStackProducer(
 					env: { COGLENS_FAKE_TRACE: trace },
 					workingDirectory: repositoryRoot,
 					productionOptions: defaultArtifactOptions.production,
-					onInvocation: details => {
+					onInvocation: (details) => {
 						observedInvocation = details;
 					},
 				},
@@ -1070,10 +1084,7 @@ async function runFakeNativeStackProducer(
 			return raw;
 		} catch (error) {
 			if (error instanceof ToolExitError) {
-				throw new Error(
-					`${error.message}\nstdout: ${error.stdout}\nstderr: ${error.stderr}`,
-					{ cause: error },
-				);
+				throw new Error(`${error.message}\nstdout: ${error.stdout}\nstderr: ${error.stderr}`, { cause: error });
 			}
 			throw error;
 		}
@@ -1135,7 +1146,7 @@ async function verifyFilterChangeSignal(): Promise<void> {
 	let persistedOptions = defaultArtifactOptions;
 	let updateFolder: vscode.WorkspaceFolder | undefined;
 	const configuration = testConfiguration(configurationChange, {
-		getArtifactOptions: kind => kind === 'assembly' ? persistedOptions : defaultArtifactOptions,
+		getArtifactOptions: (kind) => (kind === 'assembly' ? persistedOptions : defaultArtifactOptions),
 		updateArtifactOptions: async (kind, options, folder) => {
 			updateFolder = folder;
 			if (kind === 'assembly') {
@@ -1151,7 +1162,7 @@ async function verifyFilterChangeSignal(): Promise<void> {
 	service.setArtifactOption('assembly', 'labels', false);
 	assert.equal(changes, 1);
 	assert.equal(service.getArtifactOptions('assembly').display.labels, false);
-	await new Promise(resolve => setTimeout(resolve, 0));
+	await new Promise((resolve) => setTimeout(resolve, 0));
 	assert.equal(updateFolder, undefined, 'Global artifact options must use workspace scope');
 	assert.equal(
 		service.getArtifactOptions('assembly').display.labels,
@@ -1173,15 +1184,17 @@ function verifyManualVariantConfiguration(workspaceFolder: vscode.WorkspaceFolde
 	let label = 'Workspace Debug';
 	const configuration = testConfiguration(configurationChange, {
 		getToolchains: () => [profile],
-		getManualCompilationVariants: () => [{
-			id: 'manual:test',
-			source: source.fsPath,
-			displayLabel: label,
-			toolchainProfileId: 'user:manual-tool',
-			workingDirectory: workspaceFolder.uri.fsPath,
-			arguments: ['-O0'],
-			environment: {},
-		}],
+		getManualCompilationVariants: () => [
+			{
+				id: 'manual:test',
+				source: source.fsPath,
+				displayLabel: label,
+				toolchainProfileId: 'user:manual-tool',
+				workingDirectory: workspaceFolder.uri.fsPath,
+				arguments: ['-O0'],
+				environment: {},
+			},
+		],
 	});
 	const service = new CompilationService(configuration);
 	try {
@@ -1207,37 +1220,35 @@ function verifyTreeModels(workspaceFolder: vscode.WorkspaceFolder): void {
 	};
 	const compilerNode = buildToolchainTreeNode(profile, 'cmake');
 	assert.equal(compilerNode.description, 'CMake');
-	for (const expectedGroup of [
-		'Toolchain information',
-		'Arguments',
-		'Environment overrides',
-		'Capabilities',
-	]) {
+	for (const expectedGroup of ['Toolchain information', 'Arguments', 'Environment overrides', 'Capabilities']) {
 		assert.ok(findTreeNode(compilerNode, expectedGroup), `Missing toolchain tree group: ${expectedGroup}`);
 	}
 
 	const optionRoots = buildArtifactOptionsTree(defaultArtifactOptions, profile);
-	const outputOptions = optionRoots.find(node => node.label === 'Production Options');
-	assert.equal(outputOptions?.children?.find(node => node.label === 'Intel syntax')?.disabled, false);
-	assert.equal(outputOptions?.children?.find(node => node.label === 'Demangle symbols')?.disabled, false);
+	const outputOptions = optionRoots.find((node) => node.label === 'Production Options');
+	assert.equal(outputOptions?.children?.find((node) => node.label === 'Intel syntax')?.disabled, false);
+	assert.equal(outputOptions?.children?.find((node) => node.label === 'Demangle symbols')?.disabled, false);
 	const msvcOptions = buildArtifactOptionsTree(defaultArtifactOptions, {
 		...profile,
 		kind: 'msvc',
 		tools: {},
 	});
-	const msvcOutput = msvcOptions.find(node => node.label === 'Production Options');
-	const intel = msvcOutput?.children?.find(node => node.label === 'Intel syntax');
-	const demangle = msvcOutput?.children?.find(node => node.label === 'Demangle symbols');
+	const msvcOutput = msvcOptions.find((node) => node.label === 'Production Options');
+	const intel = msvcOutput?.children?.find((node) => node.label === 'Intel syntax');
+	const demangle = msvcOutput?.children?.find((node) => node.label === 'Demangle symbols');
 	assert.equal(intel?.disabled, true);
 	assert.equal(intel?.description, 'Inherent');
 	assert.equal(demangle?.disabled, true);
 	assert.equal(demangle?.description, 'Unavailable');
-	const presetNode = buildArtifactPresetTreeNode({
-		id: 'optimized',
-		artifactKind: 'assembly',
-		extraArguments: ['-O3'],
-		productionOptions: { intel: true },
-	}, workspaceFolder.uri);
+	const presetNode = buildArtifactPresetTreeNode(
+		{
+			id: 'optimized',
+			artifactKind: 'assembly',
+			extraArguments: ['-O3'],
+			productionOptions: { intel: true },
+		},
+		workspaceFolder.uri,
+	);
 	assert.equal(presetNode.treeContext, 'artifactPreset');
 	assert.equal(presetNode.description, 'Assembly');
 	assert.equal(findTreeNode(presetNode, 'Extra arguments')?.children?.[0]?.label, '-O3');
@@ -1298,7 +1309,7 @@ function verifyTreeModels(workspaceFolder: vscode.WorkspaceFolder): void {
 }
 
 function directChild(node: { children?: unknown[] }, label: string): ToolchainTreeNode {
-	const child = (node.children as ToolchainTreeNode[] | undefined)?.find(item => item.label === label);
+	const child = (node.children as ToolchainTreeNode[] | undefined)?.find((item) => item.label === label);
 	assert.ok(child, `Missing direct tree child: ${label}`);
 	return child;
 }
@@ -1307,7 +1318,7 @@ function findTreeNode(node: { label?: string; children?: unknown[] }, label: str
 	if (node.label === label) {
 		return node as ToolchainTreeNode;
 	}
-	for (const child of node.children as ToolchainTreeNode[] | undefined ?? []) {
+	for (const child of (node.children as ToolchainTreeNode[] | undefined) ?? []) {
 		const found = findTreeNode(child, label);
 		if (found) {
 			return found;

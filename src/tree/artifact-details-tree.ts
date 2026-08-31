@@ -1,20 +1,12 @@
 import vscode from 'vscode';
-import {
-	artifactDefinitions,
-} from '../artifacts/core/artifact-definitions.js';
-import {
-	buildArtifactDetails,
-	type ArtifactDetailsItem,
-} from '../artifacts/ui/artifact-details.js';
-import {
-	ArtifactDocumentProvider,
-} from '../artifact-document/artifact-document-provider.js';
+import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
+import { buildArtifactDetails, type ArtifactDetailsItem } from '../artifacts/ui/artifact-details.js';
+import { ArtifactDocumentProvider } from '../artifact-document/artifact-document-provider.js';
 import type { ArtifactDocumentSnapshot } from '../artifact-document/artifact-identity.js';
 import { TreeNode, TreeProvider } from './treedata.js';
 import { messageNode } from './tree-helpers.js';
 
-export interface ArtifactDetailsTreeNode extends TreeNode {
-}
+export interface ArtifactDetailsTreeNode extends TreeNode {}
 
 function buildArtifactDetailsTreeNode(item: ArtifactDetailsItem): ArtifactDetailsTreeNode {
 	const children = item.children?.map(buildArtifactDetailsTreeNode);
@@ -76,8 +68,7 @@ export class ArtifactDetailsTreeProvider extends TreeProvider<ArtifactDetailsTre
 			return [emptyState('Artifact details are not available yet.')];
 		}
 		const definition = artifactDefinitions[this.snapshot.identity.artifactKind];
-		return buildArtifactDetails(this.snapshot, definition.metricLabels)
-			.map(buildArtifactDetailsTreeNode);
+		return buildArtifactDetails(this.snapshot, definition.metricLabels).map(buildArtifactDetailsTreeNode);
 	}
 }
 
@@ -86,13 +77,14 @@ function emptyState(label: string): ArtifactDetailsTreeNode {
 }
 
 function groupIcon(id: string): vscode.ThemeIcon {
-	const icon = {
-		artifact: 'symbol-file',
-		status: 'pulse',
-		invocation: 'terminal',
-		environment: 'symbol-variable',
-		metrics: 'graph',
-		arguments: 'list-ordered',
-	}[id] ?? 'list-tree';
+	const icon =
+		{
+			artifact: 'symbol-file',
+			status: 'pulse',
+			invocation: 'terminal',
+			environment: 'symbol-variable',
+			metrics: 'graph',
+			arguments: 'list-ordered',
+		}[id] ?? 'list-tree';
 	return new vscode.ThemeIcon(icon);
 }

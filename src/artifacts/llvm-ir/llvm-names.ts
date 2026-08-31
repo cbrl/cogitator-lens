@@ -10,16 +10,13 @@
 /** Decodes an LLVM string body, resolving `\xx` byte escapes. */
 export function decodeLlvmString(value: string): string {
 	return value
-		.replace(/\\([0-9A-Fa-f]{2})/gu, (_match, hex: string) =>
-			String.fromCharCode(Number.parseInt(hex, 16)))
+		.replace(/\\([0-9A-Fa-f]{2})/gu, (_match, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)))
 		.replace(/\\"/gu, '"')
 		.replace(/\\\\/gu, '\\');
 }
 
 /** Decodes an LLVM identifier, removing surrounding quotes when present. */
 export function decodeLlvmName(value: string): string {
-	const unquoted = value.startsWith('"') && value.endsWith('"')
-		? value.slice(1, -1)
-		: value;
+	const unquoted = value.startsWith('"') && value.endsWith('"') ? value.slice(1, -1) : value;
 	return decodeLlvmString(unquoted);
 }

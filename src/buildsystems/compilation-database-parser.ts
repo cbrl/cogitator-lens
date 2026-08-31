@@ -1,10 +1,7 @@
 import path from 'path';
 import { removeSourceArgument } from '../toolchain-arguments.js';
 import { detectToolchainDefinition } from '../toolchains/toolchain-map.js';
-import {
-	createToolchainProfile,
-	normalizedExecutableLocalId,
-} from '../toolchains/toolchain-map.js';
+import { createToolchainProfile, normalizedExecutableLocalId } from '../toolchains/toolchain-map.js';
 import { tokenizeCommandLine } from '../tokenize.js';
 import type { ToolchainProfile } from '../types/index.js';
 
@@ -76,9 +73,9 @@ function parseEntry(
 	let commandArguments: string[];
 	if (value.arguments !== undefined) {
 		if (
-			!Array.isArray(value.arguments)
-			|| value.arguments.length === 0
-			|| value.arguments.some(argument => typeof argument !== 'string')
+			!Array.isArray(value.arguments) ||
+			value.arguments.length === 0 ||
+			value.arguments.some((argument) => typeof argument !== 'string')
 		) {
 			return fail('"arguments" must be a non-empty array of strings');
 		}
@@ -88,10 +85,7 @@ function parseEntry(
 			return fail('must contain "arguments" or a non-empty "command"');
 		}
 		try {
-			commandArguments = tokenizeCommandLine(
-				value.command,
-				platform === 'win32' ? 'windows' : 'posix',
-			);
+			commandArguments = tokenizeCommandLine(value.command, platform === 'win32' ? 'windows' : 'posix');
 		} catch (error) {
 			return fail(`could not tokenize "command": ${String(error)}`);
 		}
@@ -114,12 +108,9 @@ function parseEntry(
 
 	const executableName = path.basename(executable);
 	const profileId = normalizedExecutableLocalId(executable);
-	const toolchainProfile = createToolchainProfile(
-		compilerKind,
-		`${executableName} — ${executable}`,
-		executable,
-		{ id: profileId },
-	);
+	const toolchainProfile = createToolchainProfile(compilerKind, `${executableName} — ${executable}`, executable, {
+		id: profileId,
+	});
 
 	return {
 		entryIndex,
@@ -135,9 +126,7 @@ function resolveExecutable(executable: string, workingDirectory: string): string
 	if (path.isAbsolute(executable)) {
 		return path.normalize(executable);
 	}
-	return /[\\/]/.test(executable)
-		? path.resolve(workingDirectory, executable)
-		: executable;
+	return /[\\/]/.test(executable) ? path.resolve(workingDirectory, executable) : executable;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

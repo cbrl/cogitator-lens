@@ -29,12 +29,7 @@ import {
 import { EditorTracker } from './decorations/editor-tracker.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
 import type { ArtifactStatus, ArtifactState } from './artifact-generator.js';
-import type {
-	ArtifactKind,
-	ArtifactOptions,
-	ArtifactLineAnnotation,
-	RenderedArtifactLine,
-} from '../types/index.js';
+import type { ArtifactKind, ArtifactOptions, ArtifactLineAnnotation, RenderedArtifactLine } from '../types/index.js';
 import { formatArtifactLineAnnotation } from '../artifacts/analysis/analysis-source-renderer.js';
 import { artifactSupportsOption } from '../artifacts/core/artifact-definitions.js';
 import {
@@ -78,7 +73,7 @@ export class ArtifactDecorator {
 	private active: boolean = true;
 	private readonly synchronizedScroll = new ScrollSyncSuppression<TextEditor>();
 
-    constructor(
+	constructor(
 		sourceUri: Uri,
 		artifactUri: Uri,
 		asmEvent: Event<ArtifactStatus>,
@@ -90,10 +85,10 @@ export class ArtifactDecorator {
 		this.editorTracker = new EditorTracker();
 		this.configService = configService;
 
-        this.refreshDecorations();
+		this.refreshDecorations();
 
-        // Rebuild mapping and decorations on asm document change
-        const providerEventRegistration = asmEvent(status => {
+		// Rebuild mapping and decorations on asm document change
+		const providerEventRegistration = asmEvent((status) => {
 			this.compilationState = status.state;
 			this.truncated = status.truncated;
 			if (status.assembly) {
@@ -102,35 +97,39 @@ export class ArtifactDecorator {
 				this.content = undefined;
 			}
 			this.refreshDecorations();
-        });
+		});
 
-		const visibilityChangeRegistration = window.onDidChangeVisibleTextEditors(this.onChangeVisibleEditors.bind(this));
+		const visibilityChangeRegistration = window.onDidChangeVisibleTextEditors(
+			this.onChangeVisibleEditors.bind(this),
+		);
 
-		const selectionChangeRegistration = window.onDidChangeTextEditorSelection(this.onEditorSelectionChanged.bind(this));
+		const selectionChangeRegistration = window.onDidChangeTextEditorSelection(
+			this.onEditorSelectionChanged.bind(this),
+		);
 		const visibleRangesRegistration = window.onDidChangeTextEditorVisibleRanges(
 			this.onEditorVisibleRangesChanged.bind(this),
 		);
 
-		const documentChangeRegistration = workspace.onDidChangeTextDocument(event => {
+		const documentChangeRegistration = workspace.onDidChangeTextDocument((event) => {
 			if (equalUri(event.document.uri, this.artifactUri)) {
 				this.refreshDecorations();
 			}
 		});
 
-        this.registrations = Disposable.from(
-            providerEventRegistration,
+		this.registrations = Disposable.from(
+			providerEventRegistration,
 			visibilityChangeRegistration,
-            selectionChangeRegistration,
+			selectionChangeRegistration,
 			visibleRangesRegistration,
 			documentChangeRegistration,
-        );
-    }
+		);
+	}
 
-    public dispose(): void {
+	public dispose(): void {
 		this.synchronizedScroll.dispose();
 		this.clearAllDecorations();
-        this.registrations.dispose();
-    }
+		this.registrations.dispose();
+	}
 
 	public onEditorSelectionChanged(event: TextEditorSelectionChangeEvent): void {
 		// This event will fire when an editor is opened as well, in which case the kind will be undefined. We don't
@@ -142,7 +141,7 @@ export class ArtifactDecorator {
 			return;
 		}
 
-		this.withContent(content => {
+		this.withContent((content) => {
 			if (content.allReferencedSrcUris.has(event.textEditor.document.uri)) {
 				this.onSrcLineSelected(content, event.textEditor);
 			} else if (equalUri(event.textEditor.document.uri, this.artifactUri)) {
@@ -156,20 +155,20 @@ export class ArtifactDecorator {
 			return;
 		}
 		if (
-			!this.active
-			|| event.visibleRanges.length === 0
-			|| !this.configService.getSynchronizeSourceAndArtifactScrolling(this.sourceUri)
+			!this.active ||
+			event.visibleRanges.length === 0 ||
+			!this.configService.getSynchronizeSourceAndArtifactScrolling(this.sourceUri)
 		) {
 			return;
 		}
 
-		this.withContent(content => {
+		this.withContent((content) => {
 			if (content.allReferencedSrcUris.has(event.textEditor.document.uri)) {
 				const mapping = content.sourceLineMappings.get(event.textEditor.document.uri);
 				const anchor = mapping
 					? event.visibleRanges
-						.map(range => sourceScrollAnchor(mapping, range.start.line, range.end.line))
-						.find(candidate => candidate !== undefined)
+							.map((range) => sourceScrollAnchor(mapping, range.start.line, range.end.line))
+							.find((candidate) => candidate !== undefined)
 					: undefined;
 				const artifactEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
 				if (anchor && artifactEditor && anchor.artifactLine < artifactEditor.document.lineCount) {
@@ -182,27 +181,29 @@ export class ArtifactDecorator {
 				return;
 			}
 			const anchor = event.visibleRanges
-				.map(range => artifactScrollAnchor(content.lines, range.start.line, range.end.line))
-				.find(candidate => candidate !== undefined);
+				.map((range) => artifactScrollAnchor(content.lines, range.start.line, range.end.line))
+				.find((candidate) => candidate !== undefined);
 			if (!anchor) {
 				return;
 			}
 			const sourceUri = Uri.file(path.normalize(anchor.file));
 			const targetMapping = content.sourceLineMappings.get(sourceUri);
-			const sourceEditor = targetMapping === undefined
-				? undefined
-				: this.getAllSourceEditors(content).find(editor =>
-					content.sourceLineMappings.get(editor.document.uri) === targetMapping);
+			const sourceEditor =
+				targetMapping === undefined
+					? undefined
+					: this.getAllSourceEditors(content).find(
+							(editor) => content.sourceLineMappings.get(editor.document.uri) === targetMapping,
+						);
 			if (sourceEditor && anchor.sourceLine < sourceEditor.document.lineCount) {
 				this.revealScrollAnchor(sourceEditor, anchor.sourceLine);
 			}
 		});
 	}
 
-    private refreshDecorations() {
+	private refreshDecorations() {
 		this.clearAllDecorations();
 
-		this.withContent(content => {
+		this.withContent((content) => {
 			// Recalculate active state now that content may have changed
 			this.updateActiveState(content);
 			this.dimUnusedSourceLines(content);
@@ -224,12 +225,14 @@ export class ArtifactDecorator {
 		const stateText = this.stateDecorationText();
 		if (stateText) {
 			const asmEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
-			asmEditor?.setDecorations(stateDecoration, [{
-				range: new Range(0, 0, 0, 0),
-				renderOptions: {
-					after: { contentText: ` ${stateText}` },
+			asmEditor?.setDecorations(stateDecoration, [
+				{
+					range: new Range(0, 0, 0, 0),
+					renderOptions: {
+						after: { contentText: ` ${stateText}` },
+					},
 				},
-			}]);
+			]);
 		}
 	}
 
@@ -268,7 +271,7 @@ export class ArtifactDecorator {
 		}
 	}
 
-    private dimUnusedSourceLines(content: ArtifactDocumentContent) {
+	private dimUnusedSourceLines(content: ArtifactDocumentContent) {
 		const getUnusedLines = (document: TextDocument) => {
 			const unusedLines: Range[] = [];
 
@@ -293,7 +296,7 @@ export class ArtifactDecorator {
 				editor.setDecorations(unusedLineDecoration, getUnusedLines(editor.document));
 			}
 		}
-    }
+	}
 
 	private decorateSourceDensity(content: ArtifactDocumentContent): void {
 		for (const editor of this.getAllSourceEditors(content)) {
@@ -305,21 +308,21 @@ export class ArtifactDecorator {
 			for (const artifactLines of mapping.values()) {
 				maximum = Math.max(maximum, artifactLines.length);
 			}
-			const decorations = sourceDensityDecorations.map(bandDecorations =>
-				bandDecorations.map(() => [] as Array<{
-					range: Range;
-					hoverMessage: string;
-				}>));
+			const decorations = sourceDensityDecorations.map((bandDecorations) =>
+				bandDecorations.map(
+					() =>
+						[] as Array<{
+							range: Range;
+							hoverMessage: string;
+						}>,
+				),
+			);
 			for (const [sourceLine, artifactLines] of mapping) {
 				if (sourceLine < 0 || sourceLine >= editor.document.lineCount || artifactLines.length === 0) {
 					continue;
 				}
 				const band = sourceLineBandIndex(sourceLine, sourceDensityDecorations.length);
-				const level = sourceDensityLevel(
-					artifactLines.length,
-					maximum,
-					sourceDensityDecorations[band].length,
-				);
+				const level = sourceDensityLevel(artifactLines.length, maximum, sourceDensityDecorations[band].length);
 				decorations[band][level].push({
 					range: editor.document.lineAt(sourceLine).range,
 					hoverMessage: `${artifactLines.length} generated output ${artifactLines.length === 1 ? 'line' : 'lines'}`,
@@ -327,7 +330,9 @@ export class ArtifactDecorator {
 			}
 			sourceDensityDecorations.forEach((bandDecorations, band) =>
 				bandDecorations.forEach((decoration, level) =>
-					editor.setDecorations(decoration, decorations[band][level])));
+					editor.setDecorations(decoration, decorations[band][level]),
+				),
+			);
 		}
 	}
 
@@ -336,33 +341,34 @@ export class ArtifactDecorator {
 		if (!editor || !this.artifactOptions(content.kind).display.binaryColumns) {
 			return;
 		}
-		const addressWidth = Math.max(4, ...content.lines.map(line =>
-			line.address === undefined ? 0 : line.address.toString(16).length));
-		const opcodeWidth = Math.max(0, ...content.lines.map(line =>
-			line.opcodes?.join(' ').length ?? 0));
+		const addressWidth = Math.max(
+			4,
+			...content.lines.map((line) => (line.address === undefined ? 0 : line.address.toString(16).length)),
+		);
+		const opcodeWidth = Math.max(0, ...content.lines.map((line) => line.opcodes?.join(' ').length ?? 0));
 		const options = content.lines.flatMap((line, index) => {
-			if (
-				index >= editor.document.lineCount
-				|| (line.address === undefined && !line.opcodes?.length)
-			) {
+			if (index >= editor.document.lineCount || (line.address === undefined && !line.opcodes?.length)) {
 				return [];
 			}
-			const address = line.address === undefined
-				? ''.padStart(addressWidth)
-				: line.address.toString(16).padStart(addressWidth, '0');
+			const address =
+				line.address === undefined
+					? ''.padStart(addressWidth)
+					: line.address.toString(16).padStart(addressWidth, '0');
 			const opcodes = (line.opcodes?.join(' ') ?? '').padEnd(opcodeWidth);
-			return [{
-				range: new Range(index, 0, index, 0),
-				renderOptions: { before: { contentText: `${address}  ${opcodes}` } },
-			}];
+			return [
+				{
+					range: new Range(index, 0, index, 0),
+					renderOptions: { before: { contentText: `${address}  ${opcodes}` } },
+				},
+			];
 		});
 		editor.setDecorations(binaryColumnsDecoration, options);
 	}
 
 	private decorateSourceLineBands(content: ArtifactDocumentContent): void {
 		if (
-			!artifactSupportsOption(content.kind, 'sourceLineColorBands')
-			|| !this.artifactOptions(content.kind).display.sourceLineColorBands
+			!artifactSupportsOption(content.kind, 'sourceLineColorBands') ||
+			!this.artifactOptions(content.kind).display.sourceLineColorBands
 		) {
 			return;
 		}
@@ -373,8 +379,7 @@ export class ArtifactDecorator {
 		const asmRanges = sourceLineBandDecorations.map(() => [] as Range[]);
 		for (const editor of this.getAllSourceEditors()) {
 			const sourceRanges = sourceLineBandDecorations.map(() => [] as Range[]);
-			for (const [sourceLine, artifactLines] of
-				content.sourceLineMappings.get(editor.document.uri) ?? []) {
+			for (const [sourceLine, artifactLines] of content.sourceLineMappings.get(editor.document.uri) ?? []) {
 				const band = sourceLineBandIndex(sourceLine, sourceLineBandDecorations.length);
 				if (sourceLine >= 0 && sourceLine < editor.document.lineCount) {
 					sourceRanges[band].push(editor.document.lineAt(sourceLine).range);
@@ -386,13 +391,15 @@ export class ArtifactDecorator {
 				}
 			}
 			sourceLineBandDecorations.forEach((decoration, index) =>
-				editor.setDecorations(decoration, sourceRanges[index]));
+				editor.setDecorations(decoration, sourceRanges[index]),
+			);
 		}
 		sourceLineBandDecorations.forEach((decoration, index) =>
-			asmEditor.setDecorations(decoration, asmRanges[index]));
+			asmEditor.setDecorations(decoration, asmRanges[index]),
+		);
 	}
 
-    private onSrcLineSelected(
+	private onSrcLineSelected(
 		content: ArtifactDocumentContent,
 		selectedEditor: TextEditor,
 		highlightOnly: boolean = false,
@@ -420,9 +427,9 @@ export class ArtifactDecorator {
 		};
 
 		// Highlight selected line in source editor
-        const srcLineRange = selectedEditor.document.lineAt(selectedEditor.selection.start.line).range;
+		const srcLineRange = selectedEditor.document.lineAt(selectedEditor.selection.start.line).range;
 		selectedEditor.setDecorations(selectedSourceRangeDecoration, []);
-        selectedEditor.setDecorations(selectedLineDecoration, [srcLineRange]);
+		selectedEditor.setDecorations(selectedLineDecoration, [srcLineRange]);
 
 		// Highlight associated lines in ASM editor
 		const asmLines: Range[] = getSelectedLines(selectedEditor.document.uri, selectedEditor.selection.start.line);
@@ -433,15 +440,15 @@ export class ArtifactDecorator {
 			}
 		}
 
-        asmEditor.setDecorations(selectedLineDecoration, asmLines);
+		asmEditor.setDecorations(selectedLineDecoration, asmLines);
 
-        if (asmLines.length > 0 && !highlightOnly) {
+		if (asmLines.length > 0 && !highlightOnly) {
 			// First line will be from the editor that actually had its selection changed (the editor passed to this function)
 			this.revealNavigationTarget(asmEditor, asmLines[0]);
-        }
-    }
+		}
+	}
 
-    private onAsmLineSelected(
+	private onAsmLineSelected(
 		content: ArtifactDocumentContent,
 		asmEditor: TextEditor,
 		highlightOnly: boolean = false,
@@ -450,21 +457,23 @@ export class ArtifactDecorator {
 		if (line < 0 || line >= content.lines.length || line >= asmEditor.document.lineCount) {
 			return;
 		}
-        const asmLine = content.lines[line];
+		const asmLine = content.lines[line];
 
 		// Highlight selected line in ASM editor
-        const asmLineRange = asmEditor.document.lineAt(line).range;
-        asmEditor.setDecorations(selectedLineDecoration, [asmLineRange]);
+		const asmLineRange = asmEditor.document.lineAt(line).range;
+		asmEditor.setDecorations(selectedLineDecoration, [asmLineRange]);
 		asmEditor.setDecorations(selectedSourceRangeDecoration, []);
 
 		// Highlight associated lines only in source editors the user already has visible.
-        if (asmLineHasSource(asmLine)) {
+		if (asmLineHasSource(asmLine)) {
 			const sourceUri = Uri.file(path.normalize(asmLine.source!.file!));
 			const targetMapping = content.sourceLineMappings.get(sourceUri);
-			const targetEditor = targetMapping === undefined
-				? undefined
-				: this.getAllSourceEditors(content).find(editor =>
-					content.sourceLineMappings.get(editor.document.uri) === targetMapping);
+			const targetEditor =
+				targetMapping === undefined
+					? undefined
+					: this.getAllSourceEditors(content).find(
+							(editor) => content.sourceLineMappings.get(editor.document.uri) === targetMapping,
+						);
 			if (targetEditor) {
 				const srcLineIndex = asmLine.source!.line! - 1;
 				if (srcLineIndex < 0 || srcLineIndex >= targetEditor.document.lineCount) {
@@ -472,16 +481,14 @@ export class ArtifactDecorator {
 				}
 
 				const preciseRange = sourceSelectionRange(targetEditor.document, asmLine);
-				const srcLineRange = preciseRange
-					?? targetEditor.document.lineAt(srcLineIndex).range;
+				const srcLineRange = preciseRange ?? targetEditor.document.lineAt(srcLineIndex).range;
 				for (const editor of this.getAllSourceEditors()) {
 					editor.setDecorations(selectedLineDecoration, []);
 					editor.setDecorations(selectedSourceRangeDecoration, []);
 				}
-				targetEditor.setDecorations(
-					preciseRange ? selectedSourceRangeDecoration : selectedLineDecoration,
-					[srcLineRange],
-				);
+				targetEditor.setDecorations(preciseRange ? selectedSourceRangeDecoration : selectedLineDecoration, [
+					srcLineRange,
+				]);
 
 				if (!highlightOnly) {
 					this.revealNavigationTarget(targetEditor, srcLineRange);
@@ -489,12 +496,11 @@ export class ArtifactDecorator {
 			} else {
 				this.clearSourceSelectionDecorations();
 			}
-        }
-		else {
+		} else {
 			// Clear selected line decoration when the assembly editor line doesn't correspond to a source location
 			this.clearSourceSelectionDecorations();
-        }
-    }
+		}
+	}
 
 	private clearSourceSelectionDecorations(): void {
 		for (const editor of this.getAllSourceEditors()) {
@@ -516,7 +522,7 @@ export class ArtifactDecorator {
 	}
 
 	private revealNavigationTarget(editor: TextEditor, range: Range): void {
-		if (editor.visibleRanges.some(visibleRange => visibleRange.contains(range))) {
+		if (editor.visibleRanges.some((visibleRange) => visibleRange.contains(range))) {
 			return;
 		}
 		// A selection in one editor can scroll the other editor. Suppress the resulting
@@ -535,8 +541,8 @@ export class ArtifactDecorator {
 		const editors = window.visibleTextEditors;
 
 		// Active if the assembly editor is visible and one of the associated source editors is visible
-		const hasAsmEditor = editors.some(editor => equalUri(editor.document.uri, this.artifactUri));
-		const hasAnySourceEditor = editors.some(e => sourceUris.has(e.document.uri));
+		const hasAsmEditor = editors.some((editor) => equalUri(editor.document.uri, this.artifactUri));
+		const hasAnySourceEditor = editors.some((e) => sourceUris.has(e.document.uri));
 
 		this.active = hasAsmEditor && hasAnySourceEditor;
 	}
@@ -545,15 +551,11 @@ export class ArtifactDecorator {
 		for (const [category, decoration] of Object.entries(optimizationRemarkDecorations)) {
 			this.annotationDecorations(
 				content,
-				candidate => candidate.kind === 'optimization-remark' && candidate.category === category,
+				(candidate) => candidate.kind === 'optimization-remark' && candidate.category === category,
 				decoration,
 			);
 		}
-		this.annotationDecorations(
-			content,
-			candidate => candidate.kind === 'stack-usage',
-			stackUsageDecoration,
-		);
+		this.annotationDecorations(content, (candidate) => candidate.kind === 'stack-usage', stackUsageDecoration);
 	}
 
 	private annotationDecorations(
@@ -574,14 +576,16 @@ export class ArtifactDecorator {
 				return [];
 			}
 			const end = editor.document.lineAt(index).range.end;
-			return [{
-				range: new Range(end, end),
-				renderOptions: {
-					after: {
-						contentText: annotations.map(formatArtifactLineAnnotation).join(' · '),
+			return [
+				{
+					range: new Range(end, end),
+					renderOptions: {
+						after: {
+							contentText: annotations.map(formatArtifactLineAnnotation).join(' · '),
+						},
 					},
 				},
-			}];
+			];
 		});
 		editor.setDecorations(decoration, options);
 	}
@@ -592,9 +596,8 @@ export class ArtifactDecorator {
 
 		if (this.active) {
 			// Update dimmed lines when the editors change
-			this.withContent(content => this.dimUnusedSourceLines(content));
-		}
-		else {
+			this.withContent((content) => this.dimUnusedSourceLines(content));
+		} else {
 			// Clear cross-editor mapping decorations if the pair is no longer visible. Listing-local columns,
 			// analysis annotations, and state remain useful when the artifact is open by itself.
 			for (const editor of this.getAllSourceEditors()) {
@@ -608,9 +611,7 @@ export class ArtifactDecorator {
 	}
 
 	private getAllSourceEditors(content = this.content): TextEditor[] {
-		return content
-			? this.editorTracker.getSourceEditors(content.allReferencedSrcUris)
-			: [];
+		return content ? this.editorTracker.getSourceEditors(content.allReferencedSrcUris) : [];
 	}
 
 	private withContent<T>(action: (content: ArtifactDocumentContent) => T): T | undefined {
@@ -635,40 +636,24 @@ export class ArtifactDecorator {
 	}
 }
 
-function sourceSelectionRange(
-	document: TextDocument,
-	line: RenderedArtifactLine,
-): Range | undefined {
+function sourceSelectionRange(document: TextDocument, line: RenderedArtifactLine): Range | undefined {
 	const source = line.source;
 	if (
-		source?.line === null
-		|| source?.line === undefined
-		|| source.endLine === undefined
-		|| source.endColumn === undefined
+		source?.line === null ||
+		source?.line === undefined ||
+		source.endLine === undefined ||
+		source.endColumn === undefined
 	) {
 		return undefined;
 	}
 	const startLine = source.line - 1;
 	const endLine = source.endLine - 1;
-	if (
-		startLine < 0
-		|| endLine < startLine
-		|| endLine >= document.lineCount
-	) {
+	if (startLine < 0 || endLine < startLine || endLine >= document.lineCount) {
 		return undefined;
 	}
-	const startCharacter = Math.min(
-		Math.max(0, source.column ?? 0),
-		document.lineAt(startLine).text.length,
-	);
-	const endCharacter = Math.min(
-		Math.max(0, source.endColumn),
-		document.lineAt(endLine).text.length,
-	);
-	if (
-		endLine === startLine
-		&& endCharacter <= startCharacter
-	) {
+	const startCharacter = Math.min(Math.max(0, source.column ?? 0), document.lineAt(startLine).text.length);
+	const endCharacter = Math.min(Math.max(0, source.endColumn), document.lineAt(endLine).text.length);
+	if (endLine === startLine && endCharacter <= startCharacter) {
 		return undefined;
 	}
 	return new Range(startLine, startCharacter, endLine, endCharacter);

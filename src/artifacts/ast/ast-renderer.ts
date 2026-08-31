@@ -1,10 +1,5 @@
 import path from 'node:path';
-import type {
-	DisplayOptions,
-	RawArtifact,
-	RenderedTextArtifact,
-	RenderedArtifactLine,
-} from '../../types/index.js';
+import type { DisplayOptions, RawArtifact, RenderedTextArtifact, RenderedArtifactLine } from '../../types/index.js';
 import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
 
@@ -58,22 +53,13 @@ export function renderClangAst(
 			}
 		}
 		const parentLocation = locations.get(parsed.depth - 1);
-		const span = clangSourceSpan(
-			rawLine,
-			raw.command.workingDirectory,
-			parentLocation,
-			lastFile,
-		);
+		const span = clangSourceSpan(rawLine, raw.command.workingDirectory, parentLocation, lastFile);
 		const location: AstSourcePosition | undefined = span;
 		if (location) {
 			locations.set(parsed.depth, location);
 			lastFile = location.file;
 		}
-		if (
-			!options.showSystemDeclarations
-			&& location
-			&& isSystemDeclarationPath(location.file, sourceFile)
-		) {
+		if (!options.showSystemDeclarations && location && isSystemDeclarationPath(location.file, sourceFile)) {
 			skipDepth = parsed.depth;
 			continue;
 		}
@@ -84,13 +70,13 @@ export function renderClangAst(
 			text,
 			source: span
 				? {
-					file: span.file,
-					line: span.line,
-					column: span.column,
-					endLine: span.endLine,
-					endColumn: span.endColumn,
-					mainSource: sameFile(span.file, sourceFile),
-				}
+						file: span.file,
+						line: span.line,
+						column: span.column,
+						endLine: span.endLine,
+						endColumn: span.endColumn,
+						mainSource: sameFile(span.file, sourceFile),
+					}
 				: undefined,
 		});
 		nodes.push({
@@ -102,29 +88,25 @@ export function renderClangAst(
 	}
 
 	const completeNodes = addIndentationEnds(nodes, output.length);
-	const symbols = completeNodes.flatMap(node =>
-		node.name && isDeclarationNode(node.kind)
-			? [{ name: node.name, line: node.line }]
-			: []);
+	const symbols = completeNodes.flatMap((node) =>
+		node.name && isDeclarationNode(node.kind) ? [{ name: node.name, line: node.line }] : [],
+	);
 
 	const artifact = renderedArtifact(raw, output, {
 		nodeCount: completeNodes.length,
 		declarationCount: symbols.length,
 	});
-	const foldedLines = completeNodes.flatMap(node =>
-		node.endLine > node.line ? [{ startLine: node.line, endLine: node.endLine }] : []
+	const foldedLines = completeNodes.flatMap((node) =>
+		node.endLine > node.line ? [{ startLine: node.line, endLine: node.endLine }] : [],
 	);
 
-	return {...artifact, folds: foldedLines, symbols};
+	return { ...artifact, folds: foldedLines, symbols };
 }
 
-export function renderPythonAst(
-	raw: RawArtifact,
-	context: ArtifactRenderContext,
-): RenderedTextArtifact {
+export function renderPythonAst(raw: RawArtifact, context: ArtifactRenderContext): RenderedTextArtifact {
 	const textLines = splitLines(raw.text);
 	const sourceLines = context.source.text.split(/\r\n|\n|\r/);
-	const output: RenderedArtifactLine[] = textLines.map(text => ({ text }));
+	const output: RenderedArtifactLine[] = textLines.map((text) => ({ text }));
 	const nodes: AstNode[] = [];
 	const nodeEnds = findPythonNodeEnds(textLines);
 
@@ -167,17 +149,12 @@ export function renderPythonAst(
 			}
 		}
 		if (sourceLine !== undefined) {
-			const startColumn = pythonColumnToUtf16(
-				sourceLines[sourceLine - 1],
-				sourceColumn,
-			);
+			const startColumn = pythonColumnToUtf16(sourceLines[sourceLine - 1], sourceColumn);
 			const normalizedEndLine = endSourceLine ?? sourceLine;
-			const normalizedEndColumn = endSourceColumn === undefined
-				? startColumn + 1
-				: pythonColumnToUtf16(
-					sourceLines[normalizedEndLine - 1],
-					endSourceColumn,
-				);
+			const normalizedEndColumn =
+				endSourceColumn === undefined
+					? startColumn + 1
+					: pythonColumnToUtf16(sourceLines[normalizedEndLine - 1], endSourceColumn);
 			output[line] = {
 				text: output[line].text,
 				source: {
@@ -199,17 +176,17 @@ export function renderPythonAst(
 		});
 	}
 
-	const symbols = nodes.flatMap(node =>
-		node.name && pythonNamedDefinitionKinds.has(node.kind)
-			? [{ name: node.name, line: node.line }]
-			: []);
+	const symbols = nodes.flatMap((node) =>
+		node.name && pythonNamedDefinitionKinds.has(node.kind) ? [{ name: node.name, line: node.line }] : [],
+	);
 	return {
 		...renderedArtifact(raw, output, {
 			nodeCount: nodes.length,
 			definitionCount: symbols.length,
 		}),
-		folds: nodes.flatMap(node =>
-			node.endLine > node.line ? [{ startLine: node.line, endLine: node.endLine }] : []),
+		folds: nodes.flatMap((node) =>
+			node.endLine > node.line ? [{ startLine: node.line, endLine: node.endLine }] : [],
+		),
 		symbols,
 	};
 }
@@ -218,9 +195,9 @@ function parseClangNode(text: string): { kind: string; depth: number } | undefin
 	const match = /^((?:\| |  )*)(?:(\|-|`-))?([A-Za-z][A-Za-z0-9]*)\b/.exec(text);
 	return match
 		? {
-			kind: match[3],
-			depth: match[1].length / 2 + (match[2] ? 1 : 0),
-		}
+				kind: match[3],
+				depth: match[1].length / 2 + (match[2] ? 1 : 0),
+			}
 		: undefined;
 }
 
@@ -235,18 +212,16 @@ function clangSourceSpan(
 	lastFile: string,
 ): AstSourceSpan | undefined {
 	for (const match of text.matchAll(/<([^>]*)>/g)) {
-		const tokens = match[1].split(',').map(value => value.trim());
+		const tokens = match[1].split(',').map((value) => value.trim());
 		const start = clangPosition(tokens[0], workingDirectory, parent, lastFile);
 		if (!start) {
 			continue;
 		}
-		const end = tokens.length > 1
-			? clangPosition(tokens.at(-1)!, workingDirectory, start, start.file)
-			: start;
+		const end = tokens.length > 1 ? clangPosition(tokens.at(-1)!, workingDirectory, start, start.file) : start;
 		return sourceSpan(start, end);
 	}
 	const trailing = text.replace(/<[^>]*>/g, ' ');
-	for (const token of trailing.split(/\s+/).map(value => value.trim())) {
+	for (const token of trailing.split(/\s+/).map((value) => value.trim())) {
 		const position = clangPosition(token, workingDirectory, parent, lastFile);
 		if (position) {
 			return sourceSpan(position, position);
@@ -268,9 +243,7 @@ function clangPosition(
 			return undefined;
 		}
 		return {
-			file: path.normalize(path.isAbsolute(filename)
-				? filename
-				: path.resolve(workingDirectory, filename)),
+			file: path.normalize(path.isAbsolute(filename) ? filename : path.resolve(workingDirectory, filename)),
 			line: Number.parseInt(explicit[2], 10),
 			column: Math.max(0, Number.parseInt(explicit[3], 10) - 1),
 		};
@@ -293,18 +266,13 @@ function clangPosition(
 	return undefined;
 }
 
-function sourceSpan(
-	start: AstSourcePosition,
-	end: AstSourcePosition | undefined,
-): AstSourceSpan {
-	const validEnd = end
-		&& sameFile(start.file, end.file)
-		&& (
-			end.line > start.line
-			|| (end.line === start.line && end.column >= start.column)
-		)
-		? end
-		: start;
+function sourceSpan(start: AstSourcePosition, end: AstSourcePosition | undefined): AstSourceSpan {
+	const validEnd =
+		end &&
+		sameFile(start.file, end.file) &&
+		(end.line > start.line || (end.line === start.line && end.column >= start.column))
+			? end
+			: start;
 	return {
 		...start,
 		endLine: validEnd.line,
@@ -329,8 +297,7 @@ function clangDeclarationName(kind: string, text: string): string | undefined {
 }
 
 function isDeclarationNode(kind: string): boolean {
-	return kind.endsWith('Decl')
-		&& !['TranslationUnitDecl', 'AccessSpecDecl'].includes(kind);
+	return kind.endsWith('Decl') && !['TranslationUnitDecl', 'AccessSpecDecl'].includes(kind);
 }
 
 function isSystemDeclarationPath(filename: string, sourceFile: string): boolean {
@@ -338,25 +305,21 @@ function isSystemDeclarationPath(filename: string, sourceFile: string): boolean 
 		return false;
 	}
 	const normalized = filename.replace(/\\/g, '/').toLowerCase();
-	return normalized.startsWith('/usr/include/')
-		|| normalized.includes('/lib/clang/')
-		|| normalized.includes('/windows kits/')
-		|| normalized.includes('/microsoft visual studio/')
-		|| normalized.includes('.app/contents/developer/toolchains/')
-		|| normalized.includes('/xcode.app/');
+	return (
+		normalized.startsWith('/usr/include/') ||
+		normalized.includes('/lib/clang/') ||
+		normalized.includes('/windows kits/') ||
+		normalized.includes('/microsoft visual studio/') ||
+		normalized.includes('.app/contents/developer/toolchains/') ||
+		normalized.includes('/xcode.app/')
+	);
 }
 
-function addIndentationEnds(
-	nodes: readonly Omit<AstNode, 'endLine'>[],
-	lineCount: number,
-): AstNode[] {
+function addIndentationEnds(nodes: readonly Omit<AstNode, 'endLine'>[], lineCount: number): AstNode[] {
 	const endLines = new Array<number>(nodes.length).fill(Math.max(0, lineCount - 1));
 	const stack: number[] = [];
 	nodes.forEach((node, index) => {
-		while (
-			stack.length > 0
-			&& nodes[stack.at(-1)!].depth >= node.depth
-		) {
+		while (stack.length > 0 && nodes[stack.at(-1)!].depth >= node.depth) {
 			const completed = stack.pop()!;
 			endLines[completed] = Math.max(nodes[completed].line, node.line - 1);
 		}
@@ -369,8 +332,9 @@ function addIndentationEnds(
 }
 
 function findPythonNodeEnds(lines: readonly string[]): ReadonlyMap<number, number> {
-	const nodeStarts = new Set(lines.flatMap((line, lineIndex) =>
-		/^(\s*)([A-Za-z_]\w*)\($/.test(line) ? [lineIndex] : []));
+	const nodeStarts = new Set(
+		lines.flatMap((line, lineIndex) => (/^(\s*)([A-Za-z_]\w*)\($/.test(line) ? [lineIndex] : [])),
+	);
 	const ends = new Map<number, number>();
 	const stack: Array<{ line: number; node: boolean }> = [];
 	let quote: string | undefined;
@@ -391,7 +355,7 @@ function findPythonNodeEnds(lines: readonly string[]): ReadonlyMap<number, numbe
 				}
 				continue;
 			}
-			if (character === '"' || character === '\'') {
+			if (character === '"' || character === "'") {
 				quote = character;
 			} else if (character === '(') {
 				stack.push({ line, node: nodeStarts.has(line) && lines[line].trimEnd().endsWith('(') });
@@ -410,10 +374,7 @@ function leadingSpaces(value: string): number {
 	return /^\s*/.exec(value)?.[0].length ?? 0;
 }
 
-function pythonColumnToUtf16(
-	line: string | undefined,
-	utf8Column: number,
-): number {
+function pythonColumnToUtf16(line: string | undefined, utf8Column: number): number {
 	if (line === undefined || utf8Column <= 0) {
 		return Math.max(0, utf8Column);
 	}
@@ -446,8 +407,4 @@ function splitLines(text: string): string[] {
 	return lines;
 }
 
-const pythonNamedDefinitionKinds = new Set([
-	'FunctionDef',
-	'AsyncFunctionDef',
-	'ClassDef',
-]);
+const pythonNamedDefinitionKinds = new Set(['FunctionDef', 'AsyncFunctionDef', 'ClassDef']);

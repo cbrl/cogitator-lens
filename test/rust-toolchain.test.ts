@@ -8,25 +8,28 @@ import { toolchainDefinitions } from '../src/toolchains/toolchain-map.js';
 test('Rust assembly sanitization removes conflicting output and diagnostic arguments', () => {
 	const workingDirectory = path.resolve('project');
 	const source = path.join(workingDirectory, 'source.rs');
-	assert.deepEqual(stripRustManagedArguments([
-		'--edition=2021',
-		'--emit=metadata,link',
-		'--out-dir',
-		'old-output',
-		'--error-format=json',
-		'--json',
-		'diagnostic-rendered-ansi',
-		'--color=always',
-		'-o',
-		'old.rlib',
-		source,
-		'-C',
-		'opt-level=2',
-	], source, workingDirectory), [
-		'--edition=2021',
-		'-C',
-		'opt-level=2',
-	]);
+	assert.deepEqual(
+		stripRustManagedArguments(
+			[
+				'--edition=2021',
+				'--emit=metadata,link',
+				'--out-dir',
+				'old-output',
+				'--error-format=json',
+				'--json',
+				'diagnostic-rendered-ansi',
+				'--color=always',
+				'-o',
+				'old.rlib',
+				source,
+				'-C',
+				'opt-level=2',
+			],
+			source,
+			workingDirectory,
+		),
+		['--edition=2021', '-C', 'opt-level=2'],
+	);
 });
 
 test('Rust output arguments supply defaults while preserving project crate identity', () => {
@@ -56,12 +59,9 @@ test('Rust output arguments supply defaults while preserving project crate ident
 });
 
 test('Rust Intel syntax uses the rustc LLVM codegen option only when selected', () => {
-	assert.deepEqual(
-		intelOutputArguments(toolchainDefinitions.rust, { intel: true, demangle: false }),
-		['-C', 'llvm-args=-x86-asm-syntax=intel'],
-	);
-	assert.deepEqual(
-		intelOutputArguments(toolchainDefinitions.rust, { intel: false, demangle: false }),
-		[],
-	);
+	assert.deepEqual(intelOutputArguments(toolchainDefinitions.rust, { intel: true, demangle: false }), [
+		'-C',
+		'llvm-args=-x86-asm-syntax=intel',
+	]);
+	assert.deepEqual(intelOutputArguments(toolchainDefinitions.rust, { intel: false, demangle: false }), []);
 });

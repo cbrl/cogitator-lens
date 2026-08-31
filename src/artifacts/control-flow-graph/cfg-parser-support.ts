@@ -100,9 +100,7 @@ function isPosixAbsolute(value: string): boolean {
 
 function windowsPathUri(value: string): string {
 	const normalized = value.replaceAll('\\', '/');
-	return normalized.startsWith('//')
-		? `file:${encodeUriPath(normalized)}`
-		: `file:///${encodeUriPath(normalized)}`;
+	return normalized.startsWith('//') ? `file:${encodeUriPath(normalized)}` : `file:///${encodeUriPath(normalized)}`;
 }
 
 function posixPathUri(value: string): string {
@@ -112,6 +110,6 @@ function posixPathUri(value: string): string {
 function encodeUriPath(value: string): string {
 	return value
 		.split('/')
-		.map(segment => encodeURIComponent(segment).replaceAll('%3A', ':'))
+		.map((segment) => encodeURIComponent(segment).replaceAll('%3A', ':'))
 		.join('/');
 }

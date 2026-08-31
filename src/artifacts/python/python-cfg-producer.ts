@@ -78,10 +78,7 @@ def code_record(code,qualified_name):
 print(json.dumps({"codeObjects":code_record(root,"<module>")},separators=(",",":")))
 `.trim();
 
-export const pythonControlFlowGraphProducer: ArtifactProducer = artifactProducer(
-	'control-flow-graph',
-	{
-		output: 'stdout',
-		arguments: () => ['-I', '-c', pythonCfgHelper],
-	},
-);
+export const pythonControlFlowGraphProducer: ArtifactProducer = artifactProducer('control-flow-graph', {
+	output: 'stdout',
+	arguments: () => ['-I', '-c', pythonCfgHelper],
+});

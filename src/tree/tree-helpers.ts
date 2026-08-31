@@ -18,12 +18,7 @@ export function detailNode(label: string, value: string, icon: string): TreeNode
 	};
 }
 
-export function groupNode(
-	label: string,
-	icon: string,
-	children: TreeNode[],
-	count?: number,
-): TreeNode {
+export function groupNode(label: string, icon: string, children: TreeNode[], count?: number): TreeNode {
 	return {
 		label,
 		description: count === undefined ? undefined : `${count}`,
@@ -42,7 +37,7 @@ export function makeListNode(label: string, values: readonly string[]): TreeNode
 		label,
 		'list-ordered',
 		values.length
-			? values.map(value => ({ label: value, tooltip: value, nodeType: 'text', treeContext: 'text' }))
+			? values.map((value) => ({ label: value, tooltip: value, nodeType: 'text', treeContext: 'text' }))
 			: [noneNode],
 		values.length,
 	);
@@ -55,12 +50,12 @@ export function makeEnvironmentNode(environment: Readonly<Record<string, string>
 		'symbol-variable',
 		entries.length
 			? entries.map(([name, value]) => ({
-				label: name,
-				description: value,
-				tooltip: `${name}=${value}`,
-				nodeType: 'text',
-				treeContext: 'text',
-			}))
+					label: name,
+					description: value,
+					tooltip: `${name}=${value}`,
+					nodeType: 'text',
+					treeContext: 'text',
+				}))
 			: [noneNode],
 		entries.length,
 	);

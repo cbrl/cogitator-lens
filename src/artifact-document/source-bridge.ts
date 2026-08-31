@@ -80,18 +80,15 @@ export function sourceScrollAnchor(
 			continue;
 		}
 		const artifactLine = artifactLines.reduce<number | undefined>(
-			(lowest, candidate) => candidate >= 0 && (lowest === undefined || candidate < lowest)
-				? candidate
-				: lowest,
+			(lowest, candidate) =>
+				candidate >= 0 && (lowest === undefined || candidate < lowest) ? candidate : lowest,
 			undefined,
 		);
 		if (
-			artifactLine !== undefined
-			&& (
-				anchor === undefined
-				|| sourceLine < anchor.sourceLine
-				|| (sourceLine === anchor.sourceLine && artifactLine < anchor.artifactLine)
-			)
+			artifactLine !== undefined &&
+			(anchor === undefined ||
+				sourceLine < anchor.sourceLine ||
+				(sourceLine === anchor.sourceLine && artifactLine < anchor.artifactLine))
 		) {
 			anchor = { sourceLine, artifactLine };
 		}

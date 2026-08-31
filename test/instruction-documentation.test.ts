@@ -4,11 +4,7 @@ import {
 	documentationForInstruction,
 	instructionMnemonic,
 } from '../src/artifact-document/instruction-documentation.js';
-import type {
-	ArtifactKind,
-	RenderedArtifactLine,
-	RenderedTextArtifact,
-} from '../src/types/index.js';
+import type { ArtifactKind, RenderedArtifactLine, RenderedTextArtifact } from '../src/types/index.js';
 
 test('Compiler Explorer documentation replaces the hand-written x86 subset', () => {
 	const artifact = textArtifact('assembly', [
@@ -29,19 +25,13 @@ test('assembly documentation infers AArch64 and RISC-V from a complete listing',
 		{ text: '  adrp x0, symbol' },
 		{ text: '  blr x8' },
 	]);
-	assert.equal(
-		documentationForInstruction(aarch64, aarch64.lines[0].text)?.instructionSet,
-		'AArch64',
-	);
+	assert.equal(documentationForInstruction(aarch64, aarch64.lines[0].text)?.instructionSet, 'AArch64');
 
 	const riscv = textArtifact('binary-disassembly', [
 		{ text: '0: 13 05 10 00 addi a0, zero, 1', disassembly: 'addi a0, zero, 1' },
 		{ text: '4: 67 80 00 00 jalr zero, 0(ra)', disassembly: 'jalr zero, 0(ra)' },
 	]);
-	assert.equal(
-		documentationForInstruction(riscv, riscv.lines[0].disassembly ?? '')?.instructionSet,
-		'RISC-V',
-	);
+	assert.equal(documentationForInstruction(riscv, riscv.lines[0].disassembly ?? '')?.instructionSet, 'RISC-V');
 });
 
 test('LLVM IR and Python bytecode use their artifact-specific docenized tables', () => {
@@ -59,10 +49,7 @@ test('LLVM IR and Python bytecode use their artifact-specific docenized tables',
 	assert.match(pythonDocumentation?.url ?? '', /python\.org/);
 });
 
-function textArtifact(
-	kind: ArtifactKind,
-	lines: readonly RenderedArtifactLine[],
-): RenderedTextArtifact {
+function textArtifact(kind: ArtifactKind, lines: readonly RenderedArtifactLine[]): RenderedTextArtifact {
 	return {
 		kind,
 		presentation: 'text',
@@ -83,7 +70,7 @@ function textArtifact(
 		links: [],
 		folds: [],
 		symbols: [],
-		raw: lines.map(line => line.text).join('\n'),
-		text: lines.map(line => line.text).join('\n'),
+		raw: lines.map((line) => line.text).join('\n'),
+		text: lines.map((line) => line.text).join('\n'),
 	};
 }

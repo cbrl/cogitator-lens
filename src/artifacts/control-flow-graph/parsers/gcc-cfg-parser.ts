@@ -17,10 +17,7 @@ import type { GraphParseResult } from '../control-flow-graph-model.js';
  * particular, an unlabeled pair of successors is not treated as a true/false
  * pair: that ordering is not part of the dump contract.
  */
-export function parseGccControlFlowGraphs(
-	text: string,
-	workingDirectory: string,
-): GraphParseResult {
+export function parseGccControlFlowGraphs(text: string, workingDirectory: string): GraphParseResult {
 	const lines = splitLines(text);
 	const sections = findFunctionSections(lines);
 	const diagnostics: string[] = [];
@@ -36,8 +33,9 @@ export function parseGccControlFlowGraphs(
 
 	for (const section of sections) {
 		const parsed = parseFunction(section, lines, workingDirectory);
-		diagnostics.push(...parsed.diagnostics.map(message =>
-			`GCC function ${JSON.stringify(section.label)}: ${message}`));
+		diagnostics.push(
+			...parsed.diagnostics.map((message) => `GCC function ${JSON.stringify(section.label)}: ${message}`),
+		);
 		if (parsed.graph) {
 			graphs.push({ ...parsed.graph, id: graphIds.allocate(section.label) });
 		}
@@ -92,8 +90,8 @@ const functionHeaderPattern = /^\s*;;\s*Function\s+(.+?)\s*$/i;
 const blockHeaderPattern = /^\s*(?:<bb\s+(\d+)>|<?(ENTRY|EXIT)>?)(?:\s+\[[^\]]*\])?\s*:?\s*$/i;
 const successorPattern = /^\s*;;\s*(?:<bb\s*)?(\d+|ENTRY|EXIT)\s+succ(?:essor)?s?\s*\{([^}]*)\}/i;
 const successorStartPattern = /^\s*;;\s*(?:<bb\s*)?(\d+|ENTRY|EXIT)\s+succ(?:essor)?s?\s*\{/i;
-const locationPattern = /(?:["']([^"']+)["']|((?:[A-Za-z]:[\\/]|\/(?![\\/\s])|\.\.?[\\/])[^\r\n;]*?)|([A-Za-z0-9_.+-]+(?:[\\/][^\s:;]+)*))\s*[:(]\s*(\d+)(?:\s*[: ,]\s*(\d+))?/g;
-
+const locationPattern =
+	/(?:["']([^"']+)["']|((?:[A-Za-z]:[\\/]|\/(?![\\/\s])|\.\.?[\\/])[^\r\n;]*?)|([A-Za-z0-9_.+-]+(?:[\\/][^\s:;]+)*))\s*[:(]\s*(\d+)(?:\s*[: ,]\s*(\d+))?/g;
 
 function findFunctionSections(lines: readonly string[]): FunctionSection[] {
 	const starts: Array<{ label: string; line: number }> = [];
@@ -117,8 +115,11 @@ function functionLabel(header: string): string {
 	// "foo (foo, funcdef_no=0, decl_uid=...)".  Do not strip a normal function
 	// signature unless it contains one of the known metadata keys.
 	const suffix = label.lastIndexOf(' (');
-	if (suffix > 0 && (/\b(?:funcdef_no|decl_uid|cgraph_uid|symbol_order)\s*=/.test(label.slice(suffix))
-		|| /^\s*\(null\)\s*$/i.test(label.slice(suffix)))) {
+	if (
+		suffix > 0 &&
+		(/\b(?:funcdef_no|decl_uid|cgraph_uid|symbol_order)\s*=/.test(label.slice(suffix)) ||
+			/^\s*\(null\)\s*$/i.test(label.slice(suffix)))
+	) {
 		label = label.slice(0, suffix).trim();
 	}
 	return label;
@@ -145,7 +146,9 @@ function parseFunction(
 			const existing = blocks.get(header.key);
 			if (existing?.headerSeen) {
 				duplicateBlock = true;
-				diagnostics.push(`duplicate basic-block header ${JSON.stringify(header.key)} at output line ${line + 1}`);
+				diagnostics.push(
+					`duplicate basic-block header ${JSON.stringify(header.key)} at output line ${line + 1}`,
+				);
 				current = undefined;
 				continue;
 			}
@@ -174,12 +177,7 @@ function parseFunction(
 
 		const successor = parseSuccessors(text);
 		if (successor) {
-			const source = getOrCreateBlock(
-				blocks,
-				blockOrder,
-				blockDescriptor(successor.source),
-				line,
-			);
+			const source = getOrCreateBlock(blocks, blockOrder, blockDescriptor(successor.source), line);
 			source.successorLines.push(line);
 			for (const target of successor.targets) {
 				source.successors.push({ target, line });
@@ -265,29 +263,26 @@ function parseFunction(
 			}
 			return left.headerLine - right.headerLine || blockOrder.indexOf(left.key) - blockOrder.indexOf(right.key);
 		})
-		.map(block => block.key);
-	const nodes: ControlFlowNode[] = orderedBlockKeys.map(key => {
+		.map((block) => block.key);
+	const nodes: ControlFlowNode[] = orderedBlockKeys.map((key) => {
 		const block = blocks.get(key)!;
 		const label = block.special ?? key;
 		const statements = block.statements
-			.filter(statement => !/^;;/.test(statement))
-			.filter(statement => statement !== '{' && statement !== '}')
+			.filter((statement) => !/^;;/.test(statement))
+			.filter((statement) => statement !== '{' && statement !== '}')
 			.join('\n')
 			.trim();
 		const node: ControlFlowNode = {
 			id: key,
 			label: statements ? `${label}\n${statements}` : label,
-			referencedArtifactLines: uniqueSorted([
-				...block.lines,
-				...block.successorLines,
-			]),
+			referencedArtifactLines: uniqueSorted([...block.lines, ...block.successorLines]),
 		};
 		return block.firstSource || block.terminal
 			? {
-				...node,
-				...(block.firstSource ? { source: block.firstSource } : {}),
-				...(block.terminal ? { terminal: block.terminal } : {}),
-			}
+					...node,
+					...(block.firstSource ? { source: block.firstSource } : {}),
+					...(block.terminal ? { terminal: block.terminal } : {}),
+				}
 			: node;
 	});
 
@@ -296,8 +291,9 @@ function parseFunction(
 		const events = block.branchEvents;
 		const usedEvents = new Set<number>();
 		for (const successor of block.successors) {
-			const eventIndex = events.findIndex((event, index) =>
-				!usedEvents.has(index) && event.target === successor.target);
+			const eventIndex = events.findIndex(
+				(event, index) => !usedEvents.has(index) && event.target === successor.target,
+			);
 			const event = eventIndex >= 0 ? events[eventIndex] : undefined;
 			if (event) {
 				usedEvents.add(eventIndex);
@@ -335,9 +331,7 @@ function parseFunction(
 		}
 	}
 
-	const entryNodeId = blocks.has('ENTRY')
-		? 'ENTRY'
-		: orderedBlockKeys.find(key => key !== 'EXIT');
+	const entryNodeId = blocks.has('ENTRY') ? 'ENTRY' : orderedBlockKeys.find((key) => key !== 'EXIT');
 	const graph: ControlFlowGraph = {
 		id: `gcc:${section.label}`,
 		label: section.label,
@@ -370,7 +364,7 @@ function parseSuccessors(text: string): { source: string; targets: string[] } | 
 	}
 	const source = normalizeBlockReference(match[1]);
 	const targets = [...match[2].matchAll(/(?:<bb\s*)?(\d+|ENTRY|EXIT)\b/gi)]
-		.map(item => normalizeBlockReference(item[1]))
+		.map((item) => normalizeBlockReference(item[1]))
 		.filter((value, index, all) => all.indexOf(value) === index);
 	return { source, targets };
 }
@@ -389,9 +383,7 @@ function parseSwitchEvents(text: string, line: number): BranchEvent[] {
 }
 
 function blockDescriptor(reference: string): BlockDescriptor {
-	return reference === 'ENTRY' || reference === 'EXIT'
-		? { key: reference, special: reference }
-		: { key: reference };
+	return reference === 'ENTRY' || reference === 'EXIT' ? { key: reference, special: reference } : { key: reference };
 }
 
 function normalizeBlockReference(value: string): string {
@@ -449,11 +441,15 @@ function ensureBlock(
 }
 
 function addEdge(edges: ControlFlowEdge[], edge: ControlFlowEdge): void {
-	if (edges.some(existing =>
-		existing.from === edge.from
-		&& existing.to === edge.to
-		&& existing.kind === edge.kind
-		&& existing.label === edge.label)) {
+	if (
+		edges.some(
+			(existing) =>
+				existing.from === edge.from &&
+				existing.to === edge.to &&
+				existing.kind === edge.kind &&
+				existing.label === edge.label,
+		)
+	) {
 		return;
 	}
 	edges.push(edge);
@@ -485,10 +481,7 @@ function terminalKind(statement: string): ControlFlowNode['terminal'] | undefine
 	return undefined;
 }
 
-function parseSourceLocation(
-	text: string,
-	workingDirectory: string,
-): ControlFlowSourceLocation | undefined {
+function parseSourceLocation(text: string, workingDirectory: string): ControlFlowSourceLocation | undefined {
 	locationPattern.lastIndex = 0;
 	let match: RegExpExecArray | null;
 	while ((match = locationPattern.exec(text)) !== null) {
@@ -498,8 +491,11 @@ function parseSourceLocation(
 		}
 		const line = Number.parseInt(match[4], 10);
 		const rawColumn = match[5] === undefined ? undefined : Number.parseInt(match[5], 10);
-		if (!Number.isSafeInteger(line) || line < 1
-			|| (rawColumn !== undefined && (!Number.isSafeInteger(rawColumn) || rawColumn < 1))) {
+		if (
+			!Number.isSafeInteger(line) ||
+			line < 1 ||
+			(rawColumn !== undefined && (!Number.isSafeInteger(rawColumn) || rawColumn < 1))
+		) {
 			continue;
 		}
 		return {
@@ -510,8 +506,6 @@ function parseSourceLocation(
 	}
 	return undefined;
 }
-
-
 
 function uniqueSorted(values: readonly number[]): number[] {
 	return [...new Set(values)].sort((left, right) => left - right);

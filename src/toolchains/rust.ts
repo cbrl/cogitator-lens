@@ -1,15 +1,8 @@
 import { stripCompilerManagedArguments } from './toolchain-backend.js';
 
-const rustManagedFlagsWithValues = new Set([
-	'--emit',
-	'--error-format',
-	'--json',
-	'--out-dir',
-	'--color',
-]);
+const rustManagedFlagsWithValues = new Set(['--emit', '--error-format', '--json', '--out-dir', '--color']);
 
-const rustManagedFlagAssignments =
-	/^(?:--emit|--error-format|--json|--out-dir|--color)=/;
+const rustManagedFlagAssignments = /^(?:--emit|--error-format|--json|--out-dir|--color)=/;
 
 export function rustOutputArguments(
 	target: 'assembly' | 'object',
@@ -51,5 +44,5 @@ export function stripRustManagedArguments(
 }
 
 function hasOption(args: readonly string[], name: string): boolean {
-	return args.some(argument => argument === name || argument.startsWith(`${name}=`));
+	return args.some((argument) => argument === name || argument.startsWith(`${name}=`));
 }

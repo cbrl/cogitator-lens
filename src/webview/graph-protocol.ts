@@ -1,7 +1,4 @@
-import type {
-	ControlFlowGraph,
-	RenderedArtifactMetric,
-} from '../types/index.js';
+import type { ControlFlowGraph, RenderedArtifactMetric } from '../types/index.js';
 import {
 	allowedKeys,
 	boundedString,
@@ -30,10 +27,10 @@ export type GraphTheme = 'light' | 'dark' | 'high-contrast';
 
 export type HostMessage =
 	| {
-		readonly type: 'render';
-		readonly artifact: SerializedGraphArtifact;
-		readonly selectedGraphId?: string;
-	}
+			readonly type: 'render';
+			readonly artifact: SerializedGraphArtifact;
+			readonly selectedGraphId?: string;
+	  }
 	| { readonly type: 'theme'; readonly theme: GraphTheme };
 
 export type WebviewMessage =
@@ -61,9 +58,11 @@ export function parseHostMessage(value: unknown): HostMessage | undefined {
 			? { type: 'theme', theme: value.theme }
 			: undefined;
 	}
-	if (value.type !== 'render'
-		|| !allowedKeys(value, ['type', 'artifact', 'selectedGraphId'])
-		|| (value.selectedGraphId !== undefined && !validId(value.selectedGraphId))) {
+	if (
+		value.type !== 'render' ||
+		!allowedKeys(value, ['type', 'artifact', 'selectedGraphId']) ||
+		(value.selectedGraphId !== undefined && !validId(value.selectedGraphId))
+	) {
 		return undefined;
 	}
 	const artifact = parseSerializedGraphArtifact(value.artifact);
@@ -86,15 +85,11 @@ export function parseWebviewMessage(value: unknown): WebviewMessage | undefined 
 		case 'ready':
 			return exactKeys(value, ['type']) ? { type: 'ready' } : undefined;
 		case 'openSource':
-			return exactKeys(value, ['type', 'graphId', 'nodeId'])
-				&& validId(value.graphId)
-				&& validId(value.nodeId)
-					? { type: 'openSource', graphId: value.graphId, nodeId: value.nodeId }
-					: undefined;
+			return exactKeys(value, ['type', 'graphId', 'nodeId']) && validId(value.graphId) && validId(value.nodeId)
+				? { type: 'openSource', graphId: value.graphId, nodeId: value.nodeId }
+				: undefined;
 		case 'highlightSource':
-			return exactKeys(value, ['type', 'graphId', 'nodeId'])
-				&& validId(value.graphId)
-				&& validId(value.nodeId)
+			return exactKeys(value, ['type', 'graphId', 'nodeId']) && validId(value.graphId) && validId(value.nodeId)
 				? { type: 'highlightSource', graphId: value.graphId, nodeId: value.nodeId }
 				: undefined;
 		case 'selectionChanged':
@@ -108,10 +103,10 @@ export function parseWebviewMessage(value: unknown): WebviewMessage | undefined 
 				? { type: 'exportDot', graphId: value.graphId }
 				: undefined;
 		case 'exportSvg':
-			return exactKeys(value, ['type', 'graphId', 'svg'])
-				&& validId(value.graphId)
-				&& typeof value.svg === 'string'
-				&& value.svg.length <= 10_000_000
+			return exactKeys(value, ['type', 'graphId', 'svg']) &&
+				validId(value.graphId) &&
+				typeof value.svg === 'string' &&
+				value.svg.length <= 10_000_000
 				? { type: 'exportSvg', graphId: value.graphId, svg: value.svg }
 				: undefined;
 		default:
@@ -120,17 +115,19 @@ export function parseWebviewMessage(value: unknown): WebviewMessage | undefined 
 }
 
 function parseSerializedGraphArtifact(value: unknown): SerializedGraphArtifact | undefined {
-	if (!isRecord(value)
-		|| !allowedKeys(value, ['graphs', 'metrics', 'diagnostics', 'stale', 'failure'])
-		|| typeof value.stale !== 'boolean'
-		|| !isRecord(value.metrics)
-		|| !Array.isArray(value.graphs)
-		|| value.graphs.length > graphLimits.graphs
-		|| !Array.isArray(value.diagnostics)
-		|| value.diagnostics.length > graphLimits.diagnostics
-		|| !value.diagnostics.every(item => boundedString(item, graphLimits.labelLength) !== undefined)
-		|| (value.failure !== undefined && boundedString(value.failure, graphLimits.labelLength) === undefined)
-		|| !validMetrics(value.metrics)) {
+	if (
+		!isRecord(value) ||
+		!allowedKeys(value, ['graphs', 'metrics', 'diagnostics', 'stale', 'failure']) ||
+		typeof value.stale !== 'boolean' ||
+		!isRecord(value.metrics) ||
+		!Array.isArray(value.graphs) ||
+		value.graphs.length > graphLimits.graphs ||
+		!Array.isArray(value.diagnostics) ||
+		value.diagnostics.length > graphLimits.diagnostics ||
+		!value.diagnostics.every((item) => boundedString(item, graphLimits.labelLength) !== undefined) ||
+		(value.failure !== undefined && boundedString(value.failure, graphLimits.labelLength) === undefined) ||
+		!validMetrics(value.metrics)
+	) {
 		return undefined;
 	}
 
@@ -155,12 +152,16 @@ function parseSerializedGraphArtifact(value: unknown): SerializedGraphArtifact |
 
 function validMetrics(metrics: Record<string, unknown>): boolean {
 	const entries = Object.entries(metrics);
-	return entries.length <= graphLimits.metrics
-		&& entries.every(([name, metric]) =>
-			name.length <= graphLimits.idLength
-			&& (boundedString(metric, graphLimits.labelLength) !== undefined
-				|| typeof metric === 'number' && Number.isFinite(metric)
-				|| typeof metric === 'boolean'));
+	return (
+		entries.length <= graphLimits.metrics &&
+		entries.every(
+			([name, metric]) =>
+				name.length <= graphLimits.idLength &&
+				(boundedString(metric, graphLimits.labelLength) !== undefined ||
+					(typeof metric === 'number' && Number.isFinite(metric)) ||
+					typeof metric === 'boolean'),
+		)
+	);
 }
 
 function validId(value: unknown): value is string {

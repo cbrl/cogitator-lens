@@ -1,10 +1,5 @@
 import path from 'path';
-import type {
-	DisplayOptions,
-	RawArtifact,
-	RenderedTextArtifact,
-	StackUsageQualifier,
-} from '../../types/index.js';
+import type { DisplayOptions, RawArtifact, RenderedTextArtifact, StackUsageQualifier } from '../../types/index.js';
 import type { ArtifactProducer } from '../../toolchains/toolchain-map.js';
 import type { ArtifactOutputSpec } from '../../toolchains/toolchain-backend.js';
 import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
@@ -59,10 +54,7 @@ export const clangClStackUsageOutput: ArtifactOutputSpec = Object.freeze({
 	],
 });
 
-export const nativeStackAnalysisProducer: ArtifactProducer = artifactProducer(
-	'stack-analysis',
-	nativeStackUsageOutput,
-);
+export const nativeStackAnalysisProducer: ArtifactProducer = artifactProducer('stack-analysis', nativeStackUsageOutput);
 
 export const clangClStackAnalysisProducer: ArtifactProducer = artifactProducer(
 	'stack-analysis',
@@ -70,10 +62,7 @@ export const clangClStackAnalysisProducer: ArtifactProducer = artifactProducer(
 );
 
 /** Parse GCC/Clang's documented .su records without assuming POSIX paths. */
-export function parseStackUsage(
-	text: string,
-	workingDirectory: string,
-): StackUsageParseResult {
+export function parseStackUsage(text: string, workingDirectory: string): StackUsageParseResult {
 	const entries: StackUsageEntry[] = [];
 	const diagnostics: AnalysisParserDiagnostic[] = [];
 	const seen = new Set<string>();
@@ -103,10 +92,7 @@ export function parseStackUsage(
 	return { entries, diagnostics };
 }
 
-function parseStackUsageRecord(
-	record: string,
-	workingDirectory: string,
-): StackUsageEntry | string {
+function parseStackUsageRecord(record: string, workingDirectory: string): StackUsageEntry | string {
 	const fields = parseStackUsageFields(record);
 	if (!fields) {
 		return 'expected a location, non-negative integer size, and stack qualifier';
@@ -126,11 +112,9 @@ function parseStackUsageRecord(
 	const sourceColumn = location.sourceColumn;
 	const functionName = location.functionName;
 	if (
-		(sourceLine !== undefined
-			&& (!Number.isSafeInteger(sourceLine) || sourceLine < 1))
-		|| (sourceColumn !== undefined
-			&& (!Number.isSafeInteger(sourceColumn) || sourceColumn < 0))
-		|| !functionName
+		(sourceLine !== undefined && (!Number.isSafeInteger(sourceLine) || sourceLine < 1)) ||
+		(sourceColumn !== undefined && (!Number.isSafeInteger(sourceColumn) || sourceColumn < 0)) ||
+		!functionName
 	) {
 		return 'source line, column, and function name must be valid';
 	}
@@ -158,7 +142,7 @@ interface NativeStackUsageFields {
  * whitespace in a demangled function signature change the field boundaries.
  */
 function parseStackUsageFields(record: string): NativeStackUsageFields | undefined {
-	const tabFields = record.split(/\t+/).map(field => field.trim());
+	const tabFields = record.split(/\t+/).map((field) => field.trim());
 	if (tabFields.length >= 3) {
 		return {
 			location: tabFields[0],
@@ -168,9 +152,7 @@ function parseStackUsageFields(record: string): NativeStackUsageFields | undefin
 	}
 
 	const fields = /^(.*?)[ ]+([+-]?\d+)[ ]+(dynamic(?:[ , -]+bounded)?|static)\s*$/i.exec(record);
-	return fields
-		? { location: fields[1], value: fields[2], qualifier: fields[3] }
-		: undefined;
+	return fields ? { location: fields[1], value: fields[2], qualifier: fields[3] } : undefined;
 }
 
 interface NativeStackUsageLocation {
@@ -180,10 +162,7 @@ interface NativeStackUsageLocation {
 	readonly functionName: string;
 }
 
-function parseStackUsageLocation(
-	value: string,
-	workingDirectory: string,
-): NativeStackUsageLocation {
+function parseStackUsageLocation(value: string, workingDirectory: string): NativeStackUsageLocation {
 	// GCC: source:line:column:function. Greedy matching selects the rightmost
 	// numeric location, preserving a Windows drive prefix and C++ punctuation.
 	const gcc = /^(.*):(\d+):(\d+):(.*)$/.exec(value);
@@ -224,19 +203,24 @@ function resolveSourcePath(filename: string, workingDirectory: string): string {
 	if (path.win32.isAbsolute(filename)) {
 		return path.win32.normalize(filename);
 	}
-	return path.normalize(path.isAbsolute(filename)
-		? filename
-		: path.resolve(workingDirectory, filename));
+	return path.normalize(path.isAbsolute(filename) ? filename : path.resolve(workingDirectory, filename));
 }
 
-function normalizeNativeQualifier(
-	value: string,
-): 'static' | 'dynamic' | 'dynamic-bounded' | undefined {
-	switch (value.trim().toLowerCase().replace(/[\s,-]+/g, '-')) {
-		case 'static': return 'static';
-		case 'dynamic': return 'dynamic';
-		case 'dynamic-bounded': return 'dynamic-bounded';
-		default: return undefined;
+function normalizeNativeQualifier(value: string): 'static' | 'dynamic' | 'dynamic-bounded' | undefined {
+	switch (
+		value
+			.trim()
+			.toLowerCase()
+			.replace(/[\s,-]+/g, '-')
+	) {
+		case 'static':
+			return 'static';
+		case 'dynamic':
+			return 'dynamic';
+		case 'dynamic-bounded':
+			return 'dynamic-bounded';
+		default:
+			return undefined;
 	}
 }
 
@@ -259,23 +243,25 @@ export function renderStackUsage(
 ): RenderedTextArtifact {
 	const sourceFile = path.normalize(context.source.uri.fsPath);
 	const sourceLineCount = context.source.text.split(/\r\n|\n|\r/).length;
-	const unmappedEntryCount = entries.filter(entry =>
-		entry.sourceUri === undefined
-		|| entry.sourceLine === undefined
-		|| entry.sourceLine < 1
-		|| entry.sourceLine > sourceLineCount
-		|| !sameSourcePath(entry.sourceUri, sourceFile)
+	const unmappedEntryCount = entries.filter(
+		(entry) =>
+			entry.sourceUri === undefined ||
+			entry.sourceLine === undefined ||
+			entry.sourceLine < 1 ||
+			entry.sourceLine > sourceLineCount ||
+			!sameSourcePath(entry.sourceUri, sourceFile),
 	).length;
 	const unit = entries[0]?.unit ?? defaultUnit;
 	const totalKnownFrame = entries.reduce((total, entry) => total + entry.value, 0);
 	const largestFrame = entries.reduce((largest, entry) => Math.max(largest, entry.value), 0);
-	const dynamicFrameCount = entries.filter(entry =>
-		entry.qualifier === 'dynamic' || entry.qualifier === 'dynamic-bounded').length;
+	const dynamicFrameCount = entries.filter(
+		(entry) => entry.qualifier === 'dynamic' || entry.qualifier === 'dynamic-bounded',
+	).length;
 
 	return renderAnalysisSource(
 		raw,
 		context,
-		entries.map(entry => ({
+		entries.map((entry) => ({
 			sourceUri: entry.sourceUri,
 			sourceLine: entry.sourceLine,
 			sourceColumn: entry.sourceColumn,

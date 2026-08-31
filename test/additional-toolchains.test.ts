@@ -37,51 +37,73 @@ test('additional toolchains expose their native compiler outputs', () => {
 	assert.ok(toolchainDefinitions.nvcc.languageIdentifiers.includes('cuda-cpp'));
 
 	assert.deepEqual(zigOutputArguments('assembly', 'out.s'), [
-		'build-obj', '-fllvm', '-fno-strip', '-fno-emit-bin', '-femit-asm=out.s',
+		'build-obj',
+		'-fllvm',
+		'-fno-strip',
+		'-fno-emit-bin',
+		'-femit-asm=out.s',
 	]);
 	assert.deepEqual(zigLlvmIrOutput.arguments('out.ll'), [
-		'build-obj', '-fllvm', '-fno-strip', '-fno-emit-bin', '-femit-llvm-ir=out.ll',
+		'build-obj',
+		'-fllvm',
+		'-fno-strip',
+		'-fno-emit-bin',
+		'-femit-llvm-ir=out.ll',
 	]);
 	assert.deepEqual(nvccOutputArguments('assembly', 'out.ptx'), [
-		'--ptx', '--generate-line-info', '--keep-device-functions', '-o', 'out.ptx',
+		'--ptx',
+		'--generate-line-info',
+		'--keep-device-functions',
+		'-o',
+		'out.ptx',
 	]);
 	assert.deepEqual(nvccOutputArguments('object', 'out.cubin'), [
-		'--cubin', '--generate-line-info', '--keep-device-functions', '-o', 'out.cubin',
+		'--cubin',
+		'--generate-line-info',
+		'--keep-device-functions',
+		'-o',
+		'out.cubin',
 	]);
 	assert.deepEqual(nvdisasm.arguments('out.cubin'), ['out.cubin', '-c', '-g', '-hex']);
 });
 
 test('Go SSA parser retains final blocks, typed branches, and source mappings', () => {
-	const parsed = parseGoSsaControlFlowGraphs([
-		'generating SSA for classify',
-		'classify func(int) int',
-		'  b1:',
-		'    (+4) v1 = ArgIntReg <int> {value+0}',
-		'    If v1 -> b2 b3 (likely)',
-		'  b2:',
-		'    (+5) Ret v1',
-		'  b3:',
-		'    (+7) Ret v2',
-		'  pass trim begin',
-		'  pass trim end [0 ns]',
-		'classify func(int) int',
-		'  b1:',
-		'    (+4) v1 = TESTQ <flags>',
-		'    If v1 -> b2 b3',
-		'  b2:',
-		'    (+5) Ret v1',
-		'  b3:',
-		'    (+7) Ret v2',
-		'genssa classify',
-	].join('\n'), 'file:///project/source.go');
+	const parsed = parseGoSsaControlFlowGraphs(
+		[
+			'generating SSA for classify',
+			'classify func(int) int',
+			'  b1:',
+			'    (+4) v1 = ArgIntReg <int> {value+0}',
+			'    If v1 -> b2 b3 (likely)',
+			'  b2:',
+			'    (+5) Ret v1',
+			'  b3:',
+			'    (+7) Ret v2',
+			'  pass trim begin',
+			'  pass trim end [0 ns]',
+			'classify func(int) int',
+			'  b1:',
+			'    (+4) v1 = TESTQ <flags>',
+			'    If v1 -> b2 b3',
+			'  b2:',
+			'    (+5) Ret v1',
+			'  b3:',
+			'    (+7) Ret v2',
+			'genssa classify',
+		].join('\n'),
+		'file:///project/source.go',
+	);
 	assert.equal(parsed.graphs.length, 1);
-	assert.deepEqual(parsed.graphs[0].edges.map(edge => edge.kind), ['true', 'false']);
+	assert.deepEqual(
+		parsed.graphs[0].edges.map((edge) => edge.kind),
+		['true', 'false'],
+	);
 	assert.equal(parsed.graphs[0].nodes[0].source?.line, 3);
 	assert.match(parsed.graphs[0].nodes[0].label, /TESTQ/u);
 	assert.doesNotMatch(parsed.graphs[0].nodes[0].label, /ArgIntReg/u);
 });
 
-test('installed Go compiler produces normalized assembly and its GOSSAFUNC CFG', async t => {
+test('installed Go compiler produces normalized assembly and its GOSSAFUNC CFG', async (t) => {
 	if (spawnSync('go', ['version'], { encoding: 'utf8' }).status !== 0) {
 		t.skip('Go is not installed');
 		return;
@@ -98,7 +120,7 @@ test('installed Go compiler produces normalized assembly and its GOSSAFUNC CFG',
 	assert.equal(assemblyCell.outputs, undefined);
 	const assembly = await assemblyCell.producer(backend, fileUri(source), options, neverCancelled);
 	const parsedAssembly = backend.parseAssembly(assembly.text, defaultArtifactOptions.display);
-	assert.ok(parsedAssembly.asm.some(line => /(?:TEXT|CMPQ|JLE|NEGQ|RET)/u.test(line.text)));
+	assert.ok(parsedAssembly.asm.some((line) => /(?:TEXT|CMPQ|JLE|NEGQ|RET)/u.test(line.text)));
 
 	const graphCell = toolchainDefinitions.go.artifacts['control-flow-graph'];
 	assert.equal(graphCell.status, 'available');
@@ -106,15 +128,14 @@ test('installed Go compiler produces normalized assembly and its GOSSAFUNC CFG',
 	assert.ok(output);
 	const rawGraph = await output.producer(backend, fileUri(source), options, neverCancelled);
 	assert.equal(fs.existsSync(path.join(path.dirname(source), 'ssa.html')), false);
-	const graphs = output.parseGraphs?.(
-		rawGraph,
-		defaultArtifactOptions.display,
-		{ backend, source: { uri: fileUri(source), text: fs.readFileSync(source, 'utf8') } },
-	);
-	assert.ok(graphs?.graphs.some(graph => graph.label === 'classify'));
+	const graphs = output.parseGraphs?.(rawGraph, defaultArtifactOptions.display, {
+		backend,
+		source: { uri: fileUri(source), text: fs.readFileSync(source, 'utf8') },
+	});
+	assert.ok(graphs?.graphs.some((graph) => graph.label === 'classify'));
 });
 
-test('installed nvcc produces line-mapped PTX through the vendored CE parser', async t => {
+test('installed nvcc produces line-mapped PTX through the vendored CE parser', async (t) => {
 	if (spawnSync('nvcc', ['--version'], { encoding: 'utf8' }).status !== 0) {
 		t.skip('nvcc is not installed');
 		return;
@@ -124,29 +145,43 @@ test('installed nvcc produces line-mapped PTX through the vendored CE parser', a
 	const cell = toolchainDefinitions.nvcc.artifacts.assembly;
 	assert.equal(cell.status, 'available');
 	assert.equal(cell.outputs, undefined);
-	const raw = await cell.producer(backend, fileUri(source), {
-		workingDirectory: path.dirname(source),
-		productionOptions: defaultArtifactOptions.production,
-	}, neverCancelled);
+	const raw = await cell.producer(
+		backend,
+		fileUri(source),
+		{
+			workingDirectory: path.dirname(source),
+			productionOptions: defaultArtifactOptions.production,
+		},
+		neverCancelled,
+	);
 	assert.match(raw.text, /\.visible\s+\.entry\s+saxpy/u);
 	const parsed = backend.parseAssembly(raw.text, defaultArtifactOptions.display);
-	assert.ok(parsed.asm.some(line => /fma\.rn\.f32|mul\.wide|st\.global/u.test(line.text)));
-	assert.ok(parsed.asm.some(line => line.source?.file?.endsWith('kernel.cu')));
+	assert.ok(parsed.asm.some((line) => /fma\.rn\.f32|mul\.wide|st\.global/u.test(line.text)));
+	assert.ok(parsed.asm.some((line) => line.source?.file?.endsWith('kernel.cu')));
 
-	const sassBackend = new ToolchainBackend({
-		...profile('nvcc', 'nvcc'),
-		tools: { disassembler: 'nvdisasm' },
-	}, toolchainDefinitions.nvcc, testToolchainHost);
+	const sassBackend = new ToolchainBackend(
+		{
+			...profile('nvcc', 'nvcc'),
+			tools: { disassembler: 'nvdisasm' },
+		},
+		toolchainDefinitions.nvcc,
+		testToolchainHost,
+	);
 	const binaryCell = toolchainDefinitions.nvcc.artifacts['binary-disassembly'];
 	assert.equal(binaryCell.status, 'available');
 	assert.equal(binaryCell.outputs, undefined);
-	const sass = await binaryCell.producer(sassBackend, fileUri(source), {
-		workingDirectory: path.dirname(source),
-		productionOptions: defaultArtifactOptions.production,
-	}, neverCancelled);
+	const sass = await binaryCell.producer(
+		sassBackend,
+		fileUri(source),
+		{
+			workingDirectory: path.dirname(source),
+			productionOptions: defaultArtifactOptions.production,
+		},
+		neverCancelled,
+	);
 	const parsedSass = sassBackend.parseBinaryDisassembly(sass.text, defaultArtifactOptions.display);
-	assert.ok(parsedSass.asm.some(line => /(?:FMA|STG|EXIT)/u.test(line.disassembly ?? line.text)));
-	assert.ok(parsedSass.asm.some(line => line.address !== undefined && line.opcodes?.length));
+	assert.ok(parsedSass.asm.some((line) => /(?:FMA|STG|EXIT)/u.test(line.disassembly ?? line.text)));
+	assert.ok(parsedSass.asm.some((line) => line.address !== undefined && line.opcodes?.length));
 });
 
 function availability(toolchain: ToolchainKind, artifact: ArtifactKind): string {

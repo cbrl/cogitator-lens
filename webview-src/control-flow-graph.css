@@ -4,7 +4,9 @@
 	font-size: var(--vscode-font-size);
 }
 
-* { box-sizing: border-box; }
+* {
+	box-sizing: border-box;
+}
 
 body {
 	margin: 0;
@@ -25,9 +27,13 @@ body {
 	background: var(--vscode-editorGroupHeader-tabsBackground);
 }
 
-.toolbar label { white-space: nowrap; }
+.toolbar label {
+	white-space: nowrap;
+}
 
-input, select, button {
+input,
+select,
+button {
 	color: var(--vscode-button-secondaryForeground);
 	background: var(--vscode-button-secondaryBackground);
 	border: 1px solid var(--vscode-dropdown-border, transparent);
@@ -42,10 +48,19 @@ input {
 	padding: 2px 26px 2px 8px;
 }
 
-#graph-search { min-width: 150px; max-width: 260px; }
-#layout-direction { min-width: 116px; max-width: 150px; padding: 2px 5px; }
+#graph-search {
+	min-width: 150px;
+	max-width: 260px;
+}
+#layout-direction {
+	min-width: 116px;
+	max-width: 150px;
+	padding: 2px 5px;
+}
 
-.function-picker { position: relative; }
+.function-picker {
+	position: relative;
+}
 #function-options {
 	position: absolute;
 	z-index: 10;
@@ -72,16 +87,29 @@ input {
 	color: var(--vscode-foreground);
 	background: transparent;
 }
-.function-option:hover, .function-option:focus { background: var(--vscode-list-hoverBackground); }
+.function-option:hover,
+.function-option:focus {
+	background: var(--vscode-list-hoverBackground);
+}
 
-button { padding: 2px 9px; cursor: pointer; }
-button:hover { background: var(--vscode-button-secondaryHoverBackground); }
-button:focus-visible, input:focus-visible, select:focus-visible, .node:focus-visible {
+button {
+	padding: 2px 9px;
+	cursor: pointer;
+}
+button:hover {
+	background: var(--vscode-button-secondaryHoverBackground);
+}
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+.node:focus-visible {
 	outline: 2px solid var(--vscode-focusBorder);
 	outline-offset: 1px;
 }
 
-.spacer { flex: 1; }
+.spacer {
+	flex: 1;
+}
 
 #stale-badge {
 	padding: 3px 7px;
@@ -99,9 +127,15 @@ button:focus-visible, input:focus-visible, select:focus-visible, .node:focus-vis
 	background: var(--vscode-editorWidget-background);
 }
 
-.diagnostic + .diagnostic { margin-top: 5px; }
-.diagnostic.error { color: var(--vscode-errorForeground); }
-.diagnostic.warning { color: var(--vscode-editorWarning-foreground); }
+.diagnostic + .diagnostic {
+	margin-top: 5px;
+}
+.diagnostic.error {
+	color: var(--vscode-errorForeground);
+}
+.diagnostic.warning {
+	color: var(--vscode-editorWarning-foreground);
+}
 
 #graph-canvas {
 	position: relative;
@@ -114,7 +148,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, .node:focus-vis
 	background-size: 18px 18px;
 }
 
-#graph-canvas.dragging { cursor: grabbing; }
+#graph-canvas.dragging {
+	cursor: grabbing;
+}
 #empty-state {
 	position: absolute;
 	z-index: 1;
@@ -124,9 +160,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, .node:focus-vis
 	color: var(--vscode-descriptionForeground);
 }
 
-#empty-state[hidden] { display: none; }
+#empty-state[hidden] {
+	display: none;
+}
 
-#graph-svg { width: 100%; height: 100%; }
+#graph-svg {
+	width: 100%;
+	height: 100%;
+}
 
 .node rect {
 	fill: var(--vscode-editorWidget-background);
@@ -134,20 +175,44 @@ button:focus-visible, input:focus-visible, select:focus-visible, .node:focus-vis
 	stroke-width: 1.4;
 }
 
-.node.source-linked { cursor: pointer; }
-.node.source-linked:hover rect, .node.source-linked:focus rect {
+.node.source-linked {
+	cursor: pointer;
+}
+.node.source-linked:hover rect,
+.node.source-linked:focus rect {
 	stroke: var(--vscode-focusBorder);
 	stroke-width: 2.3;
 }
-.node.loop-node rect { fill: var(--vscode-editor-selectionBackground, var(--vscode-editorWidget-background)); }
-.node.unreachable { opacity: 0.46; }
-.node.incident rect, .node.search-match rect { stroke: var(--vscode-focusBorder); stroke-width: 2.8; }
-.node.path-node rect { stroke: var(--vscode-charts-orange, var(--vscode-focusBorder)); stroke-width: 2.4; }
-.node.search-muted { opacity: 0.25; }
+.node.loop-node rect {
+	fill: var(--vscode-editor-selectionBackground, var(--vscode-editorWidget-background));
+}
+.node.unreachable {
+	opacity: 0.46;
+}
+.node.incident rect,
+.node.search-match rect {
+	stroke: var(--vscode-focusBorder);
+	stroke-width: 2.8;
+}
+.node.path-node rect {
+	stroke: var(--vscode-charts-orange, var(--vscode-focusBorder));
+	stroke-width: 2.4;
+}
+.node.search-muted {
+	opacity: 0.25;
+}
 
-.node.terminal-return rect { stroke: var(--vscode-testing-iconPassed); }
-.node.terminal-throw rect, .node.terminal-resume rect { stroke: var(--vscode-testing-iconFailed); }
-.node.terminal-unreachable rect { stroke-dasharray: 5 4; opacity: 0.82; }
+.node.terminal-return rect {
+	stroke: var(--vscode-testing-iconPassed);
+}
+.node.terminal-throw rect,
+.node.terminal-resume rect {
+	stroke: var(--vscode-testing-iconFailed);
+}
+.node.terminal-unreachable rect {
+	stroke-dasharray: 5 4;
+	opacity: 0.82;
+}
 
 .node-label {
 	fill: var(--vscode-editor-foreground);
@@ -164,15 +229,36 @@ button:focus-visible, input:focus-visible, select:focus-visible, .node:focus-vis
 	stroke-width: 1.35;
 	opacity: 0.72;
 }
-.edge.back-edge { stroke-width: 2.4; stroke-dasharray: 8 3; }
-.edge.incident { opacity: 1; stroke-width: 2.8; }
-.edge.path-edge { opacity: 1; stroke: var(--vscode-charts-orange, var(--vscode-focusBorder)); stroke-width: 2.5; }
+.edge.back-edge {
+	stroke-width: 2.4;
+	stroke-dasharray: 8 3;
+}
+.edge.incident {
+	opacity: 1;
+	stroke-width: 2.8;
+}
+.edge.path-edge {
+	opacity: 1;
+	stroke: var(--vscode-charts-orange, var(--vscode-focusBorder));
+	stroke-width: 2.5;
+}
 
-.edge-true { stroke: var(--vscode-testing-iconPassed); }
-.edge-false, .edge-exception { stroke: var(--vscode-testing-iconFailed); }
-.edge-exception { stroke-dasharray: 5 3; }
-.edge-fallthrough { stroke: var(--vscode-charts-blue); }
-.edge-unconditional { stroke-dasharray: 1 0; }
+.edge-true {
+	stroke: var(--vscode-testing-iconPassed);
+}
+.edge-false,
+.edge-exception {
+	stroke: var(--vscode-testing-iconFailed);
+}
+.edge-exception {
+	stroke-dasharray: 5 3;
+}
+.edge-fallthrough {
+	stroke: var(--vscode-charts-blue);
+}
+.edge-unconditional {
+	stroke-dasharray: 1 0;
+}
 
 .edge-label {
 	fill: var(--vscode-editor-foreground);
@@ -201,7 +287,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, .node:focus-vis
 }
 
 .legend-item::before {
-	content: "";
+	content: '';
 	display: inline-block;
 	width: 13px;
 	margin-right: 4px;
@@ -209,14 +295,28 @@ button:focus-visible, input:focus-visible, select:focus-visible, .node:focus-vis
 	vertical-align: middle;
 }
 
-.legend-true { color: var(--vscode-testing-iconPassed); }
-.legend-false, .legend-exception { color: var(--vscode-testing-iconFailed); }
-.legend-fallthrough { color: var(--vscode-charts-blue); }
-.legend-exception::before { border-top-style: dashed; }
+.legend-true {
+	color: var(--vscode-testing-iconPassed);
+}
+.legend-false,
+.legend-exception {
+	color: var(--vscode-testing-iconFailed);
+}
+.legend-fallthrough {
+	color: var(--vscode-charts-blue);
+}
+.legend-exception::before {
+	border-top-style: dashed;
+}
 
 @media (max-width: 720px) {
-	input { min-width: 120px; max-width: 38vw; }
-	#graph-search { display: none; }
+	input {
+		min-width: 120px;
+		max-width: 38vw;
+	}
+	#graph-search {
+		display: none;
+	}
 }
 
 #node-details {
@@ -233,8 +333,15 @@ button:focus-visible, input:focus-visible, select:focus-visible, .node:focus-vis
 	background: var(--vscode-editorWidget-background);
 	box-shadow: 0 3px 10px var(--vscode-widget-shadow);
 }
-#node-details pre { margin: 8px 0; white-space: pre-wrap; font-family: var(--vscode-editor-font-family); }
-#close-node-details { float: right; min-width: 24px; }
+#node-details pre {
+	margin: 8px 0;
+	white-space: pre-wrap;
+	font-family: var(--vscode-editor-font-family);
+}
+#close-node-details {
+	float: right;
+	min-width: 24px;
+}
 
 #minimap {
 	position: absolute;
@@ -249,9 +356,19 @@ button:focus-visible, input:focus-visible, select:focus-visible, .node:focus-vis
 	cursor: crosshair;
 	opacity: 0.86;
 }
-#minimap .node-label, #minimap .edge-label { display: none; }
-#minimap .node rect { stroke-width: 2; }
+#minimap .node-label,
+#minimap .edge-label {
+	display: none;
+}
+#minimap .node rect {
+	stroke-width: 2;
+}
 
 @media (prefers-reduced-motion: reduce) {
-	*, *::before, *::after { scroll-behavior: auto !important; transition: none !important; }
+	*,
+	*::before,
+	*::after {
+		scroll-behavior: auto !important;
+		transition: none !important;
+	}
 }

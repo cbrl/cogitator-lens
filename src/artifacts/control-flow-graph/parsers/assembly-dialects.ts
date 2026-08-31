@@ -16,10 +16,8 @@ export class GccAssemblyCfgParser extends AssemblyCfgParser {
 	static override readonly dialect = 'gcc-asm';
 
 	protected override filterData(assembly: readonly AssemblyLine[]): AssemblyLine[] {
-		const isInstruction = (text: string) =>
-			!text.startsWith('#') && !/^\s+\./u.test(text) && text.trim() !== '';
-		const isFunctionName = (text: string) =>
-			text.endsWith(':') && text.includes('(') && text.includes(')');
+		const isInstruction = (text: string) => !text.startsWith('#') && !/^\s+\./u.test(text) && text.trim() !== '';
+		const isFunctionName = (text: string) => text.endsWith(':') && text.includes('(') && text.includes(')');
 
 		const result: AssemblyLine[] = [];
 		let currentLabel: AssemblyLine | undefined;
@@ -65,10 +63,12 @@ export class ClangAssemblyCfgParser extends AssemblyCfgParser {
 	protected override filterData(assembly: readonly AssemblyLine[]): AssemblyLine[] {
 		const jumpLabel = /\.LBB\d+_\d+:/u;
 		return this.filterTextSection(assembly)
-			.filter(line => line.text
-				&& (line.source !== undefined || jumpLabel.test(line.text) || this.isFunctionName(line)))
-			.map(line => ({ ...line, text: stripAssemblyComment(line.text) }))
-			.filter(line => line.text.length > 0);
+			.filter(
+				(line) =>
+					line.text && (line.source !== undefined || jumpLabel.test(line.text) || this.isFunctionName(line)),
+			)
+			.map((line) => ({ ...line, text: stripAssemblyComment(line.text) }))
+			.filter((line) => line.text.length > 0);
 	}
 
 	protected override extractJumpTarget(instruction: string): string | undefined {
@@ -128,7 +128,7 @@ export class MsvcAssemblyCfgParser extends AssemblyCfgParser {
 				start = cursor + 1;
 			}
 		}
-		return result.filter(range => range.end > range.start + 1);
+		return result.filter((range) => range.end > range.start + 1);
 	}
 
 	protected override functionName(assembly: readonly AssemblyLine[], fn: Range): string {

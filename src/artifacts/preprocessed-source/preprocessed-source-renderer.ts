@@ -1,15 +1,9 @@
 import path from 'node:path';
-import type {
-	DisplayOptions,
-	RawArtifact,
-	RenderedTextArtifact,
-	RenderedArtifactLine,
-} from '../../types/index.js';
+import type { DisplayOptions, RawArtifact, RenderedTextArtifact, RenderedArtifactLine } from '../../types/index.js';
 import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
 
-const lineMarker =
-	/^\s*#(?:\s*line)?\s+(\d+)\s+"((?:\\.|[^"])*)"(?:\s+.*)?$/;
+const lineMarker = /^\s*#(?:\s*line)?\s+(\d+)\s+"((?:\\.|[^"])*)"(?:\s+.*)?$/;
 
 export function renderPreprocessedSource(
 	raw: RawArtifact,
@@ -26,10 +20,7 @@ export function renderPreprocessedSource(
 		const marker = lineMarker.exec(text);
 		if (marker) {
 			logicalLine = Number.parseInt(marker[1], 10);
-			logicalFile = resolveMarkerPath(
-				decodeMarkerFilename(marker[2]),
-				raw.command.workingDirectory,
-			);
+			logicalFile = resolveMarkerPath(decodeMarkerFilename(marker[2]), raw.command.workingDirectory);
 			markerLines.push(lines.length);
 			lines.push({ text });
 			continue;
@@ -41,11 +32,11 @@ export function renderPreprocessedSource(
 				text,
 				source: isLocalFilename(logicalFile)
 					? {
-						file: logicalFile,
-						line: logicalLine,
-						column: 0,
-						mainSource,
-					}
+							file: logicalFile,
+							line: logicalLine,
+							column: 0,
+							mainSource,
+						}
 					: undefined,
 			});
 		}
@@ -54,13 +45,12 @@ export function renderPreprocessedSource(
 
 	const folds = options.showIncludedFiles
 		? markerLines.flatMap((startLine, index) => {
-			const endLine = (markerLines[index + 1] ?? lines.length) - 1;
-			return endLine > startLine ? [{ startLine, endLine }] : [];
-		})
+				const endLine = (markerLines[index + 1] ?? lines.length) - 1;
+				return endLine > startLine ? [{ startLine, endLine }] : [];
+			})
 		: [];
 	const includedFiles = new Set(
-		lines.flatMap(line =>
-			line.source?.file && !line.source.mainSource ? [line.source.file] : []),
+		lines.flatMap((line) => (line.source?.file && !line.source.mainSource ? [line.source.file] : [])),
 	);
 	return {
 		...renderedArtifact(raw, lines, {
@@ -89,9 +79,7 @@ function resolveMarkerPath(filename: string, workingDirectory: string): string {
 	if (!isLocalFilename(filename)) {
 		return filename;
 	}
-	return path.normalize(path.isAbsolute(filename)
-		? filename
-		: path.resolve(workingDirectory, filename));
+	return path.normalize(path.isAbsolute(filename) ? filename : path.resolve(workingDirectory, filename));
 }
 
 function decodeMarkerFilename(filename: string): string {

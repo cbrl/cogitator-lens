@@ -5,11 +5,7 @@ import { getArtifactUri, type ArtifactDocumentProvider } from '../artifact-docum
 import type { CompilationService } from '../compilation/index.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
 import { supportedLanguageIdentifiers } from '../toolchains/toolchain-map.js';
-import type {
-	CompilationVariant,
-	ManualCompilationVariantSettings,
-	ToolchainProfile,
-} from '../types/index.js';
+import type { CompilationVariant, ManualCompilationVariantSettings, ToolchainProfile } from '../types/index.js';
 import type { CompilationInfoTreeNode } from '../tree/compilation-info-tree.js';
 import { inputStringArray, inputStringRecord, pickFrom } from '../ui/quick-input.js';
 
@@ -19,67 +15,47 @@ export interface VariantCommandDependencies {
 	readonly artifacts: ArtifactDocumentProvider;
 }
 
-export function register(
-	context: vscode.ExtensionContext,
-	deps: VariantCommandDependencies,
-): void {
+export function register(context: vscode.ExtensionContext, deps: VariantCommandDependencies): void {
 	const { compilationService, configuration, artifacts } = deps;
 	context.subscriptions.push(
-		vscode.commands.registerCommand(
-			'coglens.AddCompilationVariant',
-			async (node?: CompilationInfoTreeNode) => configureManualVariant(
-				node?.source ?? activeFileUri(), undefined, compilationService, configuration,
-			),
+		vscode.commands.registerCommand('coglens.AddCompilationVariant', async (node?: CompilationInfoTreeNode) =>
+			configureManualVariant(node?.source ?? activeFileUri(), undefined, compilationService, configuration),
 		),
-		vscode.commands.registerCommand(
-			'coglens.EditCompilationVariant',
-			async (node?: CompilationInfoTreeNode) => {
-				if (node?.variant) {
-					await configureManualVariant(
-						node.variant.source, node.variant, compilationService, configuration,
-					);
-				}
-			},
-		),
-		vscode.commands.registerCommand(
-			'coglens.DeleteCompilationVariant',
-			async (node?: CompilationInfoTreeNode) => {
-				if (node?.variant?.provider !== 'manual') {
-					return;
-				}
-				const confirmation = await vscode.window.showWarningMessage(
-					`Delete the workspace variant "${node.variant.displayLabel}"?`,
-					{ modal: true },
-					'Delete',
+		vscode.commands.registerCommand('coglens.EditCompilationVariant', async (node?: CompilationInfoTreeNode) => {
+			if (node?.variant) {
+				await configureManualVariant(node.variant.source, node.variant, compilationService, configuration);
+			}
+		}),
+		vscode.commands.registerCommand('coglens.DeleteCompilationVariant', async (node?: CompilationInfoTreeNode) => {
+			if (node?.variant?.provider !== 'manual') {
+				return;
+			}
+			const confirmation = await vscode.window.showWarningMessage(
+				`Delete the workspace variant "${node.variant.displayLabel}"?`,
+				{ modal: true },
+				'Delete',
+			);
+			if (confirmation === 'Delete') {
+				await configuration.updateManualCompilationVariants(
+					configuration.getManualCompilationVariants().filter((variant) => variant.id !== node.variant?.id),
 				);
-				if (confirmation === 'Delete') {
-					await configuration.updateManualCompilationVariants(
-						configuration.getManualCompilationVariants()
-							.filter(variant => variant.id !== node.variant?.id),
-					);
-				}
-			},
-		),
-		vscode.commands.registerTextEditorCommand('coglens.PickCompilationVariant', async editor => {
+			}
+		}),
+		vscode.commands.registerTextEditorCommand('coglens.PickCompilationVariant', async (editor) => {
 			if (!isSupportedSourceDocument(editor.document)) {
 				return;
 			}
 			if (await pickVariant(editor.document.uri, compilationService)) {
 				const variant = compilationService.getSelectedVariant(editor.document.uri);
 				if (variant) {
-					artifacts.requestRefresh(getArtifactUri(
-						editor.document.uri, variant, 'assembly', 'default',
-					));
+					artifacts.requestRefresh(getArtifactUri(editor.document.uri, variant, 'assembly', 'default'));
 				}
 			}
 		}),
 	);
 }
 
-export async function pickVariantIfNeeded(
-	source: vscode.Uri,
-	service: CompilationService,
-): Promise<boolean> {
+export async function pickVariantIfNeeded(source: vscode.Uri, service: CompilationService): Promise<boolean> {
 	const variants = service.getVariants(source);
 	if (variants.length <= 1) {
 		return variants.length === 1;
@@ -87,21 +63,22 @@ export async function pickVariantIfNeeded(
 	return service.hasExplicitVariantSelection(source) || pickVariant(source, service);
 }
 
-export async function pickVariant(
-	source: vscode.Uri,
-	service: CompilationService,
-): Promise<boolean> {
+export async function pickVariant(source: vscode.Uri, service: CompilationService): Promise<boolean> {
 	const variants = service.getVariants(source);
 	if (variants.length === 0) {
 		await vscode.window.showErrorMessage('No compilation variant is available for this file.');
 		return false;
 	}
 	const selected = service.getSelectedVariant(source);
-	const choice = await pickFrom(variants, variant => ({
-		label: variant.displayLabel,
-		description: variant.id === selected?.id ? 'current' : variant.provider,
-		detail: [variant.project, variant.target, variant.configuration].filter(Boolean).join(' · '),
-	}), { title: 'Select compilation variant', matchOnDescription: true, matchOnDetail: true });
+	const choice = await pickFrom(
+		variants,
+		(variant) => ({
+			label: variant.displayLabel,
+			description: variant.id === selected?.id ? 'current' : variant.provider,
+			detail: [variant.project, variant.target, variant.configuration].filter(Boolean).join(' · '),
+		}),
+		{ title: 'Select compilation variant', matchOnDescription: true, matchOnDetail: true },
+	);
 	return choice ? service.selectVariant(source, choice.id) : false;
 }
 
@@ -111,26 +88,30 @@ async function configureManualVariant(
 	compilationService: CompilationService,
 	configuration: ConfigurationService,
 ): Promise<void> {
-	const source = initialSource ?? await pickSourceFile();
+	const source = initialSource ?? (await pickSourceFile());
 	if (!source) {
 		return;
 	}
-	const profiles = [...compilationService.toolchainRegistry.getProfiles()]
-		.sort((left, right) => left.displayName.localeCompare(right.displayName));
+	const profiles = [...compilationService.toolchainRegistry.getProfiles()].sort((left, right) =>
+		left.displayName.localeCompare(right.displayName),
+	);
 	if (!profiles.length) {
-		await vscode.window.showWarningMessage(
-			'Add or discover a toolchain before creating a compilation variant.',
-		);
+		await vscode.window.showWarningMessage('Add or discover a toolchain before creating a compilation variant.');
 		return;
 	}
-	const displayLabel = (await vscode.window.showInputBox({
-		title: existing?.provider === 'manual'
-			? 'Edit Workspace Compilation Variant'
-			: existing ? 'Create Workspace Variant from Discovered Variant' : 'Add Workspace Compilation Variant',
-		prompt: 'Variant name',
-		value: existing?.displayLabel ?? 'Workspace',
-		validateInput: value => value.trim() ? undefined : 'A name is required',
-	}))?.trim();
+	const displayLabel = (
+		await vscode.window.showInputBox({
+			title:
+				existing?.provider === 'manual'
+					? 'Edit Workspace Compilation Variant'
+					: existing
+						? 'Create Workspace Variant from Discovered Variant'
+						: 'Add Workspace Compilation Variant',
+			prompt: 'Variant name',
+			value: existing?.displayLabel ?? 'Workspace',
+			validateInput: (value) => (value.trim() ? undefined : 'A name is required'),
+		})
+	)?.trim();
 	if (!displayLabel) {
 		return;
 	}
@@ -138,13 +119,16 @@ async function configureManualVariant(
 	if (!profile) {
 		return;
 	}
-	const workingDirectory = (await vscode.window.showInputBox({
-		title: 'Working Directory',
-		value: existing?.workingDirectory
-			?? vscode.workspace.getWorkspaceFolder(source)?.uri.fsPath
-			?? path.dirname(source.fsPath),
-		validateInput: value => value.trim() ? undefined : 'A working directory is required',
-	}))?.trim();
+	const workingDirectory = (
+		await vscode.window.showInputBox({
+			title: 'Working Directory',
+			value:
+				existing?.workingDirectory ??
+				vscode.workspace.getWorkspaceFolder(source)?.uri.fsPath ??
+				path.dirname(source.fsPath),
+			validateInput: (value) => (value.trim() ? undefined : 'A working directory is required'),
+		})
+	)?.trim();
 	if (!workingDirectory) {
 		return;
 	}
@@ -169,7 +153,7 @@ async function configureManualVariant(
 		configuration: existing?.configuration,
 	};
 	const variants = configuration.getManualCompilationVariants();
-	const index = variants.findIndex(variant => variant.id === setting.id);
+	const index = variants.findIndex((variant) => variant.id === setting.id);
 	if (index >= 0) {
 		variants[index] = setting;
 	} else {
@@ -183,17 +167,21 @@ async function pickToolchainProfile(
 	profiles: readonly ToolchainProfile[],
 	selectedId: string | undefined,
 ): Promise<ToolchainProfile | undefined> {
-	const selected = profiles.find(profile => profile.id === selectedId);
-	return pickFrom(profiles, profile => ({
-		label: profile.displayName,
-		description: profile.kind,
-		detail: profile.executable,
-	}), {
-		title: 'Toolchain',
-		placeHolder: selected ? `Current: ${selected.displayName}` : 'Select the toolchain for this variant',
-		matchOnDescription: true,
-		matchOnDetail: true,
-	});
+	const selected = profiles.find((profile) => profile.id === selectedId);
+	return pickFrom(
+		profiles,
+		(profile) => ({
+			label: profile.displayName,
+			description: profile.kind,
+			detail: profile.executable,
+		}),
+		{
+			title: 'Toolchain',
+			placeHolder: selected ? `Current: ${selected.displayName}` : 'Select the toolchain for this variant',
+			matchOnDescription: true,
+			matchOnDetail: true,
+		},
+	);
 }
 
 function activeFileUri(): vscode.Uri | undefined {

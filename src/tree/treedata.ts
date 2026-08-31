@@ -1,4 +1,4 @@
-import vscode from "vscode";
+import vscode from 'vscode';
 import type { ArtifactOptionId } from '../types/index.js';
 
 /**
@@ -70,7 +70,7 @@ export interface TreeNode {
 }
 
 export class TreeItem extends vscode.TreeItem {
-    constructor(node: TreeNode) {
+	constructor(node: TreeNode) {
 		// Initialize the base class with default empty values. These will be overwritten further down.
 		super('', vscode.TreeItemCollapsibleState.None);
 
@@ -99,23 +99,23 @@ export class TreeItem extends vscode.TreeItem {
 			this.contextValue = 'disabled';
 			this.iconPath ??= new vscode.ThemeIcon('circle-slash');
 		}
-    }
+	}
 }
 
 export abstract class TreeProvider<NodeType extends TreeNode> implements vscode.TreeDataProvider<NodeType> {
-    protected _onDidChangeTreeData = new vscode.EventEmitter<NodeType | undefined>();
+	protected _onDidChangeTreeData = new vscode.EventEmitter<NodeType | undefined>();
 
 	public get onDidChangeTreeData() {
 		return this._onDidChangeTreeData.event;
 	}
 
-    public refresh(): void {
-        this._onDidChangeTreeData.fire(undefined);
-    }
+	public refresh(): void {
+		this._onDidChangeTreeData.fire(undefined);
+	}
 
-    public getTreeItem(element: NodeType): vscode.TreeItem {
-        return new TreeItem(element);
-    }
+	public getTreeItem(element: NodeType): vscode.TreeItem {
+		return new TreeItem(element);
+	}
 
-    public abstract getChildren(element?: NodeType): vscode.ProviderResult<NodeType[]>;
+	public abstract getChildren(element?: NodeType): vscode.ProviderResult<NodeType[]>;
 }

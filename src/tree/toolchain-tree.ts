@@ -3,28 +3,16 @@ import type { IntelSyntaxSupport, ToolchainProfile } from '../types/index.js';
 import { ToolchainRegistry } from '../compilation/index.js';
 import { TreeNode, TreeProvider } from './treedata.js';
 import { detailNode, groupNode, makeEnvironmentNode, makeListNode, noneNode } from './tree-helpers.js';
-import {
-	getToolchainDefinition,
-	resolveArtifactAvailability,
-} from '../toolchains/toolchain-map.js';
-import {
-	artifactDefinitions,
-	supportedArtifactKinds,
-} from '../artifacts/core/artifact-definitions.js';
-import {
-	type ConfigurationOrigin,
-	variantProviderDefinitions,
-} from '../buildsystems/variant-provider.js';
+import { getToolchainDefinition, resolveArtifactAvailability } from '../toolchains/toolchain-map.js';
+import { artifactDefinitions, supportedArtifactKinds } from '../artifacts/core/artifact-definitions.js';
+import { type ConfigurationOrigin, variantProviderDefinitions } from '../buildsystems/variant-provider.js';
 
 export interface ToolchainTreeNode extends TreeNode {
 	profile?: ToolchainProfile;
 	origin?: ConfigurationOrigin;
 }
 
-export function buildToolchainTreeNode(
-	profile: ToolchainProfile,
-	origin: ConfigurationOrigin,
-): ToolchainTreeNode {
+export function buildToolchainTreeNode(profile: ToolchainProfile, origin: ConfigurationOrigin): ToolchainTreeNode {
 	const root: ToolchainTreeNode = {
 		label: profile.displayName,
 		description: originLabel(origin),
@@ -63,7 +51,7 @@ function capabilitiesNode(profile: ToolchainProfile): ToolchainTreeNode {
 	const capabilities: Array<{
 		label: string;
 		status: 'available' | 'unavailable' | IntelSyntaxSupport;
-	}> = supportedArtifactKinds.map(kind => ({
+	}> = supportedArtifactKinds.map((kind) => ({
 		label: artifactDefinitions[kind].label,
 		status: resolveArtifactAvailability(profile, kind).status,
 	}));
@@ -78,14 +66,13 @@ function capabilitiesNode(profile: ToolchainProfile): ToolchainTreeNode {
 		});
 	}
 	const available = capabilities
-		.map(capability => capability.status)
-		.filter(status => status === 'available' || status === 'selectable' || status === 'inherent')
-		.length;
+		.map((capability) => capability.status)
+		.filter((status) => status === 'available' || status === 'selectable' || status === 'inherent').length;
 	return {
 		...groupNode(
 			'Capabilities',
 			'tools',
-			capabilities.map(capability => capabilityNode(capability.label, capability.status)),
+			capabilities.map((capability) => capabilityNode(capability.label, capability.status)),
 		),
 		description: `${available}/${capabilities.length}`,
 	};
@@ -113,8 +100,10 @@ export class ToolchainTreeProvider extends TreeProvider<ToolchainTreeNode> {
 			return element.children;
 		}
 		return [...this.registry.getProfiles()]
-			.sort((left, right) => left.displayName.localeCompare(right.displayName, undefined, { sensitivity: 'base' }))
-			.map(profile => {
+			.sort((left, right) =>
+				left.displayName.localeCompare(right.displayName, undefined, { sensitivity: 'base' }),
+			)
+			.map((profile) => {
 				const origin = this.registry.getOrigin(profile.id);
 				if (!origin) {
 					throw new Error(`Toolchain profile has no configuration origin: ${profile.id}`);
@@ -124,10 +113,7 @@ export class ToolchainTreeProvider extends TreeProvider<ToolchainTreeNode> {
 	}
 }
 
-function capabilityNode(
-	label: string,
-	status: 'available' | 'unavailable' | IntelSyntaxSupport,
-): ToolchainTreeNode {
+function capabilityNode(label: string, status: 'available' | 'unavailable' | IntelSyntaxSupport): ToolchainTreeNode {
 	const descriptions: Record<typeof status, string> = {
 		available: 'Available',
 		unavailable: 'Unavailable',

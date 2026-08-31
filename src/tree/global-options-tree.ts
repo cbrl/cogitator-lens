@@ -9,10 +9,7 @@ import type {
 } from '../types/index.js';
 import { parseArtifactUri } from '../artifact-document/artifact-uri.js';
 import { TreeNode, TreeProvider } from './treedata.js';
-import {
-	resolveArtifactAvailability,
-	resolveArtifactOptionAvailability,
-} from '../toolchains/toolchain-map.js';
+import { resolveArtifactAvailability, resolveArtifactOptionAvailability } from '../toolchains/toolchain-map.js';
 import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
 import { groupNode, messageNode } from './tree-helpers.js';
 
@@ -34,49 +31,55 @@ export function buildArtifactOptionsTree(
 	profile?: ToolchainProfile,
 	kind: ArtifactKind = 'assembly',
 ): GlobalOptionsNode[] {
-		if (!profile) {
-			return [{
+	if (!profile) {
+		return [
+			{
 				...messageNode(
 					'No toolchain selected',
 					'Open a supported source file',
 					'Open a source file with a compilation variant to configure artifact options.',
 				),
 				disabled: true,
-			}];
-		}
+			},
+		];
+	}
 
-		const availability = resolveArtifactAvailability(profile, kind);
-		if (availability.status !== 'available') {
-			return [{
+	const availability = resolveArtifactAvailability(profile, kind);
+	if (availability.status !== 'available') {
+		return [
+			{
 				label: artifactDefinitions[kind].label,
 				description: availability.status === 'unsupported' ? 'Unsupported' : 'Unavailable',
 				tooltip: availability.explanation,
 				nodeType: 'text',
 				disabled: true,
-			}];
-		}
+			},
+		];
+	}
 
-		const descriptors: readonly ArtifactOptionDescriptor[] = artifactDefinitions[kind].options;
-		const production = descriptors.filter(descriptor => descriptor.group === 'production');
-		const display = descriptors.filter(descriptor => descriptor.group === 'display');
-		const groups: GlobalOptionsNode[] = [];
-		if (production.length) {
-			groups.push(groupNode(
+	const descriptors: readonly ArtifactOptionDescriptor[] = artifactDefinitions[kind].options;
+	const production = descriptors.filter((descriptor) => descriptor.group === 'production');
+	const display = descriptors.filter((descriptor) => descriptor.group === 'display');
+	const groups: GlobalOptionsNode[] = [];
+	if (production.length) {
+		groups.push(
+			groupNode(
 				'Production Options',
 				'settings-gear',
-				production.map(descriptor => optionNode(options, profile, kind, descriptor)),
-			));
-		}
-		if (display.length) {
-			groups.push(groupNode(
+				production.map((descriptor) => optionNode(options, profile, kind, descriptor)),
+			),
+		);
+	}
+	if (display.length) {
+		groups.push(
+			groupNode(
 				'Display Options',
 				'filter',
-				display.map(descriptor => optionNode(options, profile, kind, descriptor)),
-			));
-		}
-		return groups.length
-			? groups
-			: [messageNode('No options', artifactDefinitions[kind].label)];
+				display.map((descriptor) => optionNode(options, profile, kind, descriptor)),
+			),
+		);
+	}
+	return groups.length ? groups : [messageNode('No options', artifactDefinitions[kind].label)];
 }
 
 export class GlobalOptionsTreeProvider extends TreeProvider<GlobalOptionsNode> {
@@ -92,9 +95,9 @@ export class GlobalOptionsTreeProvider extends TreeProvider<GlobalOptionsNode> {
 		return [
 			bindingNode(selected),
 			...buildArtifactOptionsTree(
-			this.compilationService.getArtifactOptions(selected.kind),
-			selected.profile,
-			selected.kind,
+				this.compilationService.getArtifactOptions(selected.kind),
+				selected.profile,
+				selected.kind,
 			),
 		];
 	}
@@ -108,13 +111,16 @@ export class GlobalOptionsTreeProvider extends TreeProvider<GlobalOptionsNode> {
 			kind = identity.artifactKind;
 		}
 		if (!source || source.scheme !== 'file') {
-			source = vscode.window.visibleTextEditors.find(editor =>
-				editor.document.uri.scheme === 'file')?.document.uri;
+			source = vscode.window.visibleTextEditors.find((editor) => editor.document.uri.scheme === 'file')?.document
+				.uri;
 		}
 		const variant = identity
-			? this.compilationService.getVariants(identity.source)
-				.find(candidate => candidate.id === identity.variantId)
-			: source ? this.compilationService.getSelectedVariant(source) : undefined;
+			? this.compilationService
+					.getVariants(identity.source)
+					.find((candidate) => candidate.id === identity.variantId)
+			: source
+				? this.compilationService.getSelectedVariant(source)
+				: undefined;
 		return {
 			kind,
 			source,
@@ -122,8 +128,7 @@ export class GlobalOptionsTreeProvider extends TreeProvider<GlobalOptionsNode> {
 			presetId: identity?.presetId,
 			outputId: identity?.artifactOutputId,
 			profile: variant
-				? this.compilationService.toolchainRegistry
-					.getToolchainById(variant.toolchainProfileId)?.profile
+				? this.compilationService.toolchainRegistry.getToolchainById(variant.toolchainProfileId)?.profile
 				: undefined,
 		};
 	}
@@ -163,16 +168,15 @@ function optionNode(
 		artifactKind: kind,
 		optionId: descriptor.id,
 		checked: optionValue(options, descriptor.id),
-		tooltip: capability.status === 'available'
-			? descriptor.description
-			: capability.explanation,
-		description: capability.status === 'available'
-			? undefined
-			: capability.status === 'unsupported'
-				? 'Unsupported'
-				: capability.reason === 'inherent'
-					? 'Inherent'
-					: 'Unavailable',
+		tooltip: capability.status === 'available' ? descriptor.description : capability.explanation,
+		description:
+			capability.status === 'available'
+				? undefined
+				: capability.status === 'unsupported'
+					? 'Unsupported'
+					: capability.reason === 'inherent'
+						? 'Inherent'
+						: 'Unavailable',
 		disabled: capability.status !== 'available',
 	};
 }

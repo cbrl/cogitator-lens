@@ -40,9 +40,7 @@ export function parseMetadata(lines: readonly string[], workingDirectory: string
 			// A DIFile splits the path into a directory and a filename; the
 			// directory is dropped when the filename is already absolute.
 			const directory = metadataString(record, 'directory');
-			const combined = directory && !isAbsoluteCompilerPath(filename)
-				? `${directory}/${filename}`
-				: filename;
+			const combined = directory && !isAbsoluteCompilerPath(filename) ? `${directory}/${filename}` : filename;
 			files.set(id, compilerSourceUri(combined, workingDirectory));
 		}
 	}
@@ -78,24 +76,22 @@ function resolveLocation(
 		const fileRef = metadataReference(record, 'file');
 		const scopeRef = metadataReference(record, 'scope');
 		const inlinedAtRef = metadataReference(record, 'inlinedAt');
-		const file = fileRef === undefined
-			? scopeRef === undefined ? undefined : resolveScopeFile(scopeRef, records, files, resolving)
-			: files.get(fileRef) ?? resolveScopeFile(fileRef, records, files, resolving);
-		const nested = inlinedAtRef === undefined
-			? undefined
-			: resolveLocation(inlinedAtRef, records, files, resolving);
-		const line = lineValue === undefined
-			? nested?.line
-			: Math.max(0, lineValue - 1);
+		const file =
+			fileRef === undefined
+				? scopeRef === undefined
+					? undefined
+					: resolveScopeFile(scopeRef, records, files, resolving)
+				: (files.get(fileRef) ?? resolveScopeFile(fileRef, records, files, resolving));
+		const nested =
+			inlinedAtRef === undefined ? undefined : resolveLocation(inlinedAtRef, records, files, resolving);
+		const line = lineValue === undefined ? nested?.line : Math.max(0, lineValue - 1);
 		if (!file || line === undefined || line < 0) {
 			return nested;
 		}
 		return {
 			uri: file,
 			line,
-			column: columnValue === undefined
-				? nested?.column ?? 0
-				: Math.max(0, columnValue - 1),
+			column: columnValue === undefined ? (nested?.column ?? 0) : Math.max(0, columnValue - 1),
 		};
 	} finally {
 		resolving.delete(id);

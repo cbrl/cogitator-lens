@@ -1,36 +1,36 @@
 {
-    "coglens.toolchains": [
-        {
-            "displayName": "Sample Rust",
-            "kind": "rust",
-            "executable": "rustc",
-            "defaultArguments": ["--edition=2021"]
-        }
-    ],
-    "coglens.defaultInvocation": {
-        "toolchain": "Sample Rust"
-    },
-    "coglens.artifactPresets": {
-        "debug-assembly": {
-			"artifactKind": "assembly",
-			"extraArguments": ["-C", "opt-level=0"]
-		},
-        "optimized-assembly": {
-            "artifactKind": "assembly",
-            "extraArguments": ["-C", "opt-level=3"],
-            "productionOptions": { "intel": true }
-        },
-        "llvm-ir": {
-			"artifactKind": "llvm-ir",
-			"extraArguments": ["-C", "opt-level=1"]
-		},
-        "rust-mir": {
-			"artifactKind": "rust-mir",
-			"extraArguments": ["-C", "opt-level=1"]
-		},
-        "control-flow": {
-			"artifactKind": "control-flow-graph",
-			"extraArguments": ["-C", "opt-level=1"]
-		}
+  "coglens.toolchains": [
+    {
+      "displayName": "Sample Rust",
+      "kind": "rust",
+      "executable": "rustc",
+      "defaultArguments": ["--edition=2021"]
     }
+  ],
+  "coglens.defaultInvocation": {
+    "toolchain": "Sample Rust"
+  },
+  "coglens.artifactPresets": {
+    "debug-assembly": {
+      "artifactKind": "assembly",
+      "extraArguments": ["-C", "opt-level=0"]
+    },
+    "optimized-assembly": {
+      "artifactKind": "assembly",
+      "extraArguments": ["-C", "opt-level=3"],
+      "productionOptions": { "intel": true }
+    },
+    "llvm-ir": {
+      "artifactKind": "llvm-ir",
+      "extraArguments": ["-C", "opt-level=1"]
+    },
+    "rust-mir": {
+      "artifactKind": "rust-mir",
+      "extraArguments": ["-C", "opt-level=1"]
+    },
+    "control-flow": {
+      "artifactKind": "control-flow-graph",
+      "extraArguments": ["-C", "opt-level=1"]
+    }
+  }
 }

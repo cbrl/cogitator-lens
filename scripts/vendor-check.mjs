@@ -137,7 +137,7 @@ async function fetchUpstream(revision, upstreamPath) {
 
 export async function checkVendoredFiles(revision, fetchFile = fetchUpstream) {
 	const mismatches = [];
-	for (const {localPath, repositoryRelativePath, upstreamPath} of checkedFiles) {
+	for (const { localPath, repositoryRelativePath, upstreamPath } of checkedFiles) {
 		const [localContent, upstreamContent] = await Promise.all([
 			fs.promises.readFile(localPath, 'utf8'),
 			fetchFile(revision, upstreamPath),

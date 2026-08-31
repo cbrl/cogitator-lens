@@ -22,297 +22,297 @@
 // ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 // POSSIBILITY OF SUCH DAMAGE.
 
-import {isString} from '../shared/common-utils.js';
-import type {IRResultLine, ParsedAsmResult} from '../types/asmresult/asmresult.interfaces.js';
-import {LLVMIrBackendOptions} from '../types/compilation/ir.interfaces.js';
-import {ParseFiltersAndOutputOptions} from '../types/features/filters.interfaces.js';
-import {LLVMIRDemangler} from './demangler/llvm.js';
-import {PropertyGetter} from './properties.interfaces.js';
+import { isString } from '../shared/common-utils.js';
+import type { IRResultLine, ParsedAsmResult } from '../types/asmresult/asmresult.interfaces.js';
+import { LLVMIrBackendOptions } from '../types/compilation/ir.interfaces.js';
+import { ParseFiltersAndOutputOptions } from '../types/features/filters.interfaces.js';
+import { LLVMIRDemangler } from './demangler/llvm.js';
+import { PropertyGetter } from './properties.interfaces.js';
 import * as utils from './utils.js';
 
 type MetaNode = {
-    [key: string]: string | number | undefined;
-    metaId: string;
-    metaType?: string;
-    file?: string;
-    filename?: string;
-    line?: number;
-    column?: number;
-    scope?: string;
+	[key: string]: string | number | undefined;
+	metaId: string;
+	metaType?: string;
+	file?: string;
+	filename?: string;
+	line?: number;
+	column?: number;
+	scope?: string;
 };
 
 export class LlvmIrParser {
-    private maxIrLines: number;
-    private debugReference: RegExp;
-    private metaNodeRe: RegExp;
-    private otherMetaDirective: RegExp;
-    private namedMetaDirective: RegExp;
-    private metaNodeOptionsRe: RegExp;
-    private llvmDebugIntrinsicLine: RegExp;
-    private llvmDebugRecordLine: RegExp;
-    private llvmDebugAnnotation: RegExp;
-    private otherMetadataAnnotation: RegExp;
-    private attributeAnnotation: RegExp;
-    private attributeDirective: RegExp;
-    private moduleMetadata: RegExp;
-    private functionAttrs: RegExp;
-    private commentOnly: RegExp;
-    private commentAtEOL: RegExp;
-    private declareLine: RegExp;
-    private libraryFunctionDefine: RegExp;
+	private maxIrLines: number;
+	private debugReference: RegExp;
+	private metaNodeRe: RegExp;
+	private otherMetaDirective: RegExp;
+	private namedMetaDirective: RegExp;
+	private metaNodeOptionsRe: RegExp;
+	private llvmDebugIntrinsicLine: RegExp;
+	private llvmDebugRecordLine: RegExp;
+	private llvmDebugAnnotation: RegExp;
+	private otherMetadataAnnotation: RegExp;
+	private attributeAnnotation: RegExp;
+	private attributeDirective: RegExp;
+	private moduleMetadata: RegExp;
+	private functionAttrs: RegExp;
+	private commentOnly: RegExp;
+	private commentAtEOL: RegExp;
+	private declareLine: RegExp;
+	private libraryFunctionDefine: RegExp;
 
-    constructor(
-        compilerProps: PropertyGetter,
-        private readonly irDemangler: LLVMIRDemangler,
-    ) {
-        this.maxIrLines = 5000;
-        if (compilerProps) {
-            this.maxIrLines = compilerProps('maxLinesOfAsm', this.maxIrLines);
-        }
+	constructor(
+		compilerProps: PropertyGetter,
+		private readonly irDemangler: LLVMIRDemangler,
+	) {
+		this.maxIrLines = 5000;
+		if (compilerProps) {
+			this.maxIrLines = compilerProps('maxLinesOfAsm', this.maxIrLines);
+		}
 
-        this.debugReference = /!dbg (!\d+)/;
-        this.metaNodeRe = /^(!\d+) = (?:distinct )?!DI([A-Za-z]+)\(([^)]*?)\)/;
-        this.otherMetaDirective = /^(!\d+) = (?:distinct )?!{.*}/;
-        this.namedMetaDirective = /^(![.A-Z_a-z-]+) = (?:distinct )?!{.*}/;
-        this.metaNodeOptionsRe = /(\w+): (!?\d+|\w+|""|"(?:[^"]|\\")*[^\\]")/gi;
+		this.debugReference = /!dbg (!\d+)/;
+		this.metaNodeRe = /^(!\d+) = (?:distinct )?!DI([A-Za-z]+)\(([^)]*?)\)/;
+		this.otherMetaDirective = /^(!\d+) = (?:distinct )?!{.*}/;
+		this.namedMetaDirective = /^(![.A-Z_a-z-]+) = (?:distinct )?!{.*}/;
+		this.metaNodeOptionsRe = /(\w+): (!?\d+|\w+|""|"(?:[^"]|\\")*[^\\]")/gi;
 
-        this.llvmDebugIntrinsicLine = /^\s*(tail\s)?call void @llvm\.dbg\..*$/;
-        this.llvmDebugRecordLine = /^\s*#dbg_.*$/;
-        this.llvmDebugAnnotation = /,? !dbg !\d+/;
-        this.otherMetadataAnnotation = /,? !(?!dbg)[\w.]+ (!\d+)/;
-        this.attributeAnnotation = /,? #\d+(?= )/;
-        this.attributeDirective = /^attributes #\d+ = { .+ }$/;
-        this.functionAttrs = /^; Function Attrs: .+$/;
-        this.moduleMetadata = /^((source_filename|target datalayout|target triple) = ".+"|; ModuleID = '.+')$/;
-        this.commentOnly = /^\s*;.*$/;
+		this.llvmDebugIntrinsicLine = /^\s*(tail\s)?call void @llvm\.dbg\..*$/;
+		this.llvmDebugRecordLine = /^\s*#dbg_.*$/;
+		this.llvmDebugAnnotation = /,? !dbg !\d+/;
+		this.otherMetadataAnnotation = /,? !(?!dbg)[\w.]+ (!\d+)/;
+		this.attributeAnnotation = /,? #\d+(?= )/;
+		this.attributeDirective = /^attributes #\d+ = { .+ }$/;
+		this.functionAttrs = /^; Function Attrs: .+$/;
+		this.moduleMetadata = /^((source_filename|target datalayout|target triple) = ".+"|; ModuleID = '.+')$/;
+		this.commentOnly = /^\s*;.*$/;
 
-        // Issue #5923: make sure the comment mark `;` is outside quotes
-        this.commentAtEOL = /\s*;(?=(?:[^"]|"[^"]*")*$).*$/;
+		// Issue #5923: make sure the comment mark `;` is outside quotes
+		this.commentAtEOL = /\s*;(?=(?:[^"]|"[^"]*")*$).*$/;
 
-        // External function declarations (issue #6319)
-        this.declareLine = /^declare\s+/;
+		// External function declarations (issue #6319)
+		this.declareLine = /^declare\s+/;
 
-        // Julia foreign-pointer thunks: auto-generated dispatch wrappers of the form @jfptr_<name>_<id>.
-        // These are not user code and clutter the IR view. See: #6320
-        // TODO: consider making this list configurable per compiler/language to support
-        // other runtimes that generate similar boilerplate (e.g. C++ vtable thunks, Rust shims).
-        this.libraryFunctionDefine = /^define\s+.*@jfptr_/;
-    }
+		// Julia foreign-pointer thunks: auto-generated dispatch wrappers of the form @jfptr_<name>_<id>.
+		// These are not user code and clutter the IR view. See: #6320
+		// TODO: consider making this list configurable per compiler/language to support
+		// other runtimes that generate similar boilerplate (e.g. C++ vtable thunks, Rust shims).
+		this.libraryFunctionDefine = /^define\s+.*@jfptr_/;
+	}
 
-    getFileName(debugInfo: Record<string, MetaNode>, scope: string): string | null {
-        const stdInLooking = /.*<stdin>|^-$|example\.[^/]+$|<source>/;
+	getFileName(debugInfo: Record<string, MetaNode>, scope: string): string | null {
+		const stdInLooking = /.*<stdin>|^-$|example\.[^/]+$|<source>/;
 
-        if (!debugInfo[scope]) {
-            // No such meta info.
-            return null;
-        }
-        // MetaInfo is a file node
-        if (debugInfo[scope].filename) {
-            const filename = debugInfo[scope].filename;
-            return stdInLooking.test(filename!) ? null : filename!;
-        }
-        // MetaInfo has a file reference.
-        if (debugInfo[scope].file) {
-            return this.getFileName(debugInfo, debugInfo[scope].file!);
-        }
-        if (!debugInfo[scope].scope) {
-            // No higher scope => can't find file.
-            return null;
-        }
-        // "Bubbling" up.
-        return this.getFileName(debugInfo, debugInfo[scope].scope!);
-    }
+		if (!debugInfo[scope]) {
+			// No such meta info.
+			return null;
+		}
+		// MetaInfo is a file node
+		if (debugInfo[scope].filename) {
+			const filename = debugInfo[scope].filename;
+			return stdInLooking.test(filename!) ? null : filename!;
+		}
+		// MetaInfo has a file reference.
+		if (debugInfo[scope].file) {
+			return this.getFileName(debugInfo, debugInfo[scope].file!);
+		}
+		if (!debugInfo[scope].scope) {
+			// No higher scope => can't find file.
+			return null;
+		}
+		// "Bubbling" up.
+		return this.getFileName(debugInfo, debugInfo[scope].scope!);
+	}
 
-    getSourceLineNumber(debugInfo: Record<string, MetaNode>, scope: string): number | null {
-        if (!debugInfo[scope]) {
-            return null;
-        }
-        if (debugInfo[scope].line) {
-            return Number(debugInfo[scope].line);
-        }
-        if (debugInfo[scope].scope) {
-            return this.getSourceLineNumber(debugInfo, debugInfo[scope].scope!);
-        }
-        return null;
-    }
+	getSourceLineNumber(debugInfo: Record<string, MetaNode>, scope: string): number | null {
+		if (!debugInfo[scope]) {
+			return null;
+		}
+		if (debugInfo[scope].line) {
+			return Number(debugInfo[scope].line);
+		}
+		if (debugInfo[scope].scope) {
+			return this.getSourceLineNumber(debugInfo, debugInfo[scope].scope!);
+		}
+		return null;
+	}
 
-    getSourceColumn(debugInfo: Record<string, MetaNode>, scope: string): number | undefined {
-        if (!debugInfo[scope]) {
-            return undefined;
-        }
-        if (debugInfo[scope].column) {
-            return Number(debugInfo[scope].column);
-        }
-        if (debugInfo[scope].scope) {
-            return this.getSourceColumn(debugInfo, debugInfo[scope].scope!);
-        }
-        return undefined;
-    }
+	getSourceColumn(debugInfo: Record<string, MetaNode>, scope: string): number | undefined {
+		if (!debugInfo[scope]) {
+			return undefined;
+		}
+		if (debugInfo[scope].column) {
+			return Number(debugInfo[scope].column);
+		}
+		if (debugInfo[scope].scope) {
+			return this.getSourceColumn(debugInfo, debugInfo[scope].scope!);
+		}
+		return undefined;
+	}
 
-    parseMetaNode(line: string): MetaNode | null {
-        // Metadata Nodes
-        // See: https://llvm.org/docs/LangRef.html#metadata
-        const match = line.match(this.metaNodeRe);
-        if (!match) {
-            return null;
-        }
-        const metaNode: MetaNode = {
-            metaId: match[1],
-            metaType: match[2],
-        };
+	parseMetaNode(line: string): MetaNode | null {
+		// Metadata Nodes
+		// See: https://llvm.org/docs/LangRef.html#metadata
+		const match = line.match(this.metaNodeRe);
+		if (!match) {
+			return null;
+		}
+		const metaNode: MetaNode = {
+			metaId: match[1],
+			metaType: match[2],
+		};
 
-        let keyValuePair;
-        while ((keyValuePair = this.metaNodeOptionsRe.exec(match[3]))) {
-            const key = keyValuePair[1];
-            let val = keyValuePair[2];
-            // Remove "" from string
-            if (isString(val) && val[0] === '"') {
-                val = val.substring(1, val.length - 1);
-            }
-            metaNode[key] = val;
-        }
+		let keyValuePair;
+		while ((keyValuePair = this.metaNodeOptionsRe.exec(match[3]))) {
+			const key = keyValuePair[1];
+			let val = keyValuePair[2];
+			// Remove "" from string
+			if (isString(val) && val[0] === '"') {
+				val = val.substring(1, val.length - 1);
+			}
+			metaNode[key] = val;
+		}
 
-        return metaNode;
-    }
+		return metaNode;
+	}
 
-    async processIr(ir: string, options: LLVMIrBackendOptions) {
-        const result: IRResultLine[] = [];
-        const irLines = utils.splitLines(ir);
-        const debugInfo: Record<string, MetaNode> = {};
-        // Set to true initially to prevent any leading newlines as a result of filtering
-        let prevLineEmpty = true;
+	async processIr(ir: string, options: LLVMIrBackendOptions) {
+		const result: IRResultLine[] = [];
+		const irLines = utils.splitLines(ir);
+		const debugInfo: Record<string, MetaNode> = {};
+		// Set to true initially to prevent any leading newlines as a result of filtering
+		let prevLineEmpty = true;
 
-        const filters: RegExp[] = [];
-        const lineFilters: RegExp[] = [];
+		const filters: RegExp[] = [];
+		const lineFilters: RegExp[] = [];
 
-        if (options.filterDebugInfo) {
-            filters.push(this.llvmDebugIntrinsicLine, this.llvmDebugRecordLine);
-            lineFilters.push(this.llvmDebugAnnotation);
-        }
-        if (options.filterIRMetadata) {
-            filters.push(this.moduleMetadata, this.metaNodeRe, this.otherMetaDirective, this.namedMetaDirective);
-            lineFilters.push(this.otherMetadataAnnotation);
-        }
-        if (options.filterAttributes) {
-            filters.push(this.attributeDirective, this.functionAttrs);
-            lineFilters.push(this.attributeAnnotation);
-        }
-        if (options.filterComments) {
-            filters.push(this.commentOnly);
-            lineFilters.push(this.commentAtEOL);
-        }
-        if (options.filterDeclarations) {
-            filters.push(this.declareLine);
-        }
+		if (options.filterDebugInfo) {
+			filters.push(this.llvmDebugIntrinsicLine, this.llvmDebugRecordLine);
+			lineFilters.push(this.llvmDebugAnnotation);
+		}
+		if (options.filterIRMetadata) {
+			filters.push(this.moduleMetadata, this.metaNodeRe, this.otherMetaDirective, this.namedMetaDirective);
+			lineFilters.push(this.otherMetadataAnnotation);
+		}
+		if (options.filterAttributes) {
+			filters.push(this.attributeDirective, this.functionAttrs);
+			lineFilters.push(this.attributeAnnotation);
+		}
+		if (options.filterComments) {
+			filters.push(this.commentOnly);
+			lineFilters.push(this.commentAtEOL);
+		}
+		if (options.filterDeclarations) {
+			filters.push(this.declareLine);
+		}
 
-        let inFilteredFunctionBody = false;
-        for (const line of irLines) {
-            // Block-level filtering for library function thunks (e.g. @jfptr_* in Julia)
-            if (options.filterLibraryFunctions) {
-                if (!inFilteredFunctionBody && this.libraryFunctionDefine.test(line)) {
-                    inFilteredFunctionBody = true;
-                }
-                if (inFilteredFunctionBody) {
-                    if (line.trim() === '}') {
-                        inFilteredFunctionBody = false;
-                    }
-                    continue;
-                }
-            }
-            if (line.trim().length === 0) {
-                // Avoid multiple successive empty lines.
-                if (!prevLineEmpty) {
-                    result.push({text: ''});
-                }
-                prevLineEmpty = true;
-            } else {
-                let newLine = line;
+		let inFilteredFunctionBody = false;
+		for (const line of irLines) {
+			// Block-level filtering for library function thunks (e.g. @jfptr_* in Julia)
+			if (options.filterLibraryFunctions) {
+				if (!inFilteredFunctionBody && this.libraryFunctionDefine.test(line)) {
+					inFilteredFunctionBody = true;
+				}
+				if (inFilteredFunctionBody) {
+					if (line.trim() === '}') {
+						inFilteredFunctionBody = false;
+					}
+					continue;
+				}
+			}
+			if (line.trim().length === 0) {
+				// Avoid multiple successive empty lines.
+				if (!prevLineEmpty) {
+					result.push({ text: '' });
+				}
+				prevLineEmpty = true;
+			} else {
+				let newLine = line;
 
-                while (true) {
-                    const temp = newLine;
-                    for (const re of lineFilters) {
-                        newLine = newLine.replace(re, '');
-                    }
-                    if (newLine === temp) {
-                        break;
-                    }
-                }
+				while (true) {
+					const temp = newLine;
+					for (const re of lineFilters) {
+						newLine = newLine.replace(re, '');
+					}
+					if (newLine === temp) {
+						break;
+					}
+				}
 
-                const resultLine: IRResultLine = {
-                    text: newLine,
-                };
+				const resultLine: IRResultLine = {
+					text: newLine,
+				};
 
-                // Non-Meta IR line. Metadata is attached to it using "!dbg !123"
-                const debugReferenceMatch = line.match(this.debugReference);
-                if (debugReferenceMatch) {
-                    resultLine.scope = debugReferenceMatch[1];
-                }
+				// Non-Meta IR line. Metadata is attached to it using "!dbg !123"
+				const debugReferenceMatch = line.match(this.debugReference);
+				if (debugReferenceMatch) {
+					resultLine.scope = debugReferenceMatch[1];
+				}
 
-                const metaNode = this.parseMetaNode(line);
-                if (metaNode) {
-                    debugInfo[metaNode.metaId] = metaNode;
-                }
+				const metaNode = this.parseMetaNode(line);
+				if (metaNode) {
+					debugInfo[metaNode.metaId] = metaNode;
+				}
 
-                // Filtering a full line
-                if (filters.some(re => line.match(re))) {
-                    continue;
-                }
+				// Filtering a full line
+				if (filters.some((re) => line.match(re))) {
+					continue;
+				}
 
-                result.push(resultLine);
-                prevLineEmpty = false;
-            }
-        }
+				result.push(resultLine);
+				prevLineEmpty = false;
+			}
+		}
 
-        if (result.length >= this.maxIrLines) {
-            result.length = this.maxIrLines + 1;
-            result[this.maxIrLines] = {text: '[truncated; too many lines]'};
-        }
+		if (result.length >= this.maxIrLines) {
+			result.length = this.maxIrLines + 1;
+			result[this.maxIrLines] = { text: '[truncated; too many lines]' };
+		}
 
-        for (const line of result) {
-            if (!line.scope) continue;
-            line.source = {
-                file: this.getFileName(debugInfo, line.scope),
-                line: this.getSourceLineNumber(debugInfo, line.scope),
-                column: this.getSourceColumn(debugInfo, line.scope),
-            };
-        }
+		for (const line of result) {
+			if (!line.scope) continue;
+			line.source = {
+				file: this.getFileName(debugInfo, line.scope),
+				line: this.getSourceLineNumber(debugInfo, line.scope),
+				column: this.getSourceColumn(debugInfo, line.scope),
+			};
+		}
 
-        if (options.demangle && this.irDemangler.canDemangle()) {
-            const demangled = await this.irDemangler.process({asm: result});
-            return {
-                asm: demangled.asm,
-                languageId: 'llvm-ir',
-            };
-        }
-        return {
-            asm: result,
-            languageId: 'llvm-ir',
-        };
-    }
+		if (options.demangle && this.irDemangler.canDemangle()) {
+			const demangled = await this.irDemangler.process({ asm: result });
+			return {
+				asm: demangled.asm,
+				languageId: 'llvm-ir',
+			};
+		}
+		return {
+			asm: result,
+			languageId: 'llvm-ir',
+		};
+	}
 
-    async processFromFilters(ir: string, filters: ParseFiltersAndOutputOptions): Promise<ParsedAsmResult> {
-        if (isString(ir)) {
-            return await this.processIr(ir, {
-                filterDebugInfo: !!filters.debugCalls,
-                filterIRMetadata: !!filters.directives,
-                filterAttributes: false,
-                filterComments: !!filters.commentOnly,
-                filterDeclarations: false,
-                filterLibraryFunctions: false,
-                demangle: !!filters.demangle,
-                // discard value names is handled earlier
-            });
-        }
-        return {
-            asm: [],
-        };
-    }
+	async processFromFilters(ir: string, filters: ParseFiltersAndOutputOptions): Promise<ParsedAsmResult> {
+		if (isString(ir)) {
+			return await this.processIr(ir, {
+				filterDebugInfo: !!filters.debugCalls,
+				filterIRMetadata: !!filters.directives,
+				filterAttributes: false,
+				filterComments: !!filters.commentOnly,
+				filterDeclarations: false,
+				filterLibraryFunctions: false,
+				demangle: !!filters.demangle,
+				// discard value names is handled earlier
+			});
+		}
+		return {
+			asm: [],
+		};
+	}
 
-    async process(ir: string, irOptions: LLVMIrBackendOptions) {
-        return await this.processIr(ir, irOptions);
-    }
+	async process(ir: string, irOptions: LLVMIrBackendOptions) {
+		return await this.processIr(ir, irOptions);
+	}
 
-    isLlvmIr(code: string) {
-        return code.includes('@llvm') && code.includes('!DI') && code.includes('!dbg');
-    }
+	isLlvmIr(code: string) {
+		return code.includes('@llvm') && code.includes('!DI') && code.includes('!dbg');
+	}
 }

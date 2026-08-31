@@ -12,12 +12,15 @@ async function readVendoredFile(relativePath: string): Promise<string> {
 
 async function readUpstreamFixture(relativePath: string): Promise<string> {
 	if (relativePath.startsWith('etc/scripts/docenizers/')) {
-		return fs.readFile(path.join(
-			repositoryRoot,
-			'scripts',
-			'compiler-explorer-docenizers',
-			relativePath.slice('etc/scripts/docenizers/'.length),
-		), 'utf8');
+		return fs.readFile(
+			path.join(
+				repositoryRoot,
+				'scripts',
+				'compiler-explorer-docenizers',
+				relativePath.slice('etc/scripts/docenizers/'.length),
+			),
+			'utf8',
+		);
 	}
 	const content = await readVendoredFile(relativePath);
 	return relativePath.startsWith('lib/asm-docs/generated/')
@@ -33,9 +36,13 @@ async function loadCheckVendoredFiles() {
 test('reports only vendored files that differ from upstream', async () => {
 	const checkVendoredFiles = await loadCheckVendoredFiles();
 	const matching = await checkVendoredFiles('deadbeef', (_revision: string, upstreamPath: string) =>
-		readUpstreamFixture(upstreamPath));
+		readUpstreamFixture(upstreamPath),
+	);
 	const mismatching = await checkVendoredFiles('deadbeef', (_revision: string, upstreamPath: string) =>
-		upstreamPath === 'lib/parsers/asmregex.ts' ? Promise.resolve('different content') : readUpstreamFixture(upstreamPath));
+		upstreamPath === 'lib/parsers/asmregex.ts'
+			? Promise.resolve('different content')
+			: readUpstreamFixture(upstreamPath),
+	);
 	assert.deepEqual(matching, []);
 	assert.deepEqual(mismatching, ['src/vendor/lib/parsers/asmregex.ts']);
 });

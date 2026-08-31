@@ -1,12 +1,4 @@
-import {
-	ConfigurationTarget,
-	Disposable,
-	Event,
-	EventEmitter,
-	Uri,
-	WorkspaceFolder,
-	workspace,
-} from 'vscode';
+import { ConfigurationTarget, Disposable, Event, EventEmitter, Uri, WorkspaceFolder, workspace } from 'vscode';
 import type {
 	ArtifactOptions,
 	ArtifactKind,
@@ -16,10 +8,7 @@ import type {
 	ToolchainSettings,
 } from '../types/index.js';
 import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
-import type {
-	ArtifactPreset,
-	ArtifactPresetConfiguration,
-} from '../artifacts/ui/presets.js';
+import type { ArtifactPreset, ArtifactPresetConfiguration } from '../artifacts/ui/presets.js';
 import * as logger from '../logger.js';
 import {
 	parseArtifactOptions,
@@ -36,7 +25,7 @@ export class ConfigurationService implements Disposable {
 	readonly onDidChange: Event<void> = this.changeEmitter.event;
 
 	constructor() {
-		this.configurationSubscription = workspace.onDidChangeConfiguration(event => {
+		this.configurationSubscription = workspace.onDidChangeConfiguration((event) => {
 			if (event.affectsConfiguration('coglens')) {
 				this.changeEmitter.fire();
 			}
@@ -86,8 +75,7 @@ export class ConfigurationService implements Disposable {
 	}
 
 	getSynchronizeSourceAndArtifactScrolling(uri: Uri): boolean {
-		return workspace.getConfiguration('coglens', uri)
-			.get('synchronizeSourceAndArtifactScrolling', true);
+		return workspace.getConfiguration('coglens', uri).get('synchronizeSourceAndArtifactScrolling', true);
 	}
 
 	getCompilationDatabases(scope?: Uri): readonly string[] {
@@ -95,7 +83,7 @@ export class ConfigurationService implements Disposable {
 	}
 
 	async updateToolchains(profiles: readonly ToolchainProfile[], folder?: WorkspaceFolder): Promise<void> {
-		const settings: ToolchainSettings[] = profiles.map(profile => ({
+		const settings: ToolchainSettings[] = profiles.map((profile) => ({
 			displayName: profile.displayName,
 			kind: profile.kind,
 			executable: profile.executable,
@@ -103,36 +91,21 @@ export class ConfigurationService implements Disposable {
 			environment: { ...profile.environment },
 			tools: { ...profile.tools },
 		}));
-		await workspace.getConfiguration('coglens', folder?.uri).update(
-			'toolchains',
-			settings,
-			ConfigurationTarget.Workspace,
-		);
+		await workspace
+			.getConfiguration('coglens', folder?.uri)
+			.update('toolchains', settings, ConfigurationTarget.Workspace);
 	}
 
-	async updateManualCompilationVariants(
-		variants: readonly ManualCompilationVariantSettings[],
-	): Promise<void> {
-		await workspace.getConfiguration('coglens').update(
-			'compileVariants',
-			variants,
-			ConfigurationTarget.Workspace,
-		);
+	async updateManualCompilationVariants(variants: readonly ManualCompilationVariantSettings[]): Promise<void> {
+		await workspace.getConfiguration('coglens').update('compileVariants', variants, ConfigurationTarget.Workspace);
 	}
 
-	async updateArtifactOptions(
-		kind: ArtifactKind,
-		options: ArtifactOptions,
-		folder?: WorkspaceFolder,
-	): Promise<void> {
+	async updateArtifactOptions(kind: ArtifactKind, options: ArtifactOptions, folder?: WorkspaceFolder): Promise<void> {
 		const configuration = workspace.getConfiguration('coglens', folder?.uri);
 		const current = configuration.get<Record<string, unknown>>('artifactOptions', {});
 		const flat = { ...options.production, ...options.display };
 		const serialized = Object.fromEntries(
-			artifactDefinitions[kind].options.map(descriptor => [
-				descriptor.id,
-				flat[descriptor.id],
-			]),
+			artifactDefinitions[kind].options.map((descriptor) => [descriptor.id, flat[descriptor.id]]),
 		);
 		await configuration.update(
 			'artifactOptions',
@@ -144,23 +117,24 @@ export class ConfigurationService implements Disposable {
 		);
 	}
 
-	async updateArtifactPresets(
-		presets: readonly ArtifactPreset[],
-		folder?: WorkspaceFolder,
-	): Promise<void> {
-		const serialized = Object.fromEntries(presets.map(preset => {
-			const configuration: ArtifactPresetConfiguration = {
-				artifactKind: preset.artifactKind,
-				extraArguments: [...preset.extraArguments],
-				productionOptions: { ...preset.productionOptions },
-			};
-			return [preset.id, configuration];
-		}));
-		await workspace.getConfiguration('coglens', folder?.uri).update(
-			'artifactPresets',
-			serialized,
-			folder ? ConfigurationTarget.WorkspaceFolder : ConfigurationTarget.Workspace,
+	async updateArtifactPresets(presets: readonly ArtifactPreset[], folder?: WorkspaceFolder): Promise<void> {
+		const serialized = Object.fromEntries(
+			presets.map((preset) => {
+				const configuration: ArtifactPresetConfiguration = {
+					artifactKind: preset.artifactKind,
+					extraArguments: [...preset.extraArguments],
+					productionOptions: { ...preset.productionOptions },
+				};
+				return [preset.id, configuration];
+			}),
 		);
+		await workspace
+			.getConfiguration('coglens', folder?.uri)
+			.update(
+				'artifactPresets',
+				serialized,
+				folder ? ConfigurationTarget.WorkspaceFolder : ConfigurationTarget.Workspace,
+			);
 	}
 
 	dispose(): void {

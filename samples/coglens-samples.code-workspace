@@ -1,80 +1,80 @@
 {
-    "folders": [
-        { "name": "C sample", "path": "c" },
-        { "name": "C++ sample", "path": "cpp" },
-        { "name": "Objective-C sample", "path": "objective-c" },
-        { "name": "Objective-C++ sample", "path": "objective-cpp" },
-        { "name": "CUDA sample", "path": "cuda" },
-        { "name": "Go sample", "path": "go" },
-        { "name": "Zig sample", "path": "zig" },
-        { "name": "Rust sample", "path": "rust" },
-        { "name": "Python sample", "path": "python" }
-    ],
-    "settings": {
-        "coglens.toolchains": [
-            {
-                "displayName": "Sample Clang C",
-                "kind": "clang",
-                "executable": "clang",
-                "defaultArguments": ["-std=c17", "-Iinclude"]
-            },
-            {
-                "displayName": "Sample GCC C",
-                "kind": "gcc",
-                "executable": "gcc",
-                "defaultArguments": ["-std=c17", "-Iinclude"]
-            },
-            {
-                "displayName": "Sample Clang C++",
-                "kind": "clang",
-                "executable": "clang++",
-                "defaultArguments": ["-std=c++20", "-Iinclude"]
-            },
-            {
-                "displayName": "Sample GCC C++",
-                "kind": "gcc",
-                "executable": "g++",
-                "defaultArguments": ["-std=c++20", "-Iinclude"]
-            },
-            {
-                "displayName": "Sample Clang Objective-C",
-                "kind": "clang",
-                "executable": "clang",
-                "defaultArguments": ["-std=c17"]
-            },
-            {
-                "displayName": "Sample Clang Objective-C++",
-                "kind": "clang",
-                "executable": "clang++",
-                "defaultArguments": ["-std=c++20"]
-            },
-            {
-                "displayName": "Sample CUDA device",
-                "kind": "nvcc",
-                "executable": "nvcc",
-                "defaultArguments": ["-std=c++17"]
-            },
-            {
-                "displayName": "Sample Go",
-                "kind": "go",
-                "executable": "go"
-            },
-            {
-                "displayName": "Sample Zig",
-                "kind": "zig",
-                "executable": "zig"
-            },
-            {
-                "displayName": "Sample Rust",
-                "kind": "rust",
-                "executable": "rustc",
-                "defaultArguments": ["--edition=2021"]
-            },
-            {
-                "displayName": "Sample Python",
-                "kind": "python",
-                "executable": "python"
-            }
-        ]
-    }
+	"folders": [
+		{ "name": "C sample", "path": "c" },
+		{ "name": "C++ sample", "path": "cpp" },
+		{ "name": "Objective-C sample", "path": "objective-c" },
+		{ "name": "Objective-C++ sample", "path": "objective-cpp" },
+		{ "name": "CUDA sample", "path": "cuda" },
+		{ "name": "Go sample", "path": "go" },
+		{ "name": "Zig sample", "path": "zig" },
+		{ "name": "Rust sample", "path": "rust" },
+		{ "name": "Python sample", "path": "python" },
+	],
+	"settings": {
+		"coglens.toolchains": [
+			{
+				"displayName": "Sample Clang C",
+				"kind": "clang",
+				"executable": "clang",
+				"defaultArguments": ["-std=c17", "-Iinclude"],
+			},
+			{
+				"displayName": "Sample GCC C",
+				"kind": "gcc",
+				"executable": "gcc",
+				"defaultArguments": ["-std=c17", "-Iinclude"],
+			},
+			{
+				"displayName": "Sample Clang C++",
+				"kind": "clang",
+				"executable": "clang++",
+				"defaultArguments": ["-std=c++20", "-Iinclude"],
+			},
+			{
+				"displayName": "Sample GCC C++",
+				"kind": "gcc",
+				"executable": "g++",
+				"defaultArguments": ["-std=c++20", "-Iinclude"],
+			},
+			{
+				"displayName": "Sample Clang Objective-C",
+				"kind": "clang",
+				"executable": "clang",
+				"defaultArguments": ["-std=c17"],
+			},
+			{
+				"displayName": "Sample Clang Objective-C++",
+				"kind": "clang",
+				"executable": "clang++",
+				"defaultArguments": ["-std=c++20"],
+			},
+			{
+				"displayName": "Sample CUDA device",
+				"kind": "nvcc",
+				"executable": "nvcc",
+				"defaultArguments": ["-std=c++17"],
+			},
+			{
+				"displayName": "Sample Go",
+				"kind": "go",
+				"executable": "go",
+			},
+			{
+				"displayName": "Sample Zig",
+				"kind": "zig",
+				"executable": "zig",
+			},
+			{
+				"displayName": "Sample Rust",
+				"kind": "rust",
+				"executable": "rustc",
+				"defaultArguments": ["--edition=2021"],
+			},
+			{
+				"displayName": "Sample Python",
+				"kind": "python",
+				"executable": "python",
+			},
+		],
+	},
 }

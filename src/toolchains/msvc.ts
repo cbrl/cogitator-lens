@@ -75,7 +75,7 @@ export async function captureWindowsEnvironment(
 			}
 		});
 	}
-	const visualStudioEnvironment = { ...await environmentPromise };
+	const visualStudioEnvironment = { ...(await environmentPromise) };
 	for (const [name, value] of Object.entries(environment)) {
 		if (value !== process.env[name]) {
 			visualStudioEnvironment[name] = value;
@@ -101,7 +101,7 @@ export async function windowsDemangle(
 		return demangleViaStdin(rawAssembly, demanglerTool, environment, workingDirectory, cancellationToken);
 	}
 
-	return withTemporaryDirectory('coglens-undname-', async temporaryDirectory => {
+	return withTemporaryDirectory('coglens-undname-', async (temporaryDirectory) => {
 		const inputFile = path.join(temporaryDirectory, 'assembly.txt');
 		await fs.promises.writeFile(inputFile, rawAssembly, 'utf8');
 		const result = await exec.execute(demanglerTool, [inputFile], {
@@ -165,15 +165,12 @@ async function findVisualStudioEnvironmentScript(
 					cancellationToken,
 				});
 				if (result.returnCode === 0) {
-					const installationPath = result.stdout.split(/\r?\n/).find(line => line.trim())?.trim();
+					const installationPath = result.stdout
+						.split(/\r?\n/)
+						.find((line) => line.trim())
+						?.trim();
 					if (installationPath) {
-						const discovered = path.join(
-							installationPath,
-							'VC',
-							'Auxiliary',
-							'Build',
-							'vcvarsall.bat',
-						);
+						const discovered = path.join(installationPath, 'VC', 'Auxiliary', 'Build', 'vcvarsall.bat');
 						if (fs.existsSync(discovered)) {
 							return discovered;
 						}
@@ -192,9 +189,7 @@ async function findVisualStudioEnvironmentScript(
 			return candidate;
 		}
 	}
-	throw new Error(
-		`Visual Studio environment script was not found through vswhere or relative to ${executable}`,
-	);
+	throw new Error(`Visual Studio environment script was not found through vswhere or relative to ${executable}`);
 }
 
 function vcvarsArchitecture(executable: string): string {

@@ -47,11 +47,11 @@ export function renderAnalysisSource(
 
 	for (const entry of entries) {
 		if (
-			entry.sourceUri !== undefined
-			&& entry.sourceLine !== undefined
-			&& entry.sourceLine >= 1
-			&& entry.sourceLine <= sourceLines.length
-			&& sameSourcePath(entry.sourceUri, sourceFile)
+			entry.sourceUri !== undefined &&
+			entry.sourceLine !== undefined &&
+			entry.sourceLine >= 1 &&
+			entry.sourceLine <= sourceLines.length &&
+			sameSourcePath(entry.sourceUri, sourceFile)
 		) {
 			const lineEntries = entriesByLine.get(entry.sourceLine) ?? [];
 			lineEntries.push(entry);
@@ -61,9 +61,7 @@ export function renderAnalysisSource(
 		}
 	}
 
-	const lines: RenderedArtifactLine[] = [
-		...(options.preamble ?? []).map(text => ({ text })),
-	];
+	const lines: RenderedArtifactLine[] = [...(options.preamble ?? []).map((text) => ({ text }))];
 	if (options.preamble?.length) {
 		lines.push({ text: '' });
 	}
@@ -93,7 +91,7 @@ export function renderAnalysisSource(
 		lines.push(
 			{ text: '' },
 			{ text: 'Unmapped entries' },
-			...unmapped.map(entry => ({
+			...unmapped.map((entry) => ({
 				text: formatArtifactLineAnnotation(entry.annotation),
 			})),
 		);
@@ -104,7 +102,7 @@ export function renderAnalysisSource(
 		lines.push(
 			{ text: '' },
 			{ text: 'Parser diagnostics' },
-			...parserDiagnostics.map(diagnostic => ({
+			...parserDiagnostics.map((diagnostic) => ({
 				text: `line ${diagnostic.line}: ${diagnostic.message} — ${diagnostic.text}`,
 			})),
 		);
@@ -118,12 +116,11 @@ export function formatArtifactLineAnnotation(annotation: ArtifactLineAnnotation)
 		case 'optimization-remark':
 			return `[${annotation.category}] ${annotation.message}`;
 		case 'stack-usage': {
-			const unit = annotation.unit === 'vm-slots'
-				? `VM slot${annotation.value === 1 ? '' : 's'}`
-				: `byte${annotation.value === 1 ? '' : 's'}`;
-			const qualifier = annotation.qualifier === 'vm'
-				? ''
-				: `, ${annotation.qualifier}`;
+			const unit =
+				annotation.unit === 'vm-slots'
+					? `VM slot${annotation.value === 1 ? '' : 's'}`
+					: `byte${annotation.value === 1 ? '' : 's'}`;
+			const qualifier = annotation.qualifier === 'vm' ? '' : `, ${annotation.qualifier}`;
 			return `stack: ${annotation.value} ${unit}${qualifier} — ${annotation.functionName}`;
 		}
 	}

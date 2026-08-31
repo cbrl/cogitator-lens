@@ -1,14 +1,7 @@
 import { Disposable, Event, EventEmitter } from 'vscode';
-import type {
-	ArtifactKind,
-	ArtifactOptionAvailability,
-	ToolchainProfile,
-} from '../types/index.js';
+import type { ArtifactKind, ArtifactOptionAvailability, ToolchainProfile } from '../types/index.js';
 import { ToolchainBackend } from '../toolchains/toolchain-backend.js';
-import {
-	getToolchainDefinition,
-	resolveArtifactAvailability,
-} from '../toolchains/toolchain-map.js';
+import { getToolchainDefinition, resolveArtifactAvailability } from '../toolchains/toolchain-map.js';
 import type { ConfigurationOrigin } from '../buildsystems/variant-provider.js';
 import { structurallyEqual } from '../utils.js';
 import { parseToolDiagnostics } from '../diagnostics.js';
@@ -28,8 +21,8 @@ export class ToolchainRegistry implements Disposable {
 
 	getProfiles(origin?: ConfigurationOrigin): readonly ToolchainProfile[] {
 		return [...this.entries.values()]
-			.filter(entry => origin === undefined || entry.origin === origin)
-			.map(entry => entry.profile);
+			.filter((entry) => origin === undefined || entry.origin === origin)
+			.map((entry) => entry.profile);
 	}
 
 	getToolchainById(id: string): ToolchainBackend | undefined {
@@ -37,9 +30,7 @@ export class ToolchainRegistry implements Disposable {
 	}
 
 	findToolchainByDisplayName(displayName: string): ToolchainBackend | undefined {
-		return [...this.entries.values()]
-			.find(entry => entry.profile.displayName === displayName)
-			?.backend;
+		return [...this.entries.values()].find((entry) => entry.profile.displayName === displayName)?.backend;
 	}
 
 	getArtifactAvailability(id: string, kind: ArtifactKind): ArtifactOptionAvailability {
@@ -59,11 +50,11 @@ export class ToolchainRegistry implements Disposable {
 	}
 
 	reconcile(origin: ConfigurationOrigin, profiles: readonly ToolchainProfile[]): boolean {
-		const canonicalProfiles = profiles.map(profile => ({
+		const canonicalProfiles = profiles.map((profile) => ({
 			...profile,
 			id: ToolchainRegistry.profileId(origin, profile.id),
 		}));
-		const next = new Map(canonicalProfiles.map(profile => [profile.id, profile]));
+		const next = new Map(canonicalProfiles.map((profile) => [profile.id, profile]));
 		let changed = false;
 
 		for (const [id, entry] of this.entries) {

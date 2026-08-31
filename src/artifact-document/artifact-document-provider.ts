@@ -23,15 +23,8 @@ import {
 import path from 'path';
 import { CompilationService } from '../compilation/index.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
-import {
-	CompilationError,
-	type CompileDiagnostic,
-	type RenderedTextArtifact,
-} from '../types/index.js';
-import {
-	artifactScheme,
-	getArtifactUri,
-} from './artifact-uri.js';
+import { CompilationError, type CompileDiagnostic, type RenderedTextArtifact } from '../types/index.js';
+import { artifactScheme, getArtifactUri } from './artifact-uri.js';
 import { ArtifactDecorator } from './artifact-decorator.js';
 import { getContent, type ArtifactDocumentContent } from './artifact-document-content.js';
 import type { ArtifactStatus } from './artifact-generator.js';
@@ -64,7 +57,7 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 		private readonly registry: ArtifactDocumentRegistry,
 	) {
 		this.subscriptions = [
-			workspace.onDidCloseTextDocument(document => this.onCloseTextDocument(document)),
+			workspace.onDidCloseTextDocument((document) => this.onCloseTextDocument(document)),
 			window.onDidChangeActiveTextEditor(() => this.refreshStatusBar()),
 			this.changeEmitter,
 			this.diagnostics,
@@ -87,34 +80,36 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 				handler.artifactUri,
 				handler.onDidChange,
 				this.configuration,
-				kind => this.compilationService.getArtifactOptions(kind),
+				(kind) => this.compilationService.getArtifactOptions(kind),
 			);
 		}
 
 		const compilation = handler.update(token);
 
-		return compilation.then(({ assembly, artifact }) => {
-			if (artifact.presentation !== 'text' || !assembly) {
-				throw new CompilationError('Graph artifacts must be opened in the control-flow graph view.');
-			}
-			document.assembly = assembly;
-			this.setDiagnostics(document, artifact.diagnostics);
+		return compilation
+			.then(({ assembly, artifact }) => {
+				if (artifact.presentation !== 'text' || !assembly) {
+					throw new CompilationError('Graph artifacts must be opened in the control-flow graph view.');
+				}
+				document.assembly = assembly;
+				this.setDiagnostics(document, artifact.diagnostics);
 
-			return getContent(assembly);
-		}).catch((error: unknown) => {
-			if (error instanceof CancellationError || token.isCancellationRequested) {
-				return document.assembly ? getContent(document.assembly) : '';
-			}
+				return getContent(assembly);
+			})
+			.catch((error: unknown) => {
+				if (error instanceof CancellationError || token.isCancellationRequested) {
+					return document.assembly ? getContent(document.assembly) : '';
+				}
 
-			document.assembly = undefined;
-			const diagnostics = error instanceof CompilationError ? error.diagnostics : [];
-			this.setDiagnostics(document, diagnostics);
+				document.assembly = undefined;
+				const diagnostics = error instanceof CompilationError ? error.diagnostics : [];
+				this.setDiagnostics(document, diagnostics);
 
-			const message = error instanceof Error ? error.message : String(error);
-			return error instanceof CompilationError && error.truncated
-				? `[truncated; process output limit exceeded]\n\n${message}`
-				: message;
-		});
+				const message = error instanceof Error ? error.message : String(error);
+				return error instanceof CompilationError && error.truncated
+					? `[truncated; process output limit exceeded]\n\n${message}`
+					: message;
+			});
 	}
 
 	get onDidChange(): Event<Uri> {
@@ -167,7 +162,7 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 	}
 
 	dispose(): void {
-		this.subscriptions.forEach(subscription => subscription.dispose());
+		this.subscriptions.forEach((subscription) => subscription.dispose());
 		for (const document of this.documents.values()) {
 			document.decorator?.dispose();
 			this.registry.unregister(document.registered.uri);
@@ -183,7 +178,7 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 		}
 
 		const registered = this.registry.open(assemblyUri, {
-			refresh: document => this.changeEmitter.fire(document.uri),
+			refresh: (document) => this.changeEmitter.fire(document.uri),
 			onStatus: (document, status) => this.onHandlerStatus(document.uri, status),
 		});
 		const document: ArtifactDocument = {
@@ -222,8 +217,11 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 		// Guard against race condition: if the user reopens the same assembly document quickly,
 		// the delayed close event from the old document would destroy the new handler/decorator.
 		// Only clean up if no tab still shows this document.
-		const remainsOpen = window.tabGroups.all.some(group => group.tabs.some(tab =>
-			tab.input instanceof TabInputText && tab.input.uri.toString() === document.uri.toString()));
+		const remainsOpen = window.tabGroups.all.some((group) =>
+			group.tabs.some(
+				(tab) => tab.input instanceof TabInputText && tab.input.uri.toString() === document.uri.toString(),
+			),
+		);
 
 		if (!remainsOpen) {
 			this.unregisterDocument(document.uri);
@@ -271,14 +269,10 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 				this.statusBar.text = '$(circle-slash) Cancelled';
 				break;
 			case 'failed':
-				this.statusBar.text = status.truncated
-					? '$(warning) Truncated'
-					: '$(error) Failed';
+				this.statusBar.text = status.truncated ? '$(warning) Truncated' : '$(error) Failed';
 				break;
 			case 'successful':
-				this.statusBar.text = status.truncated
-					? '$(warning) Truncated'
-					: '$(check) Ready';
+				this.statusBar.text = status.truncated ? '$(warning) Truncated' : '$(check) Ready';
 				break;
 		}
 		this.statusBar.tooltip = [
@@ -297,11 +291,13 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 			for (const item of document.diagnostics) {
 				const key = item.uri.toString();
 				const group = grouped.get(key) ?? { uri: item.uri, diagnostics: [] };
-				group.diagnostics.push(new Diagnostic(
-					new Range(new Position(item.line, item.column), new Position(item.line, item.column + 1)),
-					item.message,
-					toDiagnosticSeverity(item.severity),
-				));
+				group.diagnostics.push(
+					new Diagnostic(
+						new Range(new Position(item.line, item.column), new Position(item.line, item.column + 1)),
+						item.message,
+						toDiagnosticSeverity(item.severity),
+					),
+				);
 				grouped.set(key, group);
 			}
 		}
@@ -315,8 +311,11 @@ export { getArtifactUri, parseArtifactUri } from './artifact-uri.js';
 
 function toDiagnosticSeverity(severity: CompileDiagnostic['severity']): DiagnosticSeverity {
 	switch (severity) {
-		case 'warning': return DiagnosticSeverity.Warning;
-		case 'information': return DiagnosticSeverity.Information;
-		default: return DiagnosticSeverity.Error;
+		case 'warning':
+			return DiagnosticSeverity.Warning;
+		case 'information':
+			return DiagnosticSeverity.Information;
+		default:
+			return DiagnosticSeverity.Error;
 	}
 }

@@ -26,29 +26,19 @@ export const artifactSemanticTokenTypes = [
 	'label',
 ] as const;
 
-export const artifactSemanticTokensLegend = new SemanticTokensLegend(
-	[...artifactSemanticTokenTypes],
-);
+export const artifactSemanticTokensLegend = new SemanticTokensLegend([...artifactSemanticTokenTypes]);
 
 interface LineToken {
 	readonly start: number;
 	readonly length: number;
-	readonly type: typeof artifactSemanticTokenTypes[number];
+	readonly type: (typeof artifactSemanticTokenTypes)[number];
 	readonly priority: number;
 }
 
 /** Classifies a rendered line without reparsing compiler output or changing document text. */
-export function classifyArtifactLine(
-	text: string,
-	artifact: RenderedTextArtifact,
-): readonly LineToken[] {
+export function classifyArtifactLine(text: string, artifact: RenderedTextArtifact): readonly LineToken[] {
 	const candidates: LineToken[] = [];
-	const addMatches = (
-		re: RegExp,
-		type: LineToken['type'],
-		priority: number,
-		filter?: (value: string) => boolean,
-	) => {
+	const addMatches = (re: RegExp, type: LineToken['type'], priority: number, filter?: (value: string) => boolean) => {
 		for (const match of text.matchAll(re)) {
 			const value = match[0];
 			if (match.index !== undefined && (!filter || filter(value))) {
@@ -77,30 +67,35 @@ export function classifyArtifactLine(
 			/\b[a-z][a-z\d_]*\b/gi,
 			'keyword',
 			45,
-			value => documentationForOpcode(artifact, value) !== undefined,
+			(value) => documentationForOpcode(artifact, value) !== undefined,
 		);
 		addMatches(/^\s*[-a-zA-Z$._\d]+(?=:)/g, 'label', 70);
 	} else {
 		addMatches(/^\s*[.$_a-zA-Z][\w.$@?]*(?=:)/g, 'label', 70);
 		addMatches(/^\s*\.[a-zA-Z][\w.]*/g, 'keyword', 65);
 		const mnemonic = /^\s*(?:[a-zA-Z][\w.]*:\s*)?([a-zA-Z][\w.]*)/.exec(text);
-		if (
-			mnemonic?.index !== undefined
-			&& documentationForOpcode(artifact, mnemonic[1]) !== undefined
-		) {
+		if (mnemonic?.index !== undefined && documentationForOpcode(artifact, mnemonic[1]) !== undefined) {
 			const start = text.indexOf(mnemonic[1], mnemonic.index);
 			candidates.push({ start, length: mnemonic[1].length, type: 'keyword', priority: 65 });
 		}
-		addMatches(/(?:%|\$)?\b(?:r(?:1[0-5]|[0-9])[bwd]?|[re]?(?:ax|bx|cx|dx|si|di|sp|bp)|[xyz]mm\d+|x\d+|w\d+|sp|lr|pc)\b/gi, 'variable', 55);
+		addMatches(
+			/(?:%|\$)?\b(?:r(?:1[0-5]|[0-9])[bwd]?|[re]?(?:ax|bx|cx|dx|si|di|sp|bp)|[xyz]mm\d+|x\d+|w\d+|sp|lr|pc)\b/gi,
+			'variable',
+			55,
+		);
 	}
 	addMatches(/(?:<<|>>|[-+*/&|^~=<>!]+)/g, 'operator', 20);
 
 	const accepted: LineToken[] = [];
-	for (const candidate of candidates.sort((left, right) =>
-		right.priority - left.priority || left.start - right.start)) {
-		if (!accepted.some(token =>
-			token.start < candidate.start + candidate.length
-			&& candidate.start < token.start + token.length)) {
+	for (const candidate of candidates.sort(
+		(left, right) => right.priority - left.priority || left.start - right.start,
+	)) {
+		if (
+			!accepted.some(
+				(token) =>
+					token.start < candidate.start + candidate.length && candidate.start < token.start + token.length,
+			)
+		) {
 			accepted.push(candidate);
 		}
 	}
@@ -110,10 +105,7 @@ export function classifyArtifactLine(
 export class ArtifactSemanticTokensProvider implements DocumentSemanticTokensProvider {
 	constructor(private readonly artifactLookup: ArtifactLookup) {}
 
-	provideDocumentSemanticTokens(
-		document: TextDocument,
-		_token: CancellationToken,
-	): ProviderResult<SemanticTokens> {
+	provideDocumentSemanticTokens(document: TextDocument, _token: CancellationToken): ProviderResult<SemanticTokens> {
 		const artifact = this.artifactLookup(document.uri);
 		if (!artifact || !['assembly', 'binary-disassembly', 'llvm-ir'].includes(artifact.kind)) {
 			return new SemanticTokensBuilder(artifactSemanticTokensLegend).build();
@@ -121,13 +113,7 @@ export class ArtifactSemanticTokensProvider implements DocumentSemanticTokensPro
 		const builder = new SemanticTokensBuilder(artifactSemanticTokensLegend);
 		artifact.lines.forEach((line, lineNumber) => {
 			for (const token of classifyArtifactLine(line.text, artifact)) {
-				builder.push(
-					lineNumber,
-					token.start,
-					token.length,
-					artifactSemanticTokenTypes.indexOf(token.type),
-					0,
-				);
+				builder.push(lineNumber, token.start, token.length, artifactSemanticTokenTypes.indexOf(token.type), 0);
 			}
 		});
 		return builder.build();
@@ -137,6 +123,6 @@ export class ArtifactSemanticTokensProvider implements DocumentSemanticTokensPro
 function assemblyCommentStart(text: string): number {
 	const semicolon = text.indexOf(';');
 	const slash = text.indexOf('//');
-	const values = [semicolon, slash].filter(value => value >= 0);
+	const values = [semicolon, slash].filter((value) => value >= 0);
 	return values.length > 0 ? Math.min(...values) : -1;
 }

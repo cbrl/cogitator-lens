@@ -21,7 +21,7 @@ test('raw artifact cache maintains dependency indexes across replacement and evi
 	cache.set('second', artifact(currentInput), secondSource);
 	cache.set('same-source', artifact(currentInput), firstSource);
 	assert.deepEqual(
-		cache.evictInput(fakeUri(currentInput)).map(uri => uri.toString()),
+		cache.evictInput(fakeUri(currentInput)).map((uri) => uri.toString()),
 		[firstSource.toString(), secondSource.toString()],
 	);
 	assert.equal(cache.get('first'), undefined);

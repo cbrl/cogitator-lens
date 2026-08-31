@@ -1,38 +1,38 @@
 {
-    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-    "name": "Compiler AST",
-    "scopeName": "source.coglens-ast",
-    "patterns": [
-        {
-            "match": "\\b(?:TranslationUnitDecl|[A-Za-z][A-Za-z0-9]*(?:Decl|Expr|Stmt|Type|Literal))\\b",
-            "name": "entity.name.type.ast"
-        },
-        {
-            "match": "\\b(?:line|col|lineno|col_offset|end_lineno|end_col_offset)=?",
-            "name": "variable.language.location.ast"
-        },
-        {
-            "match": "\\b(?:implicit|used|referenced|definition|constexpr|invalid)\\b",
-            "name": "storage.modifier.ast"
-        },
-        {
-            "begin": "'",
-            "beginCaptures": {
-                "0": {
-                    "name": "punctuation.definition.string.begin.ast"
-                }
-            },
-            "end": "'",
-            "endCaptures": {
-                "0": {
-                    "name": "punctuation.definition.string.end.ast"
-                }
-            },
-            "name": "string.quoted.single.ast"
-        },
-        {
-            "match": "\\b\\d+\\b",
-            "name": "constant.numeric.ast"
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Compiler AST",
+  "scopeName": "source.coglens-ast",
+  "patterns": [
+    {
+      "match": "\\b(?:TranslationUnitDecl|[A-Za-z][A-Za-z0-9]*(?:Decl|Expr|Stmt|Type|Literal))\\b",
+      "name": "entity.name.type.ast"
+    },
+    {
+      "match": "\\b(?:line|col|lineno|col_offset|end_lineno|end_col_offset)=?",
+      "name": "variable.language.location.ast"
+    },
+    {
+      "match": "\\b(?:implicit|used|referenced|definition|constexpr|invalid)\\b",
+      "name": "storage.modifier.ast"
+    },
+    {
+      "begin": "'",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.begin.ast"
         }
-    ]
+      },
+      "end": "'",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.string.end.ast"
+        }
+      },
+      "name": "string.quoted.single.ast"
+    },
+    {
+      "match": "\\b\\d+\\b",
+      "name": "constant.numeric.ast"
+    }
+  ]
 }

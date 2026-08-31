@@ -14,10 +14,7 @@ import type {
 	ToolchainKind,
 	ToolchainProfile,
 } from '../types/index.js';
-import {
-	ToolchainBackend,
-	type DependencyCollectionSpec,
-} from '../toolchains/toolchain-backend.js';
+import { ToolchainBackend, type DependencyCollectionSpec } from '../toolchains/toolchain-backend.js';
 import { AsmParser } from '../vendor/lib/parsers/asm-parser.js';
 import { noopPropertyGetter } from '../vendor/compiler-props.js';
 import {
@@ -29,17 +26,10 @@ import {
 } from './msvc.js';
 import { rustOutputArguments, stripRustManagedArguments } from './rust.js';
 import { stripPythonManagedArguments } from './python.js';
-import {
-	goAssemblyProducer,
-	goSsaControlFlowGraphProducer,
-	stripGoManagedArguments,
-} from './go.js';
+import { goAssemblyProducer, goSsaControlFlowGraphProducer, stripGoManagedArguments } from './go.js';
 import { zigLlvmIrOutput, zigOutputArguments, stripZigManagedArguments } from './zig.js';
 import { nvccOutputArguments, nvdisasm, stripNvccManagedArguments } from './nvcc.js';
-import {
-	artifactDefinitions,
-	supportedArtifactKinds,
-} from '../artifacts/core/artifact-definitions.js';
+import { artifactDefinitions, supportedArtifactKinds } from '../artifacts/core/artifact-definitions.js';
 import {
 	binaryDisassemblyProducer,
 	dumpbin,
@@ -58,10 +48,7 @@ import {
 import { pythonBytecodeProducer } from '../artifacts/python/python-bytecode-producer.js';
 import { pythonControlFlowGraphProducer } from '../artifacts/python/python-cfg-producer.js';
 import { pythonAstProducer } from '../artifacts/ast/python-ast-producer.js';
-import {
-	renderClangAst,
-	renderPythonAst,
-} from '../artifacts/ast/ast-renderer.js';
+import { renderClangAst, renderPythonAst } from '../artifacts/ast/ast-renderer.js';
 import {
 	clangOptimizationRemarksOutput,
 	renderClangOptimizationRemarks,
@@ -74,10 +61,7 @@ import {
 	gccOptimizationRemarksOutput,
 	renderGccOptimizationRemarks,
 } from '../artifacts/optimization-remarks/gcc-optimization-remarks.js';
-import {
-	parseMakeDepfile,
-	parseMsvcSourceDependencies,
-} from '../compilation/artifact-inputs.js';
+import { parseMakeDepfile, parseMsvcSourceDependencies } from '../compilation/artifact-inputs.js';
 import {
 	clangClStackAnalysisProducer,
 	nativeStackAnalysisProducer,
@@ -118,11 +102,7 @@ export type ArtifactProducer = (
 interface ToolchainArtifactImplementation {
 	readonly producer: ArtifactProducer;
 	/** Optional toolchain-specific rendering action; otherwise the artifact default is used. */
-	readonly renderer?: (
-		raw: RawArtifact,
-		options: DisplayOptions,
-		context: ArtifactRenderContext,
-	) => RenderedArtifact;
+	readonly renderer?: (raw: RawArtifact, options: DisplayOptions, context: ArtifactRenderContext) => RenderedArtifact;
 	readonly requiredTool?: {
 		readonly name: string;
 		readonly label: string;
@@ -145,23 +125,23 @@ type ResolvedToolchainArtifactCell =
 	| (ToolchainArtifactImplementation & { readonly status: 'available'; readonly id?: never })
 	| (ToolchainArtifactOutput & { readonly status: 'available' })
 	| {
-		readonly status: 'unavailable' | 'unsupported';
-		readonly explanation: string;
-	};
+			readonly status: 'unavailable' | 'unsupported';
+			readonly explanation: string;
+	  };
 
 export type ToolchainArtifactCell =
 	| (ToolchainArtifactImplementation & {
-		readonly status: 'available';
-		readonly outputs?: never;
-	})
+			readonly status: 'available';
+			readonly outputs?: never;
+	  })
 	| {
-		readonly status: 'available';
-		readonly outputs: readonly [ToolchainArtifactOutput, ...ToolchainArtifactOutput[]];
-	}
+			readonly status: 'available';
+			readonly outputs: readonly [ToolchainArtifactOutput, ...ToolchainArtifactOutput[]];
+	  }
 	| {
-		readonly status: 'unavailable' | 'unsupported';
-		readonly explanation: string;
-	};
+			readonly status: 'unavailable' | 'unsupported';
+			readonly explanation: string;
+	  };
 
 export interface ToolchainDefinitionShape {
 	readonly executablePattern: RegExp;
@@ -204,13 +184,7 @@ export interface ToolchainDefinitionShape {
 	readonly artifacts: Readonly<Record<ArtifactKind, ToolchainArtifactCell>>;
 }
 
-const cFamilyLanguageIdentifiers = Object.freeze([
-	'c',
-	'cpp',
-	'objective-c',
-	'objective-cpp',
-	'cuda',
-]);
+const cFamilyLanguageIdentifiers = Object.freeze(['c', 'cpp', 'objective-c', 'objective-cpp', 'cuda']);
 
 const assemblyCell: ToolchainArtifactCell = {
 	status: 'available',
@@ -218,10 +192,7 @@ const assemblyCell: ToolchainArtifactCell = {
 		backend.produceAssembly(source, options, cancellationToken),
 };
 
-const binaryCell = (
-	label: string,
-	producer: ArtifactProducer,
-): ToolchainArtifactCell => ({
+const binaryCell = (label: string, producer: ArtifactProducer): ToolchainArtifactCell => ({
 	status: 'available',
 	producer,
 	requiredTool: {
@@ -235,10 +206,7 @@ function outputArtifactCell(
 ): ToolchainArtifactCell {
 	return Object.freeze({
 		status: 'available',
-		outputs: Object.freeze([...outputs]) as readonly [
-			ToolchainArtifactOutput,
-			...ToolchainArtifactOutput[],
-		],
+		outputs: Object.freeze([...outputs]) as readonly [ToolchainArtifactOutput, ...ToolchainArtifactOutput[]],
 	});
 }
 
@@ -250,17 +218,9 @@ const controlFlowGraphOutput = (
 	parseGraphs: NonNullable<ToolchainArtifactOutput['parseGraphs']>,
 ): ToolchainArtifactOutput => Object.freeze({ id, label, description, producer, parseGraphs });
 
-const parseAssemblyControlFlowGraphs: NonNullable<ToolchainArtifactOutput['parseGraphs']> = (
-	raw,
-	options,
-	context,
-) => {
+const parseAssemblyControlFlowGraphs: NonNullable<ToolchainArtifactOutput['parseGraphs']> = (raw, options, context) => {
 	const parsedAssembly = context.backend.parseAssembly(raw.text, options);
-	const lines = toAssemblyLines(
-		parsedAssembly.asm,
-		context.source.uri.toString(),
-		raw.command.workingDirectory,
-	);
+	const lines = toAssemblyLines(parsedAssembly.asm, context.source.uri.toString(), raw.command.workingDirectory);
 	const definition: ToolchainDefinitionShape = toolchainDefinitions[context.backend.profile.kind];
 	return definition.createCfgParser!().parse(lines);
 };
@@ -283,17 +243,14 @@ function unsupportedCell(kind: ArtifactKind): ToolchainArtifactCell {
 function artifactCells(
 	overrides: Partial<Record<ArtifactKind, ToolchainArtifactCell>>,
 ): Readonly<Record<ArtifactKind, ToolchainArtifactCell>> {
-	return Object.freeze(Object.fromEntries(
-		supportedArtifactKinds.map(kind => [kind, overrides[kind] ?? unsupportedCell(kind)]),
-	)) as Readonly<Record<ArtifactKind, ToolchainArtifactCell>>;
+	return Object.freeze(
+		Object.fromEntries(supportedArtifactKinds.map((kind) => [kind, overrides[kind] ?? unsupportedCell(kind)])),
+	) as Readonly<Record<ArtifactKind, ToolchainArtifactCell>>;
 }
 
-const existingFile = (candidate: string): string | undefined =>
-	fs.existsSync(candidate) ? candidate : undefined;
-const sibling = (executable: string, name: string): string =>
-	path.join(path.dirname(executable), name);
-const toolExecutableName = (name: string): string =>
-	process.platform === 'win32' ? `${name}.exe` : name;
+const existingFile = (candidate: string): string | undefined => (fs.existsSync(candidate) ? candidate : undefined);
+const sibling = (executable: string, name: string): string => path.join(path.dirname(executable), name);
+const toolExecutableName = (name: string): string => (process.platform === 'win32' ? `${name}.exe` : name);
 const executableOnPath = (name: string): string | undefined => {
 	for (const directory of (process.env.PATH ?? '').split(path.delimiter)) {
 		if (directory) {
@@ -307,13 +264,12 @@ const executableOnPath = (name: string): string | undefined => {
 };
 const siblingOrPath = (executable: string, name: string): string | undefined =>
 	existingFile(sibling(executable, name)) ?? executableOnPath(name);
-const discoveredTools = (
-	candidates: Readonly<Record<string, string | undefined>>,
-): Readonly<Record<string, string>> => Object.freeze(Object.fromEntries(
-	Object.entries(candidates).filter(
-		(entry): entry is [string, string] => entry[1] !== undefined,
-	),
-));
+const discoveredTools = (candidates: Readonly<Record<string, string | undefined>>): Readonly<Record<string, string>> =>
+	Object.freeze(
+		Object.fromEntries(
+			Object.entries(candidates).filter((entry): entry is [string, string] => entry[1] !== undefined),
+		),
+	);
 
 interface AuxiliaryToolNames {
 	readonly demangler?: string;
@@ -321,14 +277,13 @@ interface AuxiliaryToolNames {
 }
 
 function toolDiscoverer(names: AuxiliaryToolNames): (executable: string) => Readonly<Record<string, string>> {
-	return executable => discoveredTools({
-		demangler: names.demangler
-			? siblingOrPath(executable, toolExecutableName(names.demangler))
-			: undefined,
-		disassembler: names.disassembler
-			? siblingOrPath(executable, toolExecutableName(names.disassembler))
-			: undefined,
-	});
+	return (executable) =>
+		discoveredTools({
+			demangler: names.demangler ? siblingOrPath(executable, toolExecutableName(names.demangler)) : undefined,
+			disassembler: names.disassembler
+				? siblingOrPath(executable, toolExecutableName(names.disassembler))
+				: undefined,
+		});
 }
 
 function gnuOutputArguments(lineTableArguments: readonly string[]) {
@@ -357,17 +312,9 @@ const msvcDependencyCollection: DependencyCollectionSpec = Object.freeze({
 
 const rustDependencyCollection: DependencyCollectionSpec = Object.freeze({
 	outputFilename: 'dependencies.d',
-	arguments: (
-		outputFile: string,
-		_temporaryDirectory: string,
-		providerArguments: readonly string[],
-	) => [
-		...(hasOption(providerArguments, '--crate-name')
-			? []
-			: ['--crate-name=coglens_artifact']),
-		...(hasOption(providerArguments, '--crate-type')
-			? []
-			: ['--crate-type=lib']),
+	arguments: (outputFile: string, _temporaryDirectory: string, providerArguments: readonly string[]) => [
+		...(hasOption(providerArguments, '--crate-name') ? [] : ['--crate-name=coglens_artifact']),
+		...(hasOption(providerArguments, '--crate-type') ? [] : ['--crate-type=lib']),
 		`--emit=dep-info=${outputFile}`,
 		'--error-format=human',
 		'--color=never',
@@ -375,14 +322,14 @@ const rustDependencyCollection: DependencyCollectionSpec = Object.freeze({
 	parse: parseMakeDepfile,
 });
 
-const gnuPreprocessedSourceProducer = artifactProducer(
-	'preprocessed-source',
-	{ output: 'stdout', arguments: () => ['-E'] },
-);
-const msvcPreprocessedSourceProducer = artifactProducer(
-	'preprocessed-source',
-	{ output: 'stdout', arguments: () => ['/E'] },
-);
+const gnuPreprocessedSourceProducer = artifactProducer('preprocessed-source', {
+	output: 'stdout',
+	arguments: () => ['-E'],
+});
+const msvcPreprocessedSourceProducer = artifactProducer('preprocessed-source', {
+	output: 'stdout',
+	arguments: () => ['/E'],
+});
 const clangAstProducer = artifactProducer('ast', {
 	output: 'stdout',
 	arguments: () => ['-Xclang', '-ast-dump', '-fsyntax-only'],
@@ -395,7 +342,7 @@ const rustIntelArguments = Object.freeze(['-C', 'llvm-args=-x86-asm-syntax=intel
 const defaultAsmParser = (): AsmParser => new AsmParser(noopPropertyGetter);
 
 function hasOption(args: readonly string[], name: string): boolean {
-	return args.some(argument => argument === name || argument.startsWith(`${name}=`));
+	return args.some((argument) => argument === name || argument.startsWith(`${name}=`));
 }
 
 const clangArtifacts = artifactCells({
@@ -455,7 +402,7 @@ const gccArtifacts = artifactCells({
 		controlFlowGraphOutput(
 			'gcc-tree',
 			'GCC tree CFG',
-			'Build a source-level graph from GCC\'s tree CFG dump.',
+			"Build a source-level graph from GCC's tree CFG dump.",
 			artifactProducer('control-flow-graph', gccControlFlowGraphOutput),
 			(raw) => parseGccControlFlowGraphs(raw.text, raw.command.workingDirectory),
 		),
@@ -470,9 +417,7 @@ const msvcArtifacts = artifactCells({
 		status: 'available',
 		producer: msvcPreprocessedSourceProducer,
 	},
-	'control-flow-graph': outputArtifactCell([
-		assemblyControlFlowGraphOutput,
-	]),
+	'control-flow-graph': outputArtifactCell([assemblyControlFlowGraphOutput]),
 });
 
 const clangClArtifacts = artifactCells({
@@ -578,8 +523,7 @@ const goArtifacts = artifactCells({
 			'Go SSA CFG',
 			'Build a source-level graph from the final GOSSAFUNC SSA snapshot.',
 			goSsaControlFlowGraphProducer,
-			(raw, _options, context) =>
-				parseGoSsaControlFlowGraphs(raw.text, context.source.uri.toString()),
+			(raw, _options, context) => parseGoSsaControlFlowGraphs(raw.text, context.source.uri.toString()),
 		),
 	]),
 });
@@ -773,24 +717,21 @@ export function detectToolchainDefinition(
 	platform: NodeJS.Platform = process.platform,
 ): { kind: ToolchainKind; definition: ToolchainDefinition } | undefined {
 	const executableName = path.basename(executable);
-	const matches = supportedToolchainKinds.filter(kind =>
-		toolchainDefinitions[kind].executablePattern.test(executableName)
+	const matches = supportedToolchainKinds.filter((kind) =>
+		toolchainDefinitions[kind].executablePattern.test(executableName),
 	);
 	if (matches.includes('apple-clang')) {
-		const kind = /apple clang/i.test(versionOutput) || platform === 'darwin'
-			? 'apple-clang'
-			: 'clang';
+		const kind = /apple clang/i.test(versionOutput) || platform === 'darwin' ? 'apple-clang' : 'clang';
 		return { kind, definition: toolchainDefinitions[kind] };
 	}
 	const kind = matches[0];
 	return kind ? { kind, definition: toolchainDefinitions[kind] } : undefined;
 }
 
-export const supportedToolchainKinds: readonly ToolchainKind[] =
-	Object.keys(toolchainDefinitions) as ToolchainKind[];
+export const supportedToolchainKinds: readonly ToolchainKind[] = Object.keys(toolchainDefinitions) as ToolchainKind[];
 
 export const supportedLanguageIdentifiers: ReadonlySet<string> = new Set(
-	supportedToolchainKinds.flatMap(kind => toolchainDefinitions[kind].languageIdentifiers),
+	supportedToolchainKinds.flatMap((kind) => toolchainDefinitions[kind].languageIdentifiers),
 );
 
 export interface ToolchainProfileOverrides {
@@ -823,10 +764,7 @@ export function createToolchainProfile(
 	};
 }
 
-export function resolveArtifactAvailability(
-	profile: ToolchainProfile,
-	kind: ArtifactKind,
-): ToolchainArtifactCell {
+export function resolveArtifactAvailability(profile: ToolchainProfile, kind: ArtifactKind): ToolchainArtifactCell {
 	const cell: ToolchainArtifactCell = toolchainDefinitions[profile.kind].artifacts[kind];
 	if (cell.status === 'available' && cell.outputs) {
 		return cell;
@@ -871,7 +809,7 @@ export function resolveArtifactOutput(
 			explanation: `Select an output for ${artifactDefinitions[kind].label.toLowerCase()}.`,
 		};
 	}
-	const output = cell.outputs.find(candidate => candidate.id === outputId);
+	const output = cell.outputs.find((candidate) => candidate.id === outputId);
 	if (output === undefined) {
 		return {
 			status: 'unsupported',
@@ -888,15 +826,12 @@ function resolveImplementationAvailability(
 	profile: ToolchainProfile,
 	cell: ResolvedToolchainArtifactCell,
 ): ResolvedToolchainArtifactCell {
-	if (
-		cell.status === 'available'
-		&& cell.requiredTool
-		&& !profile.tools[cell.requiredTool.name]
-	) {
+	if (cell.status === 'available' && cell.requiredTool && !profile.tools[cell.requiredTool.name]) {
 		return {
 			status: 'unavailable',
-			explanation: `${cell.requiredTool.label} was not detected or configured as the `
-				+ `${cell.requiredTool.name} auxiliary tool for ${profile.displayName}.`,
+			explanation:
+				`${cell.requiredTool.label} was not detected or configured as the ` +
+				`${cell.requiredTool.name} auxiliary tool for ${profile.displayName}.`,
 		};
 	}
 	return cell;
@@ -915,9 +850,9 @@ export function resolveArtifactOptionAvailability(
 		return profile.tools.demangler
 			? { status: 'available' }
 			: {
-				status: 'unavailable',
-				explanation: `No demangler was detected or configured for ${profile.displayName}.`,
-			};
+					status: 'unavailable',
+					explanation: `No demangler was detected or configured for ${profile.displayName}.`,
+				};
 	}
 	if (id === 'intel') {
 		const intelSyntax = getToolchainDefinition(profile.kind).intelSyntax ?? 'unsupported';
@@ -926,14 +861,14 @@ export function resolveArtifactOptionAvailability(
 		}
 		return intelSyntax === 'inherent'
 			? {
-				status: 'unavailable',
-				explanation: `${profile.displayName} already emits Intel syntax.`,
-				reason: 'inherent',
-			}
+					status: 'unavailable',
+					explanation: `${profile.displayName} already emits Intel syntax.`,
+					reason: 'inherent',
+				}
 			: {
-				status: 'unsupported',
-				explanation: `${profile.displayName} does not support selectable Intel syntax.`,
-			};
+					status: 'unsupported',
+					explanation: `${profile.displayName} does not support selectable Intel syntax.`,
+				};
 	}
 	return { status: 'available' };
 }

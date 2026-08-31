@@ -1,7 +1,4 @@
-import type {
-	ArtifactKind,
-	ArtifactOptionAvailability,
-} from '../../types/index.js';
+import type { ArtifactKind, ArtifactOptionAvailability } from '../../types/index.js';
 import type { QuickPickItem } from 'vscode';
 
 export interface ArtifactPickerChoice {
@@ -16,12 +13,10 @@ export interface ArtifactPickerSections {
 	readonly unavailable: readonly ArtifactPickerChoice[];
 }
 
-export function partitionArtifactPickerChoices(
-	choices: readonly ArtifactPickerChoice[],
-): ArtifactPickerSections {
+export function partitionArtifactPickerChoices(choices: readonly ArtifactPickerChoice[]): ArtifactPickerSections {
 	return {
-		available: choices.filter(choice => choice.availability.status === 'available'),
-		unavailable: choices.filter(choice => choice.availability.status === 'unavailable'),
+		available: choices.filter((choice) => choice.availability.status === 'available'),
+		unavailable: choices.filter((choice) => choice.availability.status === 'unavailable'),
 	};
 }
 

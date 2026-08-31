@@ -1,9 +1,5 @@
 import { graphlib, layout } from '@dagrejs/dagre';
-import type {
-	ControlFlowEdge,
-	ControlFlowGraph,
-	ControlFlowNode,
-} from '../src/types/index.js';
+import type { ControlFlowEdge, ControlFlowGraph, ControlFlowNode } from '../src/types/index.js';
 import { analyzeGraphStructure } from '../src/artifacts/control-flow-graph/graph-structure.js';
 import {
 	parseHostMessage,
@@ -76,7 +72,7 @@ selector.addEventListener('blur', () => {
 		hideFunctionOptions();
 	}, 120);
 });
-selector.addEventListener('keydown', event => {
+selector.addEventListener('keydown', (event) => {
 	if (event.key === 'Enter') {
 		event.preventDefault();
 		selectNamedGraph();
@@ -116,11 +112,15 @@ openNodeSource.addEventListener('click', () => {
 	}
 });
 
-canvas.addEventListener('wheel', event => {
-	event.preventDefault();
-	zoomBy(event.deltaY < 0 ? 1.1 : 1 / 1.1, event.offsetX, event.offsetY);
-}, { passive: false });
-canvas.addEventListener('pointerdown', event => {
+canvas.addEventListener(
+	'wheel',
+	(event) => {
+		event.preventDefault();
+		zoomBy(event.deltaY < 0 ? 1.1 : 1 / 1.1, event.offsetX, event.offsetY);
+	},
+	{ passive: false },
+);
+canvas.addEventListener('pointerdown', (event) => {
 	if (event.button !== 0) {
 		return;
 	}
@@ -131,7 +131,7 @@ canvas.addEventListener('pointerdown', event => {
 	suppressClick = false;
 	pointer = { x: event.clientX, y: event.clientY, origin: viewport, dragging: false };
 });
-canvas.addEventListener('pointermove', event => {
+canvas.addEventListener('pointermove', (event) => {
 	if (!pointer) {
 		return;
 	}
@@ -151,7 +151,7 @@ canvas.addEventListener('pointermove', event => {
 canvas.addEventListener('pointerup', finishDrag);
 canvas.addEventListener('pointercancel', finishDrag);
 
-window.addEventListener('message', event => {
+window.addEventListener('message', (event) => {
 	const message = parseHostMessage(event.data);
 	if (!message) {
 		return;
@@ -170,11 +170,8 @@ function handleHostMessage(message: HostMessage): void {
 	staleBadge.hidden = !artifact.stale;
 	renderDiagnostics(artifact);
 	const priorState = vscode.getState();
-	const previous = message.selectedGraphId
-		?? priorState?.selectedGraphId
-		?? selector.value;
-	const selected = artifact.graphs.find(graph => graph.id === previous)
-		?? artifact.graphs[0];
+	const previous = message.selectedGraphId ?? priorState?.selectedGraphId ?? selector.value;
+	const selected = artifact.graphs.find((graph) => graph.id === previous) ?? artifact.graphs[0];
 	selector.disabled = artifact.graphs.length < 2;
 	if (!selected) {
 		currentGraph = undefined;
@@ -190,8 +187,9 @@ function handleHostMessage(message: HostMessage): void {
 }
 
 function selectNamedGraph(): void {
-	const graph = artifact?.graphs.find(candidate =>
-		candidate.label === selector.value || candidate.id === selector.value);
+	const graph = artifact?.graphs.find(
+		(candidate) => candidate.label === selector.value || candidate.id === selector.value,
+	);
 	if (graph) {
 		selectGraph(graph.id, true, true);
 	}
@@ -200,22 +198,26 @@ function selectNamedGraph(): void {
 
 function renderFunctionOptions(): void {
 	const query = selector.value.trim().toLocaleLowerCase();
-	const matching = (artifact?.graphs ?? []).filter(graph =>
-		!query || graph.label.toLocaleLowerCase().includes(query) || graph.id.toLocaleLowerCase().includes(query));
-	functionOptions.replaceChildren(...matching.map(graph => {
-		const option = document.createElement('button');
-		option.type = 'button';
-		option.className = 'function-option';
-		option.role = 'option';
-		option.textContent = graph.label;
-		option.title = graph.id;
-		option.addEventListener('pointerdown', event => {
-			event.preventDefault();
-			chooseFunction(graph);
-		});
-		option.addEventListener('click', () => chooseFunction(graph));
-		return option;
-	}));
+	const matching = (artifact?.graphs ?? []).filter(
+		(graph) =>
+			!query || graph.label.toLocaleLowerCase().includes(query) || graph.id.toLocaleLowerCase().includes(query),
+	);
+	functionOptions.replaceChildren(
+		...matching.map((graph) => {
+			const option = document.createElement('button');
+			option.type = 'button';
+			option.className = 'function-option';
+			option.role = 'option';
+			option.textContent = graph.label;
+			option.title = graph.id;
+			option.addEventListener('pointerdown', (event) => {
+				event.preventDefault();
+				chooseFunction(graph);
+			});
+			option.addEventListener('click', () => chooseFunction(graph));
+			return option;
+		}),
+	);
 	functionOptions.hidden = matching.length === 0;
 	selector.setAttribute('aria-expanded', String(!functionOptions.hidden));
 }
@@ -232,7 +234,7 @@ function hideFunctionOptions(): void {
 }
 
 function selectGraph(graphId: string, notifyHost: boolean, fit: boolean): void {
-	const graph = artifact?.graphs.find(candidate => candidate.id === graphId);
+	const graph = artifact?.graphs.find((candidate) => candidate.id === graphId);
 	if (!graph) {
 		return;
 	}
@@ -285,13 +287,11 @@ const labelMetrics = ((): { characterWidth: number; lineHeight: number } => {
 function labelLines(label: string): string[] {
 	return label
 		.split(/\r?\n/)
-		.map(line => line.length > maximumLabelColumns
-			? `${line.slice(0, maximumLabelColumns - 1)}…`
-			: line);
+		.map((line) => (line.length > maximumLabelColumns ? `${line.slice(0, maximumLabelColumns - 1)}…` : line));
 }
 
 function nodeSize(lines: readonly string[]): { width: number; height: number } {
-	const columns = Math.max(...lines.map(line => line.length), 1);
+	const columns = Math.max(...lines.map((line) => line.length), 1);
 	return {
 		width: Math.max(150, nodePaddingX * 2 + columns * labelMetrics.characterWidth),
 		height: Math.max(40, nodePaddingY * 2 + lines.length * labelMetrics.lineHeight),
@@ -307,11 +307,16 @@ function drawGraph(graph: ControlFlowGraph): void {
 		layoutGraph.setNode(node.id, nodeSize(labelLines(node.label)));
 	}
 	graph.edges.forEach((edge, index) => {
-		layoutGraph.setEdge(edge.from, edge.to, {
-			width: edge.label ? Math.min(260, 12 + edge.label.length * 6.5) : 0,
-			height: edge.label ? 20 : 0,
-			edge,
-		}, `edge-${index}`);
+		layoutGraph.setEdge(
+			edge.from,
+			edge.to,
+			{
+				width: edge.label ? Math.min(260, 12 + edge.label.length * 6.5) : 0,
+				height: edge.label ? 20 : 0,
+				edge,
+			},
+			`edge-${index}`,
+		);
 	});
 	layout(layoutGraph);
 	const bounds = layoutGraph.graph();
@@ -355,13 +360,15 @@ function drawGraph(graph: ControlFlowGraph): void {
 			'aria-label': nodeDescription(node),
 			'data-node-id': node.id,
 		});
-		group.append(svgElement('rect', {
-			x: String(-position.width / 2),
-			y: String(-position.height / 2),
-			width: String(position.width),
-			height: String(position.height),
-			rx: '7',
-		}));
+		group.append(
+			svgElement('rect', {
+				x: String(-position.width / 2),
+				y: String(-position.height / 2),
+				width: String(position.width),
+				height: String(position.height),
+				rx: '7',
+			}),
+		);
 		const lines = labelLines(node.label);
 		const text = svgElement('text', { class: 'node-label', 'text-anchor': 'start' });
 		const left = String(-position.width / 2 + nodePaddingX);
@@ -369,9 +376,7 @@ function drawGraph(graph: ControlFlowGraph): void {
 		lines.forEach((line, index) => {
 			const span = svgElement('tspan', {
 				x: left,
-				...(index === 0
-					? { y: String(firstBaseline) }
-					: { dy: String(labelMetrics.lineHeight) }),
+				...(index === 0 ? { y: String(firstBaseline) } : { dy: String(labelMetrics.lineHeight) }),
 			});
 			span.textContent = line;
 			text.append(span);
@@ -391,7 +396,7 @@ function drawGraph(graph: ControlFlowGraph): void {
 		group.addEventListener('focus', () => {
 			focusedNodeId = node.id;
 		});
-		group.addEventListener('keydown', event => navigateGraph(event, graph, node));
+		group.addEventListener('keydown', (event) => navigateGraph(event, graph, node));
 		nodeLayer.append(group);
 	}
 	viewportGroup.append(nodeLayer);
@@ -399,18 +404,20 @@ function drawGraph(graph: ControlFlowGraph): void {
 }
 
 function renderDiagnostics(value: SerializedGraphArtifact): void {
-	const messages = [
-		...(value.failure ? [`Refresh failed: ${value.failure}`] : []),
-		...value.diagnostics,
-	];
-	diagnosticList.replaceChildren(...messages.map(message => {
-		const row = document.createElement('div');
-		row.className = value.failure && messages[0] === message
-			? 'diagnostic error'
-			: /\bwarning\b/iu.test(message) ? 'diagnostic warning' : 'diagnostic';
-		row.textContent = message;
-		return row;
-	}));
+	const messages = [...(value.failure ? [`Refresh failed: ${value.failure}`] : []), ...value.diagnostics];
+	diagnosticList.replaceChildren(
+		...messages.map((message) => {
+			const row = document.createElement('div');
+			row.className =
+				value.failure && messages[0] === message
+					? 'diagnostic error'
+					: /\bwarning\b/iu.test(message)
+						? 'diagnostic warning'
+						: 'diagnostic';
+			row.textContent = message;
+			return row;
+		}),
+	);
 	const summary = diagnostics.querySelector('summary');
 	if (summary) {
 		summary.textContent = `Diagnostics (${messages.length})`;
@@ -449,7 +456,7 @@ function tracePath(graph: ControlFlowGraph, targetId: string): void {
 		if (current === targetId) {
 			break;
 		}
-		for (const edge of graph.edges.filter(candidate => candidate.from === current)) {
+		for (const edge of graph.edges.filter((candidate) => candidate.from === current)) {
 			if (!previous.has(edge.to) && edge.to !== entry) {
 				previous.set(edge.to, current);
 				pending.push(edge.to);
@@ -464,8 +471,10 @@ function tracePath(graph: ControlFlowGraph, targetId: string): void {
 		element.classList.toggle('path-node', path.has(element.dataset.nodeId ?? ''));
 	}
 	for (const element of viewportGroup.querySelectorAll<SVGPathElement>('.edge')) {
-		element.classList.toggle('path-edge', path.has(element.dataset.from ?? '')
-			&& path.has(element.dataset.to ?? ''));
+		element.classList.toggle(
+			'path-edge',
+			path.has(element.dataset.from ?? '') && path.has(element.dataset.to ?? ''),
+		);
 	}
 }
 
@@ -477,16 +486,19 @@ function navigateGraph(event: KeyboardEvent, graph: ControlFlowGraph, node: Cont
 	}
 	const forward = event.key === 'ArrowDown' || event.key === 'ArrowRight';
 	const backward = event.key === 'ArrowUp' || event.key === 'ArrowLeft';
-	const target = event.key === 'Home'
-		? graph.entryNodeId
-		: forward ? graph.edges.find(edge => edge.from === node.id)?.to
-			: backward ? graph.edges.find(edge => edge.to === node.id)?.from
-				: undefined;
+	const target =
+		event.key === 'Home'
+			? graph.entryNodeId
+			: forward
+				? graph.edges.find((edge) => edge.from === node.id)?.to
+				: backward
+					? graph.edges.find((edge) => edge.to === node.id)?.from
+					: undefined;
 	if (!target) {
 		return;
 	}
 	event.preventDefault();
-	const next = graph.nodes.find(candidate => candidate.id === target);
+	const next = graph.nodes.find((candidate) => candidate.id === target);
 	if (next) {
 		selectNode(graph, next);
 	}
@@ -497,8 +509,10 @@ function emphasize(nodeId: string | undefined, persistent = false): void {
 		element.classList.toggle('incident', Boolean(nodeId) && element.dataset.nodeId === nodeId);
 	}
 	for (const element of viewportGroup.querySelectorAll<SVGPathElement>('.edge')) {
-		element.classList.toggle('incident', Boolean(nodeId)
-			&& (element.dataset.from === nodeId || element.dataset.to === nodeId));
+		element.classList.toggle(
+			'incident',
+			Boolean(nodeId) && (element.dataset.from === nodeId || element.dataset.to === nodeId),
+		);
 	}
 	if (!persistent && selectedNode) {
 		emphasize(selectedNode.id, true);
@@ -508,8 +522,11 @@ function emphasize(nodeId: string | undefined, persistent = false): void {
 function applySearch(): void {
 	const query = graphSearch.value.trim().toLocaleLowerCase();
 	for (const element of viewportGroup.querySelectorAll<SVGGElement>('.node')) {
-		const node = currentGraph?.nodes.find(candidate => candidate.id === element.dataset.nodeId);
-		element.classList.toggle('search-match', Boolean(query) && Boolean(node?.label.toLocaleLowerCase().includes(query)));
+		const node = currentGraph?.nodes.find((candidate) => candidate.id === element.dataset.nodeId);
+		element.classList.toggle(
+			'search-match',
+			Boolean(query) && Boolean(node?.label.toLocaleLowerCase().includes(query)),
+		);
 		element.classList.toggle('search-muted', Boolean(query) && !node?.label.toLocaleLowerCase().includes(query));
 	}
 }
@@ -538,7 +555,7 @@ function renderMinimap(): void {
 	minimapContent.append(copy);
 }
 
-minimap.addEventListener('pointerdown', event => {
+minimap.addEventListener('pointerdown', (event) => {
 	if (!currentGraph) {
 		return;
 	}
@@ -661,5 +678,5 @@ function clamp(value: number, minimum: number, maximum: number): number {
 }
 
 function cssEscape(value: string): string {
-	return value.replace(/[^a-zA-Z0-9_-]/g, character => `\\${character}`);
+	return value.replace(/[^a-zA-Z0-9_-]/g, (character) => `\\${character}`);
 }

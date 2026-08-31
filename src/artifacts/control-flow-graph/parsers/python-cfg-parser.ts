@@ -40,10 +40,7 @@ interface PythonCodeObject {
 	readonly exceptions: readonly PythonExceptionEntry[];
 }
 
-export function parsePythonControlFlowGraphs(
-	text: string,
-	workingDirectory: string,
-): GraphParseResult {
+export function parsePythonControlFlowGraphs(text: string, workingDirectory: string): GraphParseResult {
 	let payload: unknown;
 	try {
 		payload = JSON.parse(text);
@@ -85,7 +82,7 @@ function codeObjectGraph(
 		};
 	}
 	const leaders = new Set<number>([code.instructions[0].offset]);
-	const offsets = new Set(code.instructions.map(instruction => instruction.offset));
+	const offsets = new Set(code.instructions.map((instruction) => instruction.offset));
 	let malformed = false;
 	for (const [index, instruction] of code.instructions.entries()) {
 		if (instruction.isJumpTarget) {
@@ -147,12 +144,12 @@ function codeObjectGraph(
 	const nodes: ControlFlowNode[] = blocks.map((block, blockIndex) => {
 		const last = block.at(-1)!;
 		const source = blockSource(block, code.filename, workingDirectory);
-		const terminal = last.terminal ? (last.return ? 'return' as const : 'throw' as const) : undefined;
+		const terminal = last.terminal ? (last.return ? ('return' as const) : ('throw' as const)) : undefined;
 		return {
 			id: nodeId(blockIndex),
 			label: block.map(formatInstruction).join('\n'),
 			...(source ? { source } : {}),
-			referencedArtifactLines: block.map(instruction => instruction.offset),
+			referencedArtifactLines: block.map((instruction) => instruction.offset),
 			...(terminal ? { terminal } : {}),
 		};
 	});
@@ -196,7 +193,7 @@ function codeObjectGraph(
 			continue;
 		}
 		for (const [blockIndex, block] of blocks.entries()) {
-			if (block.some(instruction => instruction.offset >= entry.start && instruction.offset < entry.end)) {
+			if (block.some((instruction) => instruction.offset >= entry.start && instruction.offset < entry.end)) {
 				addEdge({
 					from: nodeId(blockIndex),
 					to: nodeId(target),
@@ -207,7 +204,9 @@ function codeObjectGraph(
 		}
 	}
 	if (malformed) {
-		diagnostics.push(`Python code object ${JSON.stringify(code.name)} was omitted because its control-flow structure is malformed.`);
+		diagnostics.push(
+			`Python code object ${JSON.stringify(code.name)} was omitted because its control-flow structure is malformed.`,
+		);
 		return undefined;
 	}
 	return {
@@ -224,7 +223,7 @@ function blockSource(
 	filename: string,
 	workingDirectory: string,
 ): ControlFlowSourceLocation | undefined {
-	const instruction = instructions.find(item => item.startsLine !== undefined || item.line !== undefined);
+	const instruction = instructions.find((item) => item.startsLine !== undefined || item.line !== undefined);
 	const line = instruction?.startsLine ?? instruction?.line;
 	if (!instruction || line === undefined || line < 1) {
 		return undefined;
@@ -233,12 +232,8 @@ function blockSource(
 		uri: compilerSourceUri(filename, workingDirectory),
 		line: line - 1,
 		column: Math.max(0, instruction.column ?? 0),
-		endLine: instruction.endLine && instruction.endLine >= line
-			? instruction.endLine - 1
-			: undefined,
-		endColumn: instruction.endColumn !== undefined
-			? Math.max(0, instruction.endColumn)
-			: undefined,
+		endLine: instruction.endLine && instruction.endLine >= line ? instruction.endLine - 1 : undefined,
+		endColumn: instruction.endColumn !== undefined ? Math.max(0, instruction.endColumn) : undefined,
 	};
 }
 
@@ -246,33 +241,33 @@ function firstInstructionAtOrAfter(
 	instructions: readonly PythonInstruction[],
 	boundary: number,
 ): PythonInstruction | undefined {
-	return instructions.find(instruction => instruction.offset >= boundary);
+	return instructions.find((instruction) => instruction.offset >= boundary);
 }
 
-
-
-
-
-
 function parseCodeObject(value: unknown): PythonCodeObject | undefined {
-	if (!isRecord(value)
-		|| typeof value.name !== 'string'
-		|| !value.name.trim()
-		|| typeof value.filename !== 'string'
-		|| optionalPositiveInteger(value.firstLine) === undefined
-		|| !Array.isArray(value.instructions)
-		|| !Array.isArray(value.exceptions)) {
+	if (
+		!isRecord(value) ||
+		typeof value.name !== 'string' ||
+		!value.name.trim() ||
+		typeof value.filename !== 'string' ||
+		optionalPositiveInteger(value.firstLine) === undefined ||
+		!Array.isArray(value.instructions) ||
+		!Array.isArray(value.exceptions)
+	) {
 		return undefined;
 	}
 	const instructions = value.instructions.map(parseInstruction);
 	const exceptions = value.exceptions.map(parseExceptionEntry);
-	if (instructions.some(item => !item) || exceptions.some(item => !item)) {
+	if (instructions.some((item) => !item) || exceptions.some((item) => !item)) {
 		return undefined;
 	}
 	const parsedInstructions = instructions as PythonInstruction[];
-	if (parsedInstructions.some((instruction, index) =>
-		instruction.offset < 0
-		|| (index > 0 && instruction.offset <= parsedInstructions[index - 1].offset))) {
+	if (
+		parsedInstructions.some(
+			(instruction, index) =>
+				instruction.offset < 0 || (index > 0 && instruction.offset <= parsedInstructions[index - 1].offset),
+		)
+	) {
 		return undefined;
 	}
 	return {
@@ -285,21 +280,23 @@ function parseCodeObject(value: unknown): PythonCodeObject | undefined {
 }
 
 function parseInstruction(value: unknown): PythonInstruction | undefined {
-	if (!isRecord(value)
-		|| integer(value.offset) === undefined
-		|| typeof value.opname !== 'string'
-		|| typeof value.argrepr !== 'string'
-		|| typeof value.isJumpTarget !== 'boolean'
-		|| typeof value.isJump !== 'boolean'
-		|| typeof value.conditional !== 'boolean'
-		|| typeof value.terminal !== 'boolean'
-		|| typeof value.return !== 'boolean'
-		|| !isOptionalPositiveInteger(value.startsLine)
-		|| !isOptionalPositiveInteger(value.line)
-		|| !isOptionalPositiveInteger(value.endLine)
-		|| !isOptionalNonnegativeInteger(value.column)
-		|| !isOptionalNonnegativeInteger(value.endColumn)
-		|| !isOptionalNonnegativeInteger(value.target)) {
+	if (
+		!isRecord(value) ||
+		integer(value.offset) === undefined ||
+		typeof value.opname !== 'string' ||
+		typeof value.argrepr !== 'string' ||
+		typeof value.isJumpTarget !== 'boolean' ||
+		typeof value.isJump !== 'boolean' ||
+		typeof value.conditional !== 'boolean' ||
+		typeof value.terminal !== 'boolean' ||
+		typeof value.return !== 'boolean' ||
+		!isOptionalPositiveInteger(value.startsLine) ||
+		!isOptionalPositiveInteger(value.line) ||
+		!isOptionalPositiveInteger(value.endLine) ||
+		!isOptionalNonnegativeInteger(value.column) ||
+		!isOptionalNonnegativeInteger(value.endColumn) ||
+		!isOptionalNonnegativeInteger(value.target)
+	) {
 		return undefined;
 	}
 	const startsLine = optionalPositiveInteger(value.startsLine);
@@ -327,13 +324,15 @@ function parseInstruction(value: unknown): PythonInstruction | undefined {
 }
 
 function parseExceptionEntry(value: unknown): PythonExceptionEntry | undefined {
-	if (!isRecord(value)
-		|| optionalNonnegativeInteger(value.start) === undefined
-		|| optionalNonnegativeInteger(value.end) === undefined
-		|| optionalNonnegativeInteger(value.target) === undefined
-		|| optionalNonnegativeInteger(value.depth) === undefined
-		|| (value.end as number) < (value.start as number)
-		|| typeof value.lasti !== 'boolean') {
+	if (
+		!isRecord(value) ||
+		optionalNonnegativeInteger(value.start) === undefined ||
+		optionalNonnegativeInteger(value.end) === undefined ||
+		optionalNonnegativeInteger(value.target) === undefined ||
+		optionalNonnegativeInteger(value.depth) === undefined ||
+		(value.end as number) < (value.start as number) ||
+		typeof value.lasti !== 'boolean'
+	) {
 		return undefined;
 	}
 	return {
@@ -354,12 +353,11 @@ function pythonJumpTargetKind(opname: string): 'true' | 'false' {
 	return opname.includes('IF') && !opname.includes('FALSE') ? 'true' : 'false';
 }
 
-
 function optionalPositiveInteger(value: unknown): number | undefined {
 	return value === null || value === undefined
 		? undefined
 		: integer(value) !== undefined && (value as number) > 0
-			? value as number
+			? (value as number)
 			: undefined;
 }
 
@@ -367,7 +365,7 @@ function optionalNonnegativeInteger(value: unknown): number | undefined {
 	return value === null || value === undefined
 		? undefined
 		: integer(value) !== undefined && (value as number) >= 0
-			? value as number
+			? (value as number)
 			: undefined;
 }
 
@@ -380,7 +378,7 @@ function isOptionalNonnegativeInteger(value: unknown): boolean {
 }
 
 function integer(value: unknown): number | undefined {
-	return Number.isSafeInteger(value) ? value as number : undefined;
+	return Number.isSafeInteger(value) ? (value as number) : undefined;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -46,9 +46,9 @@ test('scroll synchronization suppresses every target event until scrolling settl
 	suppression.begin(targetEditor);
 	assert.equal(suppression.shouldSuppress(sourceEditor), false);
 	assert.equal(suppression.shouldSuppress(targetEditor), true);
-	await new Promise(resolve => setTimeout(resolve, 5));
+	await new Promise((resolve) => setTimeout(resolve, 5));
 	assert.equal(suppression.shouldSuppress(targetEditor), true);
-	await new Promise(resolve => setTimeout(resolve, 20));
+	await new Promise((resolve) => setTimeout(resolve, 20));
 	assert.equal(suppression.shouldSuppress(targetEditor), false);
 
 	suppression.dispose();

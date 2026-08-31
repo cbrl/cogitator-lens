@@ -6,14 +6,16 @@ import { normalizeOptimizationRemark, optimizationRemarksRenderer } from './opti
 export const clangOptimizationRemarksOutput: ArtifactOutputSpec = Object.freeze({
 	output: { filename: 'output.opt.yaml', optional: true },
 	arguments: (outputFile: string, temporaryDirectory: string) => [
-		'-c', '-fsave-optimization-record=yaml',
+		'-c',
+		'-fsave-optimization-record=yaml',
 		`-foptimization-record-file=${outputFile}`,
-		'-o', path.join(temporaryDirectory, 'output.o'),
+		'-o',
+		path.join(temporaryDirectory, 'output.o'),
 	],
 });
 
 export function parseClangOptimizationRemarks(text: string, workingDirectory: string) {
-	return processRawLlvmOptRemarks(text).map(remark => normalizeOptimizationRemark(remark, workingDirectory));
+	return processRawLlvmOptRemarks(text).map((remark) => normalizeOptimizationRemark(remark, workingDirectory));
 }
 
 export const renderClangOptimizationRemarks = optimizationRemarksRenderer(parseClangOptimizationRemarks);

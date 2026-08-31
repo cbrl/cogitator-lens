@@ -77,9 +77,7 @@ export function invocationDetails(command: ArtifactCommand): InvocationDetails {
 		executable: command.executable,
 		args: Object.freeze([...command.arguments]),
 		cwd: command.workingDirectory,
-		environmentVariableNames: Object.freeze(
-			[...command.environmentVariableNames].sort(),
-		),
+		environmentVariableNames: Object.freeze([...command.environmentVariableNames].sort()),
 	});
 }
 
@@ -121,10 +119,7 @@ export interface RenderedArtifactLineSource {
 	readonly mainSource?: boolean;
 }
 
-export type OptimizationRemarkCategory =
-	| 'passed'
-	| 'missed'
-	| 'analysis';
+export type OptimizationRemarkCategory = 'passed' | 'missed' | 'analysis';
 
 export interface OptimizationRemarkLineAnnotation {
 	readonly kind: 'optimization-remark';
@@ -132,11 +127,7 @@ export interface OptimizationRemarkLineAnnotation {
 	readonly message: string;
 }
 
-export type StackUsageQualifier =
-	| 'static'
-	| 'dynamic'
-	| 'dynamic-bounded'
-	| 'vm';
+export type StackUsageQualifier = 'static' | 'dynamic' | 'dynamic-bounded' | 'vm';
 
 export interface StackUsageLineAnnotation {
 	readonly kind: 'stack-usage';
@@ -146,9 +137,7 @@ export interface StackUsageLineAnnotation {
 	readonly qualifier: StackUsageQualifier;
 }
 
-export type ArtifactLineAnnotation =
-	| OptimizationRemarkLineAnnotation
-	| StackUsageLineAnnotation;
+export type ArtifactLineAnnotation = OptimizationRemarkLineAnnotation | StackUsageLineAnnotation;
 
 export interface RenderedArtifactLine {
 	readonly text: string;
@@ -188,19 +177,9 @@ export interface ControlFlowSourceLocation {
 	readonly endColumn?: number;
 }
 
-export type ControlFlowTerminal =
-	| 'return'
-	| 'throw'
-	| 'resume'
-	| 'unreachable';
+export type ControlFlowTerminal = 'return' | 'throw' | 'resume' | 'unreachable';
 
-export type ControlFlowEdgeKind =
-	| 'unconditional'
-	| 'true'
-	| 'false'
-	| 'fallthrough'
-	| 'return'
-	| 'exception';
+export type ControlFlowEdgeKind = 'unconditional' | 'true' | 'false' | 'fallthrough' | 'return' | 'exception';
 
 export interface ControlFlowNode {
 	readonly id: string;
@@ -270,10 +249,7 @@ export interface SourceState {
 
 export type ProductionKey = string & { readonly brand: unique symbol };
 
-export function productionKey(
-	request: ArtifactRequest,
-	source: SourceState,
-): ProductionKey {
+export function productionKey(request: ArtifactRequest, source: SourceState): ProductionKey {
 	const {
 		cancellationToken: _cancellationToken,
 		onInvocation: _onInvocation,

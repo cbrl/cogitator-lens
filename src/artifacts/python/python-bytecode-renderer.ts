@@ -1,9 +1,4 @@
-import type {
-	DisplayOptions,
-	RawArtifact,
-	RenderedTextArtifact,
-	RenderedArtifactLine,
-} from '../../types/index.js';
+import type { DisplayOptions, RawArtifact, RenderedTextArtifact, RenderedArtifactLine } from '../../types/index.js';
 import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
 
@@ -20,7 +15,7 @@ export function renderPythonBytecode(
 	let instructionCount = 0;
 	let codeObjectCount = 1;
 
-	const lines: RenderedArtifactLine[] = splitLines(raw.text).map(text => {
+	const lines: RenderedArtifactLine[] = splitLines(raw.text).map((text) => {
 		if (/^Disassembly of\b/.test(text)) {
 			currentSourceLine = undefined;
 			codeObjectCount++;

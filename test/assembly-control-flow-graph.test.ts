@@ -19,8 +19,7 @@ import { noopPropertyGetter } from '../src/vendor/compiler-props.js';
 import { VcAsmParser } from '../src/vendor/lib/parsers/asm-parser-vc.js';
 import type { ParseFiltersAndOutputOptions } from '../src/vendor/types/features/filters.interfaces.js';
 
-const fixture = (name: string): string =>
-	fs.readFileSync(path.join('test', 'fixtures', 'control-flow', name), 'utf8');
+const fixture = (name: string): string => fs.readFileSync(path.join('test', 'fixtures', 'control-flow', name), 'utf8');
 
 /**
  * Builds parser input from a listing.
@@ -39,10 +38,11 @@ function assemblyLines(listing: string, uri = 'file:///work/main.c'): AssemblyLi
 }
 
 test('MSVC listings become graphs through the toolchain assembly parser', () => {
-	const parsed = new VcAsmParser(noopPropertyGetter)
-		.process(fixture('msvc-listing.asm'), {} as ParseFiltersAndOutputOptions);
-	const result = new MsvcAssemblyCfgParser()
-		.parse(toAssemblyLines(parsed.asm, 'file:///C:/work/main.c', 'C:\\work'));
+	const parsed = new VcAsmParser(noopPropertyGetter).process(
+		fixture('msvc-listing.asm'),
+		{} as ParseFiltersAndOutputOptions,
+	);
+	const result = new MsvcAssemblyCfgParser().parse(toAssemblyLines(parsed.asm, 'file:///C:/work/main.c', 'C:\\work'));
 
 	assert.deepEqual(result.diagnostics, []);
 	assert.equal(result.graphs.length, 1);
@@ -52,7 +52,7 @@ test('MSVC listings become graphs through the toolchain assembly parser', () => 
 	assert.equal(graph.id, 'msvc-asm:classify');
 	assert.equal(graph.entryNodeId, 'classify');
 	assert.deepEqual(
-		graph.nodes.map(node => node.id),
+		graph.nodes.map((node) => node.id),
 		['classify', 'classify#4', '$LN2@classify:', '$LN3@classify:'],
 	);
 	// Upstream's edge is a colour; each branch role is recoverable here.
@@ -68,8 +68,10 @@ test('MSVC listings become graphs through the toolchain assembly parser', () => 
 });
 
 test('MSVC graph nodes carry the source position and the artifact lines behind them', () => {
-	const parsed = new VcAsmParser(noopPropertyGetter)
-		.process(fixture('msvc-listing.asm'), {} as ParseFiltersAndOutputOptions);
+	const parsed = new VcAsmParser(noopPropertyGetter).process(
+		fixture('msvc-listing.asm'),
+		{} as ParseFiltersAndOutputOptions,
+	);
 	const lines = toAssemblyLines(parsed.asm, 'file:///C:/work/main.c', 'C:\\work');
 	const graph = new MsvcAssemblyCfgParser().parse(lines).graphs[0];
 
@@ -77,10 +79,13 @@ test('MSVC graph nodes carry the source position and the artifact lines behind t
 	// `; Line 4` in the listing is the zero-based editor line 3.
 	assert.deepEqual(entry.source, { uri: 'file:///C:/work/main.c', line: 3, column: 0 });
 	assert.deepEqual(
-		entry.referencedArtifactLines?.map(index => parsed.asm[index].text.trim()),
+		entry.referencedArtifactLines?.map((index) => parsed.asm[index].text.trim()),
 		['mov     DWORD PTR [rsp+8], ecx', 'cmp     DWORD PTR value$[rsp], 10', 'jle     SHORT $LN2@classify'],
 	);
-	assert.equal(graph.nodes.every(node => node.source !== undefined), true);
+	assert.equal(
+		graph.nodes.every((node) => node.source !== undefined),
+		true,
+	);
 });
 
 test('MSVC /FAcs address and machine-code columns do not hide control flow', () => {
@@ -113,12 +118,7 @@ test('MSVC /FAcs address and machine-code columns do not hide control flow', () 
 });
 
 test('a final linear MSVC block does not fall through to its ENDP directive', () => {
-	const listing = [
-		'; Function compile flags: /Odtp',
-		'final_linear PROC',
-		'\tnop',
-		'final_linear ENDP',
-	].join('\n');
+	const listing = ['; Function compile flags: /Odtp', 'final_linear PROC', '\tnop', 'final_linear ENDP'].join('\n');
 
 	const result = new MsvcAssemblyCfgParser().parse(assemblyLines(listing));
 
@@ -162,7 +162,10 @@ test('a function that cannot be parsed does not suppress the others', () => {
 
 	const result = new MsvcAssemblyCfgParser().parse(assemblyLines(listing));
 
-	assert.deepEqual(result.graphs.map(graph => graph.label), ['broken', 'good']);
+	assert.deepEqual(
+		result.graphs.map((graph) => graph.label),
+		['broken', 'good'],
+	);
 	assert.equal(result.graphs[0].edges.length, 0);
 	assert.equal(result.diagnostics.length, 1);
 });
@@ -188,25 +191,27 @@ test('clang assembly splits blocks at LBB labels and types every edge', () => {
 		'.Lfunc_end0:',
 	].join('\n');
 
-	const result = new ClangAssemblyCfgParser(new InstructionSetInfo())
-		.parse(assemblyLines(listing));
+	const result = new ClangAssemblyCfgParser(new InstructionSetInfo()).parse(assemblyLines(listing));
 
 	assert.deepEqual(result.diagnostics, []);
 	assert.equal(result.graphs.length, 1);
 	const graph = result.graphs[0];
 	assert.equal(graph.id, 'clang-asm:classify');
 	assert.deepEqual(
-		graph.nodes.map(node => node.id),
+		graph.nodes.map((node) => node.id),
 		['classify', 'classify@4', '.LBB0_2:', '.LBB0_3:'],
 	);
 	assert.deepEqual(
-		graph.edges.map(edge => edge.kind),
+		graph.edges.map((edge) => edge.kind),
 		['true', 'false', 'unconditional', 'fallthrough'],
 	);
 	// A tab-indented `retq` is a return; upstream's `' ret'` substring test is not.
 	assert.equal(graph.nodes.at(-1)?.terminal, 'return');
 	// Directives and CFI pseudo-instructions never reach a node.
-	assert.equal(graph.nodes.some(node => node.label.includes('.cfi_startproc')), false);
+	assert.equal(
+		graph.nodes.some((node) => node.label.includes('.cfi_startproc')),
+		false,
+	);
 });
 
 test('the GCC dialect keeps only labels that own an instruction', () => {
@@ -229,14 +234,20 @@ test('the GCC dialect keeps only labels that own an instruction', () => {
 
 	assert.deepEqual(result.diagnostics, []);
 	// `.L0` owns only a directive, so it never becomes a block.
-	assert.deepEqual(graph.nodes.map(node => node.id), ['classify()', '.L1:', '.L2:']);
-	assert.equal(graph.nodes.some(node => node.label.includes('.L0')), false);
+	assert.deepEqual(
+		graph.nodes.map((node) => node.id),
+		['classify()', '.L1:', '.L2:'],
+	);
+	assert.equal(
+		graph.nodes.some((node) => node.label.includes('.L0')),
+		false,
+	);
 	assert.deepEqual(graph.edges, [
 		{ from: 'classify()', to: '.L2:', kind: 'true' },
 		{ from: 'classify()', to: '.L1:', kind: 'false' },
 	]);
 	assert.deepEqual(
-		graph.nodes.map(node => node.terminal),
+		graph.nodes.map((node) => node.terminal),
 		[undefined, 'return', 'return'],
 	);
 });

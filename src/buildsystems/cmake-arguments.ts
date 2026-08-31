@@ -10,11 +10,7 @@ export function flattenCmakeArguments(
 	const definition = getToolchainDefinition(kind);
 	return [
 		...argumentsList,
-		...(definition.includeFlag
-			? includes.map(value => `${definition.includeFlag}${value}`)
-			: []),
-		...(definition.defineFlag
-			? defines.map(value => `${definition.defineFlag}${value}`)
-			: []),
+		...(definition.includeFlag ? includes.map((value) => `${definition.includeFlag}${value}`) : []),
+		...(definition.defineFlag ? defines.map((value) => `${definition.defineFlag}${value}`) : []),
 	];
 }

@@ -1,13 +1,7 @@
 import path from 'path';
-import type {
-	EnvironmentPath,
-	ResolvedEnvironment,
-} from '@vscode/python-extension';
+import type { EnvironmentPath, ResolvedEnvironment } from '@vscode/python-extension';
 import type { ToolchainProfile } from '../types/index.js';
-import {
-	createToolchainProfile,
-	normalizedExecutableLocalId,
-} from '../toolchains/toolchain-map.js';
+import { createToolchainProfile, normalizedExecutableLocalId } from '../toolchains/toolchain-map.js';
 
 export interface PythonEnvironmentProfile {
 	readonly environment: ResolvedEnvironment;
@@ -40,12 +34,9 @@ export function createPythonEnvironmentProfiles(
 
 		profiles.set(id, {
 			environment,
-			profile: createToolchainProfile(
-				'python',
-				pythonEnvironmentDisplayName(environment),
-				executablePath,
-				{ id },
-			),
+			profile: createToolchainProfile('python', pythonEnvironmentDisplayName(environment), executablePath, {
+				id,
+			}),
 			aliases,
 		});
 	}
@@ -57,8 +48,10 @@ export function matchesPythonEnvironment(
 	environment: PythonEnvironmentProfile,
 	platform: NodeJS.Platform = process.platform,
 ): boolean {
-	return environment.aliases.has(normalizeEnvironmentIdentity(selection.id, platform))
-		|| environment.aliases.has(normalizeEnvironmentIdentity(selection.path, platform));
+	return (
+		environment.aliases.has(normalizeEnvironmentIdentity(selection.id, platform)) ||
+		environment.aliases.has(normalizeEnvironmentIdentity(selection.path, platform))
+	);
 }
 
 export function pythonEnvironmentDisplayName(environment: ResolvedEnvironment): string {
@@ -66,9 +59,10 @@ export function pythonEnvironmentDisplayName(environment: ResolvedEnvironment): 
 		? [environment.version.major, environment.version.minor, environment.version.micro].join('.')
 		: undefined;
 	const environmentName = environment.environment?.name;
-	const qualifier = environmentName
-		?? environment.tools[0]
-		?? (environment.environment ? path.basename(environment.environment.folderUri.fsPath) : undefined);
+	const qualifier =
+		environmentName ??
+		environment.tools[0] ??
+		(environment.environment ? path.basename(environment.environment.folderUri.fsPath) : undefined);
 	const title = `Python${version ? ` ${version}` : ''}${qualifier ? ` (${qualifier})` : ''}`;
 	return `${title} — ${environment.executable.uri?.fsPath ?? environment.path}`;
 }
@@ -79,24 +73,21 @@ export function pythonEnvironmentVersion(environment: ResolvedEnvironment): stri
 		: undefined;
 }
 
-function pythonEnvironmentAliases(
-	environment: ResolvedEnvironment,
-	platform: NodeJS.Platform,
-): ReadonlySet<string> {
-	return new Set([
-		environment.id,
-		environment.path,
-		environment.executable.uri?.fsPath,
-		environment.executable.sysPrefix,
-		environment.environment?.folderUri.fsPath,
-	]
-		.filter((value): value is string => Boolean(value))
-		.map(value => normalizeEnvironmentIdentity(value, platform)));
+function pythonEnvironmentAliases(environment: ResolvedEnvironment, platform: NodeJS.Platform): ReadonlySet<string> {
+	return new Set(
+		[
+			environment.id,
+			environment.path,
+			environment.executable.uri?.fsPath,
+			environment.executable.sysPrefix,
+			environment.environment?.folderUri.fsPath,
+		]
+			.filter((value): value is string => Boolean(value))
+			.map((value) => normalizeEnvironmentIdentity(value, platform)),
+	);
 }
 
 function normalizeEnvironmentIdentity(value: string, platform: NodeJS.Platform): string {
-	const normalized = platform === 'win32'
-		? path.win32.normalize(value)
-		: path.posix.normalize(value);
+	const normalized = platform === 'win32' ? path.win32.normalize(value) : path.posix.normalize(value);
 	return platform === 'win32' ? normalized.toLowerCase() : normalized;
 }

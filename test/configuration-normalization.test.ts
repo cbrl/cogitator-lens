@@ -63,51 +63,65 @@ test('rejects unknown toolchains and defaults malformed optional fields', () => 
 });
 
 test('parses default and workspace compilation settings', () => {
-	assert.deepEqual(parseDefaultCompilationSettings({
-		toolchain: 'clang',
-		args: ['-O2'],
-		env: { SDKROOT: '/sdk' },
-		workingDirectory: '/project/build',
-	}), {
-		toolchain: 'clang',
-		args: ['-O2'],
-		env: { SDKROOT: '/sdk' },
-		workingDirectory: '/project/build',
-	});
-	assert.deepEqual(parseManualCompilationVariants([{
-		id: 'manual:debug',
-		source: '/project/main.cpp',
-		displayLabel: 'Debug',
-		toolchainProfileId: 'user:clang',
-		workingDirectory: '/project',
-		arguments: ['-O0', '-g'],
-		environment: { SDKROOT: '/sdk' },
-		project: 'app',
-	}, {
-		id: 'missing-source',
-		displayLabel: 'Invalid',
-	}]), [{
-		id: 'manual:debug',
-		source: '/project/main.cpp',
-		displayLabel: 'Debug',
-		toolchainProfileId: 'user:clang',
-		workingDirectory: '/project',
-		arguments: ['-O0', '-g'],
-		environment: { SDKROOT: '/sdk' },
-		project: 'app',
-		target: undefined,
-		configuration: undefined,
-	}]);
+	assert.deepEqual(
+		parseDefaultCompilationSettings({
+			toolchain: 'clang',
+			args: ['-O2'],
+			env: { SDKROOT: '/sdk' },
+			workingDirectory: '/project/build',
+		}),
+		{
+			toolchain: 'clang',
+			args: ['-O2'],
+			env: { SDKROOT: '/sdk' },
+			workingDirectory: '/project/build',
+		},
+	);
+	assert.deepEqual(
+		parseManualCompilationVariants([
+			{
+				id: 'manual:debug',
+				source: '/project/main.cpp',
+				displayLabel: 'Debug',
+				toolchainProfileId: 'user:clang',
+				workingDirectory: '/project',
+				arguments: ['-O0', '-g'],
+				environment: { SDKROOT: '/sdk' },
+				project: 'app',
+			},
+			{
+				id: 'missing-source',
+				displayLabel: 'Invalid',
+			},
+		]),
+		[
+			{
+				id: 'manual:debug',
+				source: '/project/main.cpp',
+				displayLabel: 'Debug',
+				toolchainProfileId: 'user:clang',
+				workingDirectory: '/project',
+				arguments: ['-O0', '-g'],
+				environment: { SDKROOT: '/sdk' },
+				project: 'app',
+				target: undefined,
+				configuration: undefined,
+			},
+		],
+	);
 });
 
 test('parses known artifact options into immutable disjoint groups', () => {
-	const result = parseArtifactOptions({
-		assembly: {
-			intel: true,
-			labels: false,
-			notAnOption: true,
+	const result = parseArtifactOptions(
+		{
+			assembly: {
+				intel: true,
+				labels: false,
+				notAnOption: true,
+			},
 		},
-	}, 'assembly');
+		'assembly',
+	);
 	assert.equal(result.production.intel, true);
 	assert.equal(result.display.labels, false);
 	assert.equal(Object.isFrozen(result), true);
@@ -116,28 +130,34 @@ test('parses known artifact options into immutable disjoint groups', () => {
 });
 
 test('parses named artifact presets with kind-specific production inputs', () => {
-	assert.deepEqual(parseArtifactPresets({
-		optimized: {
-			artifactKind: 'assembly',
-			extraArguments: ['-O3'],
-			productionOptions: { intel: true, labels: false },
-		},
-		bytes: {
-			artifactKind: 'binary-disassembly',
-			extraArguments: ['-Os'],
-		},
-		unknown: {
-			artifactKind: 'not-an-artifact',
-		},
-	}), [{
-		id: 'optimized',
-		artifactKind: 'assembly',
-		extraArguments: ['-O3'],
-		productionOptions: { intel: true },
-	}, {
-		id: 'bytes',
-		artifactKind: 'binary-disassembly',
-		extraArguments: ['-Os'],
-		productionOptions: {},
-	}]);
+	assert.deepEqual(
+		parseArtifactPresets({
+			optimized: {
+				artifactKind: 'assembly',
+				extraArguments: ['-O3'],
+				productionOptions: { intel: true, labels: false },
+			},
+			bytes: {
+				artifactKind: 'binary-disassembly',
+				extraArguments: ['-Os'],
+			},
+			unknown: {
+				artifactKind: 'not-an-artifact',
+			},
+		}),
+		[
+			{
+				id: 'optimized',
+				artifactKind: 'assembly',
+				extraArguments: ['-O3'],
+				productionOptions: { intel: true },
+			},
+			{
+				id: 'bytes',
+				artifactKind: 'binary-disassembly',
+				extraArguments: ['-Os'],
+				productionOptions: {},
+			},
+		],
+	);
 });

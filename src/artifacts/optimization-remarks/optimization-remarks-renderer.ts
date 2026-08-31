@@ -18,18 +18,11 @@ export interface OptimizationRemark {
 	readonly message: string;
 }
 
-export type OptimizationRemarksParser = (
-	text: string,
-	workingDirectory: string,
-) => OptimizationRemark[];
+export type OptimizationRemarksParser = (text: string, workingDirectory: string) => OptimizationRemark[];
 
 export function optimizationRemarksRenderer(
 	parser: OptimizationRemarksParser,
-): (
-	raw: RawArtifact,
-	options: DisplayOptions,
-	context: ArtifactRenderContext,
-	) => RenderedTextArtifact {
+): (raw: RawArtifact, options: DisplayOptions, context: ArtifactRenderContext) => RenderedTextArtifact {
 	return (raw, _options, context) => renderOptimizationRemarks(raw, context, parser);
 }
 
@@ -41,18 +34,20 @@ function renderOptimizationRemarks(
 	const remarks = parser(raw.text, raw.command.workingDirectory);
 	const sourceFile = path.normalize(context.source.uri.fsPath);
 	const sourceLineCount = context.source.text.split(/\r\n|\n|\r/).length;
-	const mappedRemarks = remarks.filter(remark =>
-		remark.file !== undefined
-		&& remark.line !== undefined
-		&& remark.line >= 1
-		&& remark.line <= sourceLineCount
-		&& sameSourcePath(remark.file, sourceFile));
+	const mappedRemarks = remarks.filter(
+		(remark) =>
+			remark.file !== undefined &&
+			remark.line !== undefined &&
+			remark.line >= 1 &&
+			remark.line <= sourceLineCount &&
+			sameSourcePath(remark.file, sourceFile),
+	);
 	const categoryCount = (category: OptimizationRemarkCategory): number =>
-		mappedRemarks.filter(remark => remark.category === category).length;
+		mappedRemarks.filter((remark) => remark.category === category).length;
 	return renderAnalysisSource(
 		raw,
 		context,
-		mappedRemarks.map(remark => ({
+		mappedRemarks.map((remark) => ({
 			sourceUri: remark.file,
 			sourceLine: remark.line,
 			sourceColumn: remark.column,
@@ -74,19 +69,15 @@ function renderOptimizationRemarks(
 	);
 }
 
-export function normalizeOptimizationRemark(
-	remark: OptRemark,
-	workingDirectory: string,
-): OptimizationRemark {
-	const location = remark.DebugLoc.File
-		&& remark.DebugLoc.Line > 0
-		&& remark.DebugLoc.Column >= 0
-		? {
-			file: sourcePath(remark.DebugLoc.File, workingDirectory),
-			line: remark.DebugLoc.Line,
-			column: remark.DebugLoc.Column,
-		}
-		: {};
+export function normalizeOptimizationRemark(remark: OptRemark, workingDirectory: string): OptimizationRemark {
+	const location =
+		remark.DebugLoc.File && remark.DebugLoc.Line > 0 && remark.DebugLoc.Column >= 0
+			? {
+					file: sourcePath(remark.DebugLoc.File, workingDirectory),
+					line: remark.DebugLoc.Line,
+					column: remark.DebugLoc.Column,
+				}
+			: {};
 	return {
 		...location,
 		pass: remark.Pass || inferOptimizationPass(remark.displayString),
@@ -115,7 +106,5 @@ function inferOptimizationPass(message: string): string {
 }
 
 function sourcePath(filename: string, workingDirectory: string): string {
-	return path.normalize(path.isAbsolute(filename)
-		? filename
-		: path.resolve(workingDirectory, filename));
+	return path.normalize(path.isAbsolute(filename) ? filename : path.resolve(workingDirectory, filename));
 }

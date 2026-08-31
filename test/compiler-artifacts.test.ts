@@ -3,10 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { testToolchainHost } from './toolchain-host.js';
-import {
-	clangClLlvmIrOutput,
-	llvmIrOutput,
-} from '../src/artifacts/core/compiler-output-producer.js';
+import { clangClLlvmIrOutput, llvmIrOutput } from '../src/artifacts/core/compiler-output-producer.js';
 import { clangOptimizationRemarksOutput as clangOptimizationRecord } from '../src/artifacts/optimization-remarks/clang-optimization-remarks.js';
 import { clangClOptimizationRemarksOutput as clangClOptimizationRecord } from '../src/artifacts/optimization-remarks/clang-cl-optimization-remarks.js';
 import {
@@ -14,10 +11,7 @@ import {
 	parseGccOptimizationRemarks,
 } from '../src/artifacts/optimization-remarks/gcc-optimization-remarks.js';
 import { artifactDefinitions } from '../src/artifacts/core/artifact-definitions.js';
-import {
-	resolveArtifactAvailability,
-	toolchainDefinitions,
-} from '../src/toolchains/toolchain-map.js';
+import { resolveArtifactAvailability, toolchainDefinitions } from '../src/toolchains/toolchain-map.js';
 import { ToolchainBackend } from '../src/toolchains/toolchain-backend.js';
 import {
 	defaultArtifactOptions,
@@ -59,29 +53,19 @@ test('Clang LLVM IR and optimization-record arguments own their output modes', (
 		'/clang:-o',
 		'/clang:C:\\temporary\\artifact.ll',
 	]);
-	assert.deepEqual(
-		clangClOptimizationRecord.arguments(
-			'C:\\temporary\\artifact.opt.yaml',
-			'C:\\temporary',
-			[],
-		),
-		[
-			'/c',
-			'/clang:-fsave-optimization-record=yaml',
-			'/clang:-foptimization-record-file=C:\\temporary\\artifact.opt.yaml',
-			`/Fo${path.join('C:\\temporary', 'output.obj')}`,
-		],
-	);
-	assert.deepEqual(
-		clangOptimizationRecord.arguments('artifact.opt.yaml', '/temporary', []),
-		[
-			'-c',
-			'-fsave-optimization-record=yaml',
-			'-foptimization-record-file=artifact.opt.yaml',
-			'-o',
-			path.join('/temporary', 'output.o'),
-		],
-	);
+	assert.deepEqual(clangClOptimizationRecord.arguments('C:\\temporary\\artifact.opt.yaml', 'C:\\temporary', []), [
+		'/c',
+		'/clang:-fsave-optimization-record=yaml',
+		'/clang:-foptimization-record-file=C:\\temporary\\artifact.opt.yaml',
+		`/Fo${path.join('C:\\temporary', 'output.obj')}`,
+	]);
+	assert.deepEqual(clangOptimizationRecord.arguments('artifact.opt.yaml', '/temporary', []), [
+		'-c',
+		'-fsave-optimization-record=yaml',
+		'-foptimization-record-file=artifact.opt.yaml',
+		'-o',
+		path.join('/temporary', 'output.o'),
+	]);
 	assert.deepEqual(gccOptimizationRecord.arguments('artifact.opt', '/temporary', []), [
 		'-c',
 		'-fopt-info-all=artifact.opt',
@@ -102,12 +86,7 @@ test('clang-cl artifact cells dispatch through their clang-compatible specificat
 		}
 		let receivedSpec: unknown;
 		const fakeBackend = {
-			produceArtifact: async (
-				artifactKind: ArtifactKind,
-				_source: unknown,
-				_options: unknown,
-				spec: unknown,
-			) => {
+			produceArtifact: async (artifactKind: ArtifactKind, _source: unknown, _options: unknown, spec: unknown) => {
 				receivedSpec = spec;
 				return rawArtifact(artifactKind, '');
 			},
@@ -123,22 +102,19 @@ test('clang-cl artifact cells dispatch through their clang-compatible specificat
 });
 
 test('LLVM IR renderer resolves debug metadata into source links and function navigation', async () => {
-	const raw = rawArtifact(
-		'llvm-ir',
-		fixture('test/fixtures/llvm-ir/debug.ll'),
-	);
+	const raw = rawArtifact('llvm-ir', fixture('test/fixtures/llvm-ir/debug.ll'));
 	const rendered = await artifactDefinitions['llvm-ir'].renderer(
 		raw,
 		defaultArtifactOptions.display,
 		renderContext(backend('clang')),
 	);
-	const multiply = rendered.lines.find(line => line.text.includes('%mul ='));
+	const multiply = rendered.lines.find((line) => line.text.includes('%mul ='));
 	assert.deepEqual(multiply?.source, {
 		file: path.resolve('/work/source.cpp'),
 		line: 4,
 		column: 11,
 	});
-	assert.ok(rendered.sourceLocations.some(location => location.sourceLine === 4));
+	assert.ok(rendered.sourceLocations.some((location) => location.sourceLine === 4));
 	assert.deepEqual(rendered.symbols, [{ name: 'square', line: 3 }]);
 	assert.deepEqual(rendered.folds, [{ startLine: 3, endLine: 7 }]);
 	assert.equal(rendered.metrics.functionCount, 1);
@@ -149,46 +125,43 @@ test('GCC optimization info normalizes relative locations and pass families', ()
 		fixture('test/fixtures/optimization-remarks/gcc.opt'),
 		path.resolve('/project'),
 	);
-	assert.deepEqual(remarks.map(remark => ({
-		...remark,
-		file: path.relative(path.resolve('/project'), remark.file!),
-	})), [
-		{
-			file: path.join('src', 'source.cpp'),
-			line: 8,
-			column: 3,
-			pass: 'vectorizer',
-			category: 'passed',
-			message: 'loop vectorized using 16 byte vectors',
-		},
-		{
-			file: path.join('src', 'source.cpp'),
-			line: 14,
-			column: 9,
-			pass: 'inliner',
-			category: 'missed',
-			message: 'not inlining call to external',
-		},
-		{
-			file: path.join('src', 'source.cpp'),
-			line: 20,
-			column: 2,
-			pass: 'loop',
-			category: 'analysis',
-			message: 'loop turned into non-loop; it never loops',
-		},
-	]);
+	assert.deepEqual(
+		remarks.map((remark) => ({
+			...remark,
+			file: path.relative(path.resolve('/project'), remark.file!),
+		})),
+		[
+			{
+				file: path.join('src', 'source.cpp'),
+				line: 8,
+				column: 3,
+				pass: 'vectorizer',
+				category: 'passed',
+				message: 'loop vectorized using 16 byte vectors',
+			},
+			{
+				file: path.join('src', 'source.cpp'),
+				line: 14,
+				column: 9,
+				pass: 'inliner',
+				category: 'missed',
+				message: 'not inlining call to external',
+			},
+			{
+				file: path.join('src', 'source.cpp'),
+				line: 20,
+				column: 2,
+				pass: 'loop',
+				category: 'analysis',
+				message: 'loop turned into non-loop; it never loops',
+			},
+		],
+	);
 });
 
 test('optimization renderer places each remark decoration on an empty row above its source', () => {
-	const raw = rawArtifact(
-		'optimization-remarks',
-		fixture('test/fixtures/optimization-remarks/clang.opt.yaml'),
-	);
-	const sourceText = Array.from(
-		{ length: 15 },
-		(_, index) => `source line ${index + 1}`,
-	).join('\n');
+	const raw = rawArtifact('optimization-remarks', fixture('test/fixtures/optimization-remarks/clang.opt.yaml'));
+	const sourceText = Array.from({ length: 15 }, (_, index) => `source line ${index + 1}`).join('\n');
 	const rendered = artifactDefinitions['optimization-remarks'].renderer(
 		raw,
 		defaultArtifactOptions.display,
@@ -218,33 +191,32 @@ test('optimization renderer places each remark decoration on an empty row above 
 });
 
 test('optimization renderer omits foreign, locationless, and out-of-range remarks', () => {
-	const raw = rawArtifact('optimization-remarks', [
-		'/project/source.cpp:2:3: optimized: loop vectorized',
-		'/project/header.h:1:1: missed: header call was not inlined',
-		'/project/source.cpp:20:1: note: outside the source',
-		'locationless compiler detail',
-	].join('\n'));
+	const raw = rawArtifact(
+		'optimization-remarks',
+		[
+			'/project/source.cpp:2:3: optimized: loop vectorized',
+			'/project/header.h:1:1: missed: header call was not inlined',
+			'/project/source.cpp:20:1: note: outside the source',
+			'locationless compiler detail',
+		].join('\n'),
+	);
 	const rendered = artifactDefinitions['optimization-remarks'].renderer(
 		raw,
 		defaultArtifactOptions.display,
-		renderContext(
-			backend('gcc'),
-			'/project/source.cpp',
-			'first line\nsecond line\nthird line',
-		),
+		renderContext(backend('gcc'), '/project/source.cpp', 'first line\nsecond line\nthird line'),
 	);
 
-	assert.deepEqual(rendered.lines.map(line => line.text), [
-		'first line',
-		'',
-		'second line',
-		'third line',
+	assert.deepEqual(
+		rendered.lines.map((line) => line.text),
+		['first line', '', 'second line', 'third line'],
+	);
+	assert.deepEqual(rendered.lines[1].annotations, [
+		{
+			kind: 'optimization-remark',
+			category: 'passed',
+			message: 'vectorizer: loop vectorized',
+		},
 	]);
-	assert.deepEqual(rendered.lines[1].annotations, [{
-		kind: 'optimization-remark',
-		category: 'passed',
-		message: 'vectorizer: loop vectorized',
-	}]);
 	assert.equal(rendered.metrics.remarkCount, 1);
 	assert.equal(rendered.metrics.omittedRemarkCount, 3);
 	assert.equal(rendered.metrics.passedRemarkCount, 1);
@@ -253,35 +225,30 @@ test('optimization renderer omits foreign, locationless, and out-of-range remark
 
 test('optimization renderer gives multiple remarks on one source line separate anchor rows', () => {
 	const rendered = artifactDefinitions['optimization-remarks'].renderer(
-		rawArtifact('optimization-remarks', [
-			'/project/source.cpp:2:3: optimized: loop vectorized',
-			'/project/source.cpp:2:7: missed: call was not inlined',
-		].join('\n')),
-		defaultArtifactOptions.display,
-		renderContext(
-			backend('gcc'),
-			'/project/source.cpp',
-			'first line\nsecond line',
+		rawArtifact(
+			'optimization-remarks',
+			[
+				'/project/source.cpp:2:3: optimized: loop vectorized',
+				'/project/source.cpp:2:7: missed: call was not inlined',
+			].join('\n'),
 		),
+		defaultArtifactOptions.display,
+		renderContext(backend('gcc'), '/project/source.cpp', 'first line\nsecond line'),
 	);
 
-	assert.deepEqual(rendered.lines.map(line => line.text), [
-		'first line',
-		'',
-		'',
-		'second line',
-	]);
 	assert.deepEqual(
-		rendered.lines.slice(1, 3).map(line => {
+		rendered.lines.map((line) => line.text),
+		['first line', '', '', 'second line'],
+	);
+	assert.deepEqual(
+		rendered.lines.slice(1, 3).map((line) => {
 			const annotation = line.annotations?.[0];
-			return annotation?.kind === 'optimization-remark'
-				? annotation.category
-				: undefined;
+			return annotation?.kind === 'optimization-remark' ? annotation.category : undefined;
 		}),
 		['passed', 'missed'],
 	);
 	assert.deepEqual(
-		rendered.lines.slice(1, 3).map(line => line.source?.column),
+		rendered.lines.slice(1, 3).map((line) => line.source?.column),
 		[2, 6],
 	);
 });
@@ -301,10 +268,10 @@ test('malformed LLVM IR and optimization records produce valid rendered artifact
 		defaultArtifactOptions.display,
 		renderContext(backend('gcc'), '/project/source.cpp', 'int main() {}\n'),
 	);
-	assert.deepEqual(remarks.lines.map(line => line.text), [
-		'int main() {}',
-		'',
-	]);
+	assert.deepEqual(
+		remarks.lines.map((line) => line.text),
+		['int main() {}', ''],
+	);
 	assert.equal(remarks.metrics.remarkCount, 0);
 	assert.equal(remarks.metrics.omittedRemarkCount, 1);
 });

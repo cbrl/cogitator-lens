@@ -4,10 +4,7 @@ import type { CompilationVariant } from '../types/index.js';
 import { CompilationService } from '../compilation/index.js';
 import { TreeNode, TreeProvider } from './treedata.js';
 import { compareLabels, detailNode, groupNode, makeEnvironmentNode, makeListNode } from './tree-helpers.js';
-import {
-	type ConfigurationOrigin,
-	variantProviderDefinitions,
-} from '../buildsystems/variant-provider.js';
+import { type ConfigurationOrigin, variantProviderDefinitions } from '../buildsystems/variant-provider.js';
 
 type GroupKey = 'project' | 'target' | 'configuration';
 
@@ -28,9 +25,7 @@ export interface CompilationInfoTreeNode extends TreeNode {
 	variant?: CompilationVariant;
 }
 
-export function buildCompilationInfoTree(
-	compilationService: CompilationService,
-): CompilationInfoTreeNode[] {
+export function buildCompilationInfoTree(compilationService: CompilationService): CompilationInfoTreeNode[] {
 	const groups = new Map<string, WorkspaceVariantGroup>();
 	for (const source of compilationService.getAllSources()) {
 		for (const variant of compilationService.getVariants(source)) {
@@ -43,16 +38,15 @@ export function buildCompilationInfoTree(
 	}
 
 	const roots = [...groups.values()]
-		.sort((left, right) => compareLabels(left.folder?.name ?? 'External Sources', right.folder?.name ?? 'External Sources'))
-		.map(group => workspaceNode(group, compilationService));
+		.sort((left, right) =>
+			compareLabels(left.folder?.name ?? 'External Sources', right.folder?.name ?? 'External Sources'),
+		)
+		.map((group) => workspaceNode(group, compilationService));
 	attachParents(roots);
 	return roots;
 }
 
-function workspaceNode(
-	group: WorkspaceVariantGroup,
-	compilationService: CompilationService,
-): CompilationInfoTreeNode {
+function workspaceNode(group: WorkspaceVariantGroup, compilationService: CompilationService): CompilationInfoTreeNode {
 	const label = group.folder?.name ?? 'External Sources';
 	return {
 		label,
@@ -120,19 +114,14 @@ function sourceTree(
 	return sourcePathChildren(root, compilationService);
 }
 
-function sourcePathChildren(
-	node: SourcePathNode,
-	compilationService: CompilationService,
-): CompilationInfoTreeNode[] {
+function sourcePathChildren(node: SourcePathNode, compilationService: CompilationService): CompilationInfoTreeNode[] {
 	return [...node.children.values()]
 		.sort((left, right) => {
 			const leftDirectory = left.children.size > 0;
 			const rightDirectory = right.children.size > 0;
-			return leftDirectory === rightDirectory
-				? compareLabels(left.label, right.label)
-				: leftDirectory ? -1 : 1;
+			return leftDirectory === rightDirectory ? compareLabels(left.label, right.label) : leftDirectory ? -1 : 1;
 		})
-		.map(child => {
+		.map((child) => {
 			if (child.children.size > 0) {
 				return {
 					label: child.label,
@@ -153,31 +142,26 @@ function sourcePathChildren(
 				source,
 				command: source
 					? {
-						command: 'vscode.open',
-						title: 'Open Source',
-						arguments: [source],
-					}
+							command: 'vscode.open',
+							title: 'Open Source',
+							arguments: [source],
+						}
 					: undefined,
 				children: child.variants
 					.sort((left, right) => compareLabels(left.displayLabel, right.displayLabel))
-					.map(variant => variantNode(variant, compilationService)),
+					.map((variant) => variantNode(variant, compilationService)),
 			};
 		});
 }
 
-function variantNode(
-	variant: CompilationVariant,
-	compilationService: CompilationService,
-): CompilationInfoTreeNode {
+function variantNode(variant: CompilationVariant, compilationService: CompilationService): CompilationInfoTreeNode {
 	const backend = compilationService.toolchainRegistry.getToolchainById(variant.toolchainProfileId);
 	return {
 		label: variant.displayLabel,
 		description: providerLabel(variant.provider),
 		tooltip: variant.id,
 		nodeType: 'subtree',
-		treeContext: variant.provider === 'manual'
-			? 'manualCompilationVariant'
-			: 'compilationVariant',
+		treeContext: variant.provider === 'manual' ? 'manualCompilationVariant' : 'compilationVariant',
 		iconPath: new vscode.ThemeIcon('symbol-interface'),
 		source: variant.source,
 		variant,
@@ -201,8 +185,7 @@ export class CompilationInfoTreeProvider extends TreeProvider<CompilationInfoTre
 	}
 
 	getChildren(element?: CompilationInfoTreeNode): CompilationInfoTreeNode[] | undefined {
-		return element?.children
-			?? (this.roots ??= buildCompilationInfoTree(this.compilationService));
+		return element?.children ?? (this.roots ??= buildCompilationInfoTree(this.compilationService));
 	}
 
 	getParent(element: CompilationInfoTreeNode): CompilationInfoTreeNode | undefined {
@@ -215,32 +198,41 @@ export class CompilationInfoTreeProvider extends TreeProvider<CompilationInfoTre
 	}
 
 	findSource(source: vscode.Uri): CompilationInfoTreeNode | undefined {
-		const roots = this.roots ??= buildCompilationInfoTree(this.compilationService);
+		const roots = (this.roots ??= buildCompilationInfoTree(this.compilationService));
 		return findSourceNode(roots, source);
 	}
 }
 
 function groupLabel(variant: CompilationVariant, key: GroupKey): string {
 	switch (key) {
-		case 'project': return variant.project?.trim() || `${providerLabel(variant.provider)} project`;
-		case 'target': return variant.target?.trim() || 'Default target';
-		case 'configuration': return variant.configuration?.trim() || 'Default configuration';
+		case 'project':
+			return variant.project?.trim() || `${providerLabel(variant.provider)} project`;
+		case 'target':
+			return variant.target?.trim() || 'Default target';
+		case 'configuration':
+			return variant.configuration?.trim() || 'Default configuration';
 	}
 }
 
 function nextGroupKey(key: GroupKey): GroupKey | undefined {
 	switch (key) {
-		case 'project': return 'target';
-		case 'target': return 'configuration';
-		case 'configuration': return undefined;
+		case 'project':
+			return 'target';
+		case 'target':
+			return 'configuration';
+		case 'configuration':
+			return undefined;
 	}
 }
 
 function groupIcon(key: GroupKey): string {
 	switch (key) {
-		case 'project': return 'project';
-		case 'target': return 'target';
-		case 'configuration': return 'settings-gear';
+		case 'project':
+			return 'project';
+		case 'target':
+			return 'target';
+		case 'configuration':
+			return 'settings-gear';
 	}
 }
 
@@ -259,10 +251,7 @@ function providerLabel(provider: string): string {
 		: provider;
 }
 
-function attachParents(
-	nodes: readonly CompilationInfoTreeNode[],
-	parent?: CompilationInfoTreeNode,
-): void {
+function attachParents(nodes: readonly CompilationInfoTreeNode[], parent?: CompilationInfoTreeNode): void {
 	for (const node of nodes) {
 		node.parent = parent;
 		attachParents(node.children ?? [], node);

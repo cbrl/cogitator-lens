@@ -25,8 +25,7 @@ export function buildArtifactDetails(
 	const { identity, status } = snapshot;
 	const artifact = retainedArtifact(status);
 	const diagnostics = currentDiagnostics(status, artifact);
-	const invocation = status.invocation
-		?? artifact?.command;
+	const invocation = status.invocation ?? artifact?.command;
 	const counts = countDiagnostics(diagnostics);
 
 	return Object.freeze([
@@ -34,11 +33,7 @@ export function buildArtifactDetails(
 			value('artifact-label', 'Artifact', identity.artifactLabel),
 			value('kind', 'Kind', identity.artifactKind),
 			...(identity.artifactOutputId
-				? [value(
-					'artifact-output',
-					'Output',
-					identity.artifactOutputLabel ?? identity.artifactOutputId,
-				)]
+				? [value('artifact-output', 'Output', identity.artifactOutputLabel ?? identity.artifactOutputId)]
 				: []),
 			value('source', 'Source', identity.sourceLabel),
 			value('preset', 'Preset', identity.presetId),
@@ -51,33 +46,31 @@ export function buildArtifactDetails(
 		]),
 		group('status', 'Status', [
 			value('state', 'State', statusLabel(status)),
-			value(
-				'duration',
-				'Duration',
-				artifact ? formatDuration(artifact.durationMs) : 'Not available',
-			),
-			value(
-				'generated',
-				'Generated',
-				artifact ? new Date(artifact.generatedAt).toISOString() : 'Not available',
-			),
+			value('duration', 'Duration', artifact ? formatDuration(artifact.durationMs) : 'Not available'),
+			value('generated', 'Generated', artifact ? new Date(artifact.generatedAt).toISOString() : 'Not available'),
 			value('truncated', 'Output truncated', status.truncated ? 'Yes' : 'No'),
 			value('errors', 'Errors', String(counts.error)),
 			value('warnings', 'Warnings', String(counts.warning)),
 			value('information', 'Information', String(counts.information)),
-			...(status.state === 'failed'
-				? [value('failure', 'Failure', status.error.message)]
-				: []),
+			...(status.state === 'failed' ? [value('failure', 'Failure', status.error.message)] : []),
 		]),
-		group('invocation', 'Invocation', invocation
-			? invocationItems(invocation)
-			: [empty('invocation-unavailable', 'Not available')]),
-		group('environment', 'Environment', invocation
-			? environmentItems(invocation.environmentVariableNames)
-			: [empty('environment-unavailable', 'Not available')]),
-		group('metrics', 'Metrics', artifact
-			? metricItems(artifact.metrics, metricLabels)
-			: [empty('metrics-unavailable', 'Not available')]),
+		group(
+			'invocation',
+			'Invocation',
+			invocation ? invocationItems(invocation) : [empty('invocation-unavailable', 'Not available')],
+		),
+		group(
+			'environment',
+			'Environment',
+			invocation
+				? environmentItems(invocation.environmentVariableNames)
+				: [empty('environment-unavailable', 'Not available')],
+		),
+		group(
+			'metrics',
+			'Metrics',
+			artifact ? metricItems(artifact.metrics, metricLabels) : [empty('metrics-unavailable', 'Not available')],
+		),
 	]);
 }
 
@@ -94,7 +87,7 @@ function currentDiagnostics(
 	}
 	const diagnostics = [...(artifact?.diagnostics ?? []), ...status.diagnostics];
 	const keys = new Set<string>();
-	return diagnostics.filter(diagnostic => {
+	return diagnostics.filter((diagnostic) => {
 		const key = [
 			diagnostic.uri.toString(),
 			diagnostic.line,
@@ -112,14 +105,16 @@ function currentDiagnostics(
 
 function statusLabel(status: ArtifactStatus): string {
 	switch (status.state) {
-		case 'compiling': return 'Generating';
+		case 'compiling':
+			return 'Generating';
 		case 'successful':
-			return status.artifact.diagnostics.length > 0
-				? 'Ready with diagnostics'
-				: 'Ready';
-		case 'cancelled': return 'Cancelled';
-		case 'failed': return 'Failed';
-		case 'stale': return status.artifact ? 'Stale because an input changed' : 'Not generated';
+			return status.artifact.diagnostics.length > 0 ? 'Ready with diagnostics' : 'Ready';
+		case 'cancelled':
+			return 'Cancelled';
+		case 'failed':
+			return 'Failed';
+		case 'stale':
+			return status.artifact ? 'Stale because an input changed' : 'Not generated';
 	}
 }
 
@@ -132,24 +127,26 @@ function countDiagnostics(diagnostics: readonly CompileDiagnostic[]): Record<Com
 }
 
 function invocationItems(invocation: InvocationDetails): ArtifactDetailsItem[] {
-	const commandLine = [invocation.executable, ...invocation.args]
-		.map(formatCommandArgument)
-		.join(' ');
+	const commandLine = [invocation.executable, ...invocation.args].map(formatCommandArgument).join(' ');
 	return [
 		value('command-line', 'Command line', commandLine),
 		value('executable', 'Executable', invocation.executable),
-		group('arguments', 'Arguments', invocation.args.length
-			? invocation.args.map((argument, index) =>
-				value(`argument-${index}`, `Argument ${index + 1}`, argument))
-			: [empty('arguments-none', '(none)')]),
+		group(
+			'arguments',
+			'Arguments',
+			invocation.args.length
+				? invocation.args.map((argument, index) =>
+						value(`argument-${index}`, `Argument ${index + 1}`, argument),
+					)
+				: [empty('arguments-none', '(none)')],
+		),
 		value('working-directory', 'Working directory', invocation.cwd),
 	];
 }
 
 function environmentItems(names: readonly string[]): ArtifactDetailsItem[] {
 	return names.length
-		? [...names].sort(compareText).map(name =>
-			value(`environment-${encodeURIComponent(name)}`, name, name))
+		? [...names].sort(compareText).map((name) => value(`environment-${encodeURIComponent(name)}`, name, name))
 		: [empty('environment-none', '(none)')];
 }
 
@@ -160,14 +157,13 @@ function metricItems(
 	const entries = Object.entries(metrics).sort(([left], [right]) => compareText(left, right));
 	return entries.length
 		? entries.map(([key, metric]) =>
-			value(`metric-${key}`, labels[key] ?? humanizeIdentifier(key), formatMetric(metric)))
+				value(`metric-${key}`, labels[key] ?? humanizeIdentifier(key), formatMetric(metric)),
+			)
 		: [empty('metrics-none', '(none)')];
 }
 
 function formatCommandArgument(argument: string): string {
-	return argument && !/[\s"']/u.test(argument)
-		? argument
-		: JSON.stringify(argument);
+	return argument && !/[\s"']/u.test(argument) ? argument : JSON.stringify(argument);
 }
 
 function formatDuration(durationMs: number): string {
@@ -187,11 +183,7 @@ function compareText(left: string, right: string): number {
 	return left.localeCompare(right, undefined, { sensitivity: 'base', numeric: true });
 }
 
-function group(
-	id: string,
-	label: string,
-	children: readonly ArtifactDetailsItem[],
-): ArtifactDetailsItem {
+function group(id: string, label: string, children: readonly ArtifactDetailsItem[]): ArtifactDetailsItem {
 	return { id, label, children };
 }
 

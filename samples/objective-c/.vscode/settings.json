@@ -1,51 +1,49 @@
 {
-	"coglens.toolchains": [
-		{
-			"displayName": "Sample Clang Objective-C",
-			"kind": "clang",
-			"executable": "clang",
-			"defaultArguments": [
-				"-std=c17"
-			]
-		}
-	],
-	"coglens.defaultInvocation": {
-		"toolchain": "Sample Clang Objective-C"
-	},
-	"coglens.artifactPresets": {
-		"debug-assembly": {
-			"artifactKind": "assembly",
-			"extraArguments": ["-O0"]
-		},
-		"optimized-assembly": {
-			"artifactKind": "assembly",
-			"extraArguments": ["-O3"]
-		},
-		"optimized-disassembly": {
-			"artifactKind": "binary-disassembly",
-			"extraArguments": ["-O2"]
-		},
-		"preprocessed": {
-			"artifactKind": "preprocessed-source"
-		},
-		"ast": {
-			"artifactKind": "ast"
-		},
-		"llvm-ir": {
-			"artifactKind": "llvm-ir",
-			"extraArguments": ["-O1"]
-		},
-		"optimization-remarks": {
-			"artifactKind": "optimization-remarks",
-			"extraArguments": ["-O3"]
-		},
-		"stack-analysis": {
-			"artifactKind": "stack-analysis",
-			"extraArguments": ["-O1"]
-		},
-		"control-flow": {
-			"artifactKind": "control-flow-graph",
-			"extraArguments": ["-O1"]
-		}
-	}
+  "coglens.toolchains": [
+    {
+      "displayName": "Sample Clang Objective-C",
+      "kind": "clang",
+      "executable": "clang",
+      "defaultArguments": ["-std=c17"]
+    }
+  ],
+  "coglens.defaultInvocation": {
+    "toolchain": "Sample Clang Objective-C"
+  },
+  "coglens.artifactPresets": {
+    "debug-assembly": {
+      "artifactKind": "assembly",
+      "extraArguments": ["-O0"]
+    },
+    "optimized-assembly": {
+      "artifactKind": "assembly",
+      "extraArguments": ["-O3"]
+    },
+    "optimized-disassembly": {
+      "artifactKind": "binary-disassembly",
+      "extraArguments": ["-O2"]
+    },
+    "preprocessed": {
+      "artifactKind": "preprocessed-source"
+    },
+    "ast": {
+      "artifactKind": "ast"
+    },
+    "llvm-ir": {
+      "artifactKind": "llvm-ir",
+      "extraArguments": ["-O1"]
+    },
+    "optimization-remarks": {
+      "artifactKind": "optimization-remarks",
+      "extraArguments": ["-O3"]
+    },
+    "stack-analysis": {
+      "artifactKind": "stack-analysis",
+      "extraArguments": ["-O1"]
+    },
+    "control-flow": {
+      "artifactKind": "control-flow-graph",
+      "extraArguments": ["-O1"]
+    }
+  }
 }

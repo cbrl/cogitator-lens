@@ -44,12 +44,7 @@ const edgeKinds = new Set<ControlFlowEdgeKind>([
 	'return',
 	'exception',
 ]);
-const terminalKinds = new Set<ControlFlowTerminal>([
-	'return',
-	'throw',
-	'resume',
-	'unreachable',
-]);
+const terminalKinds = new Set<ControlFlowTerminal>(['return', 'throw', 'resume', 'unreachable']);
 
 export interface GraphParseResult {
 	readonly graphs: readonly ControlFlowGraph[];
@@ -57,8 +52,7 @@ export interface GraphParseResult {
 }
 
 export type GraphValidation =
-	| { readonly ok: true; readonly graph: ControlFlowGraph }
-	| { readonly ok: false; readonly reason: string };
+	{ readonly ok: true; readonly graph: ControlFlowGraph } | { readonly ok: false; readonly reason: string };
 
 /**
  * Validates a single compiler-derived graph and returns a normalized copy.
@@ -93,9 +87,10 @@ export function validateControlFlowGraph(candidate: unknown): GraphValidation {
 		nodes.push(node);
 	}
 
-	const entryNodeId = candidate.entryNodeId === undefined
-		? undefined
-		: boundedNonemptyString(candidate.entryNodeId, graphLimits.idLength);
+	const entryNodeId =
+		candidate.entryNodeId === undefined
+			? undefined
+			: boundedNonemptyString(candidate.entryNodeId, graphLimits.idLength);
 	if (candidate.entryNodeId !== undefined && (!entryNodeId || !nodeIds.has(entryNodeId))) {
 		return invalid(`entry node does not exist in ${JSON.stringify(label)}`);
 	}
@@ -147,7 +142,9 @@ export function validateControlFlowGraphs(candidates: readonly unknown[]): Graph
 		graphs.push(validated.graph);
 	}
 	if (candidates.length > graphLimits.graphs) {
-		diagnostics.push(`Omitted ${candidates.length - graphLimits.graphs} graphs beyond the ${graphLimits.graphs} graph limit.`);
+		diagnostics.push(
+			`Omitted ${candidates.length - graphLimits.graphs} graphs beyond the ${graphLimits.graphs} graph limit.`,
+		);
 	}
 
 	graphs.sort(compareControlFlowGraphs);
@@ -168,15 +165,15 @@ export function controlFlowGraphMetrics(
 	for (const graph of graphs) {
 		nodeCount += graph.nodes.length;
 		edgeCount += graph.edges.length;
-		sourceMappedNodeCount += graph.nodes.filter(node => node.source).length;
+		sourceMappedNodeCount += graph.nodes.filter((node) => node.source).length;
 		const outgoing = new Map<string, number>();
 		for (const edge of graph.edges) {
 			outgoing.set(edge.from, (outgoing.get(edge.from) ?? 0) + 1);
 		}
-		branchNodeCount += [...outgoing.values()].filter(count => count > 1).length;
+		branchNodeCount += [...outgoing.values()].filter((count) => count > 1).length;
 		if (graph.entryNodeId) {
 			const reachable = reachableNodeIds(graph, graph.entryNodeId);
-			unreachableNodeCount += graph.nodes.filter(node => !reachable.has(node.id)).length;
+			unreachableNodeCount += graph.nodes.filter((node) => !reachable.has(node.id)).length;
 		}
 	}
 	return Object.freeze({
@@ -193,11 +190,13 @@ export function controlFlowGraphMetrics(
 export function compareControlFlowGraphs(left: ControlFlowGraph, right: ControlFlowGraph): number {
 	const leftSource = firstSource(left);
 	const rightSource = firstSource(right);
-	return compareOptionalText(leftSource?.uri, rightSource?.uri)
-		|| (leftSource?.line ?? graphLimits.position) - (rightSource?.line ?? graphLimits.position)
-		|| (leftSource?.column ?? graphLimits.position) - (rightSource?.column ?? graphLimits.position)
-		|| left.label.localeCompare(right.label, undefined, { numeric: true })
-		|| left.id.localeCompare(right.id, undefined, { numeric: true });
+	return (
+		compareOptionalText(leftSource?.uri, rightSource?.uri) ||
+		(leftSource?.line ?? graphLimits.position) - (rightSource?.line ?? graphLimits.position) ||
+		(leftSource?.column ?? graphLimits.position) - (rightSource?.column ?? graphLimits.position) ||
+		left.label.localeCompare(right.label, undefined, { numeric: true }) ||
+		left.id.localeCompare(right.id, undefined, { numeric: true })
+	);
 }
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -206,7 +205,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function allowedKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
 	const allowed = new Set(keys);
-	return Object.keys(value).every(key => allowed.has(key));
+	return Object.keys(value).every((key) => allowed.has(key));
 }
 
 export function boundedString(value: unknown, maximum: number): string | undefined {
@@ -218,8 +217,10 @@ export function validPosition(value: unknown): value is number {
 }
 
 function validateNode(candidate: unknown): ControlFlowNode | undefined {
-	if (!isRecord(candidate)
-		|| !allowedKeys(candidate, ['id', 'label', 'source', 'referencedArtifactLines', 'terminal'])) {
+	if (
+		!isRecord(candidate) ||
+		!allowedKeys(candidate, ['id', 'label', 'source', 'referencedArtifactLines', 'terminal'])
+	) {
 		return undefined;
 	}
 	const id = boundedNonemptyString(candidate.id, graphLimits.idLength);
@@ -228,14 +229,14 @@ function validateNode(candidate: unknown): ControlFlowNode | undefined {
 		return undefined;
 	}
 	const source = optional(candidate.source, validateSourceLocation);
-	const terminal = optional(candidate.terminal, value =>
-		terminalKinds.has(value as ControlFlowTerminal) ? value as ControlFlowTerminal : undefined);
-	const referencedArtifactLines = optional(candidate.referencedArtifactLines, value =>
-		Array.isArray(value)
-			&& value.length <= graphLimits.referencedLinesPerNode
-			&& value.every(validPosition)
-				? value as number[]
-				: undefined);
+	const terminal = optional(candidate.terminal, (value) =>
+		terminalKinds.has(value as ControlFlowTerminal) ? (value as ControlFlowTerminal) : undefined,
+	);
+	const referencedArtifactLines = optional(candidate.referencedArtifactLines, (value) =>
+		Array.isArray(value) && value.length <= graphLimits.referencedLinesPerNode && value.every(validPosition)
+			? (value as number[])
+			: undefined,
+	);
 	if (source === invalidValue || terminal === invalidValue || referencedArtifactLines === invalidValue) {
 		return undefined;
 	}
@@ -255,9 +256,9 @@ function validateEdge(candidate: unknown, nodeIds: ReadonlySet<string>): Control
 	const from = boundedNonemptyString(candidate.from, graphLimits.idLength);
 	const to = boundedNonemptyString(candidate.to, graphLimits.idLength);
 	const kind = edgeKinds.has(candidate.kind as ControlFlowEdgeKind)
-		? candidate.kind as ControlFlowEdgeKind
+		? (candidate.kind as ControlFlowEdgeKind)
 		: undefined;
-	const label = optional(candidate.label, value => boundedString(value, graphLimits.labelLength));
+	const label = optional(candidate.label, (value) => boundedString(value, graphLimits.labelLength));
 	if (!from || !to || !kind || !nodeIds.has(from) || !nodeIds.has(to) || label === invalidValue) {
 		return undefined;
 	}
@@ -265,11 +266,13 @@ function validateEdge(candidate: unknown, nodeIds: ReadonlySet<string>): Control
 }
 
 function validateSourceLocation(candidate: unknown): ControlFlowSourceLocation | undefined {
-	if (!isRecord(candidate)
-		|| !allowedKeys(candidate, ['uri', 'line', 'column', 'endLine', 'endColumn'])
-		|| boundedString(candidate.uri, graphLimits.labelLength) === undefined
-		|| !validPosition(candidate.line)
-		|| !validPosition(candidate.column)) {
+	if (
+		!isRecord(candidate) ||
+		!allowedKeys(candidate, ['uri', 'line', 'column', 'endLine', 'endColumn']) ||
+		boundedString(candidate.uri, graphLimits.labelLength) === undefined ||
+		!validPosition(candidate.line) ||
+		!validPosition(candidate.column)
+	) {
 		return undefined;
 	}
 	try {
@@ -279,15 +282,17 @@ function validateSourceLocation(candidate: unknown): ControlFlowSourceLocation |
 	} catch {
 		return undefined;
 	}
-	const endLine = optional(candidate.endLine, value => validPosition(value) ? value : undefined);
-	const endColumn = optional(candidate.endColumn, value => validPosition(value) ? value : undefined);
+	const endLine = optional(candidate.endLine, (value) => (validPosition(value) ? value : undefined));
+	const endColumn = optional(candidate.endColumn, (value) => (validPosition(value) ? value : undefined));
 	if (endLine === invalidValue || endColumn === invalidValue) {
 		return undefined;
 	}
 	const resolvedEndLine = endLine ?? candidate.line;
 	const resolvedEndColumn = endColumn ?? candidate.column;
-	if (resolvedEndLine < candidate.line
-		|| (resolvedEndLine === candidate.line && resolvedEndColumn < candidate.column)) {
+	if (
+		resolvedEndLine < candidate.line ||
+		(resolvedEndLine === candidate.line && resolvedEndColumn < candidate.column)
+	) {
 		return undefined;
 	}
 	return {
@@ -306,10 +311,7 @@ function validateSourceLocation(candidate: unknown): ControlFlowSourceLocation |
  */
 const invalidValue = Symbol('invalid');
 
-function optional<T>(
-	value: unknown,
-	check: (value: unknown) => T | undefined,
-): T | undefined | typeof invalidValue {
+function optional<T>(value: unknown, check: (value: unknown) => T | undefined): T | undefined | typeof invalidValue {
 	if (value === undefined) {
 		return undefined;
 	}
@@ -337,7 +339,7 @@ function reachableNodeIds(graph: ControlFlowGraph, entry: string): Set<string> {
 }
 
 function firstSource(graph: ControlFlowGraph): ControlFlowSourceLocation | undefined {
-	return graph.nodes.find(node => node.source)?.source;
+	return graph.nodes.find((node) => node.source)?.source;
 }
 
 function compareOptionalText(left: string | undefined, right: string | undefined): number {

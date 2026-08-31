@@ -51,7 +51,7 @@ export class CompilationConfigDatabase implements Disposable {
 			}
 		}
 
-		const incoming = new Map(snapshot.map(variant => [variant.id, variant]));
+		const incoming = new Map(snapshot.map((variant) => [variant.id, variant]));
 		const affected = sourceUriSet();
 		let changed = false;
 
@@ -95,7 +95,7 @@ export class CompilationConfigDatabase implements Disposable {
 			for (const variant of current.values()) {
 				if (variant.provider === provider) {
 					if (!insertedProvider) {
-						desired.forEach(item => reordered.set(item.id, item));
+						desired.forEach((item) => reordered.set(item.id, item));
 						insertedProvider = true;
 					}
 				} else {
@@ -103,7 +103,7 @@ export class CompilationConfigDatabase implements Disposable {
 				}
 			}
 			if (!insertedProvider) {
-				desired.forEach(item => reordered.set(item.id, item));
+				desired.forEach((item) => reordered.set(item.id, item));
 			}
 			if (!sameKeyOrder(current, reordered)) {
 				this.bySource.set(source, reordered);
@@ -148,6 +148,5 @@ function sameKeyOrder(
 ): boolean {
 	const leftKeys = [...left.keys()];
 	const rightKeys = [...right.keys()];
-	return leftKeys.length === rightKeys.length
-		&& leftKeys.every((key, index) => key === rightKeys[index]);
+	return leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index]);
 }

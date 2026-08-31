@@ -11,10 +11,7 @@ import type {
 import { defaultArtifactOptions, immutableArtifactOptions } from '../types/index.js';
 import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
 import type { ArtifactPreset } from '../artifacts/ui/presets.js';
-import {
-	createToolchainProfile,
-	supportedToolchainKinds,
-} from '../toolchains/toolchain-map.js';
+import { createToolchainProfile, supportedToolchainKinds } from '../toolchains/toolchain-map.js';
 
 const toolchainKinds = new Set<string>(supportedToolchainKinds);
 
@@ -27,9 +24,7 @@ function asString(value: unknown, fallback = ''): string {
 }
 
 function asStringArray(value: unknown): string[] {
-	return Array.isArray(value)
-		? value.filter((item): item is string => typeof item === 'string')
-		: [];
+	return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
 }
 
 function asStringRecord(value: unknown): Record<string, string> {
@@ -43,7 +38,7 @@ function asStringRecord(value: unknown): Record<string, string> {
 
 function asRecord(value: unknown): Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value)
-		? value as Record<string, unknown>
+		? (value as Record<string, unknown>)
 		: {};
 }
 
@@ -83,7 +78,7 @@ export function parseManualCompilationVariants(raw: unknown): ManualCompilationV
 	if (!Array.isArray(raw)) {
 		return [];
 	}
-	return raw.flatMap(entry => {
+	return raw.flatMap((entry) => {
 		const value = asRecord(entry) as Partial<ManualCompilationVariantSettings>;
 		const id = asString(value.id);
 		const source = asString(value.source);
@@ -93,18 +88,20 @@ export function parseManualCompilationVariants(raw: unknown): ManualCompilationV
 		if (!id || !source || !displayLabel || !toolchainProfileId || !workingDirectory) {
 			return [];
 		}
-		return [{
-			id,
-			source,
-			displayLabel,
-			toolchainProfileId,
-			workingDirectory,
-			arguments: asStringArray(value.arguments),
-			environment: asStringRecord(value.environment),
-			project: optionalString(value.project),
-			target: optionalString(value.target),
-			configuration: optionalString(value.configuration),
-		}];
+		return [
+			{
+				id,
+				source,
+				displayLabel,
+				toolchainProfileId,
+				workingDirectory,
+				arguments: asStringArray(value.arguments),
+				environment: asStringRecord(value.environment),
+				project: optionalString(value.project),
+				target: optionalString(value.target),
+				configuration: optionalString(value.configuration),
+			},
+		];
 	});
 }
 
@@ -131,17 +128,18 @@ export function parseArtifactPresets(raw: unknown): ArtifactPreset[] {
 		}
 		const rawProductionOptions = asRecord(preset.productionOptions);
 		const productionOptions = Object.fromEntries(
-			Object.keys(defaultArtifactOptions.production).flatMap(key =>
-				typeof rawProductionOptions[key] === 'boolean'
-					? [[key, rawProductionOptions[key]]]
-					: []),
+			Object.keys(defaultArtifactOptions.production).flatMap((key) =>
+				typeof rawProductionOptions[key] === 'boolean' ? [[key, rawProductionOptions[key]]] : [],
+			),
 		);
-		return [{
-			id,
-			artifactKind: artifactKind as ArtifactKind,
-			extraArguments: asStringArray(preset.extraArguments),
-			productionOptions,
-		}];
+		return [
+			{
+				id,
+				artifactKind: artifactKind as ArtifactKind,
+				extraArguments: asStringArray(preset.extraArguments),
+				productionOptions,
+			},
+		];
 	});
 }
 

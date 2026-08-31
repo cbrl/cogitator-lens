@@ -2,14 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 import { testToolchainHost } from './toolchain-host.js';
-import {
-	artifactDefinitions,
-	supportedArtifactKinds,
-} from '../src/artifacts/core/artifact-definitions.js';
-import {
-	effectiveArtifactPresets,
-	resolveArtifactPreset,
-} from '../src/artifacts/ui/presets.js';
+import { artifactDefinitions, supportedArtifactKinds } from '../src/artifacts/core/artifact-definitions.js';
+import { effectiveArtifactPresets, resolveArtifactPreset } from '../src/artifacts/ui/presets.js';
 import {
 	supportedToolchainKinds,
 	toolchainDefinitions,
@@ -32,7 +26,7 @@ test('artifact and toolchain tables define the complete cross-product', () => {
 		const definition = toolchainDefinitions[toolchainKind];
 		assert.deepEqual(Object.keys(definition.artifacts), supportedArtifactKinds);
 		assert.ok(definition.languageIdentifiers.length > 0);
-		assert.ok(Object.values(definition.artifacts).some(cell => cell.status === 'available'));
+		assert.ok(Object.values(definition.artifacts).some((cell) => cell.status === 'available'));
 	}
 });
 
@@ -97,28 +91,25 @@ test('the manifest toolchain-kind enum and artifactOptions schema stay synchroni
 	for (const kind of supportedArtifactKinds) {
 		assert.deepEqual(
 			Object.keys(configuration['coglens.artifactOptions'].properties[kind].properties).sort(),
-			artifactDefinitions[kind].options.map(option => option.id).sort(),
+			artifactDefinitions[kind].options.map((option) => option.id).sort(),
 		);
 	}
 	assert.deepEqual(
-		configuration['coglens.artifactPresets']
-			.additionalProperties.properties.artifactKind.enum,
+		configuration['coglens.artifactPresets'].additionalProperties.properties.artifactKind.enum,
 		supportedArtifactKinds,
 	);
 	assert.deepEqual(
-		Object.keys(configuration['coglens.artifactPresets']
-			.additionalProperties.properties.productionOptions.properties).sort(),
+		Object.keys(
+			configuration['coglens.artifactPresets'].additionalProperties.properties.productionOptions.properties,
+		).sort(),
 		Object.keys(defaultArtifactOptions.production).sort(),
 	);
 	assert.equal(manifest.capabilities.untrustedWorkspaces.supported, false);
 	assert.doesNotMatch(JSON.stringify(manifest.contributes.menus), /editorLangId/);
 	assert.equal(manifest.version, '0.7.0');
-	assert.ok(manifest.contributes.commands.some(command =>
-		command.command === 'coglens.OpenControlFlowGraph'));
-	assert.ok(manifest.contributes.views.coglens.some(view =>
-		view.id === 'coglens.artifactDetails'));
-	assert.ok(manifest.contributes.views.coglens.some(view =>
-		view.id === 'coglens.artifactPresets'));
+	assert.ok(manifest.contributes.commands.some((command) => command.command === 'coglens.OpenControlFlowGraph'));
+	assert.ok(manifest.contributes.views.coglens.some((view) => view.id === 'coglens.artifactDetails'));
+	assert.ok(manifest.contributes.views.coglens.some((view) => view.id === 'coglens.artifactPresets'));
 	for (const command of [
 		'coglens.RefreshArtifact',
 		'coglens.CancelGeneration',
@@ -128,33 +119,23 @@ test('the manifest toolchain-kind enum and artifactOptions schema stay synchroni
 		'coglens.DeleteArtifactPreset',
 		'coglens.SaveArtifactOptionsAsPreset',
 	]) {
-		assert.ok(manifest.contributes.commands.some(contribution =>
-			contribution.command === command), `Missing command contribution: ${command}`);
+		assert.ok(
+			manifest.contributes.commands.some((contribution) => contribution.command === command),
+			`Missing command contribution: ${command}`,
+		);
 	}
 	assert.deepEqual(
-		manifest.contributes.keybindings.map(binding => binding.command),
-		[
-			'coglens.OpenArtifact',
-			'coglens.OpenControlFlowGraph',
-			'coglens.CompareArtifacts',
-		],
+		manifest.contributes.keybindings.map((binding) => binding.command),
+		['coglens.OpenArtifact', 'coglens.OpenControlFlowGraph', 'coglens.CompareArtifacts'],
 	);
-	assert.ok(manifest.contributes.keybindings.every(binding =>
-		binding.when.includes('coglens.supportedSource')));
-	assert.ok(manifest.contributes.colors.some(color =>
-		color.id === 'coglens.stackUsage.background'));
-	assert.ok(manifest.contributes.colors.some(color =>
-		color.id === 'coglens.sourceLineBand.6Marker'));
-	assert.ok(manifest.contributes.languages.some(language =>
-		language.id === 'coglens-asm'));
-	assert.ok(manifest.contributes.languages.some(language =>
-		language.id === 'coglens-llvm-ir'));
-	assert.ok(manifest.contributes.languages.some(language =>
-		language.id === 'zig'));
-	assert.ok(manifest.contributes.grammars.some(grammar =>
-		grammar.language === 'coglens-asm'));
-	assert.ok(manifest.contributes.grammars.some(grammar =>
-		grammar.language === 'coglens-llvm-ir'));
+	assert.ok(manifest.contributes.keybindings.every((binding) => binding.when.includes('coglens.supportedSource')));
+	assert.ok(manifest.contributes.colors.some((color) => color.id === 'coglens.stackUsage.background'));
+	assert.ok(manifest.contributes.colors.some((color) => color.id === 'coglens.sourceLineBand.6Marker'));
+	assert.ok(manifest.contributes.languages.some((language) => language.id === 'coglens-asm'));
+	assert.ok(manifest.contributes.languages.some((language) => language.id === 'coglens-llvm-ir'));
+	assert.ok(manifest.contributes.languages.some((language) => language.id === 'zig'));
+	assert.ok(manifest.contributes.grammars.some((grammar) => grammar.language === 'coglens-asm'));
+	assert.ok(manifest.contributes.grammars.some((grammar) => grammar.language === 'coglens-llvm-ir'));
 	assert.match(fs.readFileSync('.vscodeignore', 'utf8'), /^test\/\*\*$/m);
 	assert.match(fs.readFileSync('.vscodeignore', 'utf8'), /^plans\/\*\*$/m);
 	const activityIcon = fs.readFileSync('resources/gear-phi.svg', 'utf8');
@@ -178,10 +159,18 @@ test('the default preset is total and a configured default overrides it', () => 
 	} as const;
 	const presets = effectiveArtifactPresets([configured]);
 	assert.deepEqual(presets.get('default'), configured);
-	assert.equal(effectiveArtifactPresets([{
-		...configured,
-		artifactKind: 'binary-disassembly',
-	}], 'assembly').get('default')?.artifactKind, 'assembly');
+	assert.equal(
+		effectiveArtifactPresets(
+			[
+				{
+					...configured,
+					artifactKind: 'binary-disassembly',
+				},
+			],
+			'assembly',
+		).get('default')?.artifactKind,
+		'assembly',
+	);
 	assert.equal(resolveArtifactPreset('missing'), undefined);
 });
 
@@ -205,43 +194,82 @@ test('production keys exclude display options and include every production reque
 	};
 	const source = { size: 10, mtimeMs: 20 };
 	const initial = productionKey(request, source);
-	assert.equal(productionKey({
-		...request,
-		onInvocation: () => {},
-	}, source), initial);
-	assert.equal(productionKey({
-		...request,
-		options: {
-			...defaultArtifactOptions,
-			display: { ...defaultArtifactOptions.display, labels: false },
-		},
-	}, source), initial);
-	assert.notEqual(productionKey({
-		...request,
-		options: {
-			...defaultArtifactOptions,
-			production: { ...defaultArtifactOptions.production, intel: true },
-		},
-	}, source), initial);
-	assert.notEqual(productionKey({
-		...request,
-		extraArguments: ['--preset'],
-	}, source), initial);
-	assert.notEqual(productionKey({
-		...request,
-		presetId: 'optimized',
-	}, source), initial);
-	assert.notEqual(productionKey({
-		...request,
-		artifactOutputId: 'assembly',
-	}, source), initial);
+	assert.equal(
+		productionKey(
+			{
+				...request,
+				onInvocation: () => {},
+			},
+			source,
+		),
+		initial,
+	);
+	assert.equal(
+		productionKey(
+			{
+				...request,
+				options: {
+					...defaultArtifactOptions,
+					display: { ...defaultArtifactOptions.display, labels: false },
+				},
+			},
+			source,
+		),
+		initial,
+	);
+	assert.notEqual(
+		productionKey(
+			{
+				...request,
+				options: {
+					...defaultArtifactOptions,
+					production: { ...defaultArtifactOptions.production, intel: true },
+				},
+			},
+			source,
+		),
+		initial,
+	);
+	assert.notEqual(
+		productionKey(
+			{
+				...request,
+				extraArguments: ['--preset'],
+			},
+			source,
+		),
+		initial,
+	);
+	assert.notEqual(
+		productionKey(
+			{
+				...request,
+				presetId: 'optimized',
+			},
+			source,
+		),
+		initial,
+	);
+	assert.notEqual(
+		productionKey(
+			{
+				...request,
+				artifactOutputId: 'assembly',
+			},
+			source,
+		),
+		initial,
+	);
 
 	const optionsCopy = immutableArtifactOptions(defaultArtifactOptions);
 	assert.equal(artifactOptionsEqual(defaultArtifactOptions, optionsCopy), true);
-	assert.equal(artifactOptionsEqual(defaultArtifactOptions, {
-		...optionsCopy,
-		display: { ...optionsCopy.display, labels: false },
-	}), false);
+	assert.equal(
+		artifactOptionsEqual(defaultArtifactOptions, {
+			...optionsCopy,
+			display: { ...optionsCopy.display, labels: false },
+		}),
+		false,
+	);
 });
 
 test('assembly rendering maps parsed lines without a binary-mode disassembly fallback', () => {
@@ -274,14 +302,10 @@ test('assembly rendering maps parsed lines without a binary-mode disassembly fal
 		inputs: [],
 		dependencyCoverage: 'source-only',
 	};
-	const rendered = artifactDefinitions.assembly.renderer(
-		raw,
-		defaultArtifactOptions.display,
-		renderContext(backend),
-	);
-	assert.ok(rendered.lines.some(line => line.text.includes('ret')));
-	assert.ok(rendered.lines.every(line => line.opcodes === undefined));
-	assert.ok(rendered.lines.every(line => line.disassembly === undefined));
+	const rendered = artifactDefinitions.assembly.renderer(raw, defaultArtifactOptions.display, renderContext(backend));
+	assert.ok(rendered.lines.some((line) => line.text.includes('ret')));
+	assert.ok(rendered.lines.every((line) => line.opcodes === undefined));
+	assert.ok(rendered.lines.every((line) => line.disassembly === undefined));
 });
 
 function renderContext(backend: ToolchainBackend): ArtifactRenderContext {

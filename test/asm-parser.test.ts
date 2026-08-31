@@ -68,11 +68,11 @@ test('parses supported assembly dialects with source mappings', () => {
 	for (const fixture of fixtures) {
 		const result = fixture.parser.process(fixture.text, filters);
 		assert.ok(
-			result.asm.some(line => line.text.includes(fixture.opcode)),
+			result.asm.some((line) => line.text.includes(fixture.opcode)),
 			`${fixture.name} fixture lost its opcode`,
 		);
 		assert.ok(
-			result.asm.some(line => line.source?.line === fixture.sourceLine),
+			result.asm.some((line) => line.source?.line === fixture.sourceLine),
 			`${fixture.name} fixture lost its source mapping`,
 		);
 	}

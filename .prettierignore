@@ -1,0 +1,23 @@
+# Generated and third-party content
+dist/
+external/
+node_modules/
+out/
+src/vendor/lib/asm-docs/
+src/vendor/lib/parsers/
+src/vendor/static/
+src/vendor/types/
+scripts/compiler-explorer-docenizers/
+
+# Build artifacts and archives
+.vscode-test/
+.pytest_cache/
+*.vsix
+samples/**/build/
+samples/rust/target/
+
+# Local workspace files are intentionally not normalized by project formatting.
+.vscode/settings.json
+
+# Python cache
+samples/python/**/__pycache__/

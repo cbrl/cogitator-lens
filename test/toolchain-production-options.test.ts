@@ -5,18 +5,9 @@ import { windowsDemangle } from '../src/toolchains/msvc.js';
 import { toolchainDefinitions } from '../src/toolchains/toolchain-map.js';
 
 test('Intel syntax arguments respect selectable and inherent toolchain modes', () => {
-	assert.deepEqual(
-		intelOutputArguments(toolchainDefinitions.gcc, { intel: true, demangle: false }),
-		['-masm=intel'],
-	);
-	assert.deepEqual(
-		intelOutputArguments(toolchainDefinitions.gcc, { intel: false, demangle: false }),
-		[],
-	);
-	assert.deepEqual(
-		intelOutputArguments(toolchainDefinitions.msvc, { intel: true, demangle: false }),
-		[],
-	);
+	assert.deepEqual(intelOutputArguments(toolchainDefinitions.gcc, { intel: true, demangle: false }), ['-masm=intel']);
+	assert.deepEqual(intelOutputArguments(toolchainDefinitions.gcc, { intel: false, demangle: false }), []);
+	assert.deepEqual(intelOutputArguments(toolchainDefinitions.msvc, { intel: true, demangle: false }), []);
 	assert.deepEqual(
 		intelOutputArguments(
 			{ intelSyntax: 'selectable', intelArguments: undefined },

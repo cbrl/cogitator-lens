@@ -1,30 +1,38 @@
 {
-    "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
-    "name": "Compiler Assembly",
-    "scopeName": "source.coglens-asm",
-    "patterns": [
-        { "include": "#comments" },
-        { "include": "#strings" },
-        { "match": "^\\s*[.$_A-Za-z][\\w.$@?]*(?=:)", "name": "entity.name.label.asm" },
-        { "match": "^\\s*\\.[A-Za-z][\\w.]*", "name": "keyword.directive.asm" },
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Compiler Assembly",
+  "scopeName": "source.coglens-asm",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "match": "^\\s*[.$_A-Za-z][\\w.$@?]*(?=:)", "name": "entity.name.label.asm" },
+    { "match": "^\\s*\\.[A-Za-z][\\w.]*", "name": "keyword.directive.asm" },
+    {
+      "match": "^\\s*(?:[.$_A-Za-z][\\w.$@?]*:\\s*)?([A-Za-z][\\w.]*)",
+      "captures": { "1": { "name": "keyword.mnemonic.asm" } }
+    },
+    {
+      "match": "(?:%|\\$)?\\b(?:r(?:1[0-5]|[0-9])[bwd]?|[re]?(?:ax|bx|cx|dx|si|di|sp|bp)|[xyz]mm\\d+|x\\d+|w\\d+|sp|lr|pc)\\b",
+      "name": "variable.language.register.asm"
+    },
+    { "match": "\\b(?:0x[\\da-fA-F]+|\\d+)\\b", "name": "constant.numeric.asm" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        { "begin": ";", "end": "$", "name": "comment.line.semicolon.asm" },
+        { "begin": "//", "end": "$", "name": "comment.line.double-slash.asm" }
+      ]
+    },
+    "strings": {
+      "patterns": [
         {
-            "match": "^\\s*(?:[.$_A-Za-z][\\w.$@?]*:\\s*)?([A-Za-z][\\w.]*)",
-            "captures": { "1": { "name": "keyword.mnemonic.asm" } }
-        },
-        { "match": "(?:%|\\$)?\\b(?:r(?:1[0-5]|[0-9])[bwd]?|[re]?(?:ax|bx|cx|dx|si|di|sp|bp)|[xyz]mm\\d+|x\\d+|w\\d+|sp|lr|pc)\\b", "name": "variable.language.register.asm" },
-        { "match": "\\b(?:0x[\\da-fA-F]+|\\d+)\\b", "name": "constant.numeric.asm" }
-    ],
-    "repository": {
-        "comments": {
-            "patterns": [
-                { "begin": ";", "end": "$", "name": "comment.line.semicolon.asm" },
-                { "begin": "//", "end": "$", "name": "comment.line.double-slash.asm" }
-            ]
-        },
-        "strings": {
-            "patterns": [
-                { "begin": "\"", "end": "\"", "name": "string.quoted.double.asm", "patterns": [{ "match": "\\\\.", "name": "constant.character.escape.asm" }] }
-            ]
+          "begin": "\"",
+          "end": "\"",
+          "name": "string.quoted.double.asm",
+          "patterns": [{ "match": "\\\\.", "name": "constant.character.escape.asm" }]
         }
+      ]
     }
+  }
 }

@@ -25,23 +25,17 @@ export interface ArtifactCommandDependencies {
 	readonly graphPanels: GraphPanelManager;
 }
 
-export function register(
-	context: vscode.ExtensionContext,
-	deps: ArtifactCommandDependencies,
-): void {
+export function register(context: vscode.ExtensionContext, deps: ArtifactCommandDependencies): void {
 	const { compilationService, configuration, artifacts, graphPanels } = deps;
 	context.subscriptions.push(
-		vscode.commands.registerTextEditorCommand(
-			'coglens.OpenArtifact',
-			editor => openArtifact(editor, undefined, deps),
+		vscode.commands.registerTextEditorCommand('coglens.OpenArtifact', (editor) =>
+			openArtifact(editor, undefined, deps),
 		),
-		vscode.commands.registerTextEditorCommand(
-			'coglens.OpenControlFlowGraph',
-			editor => openArtifact(editor, 'control-flow-graph', deps),
+		vscode.commands.registerTextEditorCommand('coglens.OpenControlFlowGraph', (editor) =>
+			openArtifact(editor, 'control-flow-graph', deps),
 		),
-		vscode.commands.registerTextEditorCommand(
-			'coglens.CompareArtifacts',
-			editor => compareArtifacts(editor, compilationService, configuration),
+		vscode.commands.registerTextEditorCommand('coglens.CompareArtifacts', (editor) =>
+			compareArtifacts(editor, compilationService, configuration),
 		),
 		vscode.commands.registerCommand('coglens.CopyText', async (node?: TreeNode) => {
 			const text = node?.copyText ?? node?.label;
@@ -65,8 +59,9 @@ export function register(
 			if (snapshot) {
 				const activeEditor = vscode.window.activeTextEditor;
 				const mappedSource = activeEditor
-					? artifacts.getArtifactDocumentContent(activeEditor.document.uri)
-						?.lines[activeEditor.selection.active.line]?.source
+					? artifacts.getArtifactDocumentContent(activeEditor.document.uri)?.lines[
+							activeEditor.selection.active.line
+						]?.source
 					: undefined;
 				const hasMappedSource = Boolean(mappedSource?.file && mappedSource.line);
 				const sourceUri = hasMappedSource
@@ -81,17 +76,13 @@ export function register(
 				});
 			}
 		}),
-		vscode.commands.registerCommand(
-			'coglens.ShowArtifactStatus',
-			async () => showArtifactStatusActions(artifacts),
-		),
+		vscode.commands.registerCommand('coglens.ShowArtifactStatus', async () => showArtifactStatusActions(artifacts)),
 		...[
 			['coglens.OpenToolchainSettingsJson', 'coglens.toolchains'],
 			['coglens.OpenCompileSettingsJson', 'coglens.compileVariants'],
 			['coglens.OpenArtifactSettingsJson', 'coglens.artifactOptions'],
 			['coglens.OpenPresetSettingsJson', 'coglens.artifactPresets'],
-		].map(([command, key]) =>
-			vscode.commands.registerCommand(command, () => openWorkspaceSettingsJson(key))),
+		].map(([command, key]) => vscode.commands.registerCommand(command, () => openWorkspaceSettingsJson(key))),
 	);
 }
 
@@ -107,7 +98,7 @@ async function openArtifact(
 		);
 		return;
 	}
-	if (!await pickVariantIfNeeded(editor.document.uri, compilationService)) {
+	if (!(await pickVariantIfNeeded(editor.document.uri, compilationService))) {
 		return;
 	}
 	const variant = compilationService.getSelectedVariant(editor.document.uri);
@@ -123,12 +114,14 @@ async function openArtifact(
 	let kind = requestedKind;
 	if (!kind) {
 		const sections = partitionArtifactPickerChoices(
-			supportedArtifactKinds.map(artifactKind => ({
+			supportedArtifactKinds.map((artifactKind) => ({
 				label: artifactDefinitions[artifactKind].label,
 				iconPath: new vscode.ThemeIcon(artifactDefinitions[artifactKind].icon),
 				artifactKind,
-				availability: compilationService.toolchainRegistry
-					.getArtifactAvailability(variant.toolchainProfileId, artifactKind),
+				availability: compilationService.toolchainRegistry.getArtifactAvailability(
+					variant.toolchainProfileId,
+					artifactKind,
+				),
 			})),
 		);
 		const items: Array<vscode.QuickPickItem | ArtifactQuickPickChoice> = [];
@@ -142,10 +135,11 @@ async function openArtifact(
 		} else {
 			items.push(...sections.available.map(availableArtifactPickerItem));
 		}
-		const choice = await vscode.window.showQuickPick(
-			items,
-			{ title: 'Open Artifact', matchOnDescription: true, matchOnDetail: true },
-		);
+		const choice = await vscode.window.showQuickPick(items, {
+			title: 'Open Artifact',
+			matchOnDescription: true,
+			matchOnDetail: true,
+		});
 		if (!choice || !('artifactKind' in choice)) {
 			return;
 		}
@@ -155,8 +149,7 @@ async function openArtifact(
 		}
 		kind = choice.artifactKind;
 	}
-	const availability = compilationService.toolchainRegistry
-		.getArtifactAvailability(variant.toolchainProfileId, kind);
+	const availability = compilationService.toolchainRegistry.getArtifactAvailability(variant.toolchainProfileId, kind);
 	if (availability.status !== 'available') {
 		await vscode.window.showInformationMessage(availability.explanation);
 		return;
@@ -164,29 +157,34 @@ async function openArtifact(
 	const outputChoices = getArtifactOutputChoices(backend.profile, kind);
 	let artifactOutput = outputChoices.length === 1 ? outputChoices[0] : undefined;
 	if (needsArtifactOutputPicker(outputChoices)) {
-		artifactOutput = await pickFrom(outputChoices, output => ({
-			label: output.label,
-			detail: output.description,
-		}), { title: `${artifactDefinitions[kind].label} output` });
+		artifactOutput = await pickFrom(
+			outputChoices,
+			(output) => ({
+				label: output.label,
+				detail: output.description,
+			}),
+			{ title: `${artifactDefinitions[kind].label} output` },
+		);
 	}
 	if (outputChoices.length > 0 && !artifactOutput) {
 		return;
 	}
-	const presets = [...effectiveArtifactPresets(
-		configuration.getArtifactPresets(editor.document.uri), kind,
-	).values()];
-	const preset = presets.length === 1
-		? presets[0]
-		: await pickFrom(presets, candidate => ({
-			label: candidate.id === 'default' ? 'Default' : candidate.id,
-			description: candidate.extraArguments.join(' '),
-		}), { title: `${artifactDefinitions[kind].label} preset` });
+	const presets = [...effectiveArtifactPresets(configuration.getArtifactPresets(editor.document.uri), kind).values()];
+	const preset =
+		presets.length === 1
+			? presets[0]
+			: await pickFrom(
+					presets,
+					(candidate) => ({
+						label: candidate.id === 'default' ? 'Default' : candidate.id,
+						description: candidate.extraArguments.join(' '),
+					}),
+					{ title: `${artifactDefinitions[kind].label} preset` },
+				);
 	if (!preset) {
 		return;
 	}
-	const artifactUri = getArtifactUri(
-		editor.document.uri, variant, kind, preset.id, artifactOutput?.id,
-	);
+	const artifactUri = getArtifactUri(editor.document.uri, variant, kind, preset.id, artifactOutput?.id);
 	if (artifactDefinitions[kind].presentation === 'graph') {
 		await graphPanels.open(artifactUri);
 		return;
@@ -210,9 +208,7 @@ function unavailableArtifactPickerItem(choice: ArtifactPickerChoice): ArtifactQu
 		...choice,
 		label: `$(circle-slash) ${choice.label}`,
 		description: 'Unavailable',
-		detail: choice.availability.status === 'unavailable'
-			? choice.availability.explanation
-			: undefined,
+		detail: choice.availability.status === 'unavailable' ? choice.availability.explanation : undefined,
 	};
 }
 
@@ -238,7 +234,7 @@ async function compareArtifacts(
 		);
 		return;
 	}
-	if (!await pickVariantIfNeeded(editor.document.uri, compilationService)) {
+	if (!(await pickVariantIfNeeded(editor.document.uri, compilationService))) {
 		return;
 	}
 	const variants = compilationService.getVariants(editor.document.uri);
@@ -248,13 +244,13 @@ async function compareArtifacts(
 		return;
 	}
 	const targets: ComparisonTarget[] = [
-		...variants.map(variant => ({
+		...variants.map((variant) => ({
 			id: `variant:${variant.id}`,
 			label: variant.displayLabel,
 			description: 'Compilation variant',
 			variant,
 		})),
-		...configuration.getArtifactPresets(editor.document.uri).map(preset => ({
+		...configuration.getArtifactPresets(editor.document.uri).map((preset) => ({
 			id: `preset:${preset.id}`,
 			label: preset.id,
 			description: `${artifactDefinitions[preset.artifactKind].label} preset`,
@@ -272,9 +268,9 @@ async function compareArtifacts(
 	if (!left) {
 		return;
 	}
-	const compatibleTargets = targets.filter(target =>
-		target.id !== left.id
-		&& comparisonTargetsAreCompatible(left, target, compilationService));
+	const compatibleTargets = targets.filter(
+		(target) => target.id !== left.id && comparisonTargetsAreCompatible(left, target, compilationService),
+	);
 	if (compatibleTargets.length === 0) {
 		await vscode.window.showInformationMessage(
 			`No other configured variant or preset is compatible with "${left.label}".`,
@@ -289,23 +285,29 @@ async function compareArtifacts(
 		await vscode.window.showInformationMessage(graphComparisonMessage);
 		return;
 	}
-	const allCommonKinds = supportedArtifactKinds.filter(kind =>
-		targetSupportsKind(left, kind, compilationService)
-		&& targetSupportsKind(right, kind, compilationService));
-	const commonKinds = allCommonKinds.filter(kind => artifactDefinitions[kind].presentation === 'text');
+	const allCommonKinds = supportedArtifactKinds.filter(
+		(kind) =>
+			targetSupportsKind(left, kind, compilationService) && targetSupportsKind(right, kind, compilationService),
+	);
+	const commonKinds = allCommonKinds.filter((kind) => artifactDefinitions[kind].presentation === 'text');
 	if (commonKinds.length === 0) {
 		await vscode.window.showWarningMessage(
-			allCommonKinds.some(kind => artifactDefinitions[kind].presentation === 'graph')
+			allCommonKinds.some((kind) => artifactDefinitions[kind].presentation === 'graph')
 				? graphComparisonMessage
 				: `"${left.label}" and "${right.label}" do not support a common artifact kind.`,
 		);
 		return;
 	}
-	const kind = commonKinds.length === 1
-		? commonKinds[0]
-		: await pickFrom(commonKinds, artifactKind => ({
-			label: artifactDefinitions[artifactKind].label,
-		}), { title: 'Select the artifact kind to compare' });
+	const kind =
+		commonKinds.length === 1
+			? commonKinds[0]
+			: await pickFrom(
+					commonKinds,
+					(artifactKind) => ({
+						label: artifactDefinitions[artifactKind].label,
+					}),
+					{ title: 'Select the artifact kind to compare' },
+				);
 	if (!kind) {
 		return;
 	}
@@ -327,21 +329,24 @@ async function compareArtifacts(
 }
 
 function targetIsGraph(target: ComparisonTarget): boolean {
-	return Boolean(target.preset
-		&& artifactDefinitions[target.preset.artifactKind].presentation === 'graph');
+	return Boolean(target.preset && artifactDefinitions[target.preset.artifactKind].presentation === 'graph');
 }
 
 function pickComparisonTarget(
 	targets: readonly ComparisonTarget[],
 	title: string,
 ): Promise<ComparisonTarget | undefined> {
-	return pickFrom(targets, target => ({
-		label: target.label,
-		description: target.description,
-		iconPath: new vscode.ThemeIcon(target.preset
-			? artifactDefinitions[target.preset.artifactKind].icon
-			: 'git-branch'),
-	}), { title, matchOnDescription: true });
+	return pickFrom(
+		targets,
+		(target) => ({
+			label: target.label,
+			description: target.description,
+			iconPath: new vscode.ThemeIcon(
+				target.preset ? artifactDefinitions[target.preset.artifactKind].icon : 'git-branch',
+			),
+		}),
+		{ title, matchOnDescription: true },
+	);
 }
 
 function comparisonTargetsAreCompatible(
@@ -349,9 +354,10 @@ function comparisonTargetsAreCompatible(
 	right: ComparisonTarget,
 	compilationService: CompilationService,
 ): boolean {
-	return supportedArtifactKinds.some(kind =>
-		targetSupportsKind(left, kind, compilationService)
-		&& targetSupportsKind(right, kind, compilationService));
+	return supportedArtifactKinds.some(
+		(kind) =>
+			targetSupportsKind(left, kind, compilationService) && targetSupportsKind(right, kind, compilationService),
+	);
 }
 
 function targetSupportsKind(
@@ -359,16 +365,14 @@ function targetSupportsKind(
 	kind: ArtifactKind,
 	compilationService: CompilationService,
 ): boolean {
-	return (!target.preset || target.preset.artifactKind === kind)
-		&& compilationService.toolchainRegistry
-			.getArtifactAvailability(target.variant.toolchainProfileId, kind).status === 'available';
+	return (
+		(!target.preset || target.preset.artifactKind === kind) &&
+		compilationService.toolchainRegistry.getArtifactAvailability(target.variant.toolchainProfileId, kind).status ===
+			'available'
+	);
 }
 
-function comparisonUri(
-	source: vscode.Uri,
-	target: ComparisonTarget,
-	kind: ArtifactKind,
-): vscode.Uri {
+function comparisonUri(source: vscode.Uri, target: ComparisonTarget, kind: ArtifactKind): vscode.Uri {
 	return getArtifactUri(source, target.variant, kind, target.preset?.id ?? 'default');
 }
 
@@ -381,31 +385,38 @@ async function showArtifactStatusActions(artifacts: ArtifactDocumentProvider): P
 	if (!snapshot) {
 		return;
 	}
-	const choice = await vscode.window.showQuickPick([
+	const choice = await vscode.window.showQuickPick(
+		[
+			{
+				label: '$(refresh) Refresh Artifact',
+				description: 'Regenerate from the current source and settings',
+				command: 'coglens.RefreshArtifact',
+			},
+			...(snapshot.status.state === 'compiling'
+				? [
+						{
+							label: '$(debug-stop) Cancel Generation',
+							description: 'Stop the active compilation',
+							command: 'coglens.CancelGeneration',
+						},
+					]
+				: []),
+			{
+				label: '$(go-to-file) Reveal Source',
+				description: path.basename(snapshot.identity.sourceLabel),
+				command: 'coglens.RevealArtifactSource',
+			},
+			{
+				label: '$(output) Show Log',
+				description: 'Open the Cogitator Lens output channel',
+				command: 'coglens.ShowLog',
+			},
+		],
 		{
-			label: '$(refresh) Refresh Artifact',
-			description: 'Regenerate from the current source and settings',
-			command: 'coglens.RefreshArtifact',
+			title: `${snapshot.identity.artifactLabel} · ${statusLabel(snapshot.status.state)}`,
+			matchOnDescription: true,
 		},
-		...(snapshot.status.state === 'compiling' ? [{
-			label: '$(debug-stop) Cancel Generation',
-			description: 'Stop the active compilation',
-			command: 'coglens.CancelGeneration',
-		}] : []),
-		{
-			label: '$(go-to-file) Reveal Source',
-			description: path.basename(snapshot.identity.sourceLabel),
-			command: 'coglens.RevealArtifactSource',
-		},
-		{
-			label: '$(output) Show Log',
-			description: 'Open the Cogitator Lens output channel',
-			command: 'coglens.ShowLog',
-		},
-	], {
-		title: `${snapshot.identity.artifactLabel} · ${statusLabel(snapshot.status.state)}`,
-		matchOnDescription: true,
-	});
+	);
 	if (choice) {
 		await vscode.commands.executeCommand(choice.command);
 	}
@@ -416,8 +427,9 @@ function statusLabel(state: import('../artifact-document/artifact-generator.js')
 }
 
 async function openWorkspaceSettingsJson(key: string): Promise<void> {
-	const command = vscode.workspace.workspaceFile || vscode.workspace.workspaceFolders?.length
-		? 'workbench.action.openWorkspaceSettingsFile'
-		: 'workbench.action.openSettingsJson';
+	const command =
+		vscode.workspace.workspaceFile || vscode.workspace.workspaceFolders?.length
+			? 'workbench.action.openWorkspaceSettingsFile'
+			: 'workbench.action.openSettingsJson';
 	await vscode.commands.executeCommand(command, { revealSetting: { key, edit: true } });
 }

@@ -27,11 +27,15 @@ test('artifact picker hides unsupported choices and separates unavailable choice
 		},
 	]);
 
-	assert.deepEqual(sections.available.map(choice => choice.artifactKind), ['assembly']);
 	assert.deepEqual(
-		sections.unavailable.map(choice => choice.artifactKind),
+		sections.available.map((choice) => choice.artifactKind),
+		['assembly'],
+	);
+	assert.deepEqual(
+		sections.unavailable.map((choice) => choice.artifactKind),
 		['binary-disassembly'],
 	);
-	assert.ok(![...sections.available, ...sections.unavailable]
-		.some(choice => choice.artifactKind === 'python-bytecode'));
+	assert.ok(
+		![...sections.available, ...sections.unavailable].some((choice) => choice.artifactKind === 'python-bytecode'),
+	);
 });

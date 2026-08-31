@@ -345,25 +345,18 @@ const artifactDefinitionTable = {
 	},
 } as const satisfies Record<ArtifactKind, ArtifactDefinition>;
 
-export const artifactDefinitions: typeof artifactDefinitionTable
-	& Record<ArtifactKind, ArtifactDefinition> = artifactDefinitionTable;
+export const artifactDefinitions: typeof artifactDefinitionTable & Record<ArtifactKind, ArtifactDefinition> =
+	artifactDefinitionTable;
 
-export const supportedArtifactKinds = Object.freeze(
-	Object.keys(artifactDefinitions) as ArtifactKind[],
-);
+export const supportedArtifactKinds = Object.freeze(Object.keys(artifactDefinitions) as ArtifactKind[]);
 
 export function getArtifactDefinition(kind: string): ArtifactDefinition | undefined {
-	return Object.hasOwn(artifactDefinitions, kind)
-		? artifactDefinitions[kind as ArtifactKind]
-		: undefined;
+	return Object.hasOwn(artifactDefinitions, kind) ? artifactDefinitions[kind as ArtifactKind] : undefined;
 }
 
-export function artifactSupportsOption(
-	kind: ArtifactKind,
-	optionId: ArtifactOptionDescriptor['id'],
-): boolean {
+export function artifactSupportsOption(kind: ArtifactKind, optionId: ArtifactOptionDescriptor['id']): boolean {
 	const definition = artifactDefinitions[kind];
-	return definition.options.some(option => option.id === optionId);
+	return definition.options.some((option) => option.id === optionId);
 }
 
 function renderToolchainArtifact(
@@ -385,9 +378,12 @@ function renderAssembly(
 ): RenderedTextArtifact {
 	const parsed = context.backend.parseAssembly(raw.text, options);
 	const lines = parsed.asm.map(parsedLine);
-	return withLabelNavigation(renderedArtifact(raw, lines, {
-		labelCount: Object.keys(parsed.labelDefinitions ?? {}).length,
-	}), parsed);
+	return withLabelNavigation(
+		renderedArtifact(raw, lines, {
+			labelCount: Object.keys(parsed.labelDefinitions ?? {}).length,
+		}),
+		parsed,
+	);
 }
 
 function renderBinaryDisassembly(
@@ -397,38 +393,37 @@ function renderBinaryDisassembly(
 ): RenderedTextArtifact {
 	const parsed = context.backend.parseBinaryDisassembly(raw.text, options);
 	const lines = parsed.asm.map(parsedLine);
-	return withLabelNavigation(renderedArtifact(raw, lines, {
-			codeSizeBytes: parsed.asm.reduce(
-				(total, line) => total + (line.opcodes?.length ?? 0),
-				0,
-			),
-			instructionCount: parsed.asm.filter(line => line.opcodes?.length).length,
-		}), parsed);
+	return withLabelNavigation(
+		renderedArtifact(raw, lines, {
+			codeSizeBytes: parsed.asm.reduce((total, line) => total + (line.opcodes?.length ?? 0), 0),
+			instructionCount: parsed.asm.filter((line) => line.opcodes?.length).length,
+		}),
+		parsed,
+	);
 }
 
-function withLabelNavigation(
-	artifact: RenderedTextArtifact,
-	parsed: ParsedAsmResult,
-): RenderedTextArtifact {
+function withLabelNavigation(artifact: RenderedTextArtifact, parsed: ParsedAsmResult): RenderedTextArtifact {
 	const definitions = parsed.labelDefinitions ?? {};
 	const links = parsed.asm.flatMap((line, lineIndex) =>
-		(line.labels ?? []).flatMap(label => {
+		(line.labels ?? []).flatMap((label) => {
 			const targetLine = definitions[label.target ?? label.name];
 			return targetLine === undefined
 				? []
-				: [{
-					line: lineIndex,
-					startCharacter: label.range.startCol,
-					endCharacter: label.range.endCol,
-					targetLine,
-				}];
+				: [
+						{
+							line: lineIndex,
+							startCharacter: label.range.startCol,
+							endCharacter: label.range.endCol,
+							targetLine,
+						},
+					];
 		}),
 	);
 	const symbols = Object.entries(definitions)
 		.map(([name, line]) => ({ name, line }))
 		.sort((left, right) => left.line - right.line || left.name.localeCompare(right.name));
-	const boundaryLines = [...new Set(symbols.map(symbol => symbol.line))]
-		.filter(line => line >= 0 && line < artifact.lines.length)
+	const boundaryLines = [...new Set(symbols.map((symbol) => symbol.line))]
+		.filter((line) => line >= 0 && line < artifact.lines.length)
 		.sort((left, right) => left - right);
 	const folds = boundaryLines.flatMap((startLine, index) => {
 		const endLine = (boundaryLines[index + 1] ?? artifact.lines.length) - 1;
@@ -445,11 +440,11 @@ function parsedLine(line: ParsedAsmResultLine): RenderedArtifactLine {
 		disassembly: line.disassembly ?? (line.opcodes ? line.text.trimStart() : undefined),
 		source: line.source
 			? {
-				file: line.source.file,
-				line: line.source.line,
-				column: line.source.column,
-				mainSource: line.source.mainsource,
-			}
+					file: line.source.file,
+					line: line.source.line,
+					column: line.source.column,
+					mainSource: line.source.mainsource,
+				}
 			: line.source,
 	};
 }
@@ -457,8 +452,8 @@ function parsedLine(line: ParsedAsmResultLine): RenderedArtifactLine {
 export type ArtifactOptionAvailability =
 	| { readonly status: 'available' }
 	| {
-		readonly status: 'unavailable' | 'unsupported';
-		readonly explanation: string;
-		/** Machine-readable reason code for statuses a caller needs to branch on directly. */
-		readonly reason?: 'inherent';
-	};
+			readonly status: 'unavailable' | 'unsupported';
+			readonly explanation: string;
+			/** Machine-readable reason code for statuses a caller needs to branch on directly. */
+			readonly reason?: 'inherent';
+	  };

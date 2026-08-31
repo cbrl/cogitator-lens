@@ -6,20 +6,18 @@ import { parseCompilationDatabase } from '../src/buildsystems/compilation-databa
 test('parses arguments entries, resolves relative files, and preserves producer-owned arguments', () => {
 	const databasePath = path.resolve('workspace', 'build', 'compile_commands.json');
 	const directory = path.dirname(databasePath);
-	const entries = parseCompilationDatabase(JSON.stringify([{
-		directory,
-		file: path.join('..', 'src', 'main.cpp'),
-		command: 'unsupported-compiler --ignored-because-arguments-take-precedence',
-		arguments: [
-			'g++',
-			'-O2',
-			'-c',
-			path.join('..', 'src', 'main.cpp'),
-			'-o',
-			'main.o',
-		],
-		output: 'main.o',
-	}]), databasePath);
+	const entries = parseCompilationDatabase(
+		JSON.stringify([
+			{
+				directory,
+				file: path.join('..', 'src', 'main.cpp'),
+				command: 'unsupported-compiler --ignored-because-arguments-take-precedence',
+				arguments: ['g++', '-O2', '-c', path.join('..', 'src', 'main.cpp'), '-o', 'main.o'],
+				output: 'main.o',
+			},
+		]),
+		databasePath,
+	);
 
 	assert.equal(entries.length, 1);
 	assert.equal(entries[0].sourceFile, path.resolve(directory, '..', 'src', 'main.cpp'));
@@ -33,23 +31,28 @@ test('discovers Rust variants without rewriting project-specific rustc arguments
 	const databasePath = path.resolve('workspace', 'rust-project', 'compile_commands.json');
 	const directory = path.dirname(databasePath);
 	const source = path.join(directory, 'src', 'lib.rs');
-	const entries = parseCompilationDatabase(JSON.stringify([{
-		directory,
-		file: source,
-		arguments: [
-			'rustc',
-			'--crate-name',
-			'example',
-			'--crate-type=lib',
-			'--edition=2021',
-			'--extern',
-			`dependency=${path.join(directory, 'dependency.rlib')}`,
-			'--emit=metadata,link',
-			source,
-			'-o',
-			path.join(directory, 'example.rlib'),
-		],
-	}]), databasePath);
+	const entries = parseCompilationDatabase(
+		JSON.stringify([
+			{
+				directory,
+				file: source,
+				arguments: [
+					'rustc',
+					'--crate-name',
+					'example',
+					'--crate-type=lib',
+					'--edition=2021',
+					'--extern',
+					`dependency=${path.join(directory, 'dependency.rlib')}`,
+					'--emit=metadata,link',
+					source,
+					'-o',
+					path.join(directory, 'example.rlib'),
+				],
+			},
+		]),
+		databasePath,
+	);
 
 	assert.equal(entries.length, 1);
 	assert.equal(entries[0].toolchainProfile.kind, 'rust');
@@ -68,16 +71,28 @@ test('discovers Rust variants without rewriting project-specific rustc arguments
 
 test('tokenizes command entries according to the target platform', () => {
 	const databasePath = path.resolve('compile_commands.json');
-	const posixEntries = parseCompilationDatabase(JSON.stringify([{
-		directory: path.dirname(databasePath),
-		file: 'main file.cpp',
-		command: `clang++ -DNAME='hello world' -c "main file.cpp" -o main.o`,
-	}]), databasePath, 'linux');
-	const windowsEntries = parseCompilationDatabase(JSON.stringify([{
-		directory: path.dirname(databasePath),
-		file: 'main file.cpp',
-		command: String.raw`clang-cl.exe /DNAME="hello world" /c "main file.cpp" /Fomain.obj`,
-	}]), databasePath, 'win32');
+	const posixEntries = parseCompilationDatabase(
+		JSON.stringify([
+			{
+				directory: path.dirname(databasePath),
+				file: 'main file.cpp',
+				command: `clang++ -DNAME='hello world' -c "main file.cpp" -o main.o`,
+			},
+		]),
+		databasePath,
+		'linux',
+	);
+	const windowsEntries = parseCompilationDatabase(
+		JSON.stringify([
+			{
+				directory: path.dirname(databasePath),
+				file: 'main file.cpp',
+				command: String.raw`clang-cl.exe /DNAME="hello world" /c "main file.cpp" /Fomain.obj`,
+			},
+		]),
+		databasePath,
+		'win32',
+	);
 
 	assert.deepEqual(posixEntries[0].arguments, ['-DNAME=hello world', '-c', '-o', 'main.o']);
 	assert.equal(windowsEntries[0].toolchainProfile.kind, 'clang-cl');
@@ -87,13 +102,18 @@ test('tokenizes command entries according to the target platform', () => {
 test('logs and skips malformed databases and entries', () => {
 	const messages: string[] = [];
 	const databasePath = path.resolve('compile_commands.json');
-	const entries = parseCompilationDatabase(JSON.stringify([
-		null,
-		{ directory: '.', file: 'missing-command.cpp' },
-		{ directory: '.', file: 'bad-arguments.cpp', arguments: ['g++', 42] },
-		{ directory: '.', file: 'bad-command.cpp', command: `g++ "unfinished` },
-		{ directory: '.', file: 'unsupported.cpp', arguments: ['unknown-compiler', '-c', 'unsupported.cpp'] },
-	]), databasePath, 'linux', message => messages.push(message));
+	const entries = parseCompilationDatabase(
+		JSON.stringify([
+			null,
+			{ directory: '.', file: 'missing-command.cpp' },
+			{ directory: '.', file: 'bad-arguments.cpp', arguments: ['g++', 42] },
+			{ directory: '.', file: 'bad-command.cpp', command: `g++ "unfinished` },
+			{ directory: '.', file: 'unsupported.cpp', arguments: ['unknown-compiler', '-c', 'unsupported.cpp'] },
+		]),
+		databasePath,
+		'linux',
+		(message) => messages.push(message),
+	);
 
 	assert.deepEqual(entries, []);
 	assert.equal(messages.length, 5);
@@ -101,7 +121,7 @@ test('logs and skips malformed databases and entries', () => {
 
 	const jsonMessages: string[] = [];
 	assert.deepEqual(
-		parseCompilationDatabase('{', databasePath, 'linux', message => jsonMessages.push(message)),
+		parseCompilationDatabase('{', databasePath, 'linux', (message) => jsonMessages.push(message)),
 		[],
 	);
 	assert.match(jsonMessages[0], /invalid JSON/);

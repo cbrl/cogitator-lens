@@ -34,7 +34,8 @@ export function buildArtifactPresetTreeNode(
 				'settings-gear',
 				productionOptions.length
 					? productionOptions.map(([name, enabled]) =>
-						detailNode(name, enabled ? 'Enabled' : 'Disabled', 'symbol-boolean'))
+							detailNode(name, enabled ? 'Enabled' : 'Disabled', 'symbol-boolean'),
+						)
 					: [noneNode],
 				productionOptions.length,
 			),
@@ -59,20 +60,22 @@ export class ArtifactPresetsTreeProvider extends TreeProvider<ArtifactPresetTree
 		const presets = this.configuration.getArtifactPresets(scope);
 		return presets.length
 			? [...presets]
-				.sort((left, right) => left.id.localeCompare(right.id, undefined, { sensitivity: 'base' }))
-				.map(preset => buildArtifactPresetTreeNode(preset, scope))
-			: [{
-				...messageNode(
-					'No presets configured',
-					scope ? 'for this workspace' : undefined,
-					'Add a preset to reuse artifact arguments and production options.',
-				),
-				iconPath: new vscode.ThemeIcon('info'),
-			}];
+					.sort((left, right) => left.id.localeCompare(right.id, undefined, { sensitivity: 'base' }))
+					.map((preset) => buildArtifactPresetTreeNode(preset, scope))
+			: [
+					{
+						...messageNode(
+							'No presets configured',
+							scope ? 'for this workspace' : undefined,
+							'Add a preset to reuse artifact arguments and production options.',
+						),
+						iconPath: new vscode.ThemeIcon('info'),
+					},
+				];
 	}
 }
 
 export function activeConfigurationScope(): vscode.Uri | undefined {
 	const active = vscode.window.activeTextEditor?.document.uri;
-	return active ? parseArtifactUri(active)?.source ?? (active.scheme === 'file' ? active : undefined) : undefined;
+	return active ? (parseArtifactUri(active)?.source ?? (active.scheme === 'file' ? active : undefined)) : undefined;
 }

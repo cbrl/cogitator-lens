@@ -8,12 +8,8 @@ export function parseToolDiagnostics(
 	workingDirectory = path.dirname(fallbackSource.fsPath),
 ): CompileDiagnostic[] {
 	const diagnostics: CompileDiagnostic[] = [];
-	let pendingRustDiagnostic:
-		| { severity: 'error' | 'warning' | 'information'; message: string }
-		| undefined;
-	let pendingPythonLocation:
-		| { filename: string; line: number; column: number }
-		| undefined;
+	let pendingRustDiagnostic: { severity: 'error' | 'warning' | 'information'; message: string } | undefined;
+	let pendingPythonLocation: { filename: string; line: number; column: number } | undefined;
 	for (const line of output.split(/\r?\n/)) {
 		const gcc = /^(.*?):(\d+):(\d+):\s*(?:fatal\s+)?(error|warning|note):\s*(.*)$/.exec(line);
 		if (gcc) {
@@ -21,7 +17,7 @@ export function parseToolDiagnostics(
 				uri: diagnosticUri(gcc[1], fallbackSource, workingDirectory),
 				line: Math.max(0, Number(gcc[2]) - 1),
 				column: Math.max(0, Number(gcc[3]) - 1),
-				severity: gcc[4] === 'note' ? 'information' : gcc[4] as 'error' | 'warning',
+				severity: gcc[4] === 'note' ? 'information' : (gcc[4] as 'error' | 'warning'),
 				message: gcc[5],
 			});
 			pendingRustDiagnostic = undefined;
@@ -57,9 +53,7 @@ export function parseToolDiagnostics(
 		const rust = /^(error|warning|note)(\[[^\]]+\])?:\s*(.*)$/.exec(line);
 		if (rust) {
 			pendingRustDiagnostic = {
-				severity: rust[1] === 'note'
-					? 'information'
-					: rust[1] as 'error' | 'warning',
+				severity: rust[1] === 'note' ? 'information' : (rust[1] as 'error' | 'warning'),
 				message: `${rust[2] ? `${rust[2]} ` : ''}${rust[3]}`,
 			};
 			continue;
@@ -81,11 +75,7 @@ export function parseToolDiagnostics(
 		const pythonError = /^(SyntaxError|IndentationError|TabError):\s*(.*)$/.exec(line);
 		if (pythonError && pendingPythonLocation) {
 			diagnostics.push({
-				uri: diagnosticUri(
-					pendingPythonLocation.filename,
-					fallbackSource,
-					workingDirectory,
-				),
+				uri: diagnosticUri(pendingPythonLocation.filename, fallbackSource, workingDirectory),
 				line: Math.max(0, pendingPythonLocation.line - 1),
 				column: pendingPythonLocation.column,
 				severity: 'error',

@@ -1,9 +1,9 @@
 {
-	"extends": "./tsconfig.json",
-	"compilerOptions": {
-		"rootDir": ".",
-		"outDir": "out"
-	},
-	"include": ["src/**/*.ts", "test/extension/**/*.ts"],
-	"exclude": ["node_modules", ".vscode-test"]
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "rootDir": ".",
+    "outDir": "out"
+  },
+  "include": ["src/**/*.ts", "test/extension/**/*.ts"],
+  "exclude": ["node_modules", ".vscode-test"]
 }

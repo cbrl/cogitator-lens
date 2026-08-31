@@ -36,10 +36,7 @@ import type { OptRemark } from '../static/panes/opt-view.interfaces.js';
 import { logger } from './logger.js';
 import * as utils from './utils.js';
 
-export function processRawLlvmOptRemarks(
-	buffer: string,
-	compileFileName = '',
-): OptRemark[] {
+export function processRawLlvmOptRemarks(buffer: string, compileFileName = ''): OptRemark[] {
 	const output: OptRemark[] = [];
 	const remarksSet: Set<string> = new Set<string>();
 	const remarks = parseAllDocuments(buffer);
@@ -78,9 +75,7 @@ export function processRawLlvmOptRemarks(
 		const strOpt = JSON.stringify(opt);
 		if (!remarksSet.has(strOpt)) {
 			remarksSet.add(strOpt);
-			const tag = typeof doc.contents === 'object' && doc.contents !== null
-				? doc.contents.tag
-				: undefined;
+			const tag = typeof doc.contents === 'object' && doc.contents !== null ? doc.contents.tag : undefined;
 			const rawType = tag?.substring(1) ?? 'Analysis';
 			const normalized = opt as OptRemark;
 			normalized.displayString = displayOptInfo(normalized);
@@ -100,10 +95,7 @@ export function processRawLlvmOptRemarks(
 	return output;
 }
 
-export function processRawGccOptRemarks(
-	buffer: string,
-	compileFileName = '',
-): OptRemark[] {
+export function processRawGccOptRemarks(buffer: string, compileFileName = ''): OptRemark[] {
 	const remarks: OptRemark[] = [];
 
 	// example stderr lines:
@@ -124,7 +116,7 @@ export function processRawGccOptRemarks(
 		return 'Analysis'; // for type 'note' or empty
 	};
 
-	utils.eachLine(buffer, line => {
+	utils.eachLine(buffer, (line) => {
 		const match = line.match(remarkRegex);
 		if (match) {
 			const [, file, lineNum, colNum, type, message] = match;

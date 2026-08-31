@@ -64,10 +64,7 @@ interface SourceSpan {
  * dumps produced while rustc is recovering from an error: later functions can
  * still provide useful graphs and diagnostics identify only the bad function.
  */
-export function parseRustMirControlFlowGraphs(
-	text: string,
-	workingDirectory: string,
-): GraphParseResult {
+export function parseRustMirControlFlowGraphs(text: string, workingDirectory: string): GraphParseResult {
 	const lines = splitLines(text);
 	const graphs: ControlFlowGraph[] = [];
 	const diagnostics: string[] = [];
@@ -100,9 +97,7 @@ export function parseRustMirControlFlowGraphs(
 			const id = graphIds.allocate(functionLabel);
 			const delta = braceDelta(line);
 			if (delta <= 0) {
-				diagnostics.push(
-					`Omitted Rust MIR function ${JSON.stringify(functionLabel)}: missing function body.`,
-				);
+				diagnostics.push(`Omitted Rust MIR function ${JSON.stringify(functionLabel)}: missing function body.`);
 				continue;
 			}
 			current = {
@@ -133,7 +128,7 @@ export function parseRustMirControlFlowGraphs(
 				lineIndexes: [],
 				closed: false,
 			};
-			if (current.blocks.some(candidate => candidate.id === block.id)) {
+			if (current.blocks.some((candidate) => candidate.id === block.id)) {
 				current.errors.push(`duplicate basic block ${JSON.stringify(block.id)}`);
 			}
 			current.blocks.push(block);
@@ -170,50 +165,43 @@ export function parseRustMirControlFlowGraphs(
 	return { graphs, diagnostics };
 }
 
-function finishFunction(
-	functionBuilder: FunctionBuilder,
-	graphs: ControlFlowGraph[],
-	diagnostics: string[],
-): void {
+function finishFunction(functionBuilder: FunctionBuilder, graphs: ControlFlowGraph[], diagnostics: string[]): void {
 	if (functionBuilder.errors.length > 0) {
 		diagnostics.push(
-			`Omitted Rust MIR function ${JSON.stringify(functionBuilder.label)}: `
-				+ `${functionBuilder.errors.join('; ')}.`,
+			`Omitted Rust MIR function ${JSON.stringify(functionBuilder.label)}: ` +
+				`${functionBuilder.errors.join('; ')}.`,
 		);
 		return;
 	}
 	if (functionBuilder.blocks.length === 0) {
-		diagnostics.push(
-			`Omitted Rust MIR function ${JSON.stringify(functionBuilder.label)}: no basic blocks found.`,
-		);
+		diagnostics.push(`Omitted Rust MIR function ${JSON.stringify(functionBuilder.label)}: no basic blocks found.`);
 		return;
 	}
 
-	const parsedBlocks = functionBuilder.blocks.map(block => ({
+	const parsedBlocks = functionBuilder.blocks.map((block) => ({
 		block,
 		terminator: parseBlockTerminator(block),
 	}));
-	const parseErrors = parsedBlocks.flatMap(({ block, terminator }) => terminator.error
-		? [`basic block ${JSON.stringify(block.id)}: ${terminator.error}`]
-		: []);
+	const parseErrors = parsedBlocks.flatMap(({ block, terminator }) =>
+		terminator.error ? [`basic block ${JSON.stringify(block.id)}: ${terminator.error}`] : [],
+	);
 	if (parseErrors.length > 0) {
 		diagnostics.push(
-			`Omitted Rust MIR function ${JSON.stringify(functionBuilder.label)}: `
-				+ `${parseErrors.join('; ')}.`,
+			`Omitted Rust MIR function ${JSON.stringify(functionBuilder.label)}: ` + `${parseErrors.join('; ')}.`,
 		);
 		return;
 	}
 
-	const nodeIds = new Set(functionBuilder.blocks.map(block => block.id));
+	const nodeIds = new Set(functionBuilder.blocks.map((block) => block.id));
 	const edges: ControlFlowEdge[] = [];
 	const edgeKeys = new Set<string>();
 	for (const { block, terminator } of parsedBlocks) {
 		for (const successor of terminator.successors) {
 			if (!nodeIds.has(successor.target)) {
 				diagnostics.push(
-					`Omitted Rust MIR function ${JSON.stringify(functionBuilder.label)}: `
-						+ `basic block ${JSON.stringify(block.id)} targets unknown block `
-						+ `${JSON.stringify(successor.target)}.`,
+					`Omitted Rust MIR function ${JSON.stringify(functionBuilder.label)}: ` +
+						`basic block ${JSON.stringify(block.id)} targets unknown block ` +
+						`${JSON.stringify(successor.target)}.`,
 				);
 				return;
 			}
@@ -247,12 +235,7 @@ function finishFunction(
 	});
 }
 
-function appendBlockLine(
-	block: BlockBuilder,
-	lineIndex: number,
-	line: string,
-	workingDirectory: string,
-): void {
+function appendBlockLine(block: BlockBuilder, lineIndex: number, line: string, workingDirectory: string): void {
 	block.lines.push(line);
 	block.lineIndexes.push(lineIndex);
 	if (!block.source) {
@@ -265,7 +248,7 @@ function appendBlockLine(
 
 function blockLabel(block: BlockBuilder): string {
 	const label = block.lines
-		.map(line => line.trimEnd())
+		.map((line) => line.trimEnd())
 		.join('\n')
 		.trim();
 	return label || block.id;
@@ -279,8 +262,8 @@ interface ParsedTerminator {
 
 function parseBlockTerminator(block: BlockBuilder): ParsedTerminator {
 	const meaningful = block.lines
-		.map(line => stripComment(line).trim())
-		.filter(line => line && line !== '}' && !/^bb\d+(?:\s*\([^)]*\))?\s*:\s*\{?$/.test(line));
+		.map((line) => stripComment(line).trim())
+		.filter((line) => line && line !== '}' && !/^bb\d+(?:\s*\([^)]*\))?\s*:\s*\{?$/.test(line));
 	if (meaningful.length === 0) {
 		return { successors: [], error: 'missing terminator' };
 	}
@@ -304,13 +287,17 @@ function parseBlockTerminator(block: BlockBuilder): ParsedTerminator {
 }
 
 function isTerminatorStart(line: string): boolean {
-	return /^(?:goto\b|switchInt\b|return\b|resume\b|abort\b|unreachable\b|(?:_\S+\s*=\s*)?[A-Za-z_][\w:]*[\s\S]*->)/u.test(line);
+	return /^(?:goto\b|switchInt\b|return\b|resume\b|abort\b|unreachable\b|(?:_\S+\s*=\s*)?[A-Za-z_][\w:]*[\s\S]*->)/u.test(
+		line,
+	);
 }
 
 function isTerminatorContinuation(line: string): boolean {
-	return line.startsWith('[')
-		|| line.startsWith(']')
-		|| /^(?:success|return|unwind|drop|resume|real|imaginary)\s*:/iu.test(line);
+	return (
+		line.startsWith('[') ||
+		line.startsWith(']') ||
+		/^(?:success|return|unwind|drop|resume|real|imaginary)\s*:/iu.test(line)
+	);
 }
 
 function parseTerminatorLine(line: string): ParsedTerminator | undefined {
@@ -355,17 +342,14 @@ function parseTerminatorLine(line: string): ParsedTerminator | undefined {
 	}
 	if (arrow >= 0 && line.includes('[', arrow)) {
 		const family = /^\s*(?:_\S+\s*=\s*)?([A-Za-z_][\w]*)/.exec(line)?.[1] ?? '';
-		const successors = parseBracketSuccessors(
-			line,
-			family === 'switchInt' ? 'switch' : family,
-		);
+		const successors = parseBracketSuccessors(line, family === 'switchInt' ? 'switch' : family);
 		const hasSuccessorSyntax = /\[.*\]/.test(line);
 		if (successors.length > 0) {
 			return { successors };
 		}
 		if (
-			hasSuccessorSyntax
-			&& /\bunwind\s*(?::\s*)?(?:continue|unreachable|cleanup|terminate(?:\([^)]*\))?)\b/.test(line)
+			hasSuccessorSyntax &&
+			/\bunwind\s*(?::\s*)?(?:continue|unreachable|cleanup|terminate(?:\([^)]*\))?)\b/.test(line)
 		) {
 			return { successors: [] };
 		}
@@ -400,7 +384,7 @@ function parseBracketSuccessors(line: string, family: string): Successor[] {
 	// still denotes a real unwind successor.
 	for (const match of body.matchAll(/\bunwind\s+(bb\d+)\b/g)) {
 		const target = match[1];
-		if (!successors.some(successor => successor.target === target && successor.kind === 'exception')) {
+		if (!successors.some((successor) => successor.target === target && successor.kind === 'exception')) {
 			successors.push({ target, kind: 'exception', label: 'unwind' });
 		}
 	}
@@ -435,8 +419,13 @@ function successorLabel(family: string, label: string): string | undefined {
 	if (family === 'switch') {
 		return label;
 	}
-	if (family === 'assert' || family === 'yield' || family === 'drop'
-		|| normalized === 'return' || normalized === 'unwind') {
+	if (
+		family === 'assert' ||
+		family === 'yield' ||
+		family === 'drop' ||
+		normalized === 'return' ||
+		normalized === 'unwind'
+	) {
 		return label;
 	}
 	return undefined;
@@ -496,9 +485,6 @@ function sourceLocation(span: SourceSpan, workingDirectory: string): ControlFlow
 	};
 }
 
-
-
-
 function stripComment(line: string): string {
 	const index = findLineComment(line);
 	return index < 0 ? line : line.slice(0, index);
@@ -514,8 +500,7 @@ function findLineComment(line: string): number {
 				escaped = false;
 			} else if (character === '\\') {
 				escaped = true;
-			} else if ((quote === 'single' && character === "'")
-				|| (quote === 'double' && character === '"')) {
+			} else if ((quote === 'single' && character === "'") || (quote === 'double' && character === '"')) {
 				quote = undefined;
 			}
 			continue;
@@ -545,8 +530,7 @@ function braceDelta(line: string): number {
 				escaped = false;
 			} else if (character === '\\') {
 				escaped = true;
-			} else if ((quote === 'single' && character === "'")
-				|| (quote === 'double' && character === '"')) {
+			} else if ((quote === 'single' && character === "'") || (quote === 'double' && character === '"')) {
 				quote = undefined;
 			}
 			continue;

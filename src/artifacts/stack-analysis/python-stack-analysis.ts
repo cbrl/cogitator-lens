@@ -1,14 +1,7 @@
-import type {
-	DisplayOptions,
-	RawArtifact,
-	RenderedTextArtifact,
-} from '../../types/index.js';
+import type { DisplayOptions, RawArtifact, RenderedTextArtifact } from '../../types/index.js';
 import type { ArtifactProducer } from '../../toolchains/toolchain-map.js';
 import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
-import {
-	renderStackUsage,
-	type StackUsageEntry,
-} from './native-stack-analysis.js';
+import { renderStackUsage, type StackUsageEntry } from './native-stack-analysis.js';
 
 export interface PythonStackUsageRecord {
 	readonly qualifiedName: string;
@@ -39,12 +32,7 @@ export const pythonStackAnalysisHelper = [
 	"print(json.dumps({'entries':entries},ensure_ascii=True,separators=(',',':')))",
 ].join('\n');
 
-export const pythonStackAnalysisProducer: ArtifactProducer = async (
-	backend,
-	source,
-	options,
-	cancellationToken,
-) => {
+export const pythonStackAnalysisProducer: ArtifactProducer = async (backend, source, options, cancellationToken) => {
 	const raw = await backend.produceArtifact(
 		'stack-analysis',
 		source,
@@ -71,25 +59,27 @@ export function parsePythonStackUsage(text: string): readonly PythonStackUsageRe
 	if (!isRecord(value) || !Array.isArray(value.entries)) {
 		throw new Error('Python stack analysis JSON does not contain an entries array.');
 	}
-	return Object.freeze(value.entries.map((entry, index) => {
-		if (
-			!isRecord(entry)
-			|| typeof entry.qualifiedName !== 'string'
-			|| !entry.qualifiedName
-			|| !isNonNegativeSafeInteger(entry.stackSize)
-			|| !isPositiveSafeInteger(entry.firstLine)
-			|| !Array.isArray(entry.nesting)
-			|| !entry.nesting.every(item => typeof item === 'string')
-		) {
-			throw new Error(`Python stack analysis entry ${index + 1} is invalid.`);
-		}
-		return Object.freeze({
-			qualifiedName: entry.qualifiedName,
-			firstLine: entry.firstLine,
-			stackSize: entry.stackSize,
-			nesting: Object.freeze([...entry.nesting]),
-		});
-	}));
+	return Object.freeze(
+		value.entries.map((entry, index) => {
+			if (
+				!isRecord(entry) ||
+				typeof entry.qualifiedName !== 'string' ||
+				!entry.qualifiedName ||
+				!isNonNegativeSafeInteger(entry.stackSize) ||
+				!isPositiveSafeInteger(entry.firstLine) ||
+				!Array.isArray(entry.nesting) ||
+				!entry.nesting.every((item) => typeof item === 'string')
+			) {
+				throw new Error(`Python stack analysis entry ${index + 1} is invalid.`);
+			}
+			return Object.freeze({
+				qualifiedName: entry.qualifiedName,
+				firstLine: entry.firstLine,
+				stackSize: entry.stackSize,
+				nesting: Object.freeze([...entry.nesting]),
+			});
+		}),
+	);
 }
 
 export function renderPythonStackAnalysis(
@@ -98,7 +88,7 @@ export function renderPythonStackAnalysis(
 	context: ArtifactRenderContext,
 ): RenderedTextArtifact {
 	const records = parsePythonStackUsage(raw.text);
-	const entries: StackUsageEntry[] = records.map(record => ({
+	const entries: StackUsageEntry[] = records.map((record) => ({
 		sourceUri: context.source.uri.fsPath,
 		sourceLine: record.firstLine,
 		sourceColumn: 1,

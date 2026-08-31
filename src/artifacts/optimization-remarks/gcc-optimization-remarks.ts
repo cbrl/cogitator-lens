@@ -6,13 +6,15 @@ import { normalizeOptimizationRemark, optimizationRemarksRenderer } from './opti
 export const gccOptimizationRemarksOutput: ArtifactOutputSpec = Object.freeze({
 	output: { filename: 'output.opt', optional: true },
 	arguments: (outputFile: string, temporaryDirectory: string) => [
-		'-c', `-fopt-info-all=${outputFile}`,
-		'-o', path.join(temporaryDirectory, 'output.o'),
+		'-c',
+		`-fopt-info-all=${outputFile}`,
+		'-o',
+		path.join(temporaryDirectory, 'output.o'),
 	],
 });
 
 export function parseGccOptimizationRemarks(text: string, workingDirectory: string) {
-	return processRawGccOptRemarks(text).map(remark => normalizeOptimizationRemark(remark, workingDirectory));
+	return processRawGccOptRemarks(text).map((remark) => normalizeOptimizationRemark(remark, workingDirectory));
 }
 
 export const renderGccOptimizationRemarks = optimizationRemarksRenderer(parseGccOptimizationRemarks);

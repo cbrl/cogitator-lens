@@ -35,10 +35,7 @@ import { parseMetadata, type MetadataTable } from './llvm-debug-metadata.js';
  * on an unexpected `br` and throws on an unknown terminator, which discards
  * every other function in the module.
  */
-export function parseLlvmControlFlowGraphs(
-	text: string,
-	workingDirectory: string,
-): GraphParseResult {
+export function parseLlvmControlFlowGraphs(text: string, workingDirectory: string): GraphParseResult {
 	const lines = splitLines(text);
 	const metadata = parseMetadata(lines, workingDirectory);
 	const diagnostics: string[] = [];
@@ -137,7 +134,9 @@ function splitToFunctions(lines: readonly string[], diagnostics: string[]): Func
 			closingLine = lines.length;
 		}
 		if (!closed) {
-			diagnostics.push(`LLVM function ${JSON.stringify(functionName)} has no closing brace; parsing the partial body.`);
+			diagnostics.push(
+				`LLVM function ${JSON.stringify(functionName)} has no closing brace; parsing the partial body.`,
+			);
 		}
 		sections.push({
 			name: functionName,
@@ -161,7 +160,7 @@ function parseFunction(
 		diagnostics.push(`LLVM function ${JSON.stringify(section.name)} has no basic blocks.`);
 		return undefined;
 	}
-	const duplicateIdentity = firstDuplicate(blocks.map(block => block.identity));
+	const duplicateIdentity = firstDuplicate(blocks.map((block) => block.identity));
 	if (duplicateIdentity !== undefined) {
 		diagnostics.push(
 			`LLVM function ${JSON.stringify(section.name)} has duplicate basic-block identity ${JSON.stringify(duplicateIdentity)} and was omitted.`,
@@ -181,7 +180,9 @@ function parseFunction(
 		const terminator = parseTerminator(block, lines);
 		terminators.push(terminator);
 		if (terminator.malformed) {
-			diagnostics.push(`LLVM function ${JSON.stringify(section.name)}, block ${JSON.stringify(block.identity)}: ${terminator.malformed}`);
+			diagnostics.push(
+				`LLVM function ${JSON.stringify(section.name)}, block ${JSON.stringify(block.identity)}: ${terminator.malformed}`,
+			);
 			malformed = true;
 		}
 		nodes.push({
@@ -218,7 +219,9 @@ function parseFunction(
 		}
 	}
 	if (malformed) {
-		diagnostics.push(`LLVM function ${JSON.stringify(section.name)} was omitted because its control-flow structure is malformed.`);
+		diagnostics.push(
+			`LLVM function ${JSON.stringify(section.name)} was omitted because its control-flow structure is malformed.`,
+		);
 		return undefined;
 	}
 
@@ -249,12 +252,14 @@ function scanBlocks(section: FunctionSection, lines: readonly string[]): BasicBl
 
 	if (headers.length === 0) {
 		return section.bodyStartLine < section.endLine
-			? [{
-				identity: 'entry',
-				startLine: section.bodyStartLine,
-				bodyStartLine: section.bodyStartLine,
-				endLine: section.endLine,
-			}]
+			? [
+					{
+						identity: 'entry',
+						startLine: section.bodyStartLine,
+						bodyStartLine: section.bodyStartLine,
+						endLine: section.endLine,
+					},
+				]
 			: [];
 	}
 
@@ -299,16 +304,16 @@ function parseFunctionName(header: string): string | undefined {
 function blockLabel(block: BasicBlockSection, lines: readonly string[]): string {
 	const body = lines
 		.slice(block.bodyStartLine, block.endLine)
-		.map(line => line.trimEnd())
-		.filter(line => line.length > 0);
+		.map((line) => line.trimEnd())
+		.filter((line) => line.length > 0);
 	// LLVM indents every instruction by the same amount. Dropping that shared
 	// indent keeps the node narrow while preserving the deeper indentation of
 	// continuation lines in multi-line terminators.
 	const commonIndent = Math.min(
-		...body.map(line => line.length - line.trimStart().length),
+		...body.map((line) => line.length - line.trimStart().length),
 		Number.MAX_SAFE_INTEGER,
 	);
-	const text = body.map(line => line.slice(commonIndent)).join('\n');
+	const text = body.map((line) => line.slice(commonIndent)).join('\n');
 	return text ? `${block.identity}:\n${text}` : `${block.identity}:`;
 }
 
@@ -369,7 +374,10 @@ function parseTerminator(block: BasicBlockSection, lines: readonly string[]): Te
 function terminatorOpcode(line: string): string | undefined {
 	// An assignment may prefix invoke (or another terminator in malformed
 	// output), while tail/musttail/notail are instruction modifiers.
-	const match = /^\s*(?:[%@](?:"(?:\\.|[^"\\])*"|[^\s=]+)\s*=\s*)?(?:(?:tail|musttail|notail)\s+)?(br|switch|indirectbr|invoke|callbr|ret|resume|unreachable|catchret|cleanupret|catchswitch|unwind)\b/iu.exec(line);
+	const match =
+		/^\s*(?:[%@](?:"(?:\\.|[^"\\])*"|[^\s=]+)\s*=\s*)?(?:(?:tail|musttail|notail)\s+)?(br|switch|indirectbr|invoke|callbr|ret|resume|unreachable|catchret|cleanupret|catchswitch|unwind)\b/iu.exec(
+			line,
+		);
 	return match?.[1].toLowerCase();
 }
 
@@ -411,7 +419,7 @@ function parseTerminatorText(opcode: string, text: string): TerminatorResult {
 		case 'indirectbr': {
 			const targets = labelReferences(text);
 			return targets.length > 0
-				? { opcode, edges: targets.map(target => ({ target, kind: 'unconditional' as const })) }
+				? { opcode, edges: targets.map((target) => ({ target, kind: 'unconditional' as const })) }
 				: { opcode, edges: [], malformed: 'indirectbr terminator has no label target' };
 		}
 		case 'invoke': {
@@ -435,7 +443,7 @@ function parseTerminatorText(opcode: string, text: string): TerminatorResult {
 			if (normal) {
 				edges.push({ target: decodeLlvmName(normal[1].slice(1)), kind: 'unconditional', label: 'normal' });
 			}
-			const seen = new Set(edges.map(edge => edge.target));
+			const seen = new Set(edges.map((edge) => edge.target));
 			for (const target of references) {
 				if (!seen.has(target)) {
 					edges.push({ target, kind: 'unconditional', label: 'indirect' });
@@ -455,14 +463,17 @@ function parseTerminatorText(opcode: string, text: string): TerminatorResult {
 		case 'cleanupret': {
 			const match = new RegExp(`\\bunwind\\s+label\\s+(${labelToken})`, 'u').exec(text);
 			if (match) {
-				return { opcode, edges: [{ target: decodeLlvmName(match[1].slice(1)), kind: 'exception', label: 'unwind' }] };
+				return {
+					opcode,
+					edges: [{ target: decodeLlvmName(match[1].slice(1)), kind: 'exception', label: 'unwind' }],
+				};
 			}
 			return /\bunwind\s+to\s+caller\b/u.test(text)
 				? { opcode, edges: [], terminal: 'resume' }
 				: { opcode, edges: [], malformed: 'cleanupret terminator has no unwind target' };
 		}
 		case 'catchswitch': {
-			const edges = labelReferences(text).map(target => ({
+			const edges = labelReferences(text).map((target) => ({
 				target,
 				kind: 'exception' as const,
 			}));
@@ -491,8 +502,7 @@ const labelToken = String.raw`%(?:"(?:\\.|[^"\\])*"|[A-Za-z0-9$._-]+)`;
 const labelReferencePattern = new RegExp(`\\blabel\\s+(${labelToken})`, 'gu');
 
 function labelReferences(text: string): string[] {
-	return [...text.matchAll(labelReferencePattern)].map(match =>
-		decodeLlvmName(match[1].slice(1)));
+	return [...text.matchAll(labelReferencePattern)].map((match) => decodeLlvmName(match[1].slice(1)));
 }
 
 function labelReferencesWithContext(text: string): Array<{ readonly target: string; readonly context: string }> {
@@ -512,7 +522,7 @@ function labelReferencesWithContext(text: string): Array<{ readonly target: stri
 		let defaultReferenceRemoved = false;
 		return [
 			{ target: defaultTarget, context: 'default' },
-			...references.filter(reference => {
+			...references.filter((reference) => {
 				if (!defaultReferenceRemoved && reference.target === defaultTarget) {
 					defaultReferenceRemoved = true;
 					return false;
@@ -521,7 +531,7 @@ function labelReferencesWithContext(text: string): Array<{ readonly target: stri
 			}),
 		];
 	}
-	return labelReferences(text).map(target => ({ target, context: 'case' }));
+	return labelReferences(text).map((target) => ({ target, context: 'case' }));
 }
 
 function lineRange(start: number, end: number): number[] {
@@ -571,8 +581,6 @@ function findUnquotedCharacter(value: string, wanted: string): number {
 	}
 	return -1;
 }
-
-
 
 function firstDuplicate(values: readonly string[]): string | undefined {
 	const seen = new Set<string>();

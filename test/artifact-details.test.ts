@@ -7,11 +7,7 @@ import {
 } from '../src/artifacts/ui/artifact-details.js';
 import type { ArtifactDocumentSnapshot } from '../src/artifact-document/artifact-identity.js';
 import type { ArtifactStatus } from '../src/artifact-document/artifact-generator.js';
-import type {
-	ArtifactCommand,
-	RawArtifact,
-	RenderedArtifact,
-} from '../src/types/index.js';
+import type { ArtifactCommand, RawArtifact, RenderedArtifact } from '../src/types/index.js';
 
 test('invocation details redact values at the presentation boundary', () => {
 	const secret = 'do-not-display-this-value';
@@ -37,30 +33,27 @@ test('artifact details expose deterministic identity, status, invocation, enviro
 	const details = buildArtifactDetails(snapshot(successfulStatus()), {
 		largestFrame: 'Largest known frame',
 	});
-	assert.deepEqual(details.map(item => item.label), [
-		'Artifact',
-		'Status',
-		'Invocation',
-		'Environment',
-		'Metrics',
-	]);
+	assert.deepEqual(
+		details.map((item) => item.label),
+		['Artifact', 'Status', 'Invocation', 'Environment', 'Metrics'],
+	);
 	assert.equal(itemValue(details, 'state'), 'Ready with diagnostics');
 	assert.equal(itemValue(details, 'errors'), '1');
 	assert.equal(itemValue(details, 'warnings'), '1');
 	assert.equal(itemValue(details, 'information'), '1');
 	assert.equal(itemValue(details, 'duration'), '12 ms');
 	assert.equal(itemValue(details, 'generated'), '2023-11-14T22:13:20.000Z');
-	assert.equal(
-		itemValue(details, 'command-line'),
-		'"/tool chain/clang++" -O2 "-DNAME=value with spaces"',
-	);
+	assert.equal(itemValue(details, 'command-line'), '"/tool chain/clang++" -O2 "-DNAME=value with spaces"');
 	const environment = findItem(details, 'environment').children ?? [];
-	assert.deepEqual(environment.map(item => item.label), ['API_KEY', 'TOKEN']);
+	assert.deepEqual(
+		environment.map((item) => item.label),
+		['API_KEY', 'TOKEN'],
+	);
 	const metrics = findItem(details, 'metrics').children ?? [];
-	assert.deepEqual(metrics.map(item => item.id), [
-		'metric-functionCount',
-		'metric-largestFrame',
-	]);
+	assert.deepEqual(
+		metrics.map((item) => item.id),
+		['metric-functionCount', 'metric-largestFrame'],
+	);
 	assert.equal(metrics[1].label, 'Largest known frame');
 	assert.equal(metrics[1].copyText, '64');
 });
@@ -71,12 +64,15 @@ test('artifact details represent all lifecycle states without requiring an artif
 		[{ state: 'compiling', truncated: false }, 'Generating'],
 		[{ state: 'cancelled', truncated: false }, 'Cancelled'],
 		[successfulStatus(false), 'Ready'],
-		[{
-			state: 'failed',
-			error: new Error('expected failure'),
-			diagnostics: [],
-			truncated: true,
-		}, 'Failed'],
+		[
+			{
+				state: 'failed',
+				error: new Error('expected failure'),
+				diagnostics: [],
+				truncated: true,
+			},
+			'Failed',
+		],
 	];
 	for (const [status, expected] of statuses) {
 		const details = buildArtifactDetails(snapshot(status));
@@ -85,23 +81,25 @@ test('artifact details represent all lifecycle states without requiring an artif
 });
 
 test('failed artifact details retain the sanitized invocation prepared before execution', () => {
-	const details = buildArtifactDetails(snapshot({
-		state: 'failed',
-		error: new Error('expected failure'),
-		diagnostics: [],
-		invocation: {
-			executable: '/tool/clang++',
-			args: ['-c', 'source.cpp'],
-			cwd: '/project',
-			environmentVariableNames: ['PATH'],
-		},
-		truncated: false,
-	}));
+	const details = buildArtifactDetails(
+		snapshot({
+			state: 'failed',
+			error: new Error('expected failure'),
+			diagnostics: [],
+			invocation: {
+				executable: '/tool/clang++',
+				args: ['-c', 'source.cpp'],
+				cwd: '/project',
+				environmentVariableNames: ['PATH'],
+			},
+			truncated: false,
+		}),
+	);
 	assert.equal(itemValue(details, 'state'), 'Failed');
 	assert.equal(itemValue(details, 'executable'), '/tool/clang++');
 	assert.equal(itemValue(details, 'argument-1'), 'source.cpp');
 	assert.deepEqual(
-		findItem(details, 'environment').children?.map(item => item.label),
+		findItem(details, 'environment').children?.map((item) => item.label),
 		['PATH'],
 	);
 });
@@ -110,11 +108,13 @@ function successfulStatus(withDiagnostics = true): ArtifactStatus {
 	const raw: RawArtifact = {
 		kind: 'stack-analysis',
 		text: '',
-		diagnostics: withDiagnostics ? [
-			{ uri: {} as never, line: 0, column: 0, severity: 'error', message: 'error' },
-			{ uri: {} as never, line: 0, column: 0, severity: 'warning', message: 'warning' },
-			{ uri: {} as never, line: 0, column: 0, severity: 'information', message: 'note' },
-		] : [],
+		diagnostics: withDiagnostics
+			? [
+					{ uri: {} as never, line: 0, column: 0, severity: 'error', message: 'error' },
+					{ uri: {} as never, line: 0, column: 0, severity: 'warning', message: 'warning' },
+					{ uri: {} as never, line: 0, column: 0, severity: 'information', message: 'note' },
+				]
+			: [],
 		durationMs: 12.4,
 		generatedAt: 1_700_000_000_000,
 		command: {
@@ -190,10 +190,7 @@ function findItem(items: readonly ArtifactDetailsItem[], id: string): ArtifactDe
 	throw new Error(`Details item not found: ${id}`);
 }
 
-function tryFindItem(
-	items: readonly ArtifactDetailsItem[],
-	id: string,
-): ArtifactDetailsItem | undefined {
+function tryFindItem(items: readonly ArtifactDetailsItem[], id: string): ArtifactDetailsItem | undefined {
 	for (const item of items) {
 		if (item.id === id) {
 			return item;

@@ -8,11 +8,7 @@
  * the same way in a `switch` and survives serialization, which matters because
  * the classification is carried into diagnostics.
  */
-export type InstructionType =
-	| 'unconditional-jump'
-	| 'conditional-jump'
-	| 'return'
-	| 'linear';
+export type InstructionType = 'unconditional-jump' | 'conditional-jump' | 'return' | 'linear';
 
 /**
  * Classifies assembly instructions for one instruction set.
@@ -26,9 +22,11 @@ export class InstructionSetInfo {
 	 * instruction. Used to split a labelled block at each branch.
 	 */
 	isJump(instruction: string): boolean {
-		return instruction.trim().startsWith('j')
-			|| /\bb\.*(?:eq|ne|cs|hs|cc|lo|hi|ls|ge|lt|gt|le|rge|rlt)?\b/u.test(instruction)
-			|| /tbnz|tbz|cbnz|cbz/u.test(instruction);
+		return (
+			instruction.trim().startsWith('j') ||
+			/\bb\.*(?:eq|ne|cs|hs|cc|lo|hi|ls|ge|lt|gt|le|rge|rlt)?\b/u.test(instruction) ||
+			/tbnz|tbz|cbnz|cbz/u.test(instruction)
+		);
 	}
 
 	classify(instruction: string): InstructionType {
@@ -42,15 +40,28 @@ export class InstructionSetInfo {
 		// space-indented and so misses the tab-indented form assemblers emit.
 		// Matching the mnemonic covers `ret`, `retq`, and the space-indented
 		// `rep ret` alike.
-		return /^ret[a-z]?$/u.test(opcodeOf(instruction)) || instruction.includes(' ret')
-			? 'return'
-			: 'linear';
+		return /^ret[a-z]?$/u.test(opcodeOf(instruction)) || instruction.includes(' ret') ? 'return' : 'linear';
 	}
 }
 
 const armConditions = `(?:${[
-	'eq', 'ne', 'cs', 'hs', 'cc', 'lo', 'mi', 'pl', 'vs', 'vc',
-	'hi', 'ls', 'ge', 'lt', 'gt', 'le', 'al',
+	'eq',
+	'ne',
+	'cs',
+	'hs',
+	'cc',
+	'lo',
+	'mi',
+	'pl',
+	'vs',
+	'vc',
+	'hi',
+	'ls',
+	'ge',
+	'lt',
+	'gt',
+	'le',
+	'al',
 ].join('|')})`;
 
 const armConditionalJumps = new RegExp(
@@ -62,17 +73,19 @@ const armConditionalJumps = new RegExp(
 		'cbnz',
 		'tbz',
 		'tbnz',
-	].map(pattern => `(?:${pattern})`).join('|')})\\b`,
+	]
+		.map((pattern) => `(?:${pattern})`)
+		.join('|')})\\b`,
 	'u',
 );
 const armUnconditionalJumps = new RegExp(
-	`\\b(?:${['b(?:\\.w)?', 'bx', 'bxj'].map(pattern => `(?:${pattern})`).join('|')})\\b`,
+	`\\b(?:${['b(?:\\.w)?', 'bx', 'bxj'].map((pattern) => `(?:${pattern})`).join('|')})\\b`,
 	'u',
 );
 const armReturns = new RegExp(
-	`(?:${['bx', 'ret'].map(pattern => `(?:${pattern})`).join('|')})\\b.*`
-	+ String.raw`|pop\s*\{(?:r(?:\d{2,}|[4-9]),\s*)*pc\}.*`
-	+ String.raw`|mov\s*pc\s*,.*`,
+	`(?:${['bx', 'ret'].map((pattern) => `(?:${pattern})`).join('|')})\\b.*` +
+		String.raw`|pop\s*\{(?:r(?:\d{2,}|[4-9]),\s*)*pc\}.*` +
+		String.raw`|mov\s*pc\s*,.*`,
 	'u',
 );
 
@@ -153,10 +166,7 @@ export class MsvcInstructionSetInfo extends InstructionSetInfo {
  * listing line.
  */
 function msvcInstruction(instruction: string): string {
-	return instruction.replace(
-		/^\s*(?:[0-9a-f]{5,16}\s+)?(?:[0-9a-f]{2}\s+)+/iu,
-		'',
-	);
+	return instruction.replace(/^\s*(?:[0-9a-f]{5,16}\s+)?(?:[0-9a-f]{2}\s+)+/iu, '');
 }
 
 /**

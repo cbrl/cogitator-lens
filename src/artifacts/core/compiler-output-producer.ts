@@ -1,14 +1,7 @@
 import type { CancellationToken, Uri } from 'vscode';
 import path from 'path';
-import type {
-	ArtifactKind,
-	CompileOptions,
-	RawArtifact,
-} from '../../types/index.js';
-import type {
-	ArtifactOutputSpec,
-	ToolchainBackend,
-} from '../../toolchains/toolchain-backend.js';
+import type { ArtifactKind, CompileOptions, RawArtifact } from '../../types/index.js';
+import type { ArtifactOutputSpec, ToolchainBackend } from '../../toolchains/toolchain-backend.js';
 import type { ArtifactProducer } from '../../toolchains/toolchain-map.js';
 
 /**
@@ -29,28 +22,18 @@ export const assemblyControlFlowGraphProducer: ArtifactProducer = async (
 	kind: 'control-flow-graph',
 });
 
-export function artifactProducer(
-	kind: ArtifactKind,
-	spec: ArtifactOutputSpec,
-): ArtifactProducer {
+export function artifactProducer(kind: ArtifactKind, spec: ArtifactOutputSpec): ArtifactProducer {
 	return (
 		backend: ToolchainBackend,
 		source: Uri,
 		options: CompileOptions,
 		cancellationToken: CancellationToken,
-	): Promise<RawArtifact> =>
-		backend.produceArtifact(kind, source, options, spec, cancellationToken);
+	): Promise<RawArtifact> => backend.produceArtifact(kind, source, options, spec, cancellationToken);
 }
 
 export const llvmIrOutput: ArtifactOutputSpec = Object.freeze({
 	output: { filename: 'output.ll' },
-	arguments: (outputFile: string) => [
-		'-emit-llvm',
-		'-S',
-		'-gline-tables-only',
-		'-o',
-		outputFile,
-	],
+	arguments: (outputFile: string) => ['-emit-llvm', '-S', '-gline-tables-only', '-o', outputFile],
 });
 
 export const clangClLlvmIrOutput: ArtifactOutputSpec = Object.freeze({
@@ -102,5 +85,5 @@ export function rustArtifactArguments(
 }
 
 function hasOption(args: readonly string[], name: string): boolean {
-	return args.some(argument => argument === name || argument.startsWith(`${name}=`));
+	return args.some((argument) => argument === name || argument.startsWith(`${name}=`));
 }

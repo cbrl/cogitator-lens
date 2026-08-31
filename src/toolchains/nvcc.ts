@@ -1,10 +1,7 @@
 import path from 'node:path';
 import type { BinaryDisassembler } from './toolchain-backend.js';
 
-export function nvccOutputArguments(
-	target: 'assembly' | 'object',
-	outputFile: string,
-): readonly string[] {
+export function nvccOutputArguments(target: 'assembly' | 'object', outputFile: string): readonly string[] {
 	return target === 'assembly'
 		? ['--ptx', '--generate-line-info', '--keep-device-functions', '-o', outputFile]
 		: ['--cubin', '--generate-line-info', '--keep-device-functions', '-o', outputFile];
@@ -31,7 +28,11 @@ export function stripNvccManagedArguments(
 			index++;
 			continue;
 		}
-		if (/^(?:-o.+|--output-file=|--ptx$|-ptx$|--cubin$|-cubin$|--compile$|-c$|-S$|-E$|--generate-line-info$|-lineinfo$|--keep-device-functions$)/u.test(argument)) {
+		if (
+			/^(?:-o.+|--output-file=|--ptx$|-ptx$|--cubin$|-cubin$|--compile$|-c$|-S$|-E$|--generate-line-info$|-lineinfo$|--keep-device-functions$)/u.test(
+				argument,
+			)
+		) {
 			continue;
 		}
 		result.push(argument);

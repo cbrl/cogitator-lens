@@ -1,9 +1,6 @@
 import path from 'node:path';
 
-export function zigOutputArguments(
-	target: 'assembly' | 'object',
-	outputFile: string,
-): readonly string[] {
+export function zigOutputArguments(target: 'assembly' | 'object', outputFile: string): readonly string[] {
 	return target === 'assembly'
 		? ['build-obj', '-fllvm', '-fno-strip', '-fno-emit-bin', `-femit-asm=${outputFile}`]
 		: ['build-obj', '-fllvm', '-fno-strip', `-femit-bin=${outputFile}`];

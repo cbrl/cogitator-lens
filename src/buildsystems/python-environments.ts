@@ -6,15 +6,8 @@ import {
 	type PythonExtension as PythonExtensionApi,
 	type ResolvedEnvironment,
 } from '@vscode/python-extension';
-import {
-	Disposable,
-	Uri,
-	workspace,
-} from 'vscode';
-import type {
-	CompilationVariant,
-	ProviderSnapshot,
-} from '../types/index.js';
+import { Disposable, Uri, workspace } from 'vscode';
+import type { CompilationVariant, ProviderSnapshot } from '../types/index.js';
 import * as logger from '../logger.js';
 import { VariantProvider } from './variant-provider.js';
 import {
@@ -26,8 +19,7 @@ import {
 
 const providerId = 'python-environments';
 const pythonSourcePattern = '**/*.py';
-const pythonSourceExclusions =
-	'**/{.git,.hg,.svn,.nox,.tox,.venv,__pycache__,env,node_modules,site-packages,venv}/**';
+const pythonSourceExclusions = '**/{.git,.hg,.svn,.nox,.tox,.venv,__pycache__,env,node_modules,site-packages,venv}/**';
 
 type PythonApiFactory = () => Promise<PythonExtensionApi>;
 
@@ -38,9 +30,7 @@ export class PythonEnvironmentVariantProvider extends VariantProvider {
 	private refreshGeneration = 0;
 	private disposed = false;
 
-	constructor(
-		private readonly apiFactory: PythonApiFactory = () => PythonExtension.api(),
-	) {
+	constructor(private readonly apiFactory: PythonApiFactory = () => PythonExtension.api()) {
 		super();
 	}
 
@@ -91,10 +81,10 @@ export class PythonEnvironmentVariantProvider extends VariantProvider {
 		}
 
 		const profiles = createPythonEnvironmentProfiles(environments);
-		const variants = sources.flatMap(source => this.createVariants(api, source, profiles));
+		const variants = sources.flatMap((source) => this.createVariants(api, source, profiles));
 		this.publish({
 			provider: providerId,
-			toolchainProfiles: profiles.map(item => item.profile),
+			toolchainProfiles: profiles.map((item) => item.profile),
 			variants,
 		});
 	}
@@ -102,33 +92,31 @@ export class PythonEnvironmentVariantProvider extends VariantProvider {
 	override dispose(): void {
 		this.disposed = true;
 		this.refreshGeneration++;
-		this.subscriptions.splice(0).forEach(subscription => subscription.dispose());
+		this.subscriptions.splice(0).forEach((subscription) => subscription.dispose());
 		super.dispose();
 	}
 
 	private async resolveEnvironments(api: PythonExtensionApi): Promise<ResolvedEnvironment[]> {
 		const active = [
 			api.environments.getActiveEnvironmentPath(),
-			...(workspace.workspaceFolders ?? []).map(folder =>
-				api.environments.getActiveEnvironmentPath(folder)),
+			...(workspace.workspaceFolders ?? []).map((folder) => api.environments.getActiveEnvironmentPath(folder)),
 		];
-		const candidates: Array<Environment | EnvironmentPath> = [
-			...active,
-			...api.environments.known,
-		];
+		const candidates: Array<Environment | EnvironmentPath> = [...active, ...api.environments.known];
 		const unique = new Map<string, Environment | EnvironmentPath>();
 		for (const candidate of candidates) {
 			unique.set(`${candidate.id}\0${candidate.path}`, candidate);
 		}
 
-		const resolved = await Promise.all([...unique.values()].map(async candidate => {
-			try {
-				return await api.environments.resolveEnvironment(candidate);
-			} catch (error) {
-				logger.logChannel.warn(`Failed to resolve Python environment ${candidate.path}: ${String(error)}`);
-				return undefined;
-			}
-		}));
+		const resolved = await Promise.all(
+			[...unique.values()].map(async (candidate) => {
+				try {
+					return await api.environments.resolveEnvironment(candidate);
+				} catch (error) {
+					logger.logChannel.warn(`Failed to resolve Python environment ${candidate.path}: ${String(error)}`);
+					return undefined;
+				}
+			}),
+		);
 		return resolved.filter((environment): environment is ResolvedEnvironment => Boolean(environment));
 	}
 
@@ -139,21 +127,18 @@ export class PythonEnvironmentVariantProvider extends VariantProvider {
 	): CompilationVariant[] {
 		const active = api.environments.getActiveEnvironmentPath(source);
 		const orderedProfiles = [...profiles].sort((left, right) => {
-			const activeOrder = Number(matchesPythonEnvironment(active, right))
-				- Number(matchesPythonEnvironment(active, left));
+			const activeOrder =
+				Number(matchesPythonEnvironment(active, right)) - Number(matchesPythonEnvironment(active, left));
 
-			return activeOrder || left.profile.displayName.localeCompare(
-				right.profile.displayName,
-				undefined,
-				{ sensitivity: 'base' },
+			return (
+				activeOrder ||
+				left.profile.displayName.localeCompare(right.profile.displayName, undefined, { sensitivity: 'base' })
 			);
 		});
 		const folder = workspace.getWorkspaceFolder(source);
-		const environment = definedEnvironmentVariables(
-			api.environments.getEnvironmentVariables(source),
-		);
+		const environment = definedEnvironmentVariables(api.environments.getEnvironmentVariables(source));
 
-		return orderedProfiles.map(item => ({
+		return orderedProfiles.map((item) => ({
 			id: `${providerId}:${item.profile.id}|${source.toString()}`,
 			provider: providerId,
 			project: folder?.name,
@@ -177,7 +162,6 @@ function definedEnvironmentVariables(
 	environment: Readonly<Record<string, string | undefined>>,
 ): Readonly<Record<string, string>> {
 	return Object.fromEntries(
-		Object.entries(environment)
-			.filter((entry): entry is [string, string] => entry[1] !== undefined),
+		Object.entries(environment).filter((entry): entry is [string, string] => entry[1] !== undefined),
 	);
 }

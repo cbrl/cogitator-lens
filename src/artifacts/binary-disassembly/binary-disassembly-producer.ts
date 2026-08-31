@@ -1,12 +1,6 @@
 import type { CancellationToken, Uri } from 'vscode';
-import type {
-	CompileOptions,
-	RawArtifact,
-} from '../../types/index.js';
-import type {
-	BinaryDisassembler,
-	ToolchainBackend,
-} from '../../toolchains/toolchain-backend.js';
+import type { CompileOptions, RawArtifact } from '../../types/index.js';
+import type { BinaryDisassembler, ToolchainBackend } from '../../toolchains/toolchain-backend.js';
 
 export function binaryDisassemblyProducer(
 	disassembler: BinaryDisassembler,
@@ -28,11 +22,7 @@ export const gnuObjdump: BinaryDisassembler = Object.freeze({
 
 export const llvmObjdump: BinaryDisassembler = Object.freeze({
 	tool: 'disassembler',
-	arguments: (objectFile: string) => [
-		'--disassemble',
-		'--line-numbers',
-		objectFile,
-	],
+	arguments: (objectFile: string) => ['--disassemble', '--line-numbers', objectFile],
 	normalizeOutput: normalizeDisassemblySourcePaths,
 });
 
@@ -70,9 +60,7 @@ export function normalizeDumpbinOutput(output: string): string {
 
 		const addressAndSymbol = /^\s*([0-9a-f]+)\s+<?([^<>:]+)>?:\s*$/i.exec(line);
 		if (addressAndSymbol) {
-			normalized.push(
-				`${addressAndSymbol[1].toLowerCase()} <${addressAndSymbol[2].trim()}>:`,
-			);
+			normalized.push(`${addressAndSymbol[1].toLowerCase()} <${addressAndSymbol[2].trim()}>:`);
 			pendingSymbol = undefined;
 			pendingSource = undefined;
 			continue;
@@ -105,34 +93,32 @@ export function normalizeDumpbinOutput(output: string): string {
 			addressBySymbol.set(label[2], label[1]);
 		}
 	}
-	return normalized.map(line => {
-		const numericBranch = /\b(?:call|j[a-z]+)\s+([0-9a-f]+)$/i.exec(line);
-		const numericSymbol = numericBranch
-			? symbolByAddress.get(canonicalAddress(numericBranch[1]))
-			: undefined;
-		if (numericBranch && numericSymbol) {
-			return `${line} <${numericSymbol}>`;
-		}
-		const symbolicBranch = /\b(?:call|j[a-z]+)\s+(\S+)$/i.exec(line);
-		const address = symbolicBranch
-			? addressBySymbol.get(symbolicBranch[1])
-			: undefined;
-		return symbolicBranch && address
-			? line.replace(
-				symbolicBranch[1],
-				`${address} <${symbolicBranch[1]}>`,
-			)
-			: line;
-	}).join('\n');
+	return normalized
+		.map((line) => {
+			const numericBranch = /\b(?:call|j[a-z]+)\s+([0-9a-f]+)$/i.exec(line);
+			const numericSymbol = numericBranch ? symbolByAddress.get(canonicalAddress(numericBranch[1])) : undefined;
+			if (numericBranch && numericSymbol) {
+				return `${line} <${numericSymbol}>`;
+			}
+			const symbolicBranch = /\b(?:call|j[a-z]+)\s+(\S+)$/i.exec(line);
+			const address = symbolicBranch ? addressBySymbol.get(symbolicBranch[1]) : undefined;
+			return symbolicBranch && address
+				? line.replace(symbolicBranch[1], `${address} <${symbolicBranch[1]}>`)
+				: line;
+		})
+		.join('\n');
 }
 
 export function normalizeDisassemblySourcePaths(output: string): string {
-	return output.split(/\r?\n/).map(line => {
-		const source = /^([a-z]):[\\/](.*):(\d+)(.*)$/i.exec(line);
-		return source
-			? `${source[1].toUpperCase()}:/${source[2].replaceAll('\\', '/')}:${source[3]}${source[4]}`
-			: line;
-	}).join('\n');
+	return output
+		.split(/\r?\n/)
+		.map((line) => {
+			const source = /^([a-z]):[\\/](.*):(\d+)(.*)$/i.exec(line);
+			return source
+				? `${source[1].toUpperCase()}:/${source[2].replaceAll('\\', '/')}:${source[3]}${source[4]}`
+				: line;
+		})
+		.join('\n');
 }
 
 function canonicalAddress(address: string): string {

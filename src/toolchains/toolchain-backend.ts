@@ -20,10 +20,7 @@ import { samePath } from '../toolchain-arguments.js';
 import * as exec from '../exec.js';
 import { withTemporaryDirectory } from '../temporary-directory.js';
 import type { ToolchainDefinition } from './toolchain-map.js';
-import {
-	snapshotArtifactInputs,
-	type ArtifactInputMetadata,
-} from '../compilation/artifact-inputs.js';
+import { snapshotArtifactInputs, type ArtifactInputMetadata } from '../compilation/artifact-inputs.js';
 
 const maxArtifactFileBytes = 50 * 1024 * 1024;
 
@@ -41,7 +38,10 @@ export class ToolExitError extends Error {
 
 /** A successful tool invocation did not create its required artifact file. */
 export class MissingToolOutputError extends Error {
-	constructor(public readonly filename: string, options?: ErrorOptions) {
+	constructor(
+		public readonly filename: string,
+		options?: ErrorOptions,
+	) {
 		super(`Toolchain did not produce the expected output file: ${filename}`, options);
 		this.name = 'MissingToolOutputError';
 	}
@@ -55,27 +55,24 @@ export interface BinaryDisassembler {
 
 export interface ToolchainHost {
 	log(message: string, level?: 'info' | 'debug'): void;
-	parseDiagnostics(
-		output: string,
-		source: Uri,
-		workingDirectory: string,
-	): readonly CompileDiagnostic[];
+	parseDiagnostics(output: string, source: Uri, workingDirectory: string): readonly CompileDiagnostic[];
 }
 
 export interface ArtifactOutputSpec {
-	readonly output: 'stdout' | 'stderr' | {
-		readonly filename: string;
-		readonly optional?: boolean;
-	};
+	readonly output:
+		| 'stdout'
+		| 'stderr'
+		| {
+				readonly filename: string;
+				readonly optional?: boolean;
+		  };
 	readonly arguments: (
 		outputFile: string,
 		temporaryDirectory: string,
 		providerArguments: readonly string[],
 	) => readonly string[];
 	/** Invocation-local environment additions, normally paths inside the temporary directory. */
-	readonly environment?: (
-		temporaryDirectory: string,
-	) => Readonly<Record<string, string>>;
+	readonly environment?: (temporaryDirectory: string) => Readonly<Record<string, string>>;
 	readonly acceptOutputOnError?: boolean;
 }
 
@@ -89,10 +86,7 @@ export interface DependencyCollectionSpec {
 		providerArguments: readonly string[],
 	) => readonly string[];
 	/** Converts the toolchain's dependency format into local input paths. */
-	readonly parse: (
-		text: string,
-		workingDirectory: string,
-	) => readonly string[];
+	readonly parse: (text: string, workingDirectory: string) => readonly string[];
 }
 
 const flagsWithSeparateValues = new Set([
@@ -111,7 +105,8 @@ const flagsWithSeparateValues = new Set([
 	'/sourceDependencies',
 ]);
 const flagsWithJoinedValues = /^(?:-o|-MF|-MT|-MQ|-dumpdir=|\/[Ff][OoAaDdIi]|\/[Ss]ource[Dd]ependencies:).+/;
-const artifactOutputFlags = /^(?:-emit-llvm|-fdump-tree-cfg(?:-[^=]+)*(?:=.*)?|-save-temps(?:=.*)?|-f(?:no-)?stack-usage|-fsave-optimization-record(?:=.*)?|-foptimization-record-file(?:=.*)?|-fopt-info(?:-[^=]+)?(?:=.*)?|\/clang:-(?:emit-llvm|S|gline-tables-only|save-temps(?:=.*)?|f(?:no-)?stack-usage|fsave-optimization-record(?:=.*)?|foptimization-record-file(?:=.*)?))$/;
+const artifactOutputFlags =
+	/^(?:-emit-llvm|-fdump-tree-cfg(?:-[^=]+)*(?:=.*)?|-save-temps(?:=.*)?|-f(?:no-)?stack-usage|-fsave-optimization-record(?:=.*)?|-foptimization-record-file(?:=.*)?|-fopt-info(?:-[^=]+)?(?:=.*)?|\/clang:-(?:emit-llvm|S|gline-tables-only|save-temps(?:=.*)?|f(?:no-)?stack-usage|fsave-optimization-record(?:=.*)?|foptimization-record-file(?:=.*)?))$/;
 const compilerManagedFlags = new Set([
 	'-S',
 	'-c',
@@ -260,13 +255,14 @@ export class ToolchainBackend {
 				],
 			},
 			cancellationToken,
-			(text, invocation) => this.postProcessAssembly(
-				text,
-				options.productionOptions,
-				invocation.preparedEnvironment,
-				invocation.workingDirectory,
-				cancellationToken,
-			),
+			(text, invocation) =>
+				this.postProcessAssembly(
+					text,
+					options.productionOptions,
+					invocation.preparedEnvironment,
+					invocation.workingDirectory,
+					cancellationToken,
+				),
 		);
 	}
 
@@ -281,13 +277,12 @@ export class ToolchainBackend {
 		}
 		const outputArguments = this.definition.outputArguments;
 		const objectFilename = this.definition.objectFilename;
-		return withTemporaryDirectory('coglens-', async temporaryDirectory => {
+		return withTemporaryDirectory('coglens-', async (temporaryDirectory) => {
 			const objectFile = path.join(temporaryDirectory, objectFilename);
 			const { invocation, result: compilerResult } = await this.run(
 				source,
 				options,
-				providerArguments =>
-					outputArguments('object', objectFile, providerArguments),
+				(providerArguments) => outputArguments('object', objectFile, providerArguments),
 				cancellationToken,
 			);
 			const disassemblerExecutable = this.profile.tools[disassembler.tool];
@@ -296,12 +291,7 @@ export class ToolchainBackend {
 			}
 
 			const disassemblerArguments = disassembler.arguments(objectFile);
-			this.reportInvocation(
-				options,
-				invocation,
-				disassemblerExecutable,
-				disassemblerArguments,
-			);
+			this.reportInvocation(options, invocation, disassemblerExecutable, disassemblerArguments);
 			this.host.log(`Command: ${disassemblerExecutable} ${disassemblerArguments.join(' ')}`);
 			const disassemblerResult = await exec.execute(disassemblerExecutable, disassemblerArguments, {
 				cwd: invocation.workingDirectory,
@@ -346,14 +336,7 @@ export class ToolchainBackend {
 		spec: ArtifactOutputSpec,
 		cancellationToken: CancellationToken,
 	): Promise<RawArtifact> {
-		return this.produceArtifactWithTransform(
-			kind,
-			source,
-			options,
-			spec,
-			cancellationToken,
-			text => text,
-		);
+		return this.produceArtifactWithTransform(kind, source, options, spec, cancellationToken, (text) => text);
 	}
 
 	private async produceArtifactWithTransform(
@@ -364,27 +347,25 @@ export class ToolchainBackend {
 		cancellationToken: CancellationToken,
 		transform: (text: string, invocation: PreparedInvocation) => Promise<string> | string,
 	): Promise<RawArtifact> {
-		return withTemporaryDirectory('coglens-', async temporaryDirectory => {
-			const outputFile = spec.output === 'stdout' || spec.output === 'stderr'
-				? ''
-				: path.join(temporaryDirectory, spec.output.filename);
+		return withTemporaryDirectory('coglens-', async (temporaryDirectory) => {
+			const outputFile =
+				spec.output === 'stdout' || spec.output === 'stderr'
+					? ''
+					: path.join(temporaryDirectory, spec.output.filename);
 			const { invocation, result } = await this.run(
 				source,
 				options,
-				providerArguments => spec.arguments(
-					outputFile,
-					temporaryDirectory,
-					providerArguments,
-				),
+				(providerArguments) => spec.arguments(outputFile, temporaryDirectory, providerArguments),
 				cancellationToken,
 				spec.acceptOutputOnError,
 				spec.environment?.(temporaryDirectory),
 			);
-			const rawText = spec.output === 'stdout'
-				? result.stdout
-				: spec.output === 'stderr'
-					? result.stderr
-					: await readBoundedArtifactFile(outputFile, spec.output.optional);
+			const rawText =
+				spec.output === 'stdout'
+					? result.stdout
+					: spec.output === 'stderr'
+						? result.stderr
+						: await readBoundedArtifactFile(outputFile, spec.output.optional);
 			const text = await transform(rawText, invocation);
 			const inputMetadata = await this.collectDependencyInputs(
 				source,
@@ -392,19 +373,13 @@ export class ToolchainBackend {
 				temporaryDirectory,
 				cancellationToken,
 			);
-			const diagnosticOutput = spec.output === 'stdout'
-				? result.stderr
-				: spec.output === 'stderr'
-					? result.stdout
-					: `${result.stderr}\n${result.stdout}`;
-			return this.buildRawArtifact(
-				kind,
-				text,
-				diagnosticOutput,
-				source,
-				invocation,
-				inputMetadata,
-			);
+			const diagnosticOutput =
+				spec.output === 'stdout'
+					? result.stderr
+					: spec.output === 'stderr'
+						? result.stdout
+						: `${result.stderr}\n${result.stdout}`;
+			return this.buildRawArtifact(kind, text, diagnosticOutput, source, invocation, inputMetadata);
 		});
 	}
 
@@ -421,11 +396,7 @@ export class ToolchainBackend {
 		return this.binaryAsmParser.process(rawDisassembly, filters);
 	}
 
-	renderArtifact(
-		raw: RawArtifact,
-		options: DisplayOptions,
-		context: ArtifactRenderContext,
-	): RenderedArtifact {
+	renderArtifact(raw: RawArtifact, options: DisplayOptions, context: ArtifactRenderContext): RenderedArtifact {
 		const renderer = this.getArtifactRenderer(raw.kind);
 		if (!renderer) {
 			throw new Error(`${this.profile.displayName} has no ${raw.kind} rendering capability.`);
@@ -435,15 +406,9 @@ export class ToolchainBackend {
 
 	getArtifactRenderer(
 		kind: ArtifactKind,
-	): ((
-		raw: RawArtifact,
-		options: DisplayOptions,
-		context: ArtifactRenderContext,
-	) => RenderedArtifact) | undefined {
+	): ((raw: RawArtifact, options: DisplayOptions, context: ArtifactRenderContext) => RenderedArtifact) | undefined {
 		const cell = this.definition.artifacts[kind];
-		return cell.status === 'available' && cell.outputs === undefined
-			? cell.renderer
-			: undefined;
+		return cell.status === 'available' && cell.outputs === undefined ? cell.renderer : undefined;
 	}
 
 	private async run(
@@ -463,10 +428,7 @@ export class ToolchainBackend {
 		);
 		this.host.log(`Producing an artifact for ${source.fsPath} with ${this.profile.displayName}`);
 		this.host.log(`Command: ${this.profile.executable} ${invocation.argumentsList.join(' ')}`);
-		this.host.log(
-			`Environment overrides: ${invocation.overriddenNames.join(', ') || '(none)'}`,
-			'debug',
-		);
+		this.host.log(`Environment overrides: ${invocation.overriddenNames.join(', ') || '(none)'}`, 'debug');
 
 		const result = await exec.execute(this.profile.executable, invocation.argumentsList, {
 			cwd: invocation.workingDirectory,
@@ -497,11 +459,7 @@ export class ToolchainBackend {
 		return {
 			kind,
 			text,
-			diagnostics: this.host.parseDiagnostics(
-				diagnosticOutput,
-				source,
-				invocation.workingDirectory,
-			),
+			diagnostics: this.host.parseDiagnostics(diagnosticOutput, source, invocation.workingDirectory),
 			durationMs: performance.now() - invocation.started,
 			generatedAt: Date.now(),
 			truncated: false,
@@ -534,22 +492,24 @@ export class ToolchainBackend {
 			: environment;
 
 		const strip = this.definition.stripOwnedArguments ?? stripCompilerManagedArguments;
-		const providerArguments = strip([
-			...this.profile.defaultArguments,
-			...(options.args ?? []),
-		], source.fsPath, workingDirectory);
+		const providerArguments = strip(
+			[...this.profile.defaultArguments, ...(options.args ?? [])],
+			source.fsPath,
+			workingDirectory,
+		);
 
 		const compilerArguments = ownedArguments(providerArguments);
-		const argumentsList = this.definition.ownedArgumentPlacement === 'before-provider'
-			? [...compilerArguments, ...providerArguments, source.fsPath]
-			: this.definition.ownedArgumentPlacement === 'command-before-provider'
-				? [
-					...compilerArguments.slice(0, 1),
-					...providerArguments,
-					...compilerArguments.slice(1),
-					source.fsPath,
-				]
-				: [...providerArguments, ...compilerArguments, source.fsPath];
+		const argumentsList =
+			this.definition.ownedArgumentPlacement === 'before-provider'
+				? [...compilerArguments, ...providerArguments, source.fsPath]
+				: this.definition.ownedArgumentPlacement === 'command-before-provider'
+					? [
+							...compilerArguments.slice(0, 1),
+							...providerArguments,
+							...compilerArguments.slice(1),
+							source.fsPath,
+						]
+					: [...providerArguments, ...compilerArguments, source.fsPath];
 
 		const invocation = {
 			workingDirectory,
@@ -574,14 +534,14 @@ export class ToolchainBackend {
 		executable = this.profile.executable,
 		args: readonly string[] = invocation.argumentsList,
 	): void {
-		options.onInvocation?.(Object.freeze({
-			executable,
-			args: Object.freeze([...args]),
-			cwd: invocation.workingDirectory,
-			environmentVariableNames: Object.freeze([
-				...invocation.environmentVariableNames,
-			]),
-		}));
+		options.onInvocation?.(
+			Object.freeze({
+				executable,
+				args: Object.freeze([...args]),
+				cwd: invocation.workingDirectory,
+				environmentVariableNames: Object.freeze([...invocation.environmentVariableNames]),
+			}),
+		);
 	}
 
 	private async collectDependencyInputs(
@@ -592,28 +552,15 @@ export class ToolchainBackend {
 	): Promise<ArtifactInputMetadata> {
 		const spec = this.definition.dependencyCollection;
 		if (!spec) {
-			return snapshotArtifactInputs(
-				source.fsPath,
-				[],
-				'source-only',
-				invocation.workingDirectory,
-			);
+			return snapshotArtifactInputs(source.fsPath, [], 'source-only', invocation.workingDirectory);
 		}
 		const dependencyFile = path.join(temporaryDirectory, spec.outputFilename);
-		const dependencyArguments = spec.arguments(
-			dependencyFile,
-			temporaryDirectory,
-			invocation.providerArguments,
-		);
+		const dependencyArguments = spec.arguments(dependencyFile, temporaryDirectory, invocation.providerArguments);
 
 		try {
 			const result = await exec.execute(
 				this.profile.executable,
-				[
-					...invocation.providerArguments,
-					...dependencyArguments,
-					source.fsPath,
-				],
+				[...invocation.providerArguments, ...dependencyArguments, source.fsPath],
 				{
 					cwd: invocation.workingDirectory,
 					env: invocation.preparedEnvironment,
@@ -621,46 +568,22 @@ export class ToolchainBackend {
 				},
 			);
 			if (result.returnCode !== 0) {
-				return snapshotArtifactInputs(
-					source.fsPath,
-					[],
-					'source-only',
-					invocation.workingDirectory,
-				);
+				return snapshotArtifactInputs(source.fsPath, [], 'source-only', invocation.workingDirectory);
 			}
 			const dependencyText = await readBoundedArtifactFile(dependencyFile);
-			const dependencies = spec.parse(
-				dependencyText,
-				invocation.workingDirectory,
-			);
+			const dependencies = spec.parse(dependencyText, invocation.workingDirectory);
 			if (dependencies.length === 0) {
-				return snapshotArtifactInputs(
-					source.fsPath,
-					[],
-					'source-only',
-					invocation.workingDirectory,
-				);
+				return snapshotArtifactInputs(source.fsPath, [], 'source-only', invocation.workingDirectory);
 			}
-			return snapshotArtifactInputs(
-				source.fsPath,
-				dependencies,
-				'complete',
-				invocation.workingDirectory,
-			);
+			return snapshotArtifactInputs(source.fsPath, dependencies, 'complete', invocation.workingDirectory);
 		} catch (error) {
 			if (
-				cancellationToken.isCancellationRequested
-				|| (error instanceof exec.ExecError
-					&& (error.kind === 'cancelled' || error.kind === 'timeout'))
+				cancellationToken.isCancellationRequested ||
+				(error instanceof exec.ExecError && (error.kind === 'cancelled' || error.kind === 'timeout'))
 			) {
 				throw error;
 			}
-			return snapshotArtifactInputs(
-				source.fsPath,
-				[],
-				'source-only',
-				invocation.workingDirectory,
-			);
+			return snapshotArtifactInputs(source.fsPath, [], 'source-only', invocation.workingDirectory);
 		}
 	}
 
@@ -722,8 +645,5 @@ async function readBoundedArtifactFile(filename: string, optional = false): Prom
 }
 
 function artifactFileLimitError(): exec.ExecError {
-	return new exec.ExecError(
-		'output-limit',
-		`Toolchain output file exceeded the ${maxArtifactFileBytes}-byte limit`,
-	);
+	return new exec.ExecError('output-limit', `Toolchain output file exceeded the ${maxArtifactFileBytes}-byte limit`);
 }

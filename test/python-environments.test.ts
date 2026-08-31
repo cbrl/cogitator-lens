@@ -36,10 +36,7 @@ test('resolved Python environments become deduplicated toolchain profiles', () =
 		},
 	};
 
-	const profiles = createPythonEnvironmentProfiles(
-		[primary, duplicate, invalid],
-		'win32',
-	);
+	const profiles = createPythonEnvironmentProfiles([primary, duplicate, invalid], 'win32');
 
 	assert.equal(profiles.length, 1);
 	assert.equal(profiles[0].profile.kind, 'python');
@@ -47,16 +44,8 @@ test('resolved Python environments become deduplicated toolchain profiles', () =
 	assert.equal(profiles[0].profile.displayName, pythonEnvironmentDisplayName(primary));
 	assert.match(profiles[0].profile.displayName, /Python 3\.13\.5 \(\.venv\)/);
 	assert.equal(pythonEnvironmentVersion(primary), '3.13.5');
-	assert.ok(matchesPythonEnvironment(
-		{ id: 'selection', path: 'c:\\WORK\\.VENV' },
-		profiles[0],
-		'win32',
-	));
-	assert.ok(matchesPythonEnvironment(
-		{ id: 'DUPLICATE-ID', path: 'unused' },
-		profiles[0],
-		'win32',
-	));
+	assert.ok(matchesPythonEnvironment({ id: 'selection', path: 'c:\\WORK\\.VENV' }, profiles[0], 'win32'));
+	assert.ok(matchesPythonEnvironment({ id: 'DUPLICATE-ID', path: 'unused' }, profiles[0], 'win32'));
 });
 
 function environment(options: {
@@ -78,11 +67,11 @@ function environment(options: {
 		},
 		environment: options.folder
 			? {
-				type: 'VirtualEnvironment',
-				name: options.name,
-				folderUri,
-				workspaceFolder: undefined,
-			}
+					type: 'VirtualEnvironment',
+					name: options.name,
+					folderUri,
+					workspaceFolder: undefined,
+				}
 			: undefined,
 		version: {
 			major: options.version[0],

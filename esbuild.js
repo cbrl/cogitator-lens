@@ -1,4 +1,4 @@
-const esbuild = require("esbuild");
+const esbuild = require('esbuild');
 
 const production = process.argv.includes('--production');
 const watch = process.argv.includes('--watch');
@@ -25,9 +25,7 @@ const esbuildProblemMatcherPlugin = {
 
 async function main() {
 	const extensionContext = await esbuild.context({
-		entryPoints: [
-			'src/extension.ts'
-		],
+		entryPoints: ['src/extension.ts'],
 		bundle: true,
 		format: 'cjs',
 		minify: production,
@@ -43,10 +41,7 @@ async function main() {
 		],
 	});
 	const webviewContext = await esbuild.context({
-		entryPoints: [
-			'webview-src/control-flow-graph.ts',
-			'webview-src/control-flow-graph.css',
-		],
+		entryPoints: ['webview-src/control-flow-graph.ts', 'webview-src/control-flow-graph.css'],
 		bundle: true,
 		format: 'iife',
 		minify: production,
@@ -60,14 +55,14 @@ async function main() {
 	});
 	const contexts = [extensionContext, webviewContext];
 	if (watch) {
-		await Promise.all(contexts.map(context => context.watch()));
+		await Promise.all(contexts.map((context) => context.watch()));
 	} else {
-		await Promise.all(contexts.map(context => context.rebuild()));
-		await Promise.all(contexts.map(context => context.dispose()));
+		await Promise.all(contexts.map((context) => context.rebuild()));
+		await Promise.all(contexts.map((context) => context.dispose()));
 	}
 }
 
-main().catch(e => {
+main().catch((e) => {
 	console.error(e);
 	process.exit(1);
 });

@@ -19,15 +19,12 @@ export function renderControlFlowGraphArtifact(
 	options: DisplayOptions,
 	context: ArtifactRenderContext,
 ): RenderedGraphArtifact {
-	const parsed = remapRemoteSources(
-		context.artifactOutput!.parseGraphs!(raw, options, context),
-		context.source.uri,
-	);
+	const parsed = remapRemoteSources(context.artifactOutput!.parseGraphs!(raw, options, context), context.source.uri);
 	const validated = validateControlFlowGraphs(parsed.graphs);
 	const messages = [...parsed.diagnostics, ...validated.diagnostics];
 	const diagnostics: CompileDiagnostic[] = [
 		...raw.diagnostics,
-		...messages.map(message => ({
+		...messages.map((message) => ({
 			uri: context.source.uri,
 			line: 0,
 			column: 0,
@@ -56,15 +53,16 @@ function remapRemoteSources(parsed: GraphParseResult, workspaceSource: Uri): Gra
 	}
 	return {
 		...parsed,
-		graphs: parsed.graphs.map(graph => ({
-			...graph,
-			nodes: graph.nodes.map(node => {
-				const remapped = node.source && remapRemoteUri(node.source.uri, workspaceSource);
-				return remapped
-					? { ...node, source: { ...node.source!, uri: remapped } }
-					: node;
-			}),
-		} satisfies ControlFlowGraph)),
+		graphs: parsed.graphs.map(
+			(graph) =>
+				({
+					...graph,
+					nodes: graph.nodes.map((node) => {
+						const remapped = node.source && remapRemoteUri(node.source.uri, workspaceSource);
+						return remapped ? { ...node, source: { ...node.source!, uri: remapped } } : node;
+					}),
+				}) satisfies ControlFlowGraph,
+		),
 	};
 }
 
@@ -72,11 +70,13 @@ function remapRemoteUri(uri: string, workspaceSource: Uri): string | undefined {
 	try {
 		const source = new URL(uri);
 		return source.protocol === 'file:'
-			? workspaceSource.with({
-				path: decodeURIComponent(source.pathname),
-				query: '',
-				fragment: '',
-			}).toString()
+			? workspaceSource
+					.with({
+						path: decodeURIComponent(source.pathname),
+						query: '',
+						fragment: '',
+					})
+					.toString()
 			: undefined;
 	} catch {
 		return undefined;

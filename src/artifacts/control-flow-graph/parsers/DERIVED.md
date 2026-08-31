@@ -15,14 +15,14 @@ about keeping upstream files pristine do not apply.
 
 ## Provenance
 
-| File | Upstream origin |
-| --- | --- |
-| `instruction-sets.ts` | `lib/cfg/instruction-sets/{base,arm,xtensa}.ts` |
-| `assembly-cfg-parser.ts` | `lib/cfg/cfg-parsers/base.ts` |
-| `assembly-dialects.ts` | `lib/cfg/cfg-parsers/{gcc,clang,vc}.ts` |
-| `llvm-ir-cfg-parser.ts` | `lib/cfg/cfg-parsers/llvm-ir.ts` (structure only) |
-| `assembly-line.ts` | `AssemblyLine` in `lib/cfg/cfg-parsers/base.ts` |
-| `llvm-debug-metadata.ts` | No upstream equivalent |
+| File                     | Upstream origin                                   |
+| ------------------------ | ------------------------------------------------- |
+| `instruction-sets.ts`    | `lib/cfg/instruction-sets/{base,arm,xtensa}.ts`   |
+| `assembly-cfg-parser.ts` | `lib/cfg/cfg-parsers/base.ts`                     |
+| `assembly-dialects.ts`   | `lib/cfg/cfg-parsers/{gcc,clang,vc}.ts`           |
+| `llvm-ir-cfg-parser.ts`  | `lib/cfg/cfg-parsers/llvm-ir.ts` (structure only) |
+| `assembly-line.ts`       | `AssemblyLine` in `lib/cfg/cfg-parsers/base.ts`   |
+| `llvm-debug-metadata.ts` | No upstream equivalent                            |
 
 Not taken: `cfg-parsers/oat.ts` (dex2oat), `cfg-parsers/python.ts` (see below),
 `instruction-sets/python.ts`, and `lib/cfg/cfg.ts`'s compiler-group dispatch,

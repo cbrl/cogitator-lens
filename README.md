@@ -24,7 +24,7 @@ metrics.
 ### Artifact support
 
 | Artifact             | GCC | Clang / Apple Clang | clang-cl | MSVC | Rust | Python     | Go        | Zig | nvcc       |
-|----------------------|-----|---------------------|----------|------|------|------------|-----------|-----|------------|
+| -------------------- | --- | ------------------- | -------- | ---- | ---- | ---------- | --------- | --- | ---------- |
 | Assembly             | Yes | Yes                 | Yes      | Yes  | Yes  | —          | Yes       | Yes | Yes (PTX)  |
 | Binary disassembly   | Yes | Yes                 | Yes      | Yes  | —    | —          | —         | —   | Yes (SASS) |
 | Preprocessed source  | Yes | Yes                 | Yes      | Yes  | —    | —          | —         | —   | Yes        |
@@ -58,20 +58,20 @@ environment. Editing a discovered variant creates a workspace copy.
 
 ```json
 {
-  "coglens.artifactPresets": {
-    "optimized-intel": {
-      "artifactKind": "assembly",
-      "extraArguments": ["-O3"],
-      "productionOptions": {
-        "intel": true,
-        "demangle": true
-      }
-    },
-    "size-disassembly": {
-      "artifactKind": "binary-disassembly",
-      "extraArguments": ["-Os"]
-    }
-  }
+	"coglens.artifactPresets": {
+		"optimized-intel": {
+			"artifactKind": "assembly",
+			"extraArguments": ["-O3"],
+			"productionOptions": {
+				"intel": true,
+				"demangle": true
+			}
+		},
+		"size-disassembly": {
+			"artifactKind": "binary-disassembly",
+			"extraArguments": ["-Os"]
+		}
+	}
 }
 ```
 
@@ -86,12 +86,12 @@ automatically:
 
 ```json
 {
-  "displayName": "Clang",
-  "kind": "clang",
-  "executable": "/opt/llvm/bin/clang++",
-  "tools": {
-    "disassembler": "/opt/llvm/bin/llvm-objdump"
-  }
+	"displayName": "Clang",
+	"kind": "clang",
+	"executable": "/opt/llvm/bin/clang++",
+	"tools": {
+		"disassembler": "/opt/llvm/bin/llvm-objdump"
+	}
 }
 ```
 
@@ -102,17 +102,17 @@ symbols.
 
 ```json
 {
-  "coglens.toolchains": [
-    {
-      "displayName": "Rust",
-      "kind": "rust",
-      "executable": "rustc",
-      "defaultArguments": ["--edition=2021", "-C", "opt-level=2"]
-    }
-  ],
-  "coglens.defaultInvocation": {
-    "toolchain": "Rust"
-  }
+	"coglens.toolchains": [
+		{
+			"displayName": "Rust",
+			"kind": "rust",
+			"executable": "rustc",
+			"defaultArguments": ["--edition=2021", "-C", "opt-level=2"]
+		}
+	],
+	"coglens.defaultInvocation": {
+		"toolchain": "Rust"
+	}
 }
 ```
 
@@ -124,17 +124,17 @@ invocation.
 
 ```json
 {
-  "coglens.toolchains": [
-    {
-      "displayName": "Python",
-      "kind": "python",
-      "executable": "python",
-      "defaultArguments": ["-O"]
-    }
-  ],
-  "coglens.defaultInvocation": {
-    "toolchain": "Python"
-  }
+	"coglens.toolchains": [
+		{
+			"displayName": "Python",
+			"kind": "python",
+			"executable": "python",
+			"defaultArguments": ["-O"]
+		}
+	],
+	"coglens.defaultInvocation": {
+		"toolchain": "Python"
+	}
 }
 ```
 

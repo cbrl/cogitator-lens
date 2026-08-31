@@ -1,30 +1,30 @@
 {
-    "coglens.toolchains": [
-        {
-            "displayName": "Sample CUDA device",
-            "kind": "nvcc",
-            "executable": "nvcc",
-            "defaultArguments": ["-std=c++17"]
-        }
-    ],
-    "coglens.defaultInvocation": {
-        "toolchain": "Sample CUDA device"
-    },
-    "coglens.artifactPresets": {
-        "debug-assembly": {
-			"artifactKind": "assembly",
-			"extraArguments": ["-O0"]
-		},
-        "optimized-assembly": {
-            "artifactKind": "assembly",
-            "extraArguments": ["-O3"]
-        },
-        "optimized-disassembly": {
-			"artifactKind": "binary-disassembly",
-			"extraArguments": ["-O2"]
-		},
-        "preprocessed": {
-			"artifactKind": "preprocessed-source"
-		}
+  "coglens.toolchains": [
+    {
+      "displayName": "Sample CUDA device",
+      "kind": "nvcc",
+      "executable": "nvcc",
+      "defaultArguments": ["-std=c++17"]
     }
+  ],
+  "coglens.defaultInvocation": {
+    "toolchain": "Sample CUDA device"
+  },
+  "coglens.artifactPresets": {
+    "debug-assembly": {
+      "artifactKind": "assembly",
+      "extraArguments": ["-O0"]
+    },
+    "optimized-assembly": {
+      "artifactKind": "assembly",
+      "extraArguments": ["-O3"]
+    },
+    "optimized-disassembly": {
+      "artifactKind": "binary-disassembly",
+      "extraArguments": ["-O2"]
+    },
+    "preprocessed": {
+      "artifactKind": "preprocessed-source"
+    }
+  }
 }

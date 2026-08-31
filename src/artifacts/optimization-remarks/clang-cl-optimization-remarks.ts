@@ -6,7 +6,8 @@ import { optimizationRemarksRenderer } from './optimization-remarks-renderer.js'
 export const clangClOptimizationRemarksOutput: ArtifactOutputSpec = Object.freeze({
 	output: { filename: 'output.opt.yaml', optional: true },
 	arguments: (outputFile: string, temporaryDirectory: string) => [
-		'/c', '/clang:-fsave-optimization-record=yaml',
+		'/c',
+		'/clang:-fsave-optimization-record=yaml',
 		`/clang:-foptimization-record-file=${outputFile}`,
 		`/Fo${path.join(temporaryDirectory, 'output.obj')}`,
 	],

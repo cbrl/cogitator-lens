@@ -56,64 +56,55 @@ test('Python bytecode producer owns module dispatch and uses stdout', async () =
 test('Python argument stripping removes only extension-owned execution modes and source paths', () => {
 	const workingDirectory = process.cwd();
 	const source = path.join(workingDirectory, 'main.py');
-	assert.deepEqual(stripPythonManagedArguments([
-		'-O',
-		'-X',
-		'dev',
-		'-m',
-		'module',
-		'./main.py',
-		'--',
-	], source, workingDirectory), [
-		'-O',
-		'-X',
-		'dev',
-	]);
-	assert.deepEqual(stripPythonManagedArguments([
-		'-cprint(1)',
-		'-mtrace',
-		'-B',
-	], source, workingDirectory), ['-B']);
+	assert.deepEqual(
+		stripPythonManagedArguments(['-O', '-X', 'dev', '-m', 'module', './main.py', '--'], source, workingDirectory),
+		['-O', '-X', 'dev'],
+	);
+	assert.deepEqual(stripPythonManagedArguments(['-cprint(1)', '-mtrace', '-B'], source, workingDirectory), ['-B']);
 });
 
 test('Python bytecode renderer maps supported disassembly layouts to source lines', () => {
-	const raw = rawArtifact([
-		'  0           RESUME                   0',
-		'',
-		'  1           LOAD_CONST               0 (<code object add>)',
-		'              MAKE_FUNCTION',
-		'              STORE_NAME               0 (add)',
-		'',
-		'Disassembly of <code object add at 0x1, file "main.py", line 1>:',
-		'  2           LOAD_FAST_LOAD_FAST      1 (a, b)',
-		'              BINARY_OP                0 (+)',
-		'',
-		'  3           RETURN_VALUE',
-	].join('\n'));
+	const raw = rawArtifact(
+		[
+			'  0           RESUME                   0',
+			'',
+			'  1           LOAD_CONST               0 (<code object add>)',
+			'              MAKE_FUNCTION',
+			'              STORE_NAME               0 (add)',
+			'',
+			'Disassembly of <code object add at 0x1, file "main.py", line 1>:',
+			'  2           LOAD_FAST_LOAD_FAST      1 (a, b)',
+			'              BINARY_OP                0 (+)',
+			'',
+			'  3           RETURN_VALUE',
+		].join('\n'),
+	);
 
 	const rendered = artifactDefinitions['python-bytecode'].renderer(
 		raw,
 		defaultArtifactOptions.display,
 		renderContext(),
 	);
-	const mapped = rendered.lines.filter(line => line.source);
-	assert.deepEqual([...new Set(mapped.map(line => line.source?.line))], [1, 2, 3]);
-	assert.ok(mapped.every(line => line.source?.file === 'C:\\project\\main.py'));
-	assert.ok(mapped.every(line => line.source?.mainSource));
+	const mapped = rendered.lines.filter((line) => line.source);
+	assert.deepEqual([...new Set(mapped.map((line) => line.source?.line))], [1, 2, 3]);
+	assert.ok(mapped.every((line) => line.source?.file === 'C:\\project\\main.py'));
+	assert.ok(mapped.every((line) => line.source?.mainSource));
 	assert.equal(rendered.metrics.instructionCount, 7);
 	assert.equal(rendered.metrics.codeObjectCount, 2);
 	assert.equal(rendered.metrics.sourceLineCount, 3);
 
 	const offsetBearing = artifactDefinitions['python-bytecode'].renderer(
-		rawArtifact([
-			'  1           0 LOAD_CONST               0 (1)',
-			'              2 STORE_NAME               0 (value)',
-			'              4 RETURN_VALUE',
-		].join('\n')),
+		rawArtifact(
+			[
+				'  1           0 LOAD_CONST               0 (1)',
+				'              2 STORE_NAME               0 (value)',
+				'              4 RETURN_VALUE',
+			].join('\n'),
+		),
 		defaultArtifactOptions.display,
 		renderContext(),
 	);
-	assert.ok(offsetBearing.lines.every(line => line.source?.line === 1));
+	assert.ok(offsetBearing.lines.every((line) => line.source?.line === 1));
 	assert.equal(offsetBearing.metrics.instructionCount, 3);
 });
 

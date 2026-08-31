@@ -1,23 +1,10 @@
 import fs from 'fs';
 import path from 'path';
-import {
-	Disposable,
-	RelativePattern,
-	Uri,
-	WorkspaceFolder,
-	workspace,
-} from 'vscode';
+import { Disposable, RelativePattern, Uri, WorkspaceFolder, workspace } from 'vscode';
 import { VariantProvider } from './variant-provider.js';
-import {
-	compilationDatabaseProviderId,
-	parseCompilationDatabase,
-} from './compilation-database-parser.js';
+import { compilationDatabaseProviderId, parseCompilationDatabase } from './compilation-database-parser.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
-import type {
-	CompilationVariant,
-	ToolchainProfile,
-	ProviderSnapshot,
-} from '../types/index.js';
+import type { CompilationVariant, ToolchainProfile, ProviderSnapshot } from '../types/index.js';
 import * as logger from '../logger.js';
 
 interface DatabaseFile {
@@ -40,7 +27,7 @@ export class CompilationDatabaseVariantProvider extends VariantProvider {
 	async initialize(): Promise<void> {
 		this.subscriptions.push(
 			workspace.onDidChangeWorkspaceFolders(() => void this.reconfigure()),
-			workspace.onDidChangeConfiguration(event => {
+			workspace.onDidChangeConfiguration((event) => {
 				if (event.affectsConfiguration('coglens.compilationDatabases')) {
 					void this.reconfigure();
 				}
@@ -52,7 +39,7 @@ export class CompilationDatabaseVariantProvider extends VariantProvider {
 	async refresh(): Promise<void> {
 		const generation = ++this.refreshGeneration;
 		const databaseFiles = this.getDatabaseFiles();
-		const snapshots = await Promise.all(databaseFiles.map(database => this.readDatabase(database)));
+		const snapshots = await Promise.all(databaseFiles.map((database) => this.readDatabase(database)));
 		if (this.disposed || generation !== this.refreshGeneration) {
 			return;
 		}
@@ -60,7 +47,7 @@ export class CompilationDatabaseVariantProvider extends VariantProvider {
 		const profiles = new Map<string, ToolchainProfile>();
 		const variants: CompilationVariant[] = [];
 		for (const snapshot of snapshots) {
-			snapshot.toolchainProfiles.forEach(profile => profiles.set(profile.id, profile));
+			snapshot.toolchainProfiles.forEach((profile) => profiles.set(profile.id, profile));
 			variants.push(...snapshot.variants);
 		}
 		this.publish({
@@ -73,18 +60,17 @@ export class CompilationDatabaseVariantProvider extends VariantProvider {
 	override dispose(): void {
 		this.disposed = true;
 		this.refreshGeneration++;
-		this.watchers.splice(0).forEach(watcher => watcher.dispose());
-		this.subscriptions.splice(0).forEach(subscription => subscription.dispose());
+		this.watchers.splice(0).forEach((watcher) => watcher.dispose());
+		this.subscriptions.splice(0).forEach((subscription) => subscription.dispose());
 		super.dispose();
 	}
 
 	private async reconfigure(): Promise<void> {
-		this.watchers.splice(0).forEach(watcher => watcher.dispose());
+		this.watchers.splice(0).forEach((watcher) => watcher.dispose());
 		for (const database of this.getDatabaseFiles()) {
-			const watcher = workspace.createFileSystemWatcher(new RelativePattern(
-				Uri.file(path.dirname(database.filePath)),
-				path.basename(database.filePath),
-			));
+			const watcher = workspace.createFileSystemWatcher(
+				new RelativePattern(Uri.file(path.dirname(database.filePath)), path.basename(database.filePath)),
+			);
 			this.watchers.push(
 				watcher,
 				watcher.onDidCreate(() => void this.refresh()),
@@ -119,20 +105,13 @@ export class CompilationDatabaseVariantProvider extends VariantProvider {
 			contents = await fs.promises.readFile(database.filePath, 'utf8');
 		} catch (error) {
 			if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-				logger.logChannel.error(
-					`Failed to read compilation database ${database.filePath}: ${String(error)}`,
-				);
+				logger.logChannel.error(`Failed to read compilation database ${database.filePath}: ${String(error)}`);
 			}
 			return this.emptySnapshot();
 		}
 
-		const entries = parseCompilationDatabase(
-			contents,
-			database.filePath,
-			process.platform,
-			message => logger.logChannel.warn(
-				`Ignoring malformed compilation database ${database.filePath} ${message}`,
-			),
+		const entries = parseCompilationDatabase(contents, database.filePath, process.platform, (message) =>
+			logger.logChannel.warn(`Ignoring malformed compilation database ${database.filePath} ${message}`),
 		);
 		const profiles = new Map<string, ToolchainProfile>();
 		const variants: CompilationVariant[] = [];
@@ -172,9 +151,7 @@ export class CompilationDatabaseVariantProvider extends VariantProvider {
 
 function relativeDatabaseLabel(database: DatabaseFile): string {
 	const relative = path.relative(database.folder.uri.fsPath, database.filePath);
-	return relative && !relative.startsWith('..') && !path.isAbsolute(relative)
-		? relative
-		: database.filePath;
+	return relative && !relative.startsWith('..') && !path.isAbsolute(relative) ? relative : database.filePath;
 }
 
 function normalizeIdentity(value: string): string {

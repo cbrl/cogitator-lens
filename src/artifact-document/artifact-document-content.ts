@@ -23,7 +23,7 @@ export function asmLineHasSource(line: RenderedArtifactLine): boolean {
 }
 
 export function getContent(assembly: ArtifactDocumentContent): string {
-	return assembly.lines.map(line => line.text).join('\n');
+	return assembly.lines.map((line) => line.text).join('\n');
 }
 
 export function buildArtifactDocumentContent(

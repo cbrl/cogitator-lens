@@ -22,11 +22,13 @@ export function renderedArtifact(
 		sourceLocations: lines.flatMap((line, lineIndex) => {
 			const sourceLine = line.source?.line;
 			return line.source?.file && sourceLine !== undefined && sourceLine !== null
-				? [{
-					line: lineIndex,
-					uri: line.source.file,
-					sourceLine,
-				}]
+				? [
+						{
+							line: lineIndex,
+							uri: line.source.file,
+							sourceLine,
+						},
+					]
 				: [];
 		}),
 		links: [],
@@ -36,7 +38,6 @@ export function renderedArtifact(
 		raw: raw.text,
 		text: raw.text,
 		toolOutputTruncated: raw.truncated,
-		truncated: raw.truncated || lines.some(line =>
-			line.text.includes('[truncated; too many lines]')),
+		truncated: raw.truncated || lines.some((line) => line.text.includes('[truncated; too many lines]')),
 	};
 }

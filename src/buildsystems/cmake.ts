@@ -2,11 +2,7 @@ import path from 'path';
 import { Disposable, Uri, workspace } from 'vscode';
 import * as cmakeTools from 'vscode-cmake-tools';
 import { VariantProvider } from './variant-provider.js';
-import type {
-	CompilationVariant,
-	ProviderSnapshot,
-	ToolchainProfile,
-} from '../types/index.js';
+import type { CompilationVariant, ProviderSnapshot, ToolchainProfile } from '../types/index.js';
 import {
 	createToolchainProfile,
 	detectToolchainDefinition,
@@ -46,12 +42,12 @@ export class CmakeVariantProvider extends VariantProvider {
 		}
 
 		this.subscriptions.push(
-			this.api.onActiveProjectChanged(uri => {
+			this.api.onActiveProjectChanged((uri) => {
 				if (uri) {
 					void this.attachProject(uri);
 				}
 			}),
-			workspace.onDidChangeWorkspaceFolders(event => {
+			workspace.onDidChangeWorkspaceFolders((event) => {
 				for (const removed of event.removed) {
 					this.detachProject(removed.uri);
 				}
@@ -62,13 +58,13 @@ export class CmakeVariantProvider extends VariantProvider {
 			}),
 		);
 
-		await Promise.all((workspace.workspaceFolders ?? []).map(folder => this.attachProject(folder.uri)));
+		await Promise.all((workspace.workspaceFolders ?? []).map((folder) => this.attachProject(folder.uri)));
 		await this.refresh();
 	}
 
 	async refresh(): Promise<void> {
 		const generation = ++this.refreshGeneration;
-		const snapshots = await Promise.all([...this.projects.values()].map(state => this.readProject(state)));
+		const snapshots = await Promise.all([...this.projects.values()].map((state) => this.readProject(state)));
 		if (this.disposed || generation !== this.refreshGeneration) {
 			return;
 		}
@@ -76,7 +72,7 @@ export class CmakeVariantProvider extends VariantProvider {
 		const profiles = new Map<string, ToolchainProfile>();
 		const variants: CompilationVariant[] = [];
 		for (const snapshot of snapshots) {
-			snapshot.toolchainProfiles.forEach(profile => profiles.set(profile.id, profile));
+			snapshot.toolchainProfiles.forEach((profile) => profiles.set(profile.id, profile));
 			variants.push(...snapshot.variants);
 		}
 
@@ -85,8 +81,8 @@ export class CmakeVariantProvider extends VariantProvider {
 
 	override dispose(): void {
 		this.disposed = true;
-		this.subscriptions.forEach(subscription => subscription.dispose());
-		this.projects.forEach(state => state.codeModelSubscription.dispose());
+		this.subscriptions.forEach((subscription) => subscription.dispose());
+		this.projects.forEach((state) => state.codeModelSubscription.dispose());
 		this.projects.clear();
 		this.projectGenerations.clear();
 		super.dispose();
@@ -152,7 +148,7 @@ export class CmakeVariantProvider extends VariantProvider {
 		}
 
 		const configurations = activeBuildType
-			? codeModel.configurations.filter(configuration => configuration.name === activeBuildType)
+			? codeModel.configurations.filter((configuration) => configuration.name === activeBuildType)
 			: codeModel.configurations;
 
 		for (const configuration of configurations) {
@@ -190,7 +186,7 @@ export class CmakeVariantProvider extends VariantProvider {
 
 						const argumentsList = flattenCmakeArguments(
 							this.tokenizeFragments(fileGroup.compileCommandFragments ?? [], target.name),
-							fileGroup.includePath?.map(item => item.path) ?? [],
+							fileGroup.includePath?.map((item) => item.path) ?? [],
 							fileGroup.defines ?? [],
 							detected.kind,
 						);
@@ -228,7 +224,7 @@ export class CmakeVariantProvider extends VariantProvider {
 		return {
 			provider: this.providerId,
 			toolchainProfiles: [...toolchainProfiles.values()],
-			variants
+			variants,
 		};
 	}
 
@@ -243,8 +239,8 @@ export class CmakeVariantProvider extends VariantProvider {
 
 	private tokenizeFragments(fragments: readonly string[], targetName: string): string[] {
 		try {
-			return fragments.flatMap(fragment =>
-				tokenizeCommandLine(fragment, process.platform === 'win32' ? 'windows' : 'posix')
+			return fragments.flatMap((fragment) =>
+				tokenizeCommandLine(fragment, process.platform === 'win32' ? 'windows' : 'posix'),
 			);
 		} catch (error) {
 			logger.logChannel.error(`Ignoring malformed CMake arguments for target ${targetName}: ${String(error)}`);

@@ -32,10 +32,7 @@ test('passes spaces and shell metacharacters as literal argv values', async () =
 
 test('writes and closes child-process stdin', async () => {
 	const input = 'assembly with spaces\n_and_symbols\n';
-	const echoed = await execute(process.execPath, [
-		'-e',
-		'process.stdin.pipe(process.stdout)',
-	], { stdin: input });
+	const echoed = await execute(process.execPath, ['-e', 'process.stdin.pipe(process.stdout)'], { stdin: input });
 	const closed = await execute(process.execPath, [
 		'-e',
 		'process.stdin.on("end", () => process.stdout.write("closed")); process.stdin.resume()',
@@ -63,10 +60,7 @@ test('distinguishes timeout and cancellation', async () => {
 		timeoutMs: 5_000,
 	});
 	setTimeout(() => token.cancel(), 25);
-	await assert.rejects(
-		execution,
-		(error: unknown) => error instanceof ExecError && error.kind === 'cancelled',
-	);
+	await assert.rejects(execution, (error: unknown) => error instanceof ExecError && error.kind === 'cancelled');
 });
 
 test('rejects after the termination grace period when process termination never closes the child', async () => {

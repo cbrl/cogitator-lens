@@ -15,7 +15,10 @@ export function createToolchainTreeView(
 ): ToolchainTreeProvider {
 	const provider = new ToolchainTreeProvider(registry);
 	const view = vscode.window.createTreeView('coglens.toolchains', { treeDataProvider: provider });
-	context.subscriptions.push(view, registry.onDidChange(() => provider.refresh()));
+	context.subscriptions.push(
+		view,
+		registry.onDidChange(() => provider.refresh()),
+	);
 	return provider;
 }
 
@@ -60,7 +63,7 @@ export function createGlobalOptionsTreeView(
 		compilationService.onVariantsChanged(() => provider.refresh()),
 		compilationService.onArtifactOptionsChanged(() => provider.refresh()),
 		compilationService.toolchainRegistry.onDidChange(() => provider.refresh()),
-		view.onDidChangeCheckboxState(event => {
+		view.onDidChangeCheckboxState((event) => {
 			const [node, state] = event.items[0] ?? [];
 			if (!node?.optionId || !node.artifactKind) {
 				return;
@@ -108,15 +111,19 @@ export function createArtifactDetailsTreeView(
 	context.subscriptions.push(
 		view,
 		vscode.window.onDidChangeActiveTextEditor(followActiveEditor),
-		artifacts.onDidChangeArtifactState(snapshot => provider.acceptArtifactState(snapshot)),
-		...(graphs ? [graphs.onDidChangeActiveGraph(snapshot => {
-			if (snapshot) {
-				provider.setActiveSnapshot(snapshot);
-			} else {
-				followActiveEditor();
-			}
-		})] : []),
-		view.onDidChangeVisibility(event => {
+		artifacts.onDidChangeArtifactState((snapshot) => provider.acceptArtifactState(snapshot)),
+		...(graphs
+			? [
+					graphs.onDidChangeActiveGraph((snapshot) => {
+						if (snapshot) {
+							provider.setActiveSnapshot(snapshot);
+						} else {
+							followActiveEditor();
+						}
+					}),
+				]
+			: []),
+		view.onDidChangeVisibility((event) => {
 			if (event.visible) {
 				followActiveEditor();
 			}
