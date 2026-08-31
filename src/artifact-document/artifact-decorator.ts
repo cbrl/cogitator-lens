@@ -437,7 +437,7 @@ export class ArtifactDecorator {
 
         if (asmLines.length > 0 && !highlightOnly) {
 			// First line will be from the editor that actually had its selection changed (the editor passed to this function)
-            asmEditor.revealRange(asmLines[0], TextEditorRevealType.InCenterIfOutsideViewport);
+			this.revealNavigationTarget(asmEditor, asmLines[0]);
         }
     }
 
@@ -484,7 +484,7 @@ export class ArtifactDecorator {
 				);
 
 				if (!highlightOnly) {
-					targetEditor.revealRange(srcLineRange, TextEditorRevealType.InCenterIfOutsideViewport);
+					this.revealNavigationTarget(targetEditor, srcLineRange);
 				}
 			} else {
 				this.clearSourceSelectionDecorations();
@@ -513,6 +513,17 @@ export class ArtifactDecorator {
 		// editors that dispatch the first visible-range event asynchronously.
 		this.synchronizedScroll.begin(editor);
 		editor.revealRange(editor.document.lineAt(line).range, TextEditorRevealType.AtTop);
+	}
+
+	private revealNavigationTarget(editor: TextEditor, range: Range): void {
+		if (editor.visibleRanges.some(visibleRange => visibleRange.contains(range))) {
+			return;
+		}
+		// A selection in one editor can scroll the other editor. Suppress the resulting
+		// visible-range events so automatic scroll synchronization cannot navigate back
+		// from an unrelated line that happens to be at the top of the new viewport.
+		this.synchronizedScroll.begin(editor);
+		editor.revealRange(range, TextEditorRevealType.InCenterIfOutsideViewport);
 	}
 
 	private updateActiveState(content?: ArtifactDocumentContent): void {
