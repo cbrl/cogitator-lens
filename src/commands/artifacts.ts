@@ -272,9 +272,16 @@ async function compareArtifacts(
 	if (!left) {
 		return;
 	}
-	const right = await pickComparisonTarget(
-		targets.filter(target => target.id !== left.id), 'Select the right artifact',
-	);
+	const compatibleTargets = targets.filter(target =>
+		target.id !== left.id
+		&& comparisonTargetsAreCompatible(left, target, compilationService));
+	if (compatibleTargets.length === 0) {
+		await vscode.window.showInformationMessage(
+			`No other configured variant or preset is compatible with "${left.label}".`,
+		);
+		return;
+	}
+	const right = await pickComparisonTarget(compatibleTargets, 'Select the right artifact');
 	if (!right) {
 		return;
 	}
@@ -331,7 +338,20 @@ function pickComparisonTarget(
 	return pickFrom(targets, target => ({
 		label: target.label,
 		description: target.description,
+		iconPath: new vscode.ThemeIcon(target.preset
+			? artifactDefinitions[target.preset.artifactKind].icon
+			: 'git-branch'),
 	}), { title, matchOnDescription: true });
+}
+
+function comparisonTargetsAreCompatible(
+	left: ComparisonTarget,
+	right: ComparisonTarget,
+	compilationService: CompilationService,
+): boolean {
+	return supportedArtifactKinds.some(kind =>
+		targetSupportsKind(left, kind, compilationService)
+		&& targetSupportsKind(right, kind, compilationService));
 }
 
 function targetSupportsKind(
