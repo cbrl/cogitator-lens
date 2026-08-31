@@ -1,14 +1,14 @@
 {
     "coglens.toolchains": [
         {
-            "displayName": "Sample Clang CUDA host",
-            "kind": "clang",
-            "executable": "clang++",
-            "defaultArguments": ["-x", "c++", "-std=c++20"]
+            "displayName": "Sample CUDA device",
+            "kind": "nvcc",
+            "executable": "nvcc",
+            "defaultArguments": ["-std=c++17"]
         }
     ],
     "coglens.defaultInvocation": {
-        "toolchain": "Sample Clang CUDA host"
+        "toolchain": "Sample CUDA device"
     },
     "coglens.artifactPresets": {
         "debug-assembly": {
@@ -17,8 +17,7 @@
 		},
         "optimized-assembly": {
             "artifactKind": "assembly",
-            "extraArguments": ["-O3"],
-            "productionOptions": { "intel": true, "demangle": true }
+            "extraArguments": ["-O3"]
         },
         "optimized-disassembly": {
 			"artifactKind": "binary-disassembly",
@@ -26,25 +25,6 @@
 		},
         "preprocessed": {
 			"artifactKind": "preprocessed-source"
-		},
-        "ast": {
-			"artifactKind": "ast"
-		},
-        "llvm-ir": {
-			"artifactKind": "llvm-ir",
-			"extraArguments": ["-O1"]
-		},
-        "optimization-remarks": {
-			"artifactKind": "optimization-remarks",
-			"extraArguments": ["-O3"]
-		},
-        "stack-analysis": {
-			"artifactKind": "stack-analysis",
-			"extraArguments": ["-O1"]
-		},
-        "control-flow": {
-			"artifactKind": "control-flow-graph",
-			"extraArguments": ["-O1"]
 		}
     }
 }

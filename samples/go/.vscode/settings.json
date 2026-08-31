@@ -1,0 +1,24 @@
+{
+    "coglens.toolchains": [
+        {
+            "displayName": "Sample Go",
+            "kind": "go",
+            "executable": "go"
+        }
+    ],
+    "coglens.defaultInvocation": {
+        "toolchain": "Sample Go"
+    },
+    "coglens.artifactPresets": {
+        "debug-assembly": {
+            "artifactKind": "assembly",
+            "extraArguments": ["-gcflags=-N -l"]
+        },
+        "optimized-assembly": {
+            "artifactKind": "assembly"
+        },
+        "control-flow": {
+            "artifactKind": "control-flow-graph"
+        }
+    }
+}

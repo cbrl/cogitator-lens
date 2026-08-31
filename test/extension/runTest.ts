@@ -49,6 +49,7 @@ import {
 	nativeStackUsageOutput,
 } from '../../src/artifacts/stack-analysis/native-stack-analysis.js';
 import { ExecError } from '../../src/exec.js';
+import { isSupportedSourceDocument } from '../../src/commands/artifacts.js';
 
 const extensionToolchainHost = {
 	log() {},
@@ -84,6 +85,7 @@ export async function run(): Promise<void> {
 	]) {
 		assert.ok(registeredCommands.includes(command), `Missing registered command: ${command}`);
 	}
+	await verifyAdditionalSourceLanguageIds();
 
 	const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
 	assert.ok(workspaceFolder, 'Extension tests require an open workspace folder');
@@ -113,6 +115,22 @@ export async function run(): Promise<void> {
 	await verifyCompilationDatabaseVariantProvider(workspaceFolder);
 	await verifyPythonEnvironmentVariantProvider(workspaceFolder);
 	verifyTreeModels(workspaceFolder);
+}
+
+async function verifyAdditionalSourceLanguageIds(): Promise<void> {
+	const repositoryRoot = vscode.workspace.workspaceFolders?.[0]?.uri;
+	assert.ok(repositoryRoot);
+	const zigDocument = await vscode.workspace.openTextDocument(
+		vscode.Uri.joinPath(repositoryRoot, 'samples', 'zig', 'src', 'main.zig'),
+	);
+	assert.equal(zigDocument.languageId, 'zig');
+	assert.equal(isSupportedSourceDocument(zigDocument), true);
+
+	const cudaDocument = await vscode.workspace.openTextDocument(
+		vscode.Uri.joinPath(repositoryRoot, 'samples', 'cuda', 'src', 'main.cu'),
+	);
+	assert.equal(cudaDocument.languageId, 'cuda-cpp');
+	assert.equal(isSupportedSourceDocument(cudaDocument), true);
 }
 
 async function verifyCompilationDatabaseVariantProvider(workspaceFolder: vscode.WorkspaceFolder): Promise<void> {

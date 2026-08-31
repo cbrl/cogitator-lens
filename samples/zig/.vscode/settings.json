@@ -1,0 +1,31 @@
+{
+    "coglens.toolchains": [
+        {
+            "displayName": "Sample Zig",
+            "kind": "zig",
+            "executable": "zig"
+        }
+    ],
+    "coglens.defaultInvocation": {
+        "toolchain": "Sample Zig"
+    },
+    "coglens.artifactPresets": {
+        "debug-assembly": {
+            "artifactKind": "assembly",
+            "extraArguments": ["-O", "Debug"]
+        },
+        "optimized-assembly": {
+            "artifactKind": "assembly",
+            "extraArguments": ["-O", "ReleaseFast"],
+            "productionOptions": { "intel": true }
+        },
+        "llvm-ir": {
+            "artifactKind": "llvm-ir",
+            "extraArguments": ["-O", "ReleaseSafe"]
+        },
+        "control-flow": {
+            "artifactKind": "control-flow-graph",
+            "extraArguments": ["-O", "ReleaseSafe"]
+        }
+    }
+}

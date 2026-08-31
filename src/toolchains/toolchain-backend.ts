@@ -63,7 +63,7 @@ export interface ToolchainHost {
 }
 
 export interface ArtifactOutputSpec {
-	readonly output: 'stdout' | {
+	readonly output: 'stdout' | 'stderr' | {
 		readonly filename: string;
 		readonly optional?: boolean;
 	};
@@ -72,6 +72,10 @@ export interface ArtifactOutputSpec {
 		temporaryDirectory: string,
 		providerArguments: readonly string[],
 	) => readonly string[];
+	/** Invocation-local environment additions, normally paths inside the temporary directory. */
+	readonly environment?: (
+		temporaryDirectory: string,
+	) => Readonly<Record<string, string>>;
 	readonly acceptOutputOnError?: boolean;
 }
 
@@ -225,13 +229,14 @@ export class ToolchainBackend {
 	// dialect `asmParser` handles for textual assembly. Parsing it with a dedicated plain
 	// `AsmParser` keeps that independent of a backend's assembly dialect (e.g. MSVC's
 	// `VcAsmParser`, whose own binary-mode parsing is an unimplemented upstream stub).
-	private readonly binaryAsmParser: AsmParser = new AsmParser(noopPropertyGetter);
+	private readonly binaryAsmParser: AsmParser;
 
 	constructor(profile: ToolchainProfile, definition: ToolchainDefinition, host: ToolchainHost) {
 		this.profile = profile;
 		this.definition = definition;
 		this.host = host;
 		this.asmParser = definition.createParser?.();
+		this.binaryAsmParser = definition.createBinaryParser?.() ?? new AsmParser(noopPropertyGetter);
 	}
 
 	async produceAssembly(
@@ -250,8 +255,8 @@ export class ToolchainBackend {
 			{
 				output: { filename: 'output.asm' },
 				arguments: (outputFile, _temporaryDirectory, providerArguments) => [
-					...this.outputOptionArguments(options.productionOptions),
 					...outputArguments('assembly', outputFile, providerArguments),
+					...this.outputOptionArguments(options.productionOptions),
 				],
 			},
 			cancellationToken,
@@ -360,7 +365,7 @@ export class ToolchainBackend {
 		transform: (text: string, invocation: PreparedInvocation) => Promise<string> | string,
 	): Promise<RawArtifact> {
 		return withTemporaryDirectory('coglens-', async temporaryDirectory => {
-			const outputFile = spec.output === 'stdout'
+			const outputFile = spec.output === 'stdout' || spec.output === 'stderr'
 				? ''
 				: path.join(temporaryDirectory, spec.output.filename);
 			const { invocation, result } = await this.run(
@@ -373,10 +378,13 @@ export class ToolchainBackend {
 				),
 				cancellationToken,
 				spec.acceptOutputOnError,
+				spec.environment?.(temporaryDirectory),
 			);
 			const rawText = spec.output === 'stdout'
 				? result.stdout
-				: await readBoundedArtifactFile(outputFile, spec.output.optional);
+				: spec.output === 'stderr'
+					? result.stderr
+					: await readBoundedArtifactFile(outputFile, spec.output.optional);
 			const text = await transform(rawText, invocation);
 			const inputMetadata = await this.collectDependencyInputs(
 				source,
@@ -386,7 +394,9 @@ export class ToolchainBackend {
 			);
 			const diagnosticOutput = spec.output === 'stdout'
 				? result.stderr
-				: `${result.stderr}\n${result.stdout}`;
+				: spec.output === 'stderr'
+					? result.stdout
+					: `${result.stderr}\n${result.stdout}`;
 			return this.buildRawArtifact(
 				kind,
 				text,
@@ -442,12 +452,14 @@ export class ToolchainBackend {
 		ownedArguments: (providerArguments: readonly string[]) => readonly string[],
 		cancellationToken: CancellationToken,
 		acceptOutputOnError = false,
+		invocationEnvironment: Readonly<Record<string, string>> = {},
 	): Promise<ToolchainRun> {
 		const invocation = await this.prepareInvocation(
 			source,
 			options,
 			ownedArguments,
 			cancellationToken,
+			invocationEnvironment,
 		);
 		this.host.log(`Producing an artifact for ${source.fsPath} with ${this.profile.displayName}`);
 		this.host.log(`Command: ${this.profile.executable} ${invocation.argumentsList.join(' ')}`);
@@ -508,12 +520,14 @@ export class ToolchainBackend {
 		options: CompileOptions,
 		ownedArguments: (providerArguments: readonly string[]) => readonly string[],
 		cancellationToken: CancellationToken,
+		invocationEnvironment: Readonly<Record<string, string>> = {},
 	): Promise<PreparedInvocation> {
 		const workingDirectory = options.workingDirectory ?? path.dirname(source.fsPath);
 		const environment = {
 			...process.env,
 			...this.profile.environment,
 			...options.env,
+			...invocationEnvironment,
 		};
 		const preparedEnvironment = this.definition.prepareEnvironment
 			? await this.definition.prepareEnvironment(this.profile, environment, cancellationToken)
@@ -525,18 +539,28 @@ export class ToolchainBackend {
 			...(options.args ?? []),
 		], source.fsPath, workingDirectory);
 
-		const argumentsList = [
-			...providerArguments,
-			...ownedArguments(providerArguments),
-			source.fsPath,
-		];
+		const compilerArguments = ownedArguments(providerArguments);
+		const argumentsList = this.definition.ownedArgumentPlacement === 'before-provider'
+			? [...compilerArguments, ...providerArguments, source.fsPath]
+			: this.definition.ownedArgumentPlacement === 'command-before-provider'
+				? [
+					...compilerArguments.slice(0, 1),
+					...providerArguments,
+					...compilerArguments.slice(1),
+					source.fsPath,
+				]
+				: [...providerArguments, ...compilerArguments, source.fsPath];
 
 		const invocation = {
 			workingDirectory,
 			preparedEnvironment,
 			argumentsList,
 			providerArguments,
-			overriddenNames: Object.keys({ ...this.profile.environment, ...options.env }).sort(),
+			overriddenNames: Object.keys({
+				...this.profile.environment,
+				...options.env,
+				...invocationEnvironment,
+			}).sort(),
 			environmentVariableNames: Object.keys(preparedEnvironment).sort(),
 			started: performance.now(),
 		};

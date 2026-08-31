@@ -149,6 +149,8 @@ test('the manifest toolchain-kind enum and artifactOptions schema stay synchroni
 		language.id === 'coglens-asm'));
 	assert.ok(manifest.contributes.languages.some(language =>
 		language.id === 'coglens-llvm-ir'));
+	assert.ok(manifest.contributes.languages.some(language =>
+		language.id === 'zig'));
 	assert.ok(manifest.contributes.grammars.some(grammar =>
 		grammar.language === 'coglens-asm'));
 	assert.ok(manifest.contributes.grammars.some(grammar =>

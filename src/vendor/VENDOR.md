@@ -47,6 +47,15 @@ The small files `lib/assert.ts`, `lib/utils.ts`, `lib/logger.ts`,
 local integration shims. They provide only the dependencies exercised by the
 vendored parsers.
 
+`lib/parsers/asm-parser-go.ts` extracts and adapts
+`GolangCompiler.convertNewGoL` from `lib/compilers/golang.ts`. The adapter keeps
+CE's pseudo-label and source-directive normalization while accepting Windows
+drive-letter paths. `lib/parsers/asm-parser-ptx.ts` is a dependency-reduced
+copy of CE's PTX parser; compiler-server-only state was removed, while its PTX
+filtering, indentation, and `.file`/`.loc` mapping behavior is preserved.
+`lib/parsers/asm-parser-sass.ts` copies CE's compact `nvdisasm` parser
+configuration.
+
 ## Updating to a newer revision
 
 1. Pick the new Compiler Explorer commit SHA.

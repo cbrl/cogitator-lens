@@ -1,57 +1,47 @@
-// This file is deliberately host-only. It exercises VS Code's CUDA language mode with one of
-// Cogitator Lens's supported C-family compilers without requiring nvcc or a CUDA runtime.
-
-#if defined(_MSC_VER)
-#define SAMPLE_NOINLINE __declspec(noinline)
-#else
-#define SAMPLE_NOINLINE __attribute__((noinline))
-#endif
-
-enum class TransformMode {
+enum class TransformMode : int {
     add,
     multiply,
     saturate
 };
 
-SAMPLE_NOINLINE int transform_value(int value, TransformMode mode) noexcept
+__device__ __noinline__ float transform_value(float value, TransformMode mode)
 {
     switch (mode) {
     case TransformMode::add:
-        return value + 7;
+        return value + 7.0F;
     case TransformMode::multiply:
-        return value * 3;
+        return value * 3.0F;
     case TransformMode::saturate:
-        return value < -32 ? -32 : (value > 32 ? 32 : value);
+        return value < -32.0F ? -32.0F : (value > 32.0F ? 32.0F : value);
     }
-    return 0;
+    return 0.0F;
 }
 
-SAMPLE_NOINLINE int reduce_values(const int *values, int count, TransformMode mode) noexcept
+extern "C" __global__ void transform_series(
+    float *output,
+    const float *input,
+    int count,
+    TransformMode mode)
 {
-    volatile int stack_slots[16] = {};
-    int total = 0;
-
-    for (int index = 0; index < count; ++index) {
-        stack_slots[index & 15] = transform_value(values[index], mode);
-        total += stack_slots[index & 15];
+    const int index = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
+    if (index >= count) {
+        return;
     }
 
-    return total + stack_slots[count & 15];
+    float stack_slots[4] = {};
+    float total = 0.0F;
+    for (int offset = index; offset < count; offset += static_cast<int>(gridDim.x * blockDim.x)) {
+        const float transformed = transform_value(input[offset], mode);
+        stack_slots[offset & 3] = transformed;
+        total += transformed;
+    }
+    output[index] = total + stack_slots[index & 3];
 }
 
-SAMPLE_NOINLINE void saxpy(float *output, const float *input, int count, float scale) noexcept
+extern "C" __global__ void saxpy(float *output, const float *input, int count, float scale)
 {
-    for (int index = 0; index < count; ++index) {
+    const int index = static_cast<int>(blockIdx.x * blockDim.x + threadIdx.x);
+    if (index < count) {
         output[index] = scale * input[index] + output[index];
     }
-}
-
-int main()
-{
-    const int values[] = {1, -3, 8, 13, -21};
-    const float input[] = {1.0F, 2.0F, 3.0F, 4.0F};
-    float output[] = {4.0F, 3.0F, 2.0F, 1.0F};
-
-    saxpy(output, input, 4, 1.5F);
-    return (reduce_values(values, 5, TransformMode::saturate) + static_cast<int>(output[3])) & 0xff;
 }

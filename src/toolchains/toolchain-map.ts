@@ -30,6 +30,13 @@ import {
 import { rustOutputArguments, stripRustManagedArguments } from './rust.js';
 import { stripPythonManagedArguments } from './python.js';
 import {
+	goAssemblyProducer,
+	goSsaControlFlowGraphProducer,
+	stripGoManagedArguments,
+} from './go.js';
+import { zigLlvmIrOutput, zigOutputArguments, stripZigManagedArguments } from './zig.js';
+import { nvccOutputArguments, nvdisasm, stripNvccManagedArguments } from './nvcc.js';
+import {
 	artifactDefinitions,
 	supportedArtifactKinds,
 } from '../artifacts/core/artifact-definitions.js';
@@ -91,7 +98,11 @@ import { parseGccControlFlowGraphs } from '../artifacts/control-flow-graph/parse
 import { parseLlvmControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/llvm-ir-cfg-parser.js';
 import { parsePythonControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/python-cfg-parser.js';
 import { parseRustMirControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/rust-mir-cfg-parser.js';
+import { parseGoSsaControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/go-ssa-cfg-parser.js';
 import type { AssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/assembly-cfg-parser.js';
+import { GoAsmParser } from '../vendor/lib/parsers/asm-parser-go.js';
+import { PTXAsmParser } from '../vendor/lib/parsers/asm-parser-ptx.js';
+import { SassAsmParser } from '../vendor/lib/parsers/asm-parser-sass.js';
 
 export type ToolCapabilityStatus = 'available' | 'unavailable' | 'unsupported';
 
@@ -165,12 +176,15 @@ export interface ToolchainDefinitionShape {
 		outputFile: string,
 		providerArguments: readonly string[],
 	) => readonly string[];
+	/** Controls argument order for drivers whose first argument is a required subcommand. */
+	readonly ownedArgumentPlacement?: 'before-provider' | 'command-before-provider';
 	readonly stripOwnedArguments?: (
 		args: readonly string[],
 		sourceFile: string,
 		workingDirectory: string,
 	) => readonly string[];
 	readonly createParser?: () => AsmParser;
+	readonly createBinaryParser?: () => AsmParser;
 	readonly createCfgParser?: () => AssemblyCfgParser;
 	readonly prepareEnvironment?: (
 		profile: ToolchainProfile,
@@ -553,6 +567,50 @@ const pythonArtifacts = artifactCells({
 	]),
 });
 
+const goArtifacts = artifactCells({
+	assembly: {
+		status: 'available',
+		producer: goAssemblyProducer,
+	},
+	'control-flow-graph': outputArtifactCell([
+		controlFlowGraphOutput(
+			'go-ssa',
+			'Go SSA CFG',
+			'Build a source-level graph from the final GOSSAFUNC SSA snapshot.',
+			goSsaControlFlowGraphProducer,
+			(raw, _options, context) =>
+				parseGoSsaControlFlowGraphs(raw.text, context.source.uri.toString()),
+		),
+	]),
+});
+
+const zigArtifacts = artifactCells({
+	assembly: assemblyCell,
+	'llvm-ir': {
+		status: 'available',
+		producer: artifactProducer('llvm-ir', zigLlvmIrOutput),
+	},
+	'control-flow-graph': outputArtifactCell([
+		controlFlowGraphOutput(
+			'llvm-ir',
+			'LLVM IR CFG',
+			'Build a graph from Zig LLVM IR output.',
+			artifactProducer('control-flow-graph', zigLlvmIrOutput),
+			(raw) => parseLlvmControlFlowGraphs(raw.text, raw.command.workingDirectory),
+		),
+		assemblyControlFlowGraphOutput,
+	]),
+});
+
+const nvccArtifacts = artifactCells({
+	assembly: assemblyCell,
+	'binary-disassembly': binaryCell('nvdisasm', binaryDisassemblyProducer(nvdisasm)),
+	'preprocessed-source': {
+		status: 'available',
+		producer: gnuPreprocessedSourceProducer,
+	},
+});
+
 export const toolchainDefinitions = {
 	gcc: {
 		executablePattern: /^(?:gcc|g\+\+)(?:-\d+(?:\.\d+)*)?(?:\.exe)?$/i,
@@ -656,6 +714,45 @@ export const toolchainDefinitions = {
 		stripOwnedArguments: stripPythonManagedArguments,
 		discoverTools: toolDiscoverer({}),
 		artifacts: pythonArtifacts,
+	},
+	go: {
+		executablePattern: /^go(?:\.exe)?$/i,
+		languageIdentifiers: Object.freeze(['go']),
+		stripOwnedArguments: stripGoManagedArguments,
+		ownedArgumentPlacement: 'command-before-provider',
+		createParser: () => new GoAsmParser(noopPropertyGetter),
+		discoverTools: toolDiscoverer({}),
+		artifacts: goArtifacts,
+	},
+	zig: {
+		executablePattern: /^zig(?:\.exe)?$/i,
+		languageIdentifiers: Object.freeze(['zig']),
+		intelSyntax: 'selectable',
+		intelArguments: Object.freeze(['-mllvm', '--x86-asm-syntax=intel']),
+		includeFlag: '-I',
+		defineFlag: '-D',
+		objectFilename: 'output.o',
+		outputArguments: zigOutputArguments,
+		stripOwnedArguments: stripZigManagedArguments,
+		ownedArgumentPlacement: 'command-before-provider',
+		createParser: defaultAsmParser,
+		createCfgParser: () => new ClangAssemblyCfgParser(new InstructionSetInfo()),
+		discoverTools: toolDiscoverer({ demangler: 'llvm-cxxfilt', disassembler: 'llvm-objdump' }),
+		artifacts: zigArtifacts,
+	},
+	nvcc: {
+		executablePattern: /^nvcc(?:\.exe)?$/i,
+		languageIdentifiers: Object.freeze(['cuda', 'cuda-cpp']),
+		includeFlag: '-I',
+		defineFlag: '-D',
+		objectFilename: process.platform === 'win32' ? 'output.obj' : 'output.o',
+		outputArguments: nvccOutputArguments,
+		stripOwnedArguments: stripNvccManagedArguments,
+		createParser: () => new PTXAsmParser(noopPropertyGetter),
+		createBinaryParser: () => new SassAsmParser(noopPropertyGetter),
+		...(process.platform === 'win32' ? { prepareEnvironment: captureWindowsEnvironment } : {}),
+		discoverTools: toolDiscoverer({ disassembler: 'nvdisasm' }),
+		artifacts: nvccArtifacts,
 	},
 } as const satisfies Record<string, ToolchainDefinitionShape>;
 

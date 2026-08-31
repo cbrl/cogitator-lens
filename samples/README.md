@@ -17,17 +17,17 @@ The checked-in settings use executables found on `PATH`:
 
 | Project | Configured executable | Artifact coverage |
 | --- | --- | --- |
-| C, C++, Objective-C, Objective-C++, CUDA | `clang` or `clang++` | Assembly, binary disassembly, preprocessing, AST, LLVM IR, optimization remarks, stack analysis, CFG |
+| C, C++, Objective-C, Objective-C++ | `clang` or `clang++` | Assembly, binary disassembly, preprocessing, AST, LLVM IR, optimization remarks, stack analysis, CFG |
+| CUDA device code | `nvcc` | PTX assembly, SASS binary disassembly, preprocessing |
+| Go | `go` | Assembly, SSA CFG |
+| Zig | `zig` | Assembly, LLVM IR, CFG |
 | Rust | `rustc` | Assembly, LLVM IR, MIR, CFG |
 | Python | `python` | AST, bytecode, stack analysis, CFG |
 
 Edit `.vscode/settings.json` in a standalone project, or the `settings` section of the umbrella
 workspace, if an executable has a different name or location. Binary disassembly additionally needs
-`llvm-objdump` beside Clang or on `PATH`. Optional Rust demangling needs `rustfilt`.
-
-CUDA is a host-side `.cu` sample compiled as ordinary C++ (`-x c++`). Cogitator Lens recognizes the
-VS Code `cuda` language, but its supported C-family backends do not include `nvcc`; using host-only
-code keeps every advertised Clang artifact available without requiring a CUDA toolkit.
+`llvm-objdump` beside Clang or on `PATH`. Optional Rust demangling needs `rustfilt`. CUDA requires
+the CUDA toolkit; its bundled `nvdisasm` enables the SASS disassembly artifact.
 
 ## Trying the artifacts
 
@@ -52,10 +52,12 @@ cmake -S cpp -B cpp/build && cmake --build cpp/build
 cmake -S objective-c -B objective-c/build && cmake --build objective-c/build
 cmake -S objective-cpp -B objective-cpp/build && cmake --build objective-cpp/build
 cmake -S cuda -B cuda/build && cmake --build cuda/build
+go test ./go/src/main.go
+zig test zig/src/main.zig
 cargo build --manifest-path rust/Cargo.toml
 python -m py_compile python/src/disassembly_sample.py
 ```
 
 Objective-C and Objective-C++ require a Clang installation with those front ends enabled. Their
 CMake targets are object libraries, so no Objective-C runtime or framework is needed for the smoke
-build.
+build. CUDA configuration requires CMake to find an installed CUDA toolkit and host compiler.

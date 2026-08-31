@@ -23,18 +23,18 @@ metrics.
 
 ### Artifact support
 
-| Artifact | GCC | Clang / Apple Clang | clang-cl | MSVC | Rust | Python |
-| --- | --- | --- | --- | --- | --- | --- |
-| Assembly | Yes | Yes | Yes | Yes | Yes | — |
-| Binary disassembly | Yes | Yes | Yes | Yes | — | — |
-| Preprocessed source | Yes | Yes | Yes | Yes | — | — |
-| AST | — | Yes | Yes | — | — | Yes (3.9+) |
-| LLVM IR | — | Yes | Yes | — | Yes | — |
-| Rust MIR | — | — | — | — | Yes | — |
-| Optimization remarks | Yes | Yes | Yes | — | — | — |
-| Stack analysis | Yes | Yes | Yes | — | — | Yes |
-| Python bytecode | — | — | — | — | — | Yes |
-| Control-flow graph | Yes | Yes | Yes | — | Yes | Yes |
+| Artifact             | GCC | Clang / Apple Clang | clang-cl | MSVC | Rust | Python     | Go        | Zig | nvcc       |
+|----------------------|-----|---------------------|----------|------|------|------------|-----------|-----|------------|
+| Assembly             | Yes | Yes                 | Yes      | Yes  | Yes  | —          | Yes       | Yes | Yes (PTX)  |
+| Binary disassembly   | Yes | Yes                 | Yes      | Yes  | —    | —          | —         | —   | Yes (SASS) |
+| Preprocessed source  | Yes | Yes                 | Yes      | Yes  | —    | —          | —         | —   | Yes        |
+| AST                  | —   | Yes                 | Yes      | —    | —    | Yes (3.9+) | —         | —   | —          |
+| LLVM IR              | —   | Yes                 | Yes      | —    | Yes  | —          | —         | Yes | —          |
+| Rust MIR             | —   | —                   | —        | —    | Yes  | —          | —         | —   | —          |
+| Optimization remarks | Yes | Yes                 | Yes      | —    | —    | —          | —         | —   | —          |
+| Stack analysis       | Yes | Yes                 | Yes      | —    | —    | Yes        | —         | —   | —          |
+| Python bytecode      | —   | —                   | —        | —    | —    | Yes        | —         | —   | —          |
+| Control-flow graph   | Yes | Yes                 | Yes      | —    | Yes  | Yes        | Yes (SSA) | Yes | —          |
 
 ## Configuration
 
@@ -45,9 +45,9 @@ sidebar.
 
 A toolchain has the form
 `{ displayName, kind, executable, defaultArguments?, environment?, tools? }`. Supported kinds are
-`gcc`, `clang`, `apple-clang`, `clang-cl`, `msvc`, `rust`, and `python`. Use `defaultArguments` for
-include paths and macro definitions. Set auxiliary tools, such as a disassembler or demangler, in
-`tools` when they are not found beside the compiler or on `PATH`.
+`gcc`, `clang`, `apple-clang`, `clang-cl`, `msvc`, `rust`, `python`, `go`, `zig`, and `nvcc`. Use
+`defaultArguments` for include paths and macro definitions. Set auxiliary tools, such as a
+disassembler or demangler, in `tools` when they are not found beside the compiler or on `PATH`.
 
 Use the add action in **Project Compile Info** to create a `coglens.compileVariants` entry for the
 active file. Variants specify a source file, toolchain, working directory, arguments, and
@@ -80,8 +80,9 @@ options do not regenerate an artifact.
 
 ### Optional tools
 
-Binary disassembly uses `objdump` for GCC, `llvm-objdump` for Clang toolchains, and `dumpbin` for
-MSVC. Configure a `disassembler` when the tool is not detected automatically:
+Binary disassembly uses `objdump` for GCC, `llvm-objdump` for Clang-family toolchains, `dumpbin`
+for MSVC, and `nvdisasm` for nvcc cubins. Configure a `disassembler` when the tool is not detected
+automatically:
 
 ```json
 {
@@ -142,6 +143,18 @@ is compiled or parsed without being imported or executed.
 
 When Microsoft's Python extension is installed, its selected and known environments are discovered
 automatically for workspace Python files.
+
+### Go
+
+Go assembly is produced with `go build -gcflags=-S`. Its CFG output uses the compiler's textual
+`GOSSAFUNC` dump. Set `GOSSAFUNC` in the toolchain or invocation environment to select a specific
+function, or leave it unset to select the first non-`init` function in the source file.
+
+### CUDA
+
+The nvcc assembly artifact is line-mapped device PTX, while binary disassembly compiles a cubin and
+runs the sibling `nvdisasm` to render SASS. On Windows, the Visual Studio host-compiler environment
+is discovered in the same way as MSVC.
 
 ## Development samples
 

@@ -29,6 +29,11 @@
     "contributes": {
         "languages": [
             {
+                "id": "zig",
+                "aliases": ["Zig", "zig"],
+                "extensions": [".zig"]
+            },
+            {
                 "id": "coglens-asm",
                 "aliases": ["Compiler Assembly"],
                 "extensions": [".asm", ".disasm"]
@@ -412,7 +417,10 @@
                                         "clang",
                                         "apple-clang",
                                         "rust",
-                                        "python"
+                                        "python",
+                                        "go",
+                                        "zig",
+                                        "nvcc"
                                     ]
                                 },
                                 "executable": {
