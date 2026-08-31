@@ -11,6 +11,7 @@
     "url": "https://github.com/cbrl/cogitator-lens"
   },
   "engines": {
+    "node": ">=22",
     "vscode": "^1.94.0"
   },
   "capabilities": {
