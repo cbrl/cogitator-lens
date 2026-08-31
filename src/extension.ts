@@ -12,6 +12,7 @@ import {
 	artifactSemanticTokensLegend,
 } from './artifact-document/artifact-semantic-tokens-provider.js';
 import { ArtifactDocumentProvider, getArtifactUri } from './artifact-document/artifact-document-provider.js';
+import { ArtifactDocumentRegistry } from './artifact-document/artifact-document-registry.js';
 import { CmakeVariantProvider } from './buildsystems/cmake.js';
 import { CompilationDatabaseVariantProvider } from './buildsystems/compilation-database.js';
 import { PythonEnvironmentVariantProvider } from './buildsystems/python-environments.js';
@@ -45,8 +46,9 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		configuration,
 		context.workspaceState,
 	);
-	const artifactProvider = new ArtifactDocumentProvider(compilationService, configuration);
-	const graphPanels = new GraphPanelManager(context, compilationService, configuration);
+	const artifactRegistry = new ArtifactDocumentRegistry(compilationService, configuration);
+	const artifactProvider = new ArtifactDocumentProvider(compilationService, configuration, artifactRegistry);
+	const graphPanels = new GraphPanelManager(context, artifactRegistry);
 	const navigationProvider = new ArtifactNavigationProvider(uri =>
 		artifactProvider.getRenderedArtifact(uri));
 
@@ -169,6 +171,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
 	context.subscriptions.push(
 		configuration,
 		compilationService,
+		artifactRegistry,
 		artifactProvider,
 		graphPanels,
 		...variantProviders,

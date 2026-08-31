@@ -11,7 +11,6 @@ import {
 	Position,
 	ProviderResult,
 	Range,
-	RelativePattern,
 	StatusBarAlignment,
 	StatusBarItem,
 	TabInputText,
@@ -22,7 +21,6 @@ import {
 	workspace,
 } from 'vscode';
 import path from 'path';
-import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
 import { CompilationService } from '../compilation/index.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
 import {
@@ -30,43 +28,32 @@ import {
 	type CompileDiagnostic,
 	type RenderedTextArtifact,
 } from '../types/index.js';
-import { toComparisonKey } from '../utils.js';
-import { sourceUriMap, sourceUriSet, UriSet } from '../uri-containers.js';
 import {
 	artifactScheme,
 	getArtifactUri,
-	parseArtifactUri,
 } from './artifact-uri.js';
 import { ArtifactDecorator } from './artifact-decorator.js';
 import { getContent, type ArtifactDocumentContent } from './artifact-document-content.js';
-import { ArtifactGenerator } from './artifact-generator.js';
 import type { ArtifactStatus } from './artifact-generator.js';
-import type {
-	ArtifactDocumentIdentity,
-	ArtifactDocumentSnapshot,
-} from './artifact-identity.js';
+import {
+	artifactDocumentKey,
+	ArtifactDocumentRegistry,
+	type ArtifactRegistryDocument,
+} from './artifact-document-registry.js';
+import type { ArtifactDocumentSnapshot } from './artifact-identity.js';
 
 interface ArtifactDocument {
-	readonly identity: ArtifactDocumentIdentity;
-	readonly handler: ArtifactGenerator;
-	readonly watcher: Disposable;
+	readonly registered: ArtifactRegistryDocument;
 	decorator?: ArtifactDecorator;
 	assembly?: ArtifactDocumentContent;
-	pendingRefresh?: ReturnType<typeof setTimeout>;
 	diagnostics: readonly CompileDiagnostic[];
-}
-
-function documentKey(uri: Uri): string {
-	return toComparisonKey(uri, true, process.platform === 'win32');
 }
 
 export class ArtifactDocumentProvider implements TextDocumentContentProvider, Disposable {
 	static readonly scheme = artifactScheme;
 
 	private readonly documents = new Map<string, ArtifactDocument>();
-	private readonly sourceToArtifacts = sourceUriMap<UriSet>();
 	private readonly changeEmitter = new EventEmitter<Uri>();
-	private readonly artifactStateEmitter = new EventEmitter<ArtifactDocumentSnapshot>();
 	private readonly diagnostics: DiagnosticCollection = languages.createDiagnosticCollection('coglens');
 	private readonly statusBar: StatusBarItem = window.createStatusBarItem(StatusBarAlignment.Right, 1000);
 	private readonly subscriptions: Disposable[];
@@ -74,29 +61,12 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 	constructor(
 		private readonly compilationService: CompilationService,
 		private readonly configuration: ConfigurationService,
+		private readonly registry: ArtifactDocumentRegistry,
 	) {
 		this.subscriptions = [
 			workspace.onDidCloseTextDocument(document => this.onCloseTextDocument(document)),
 			window.onDidChangeActiveTextEditor(() => this.refreshStatusBar()),
-			compilationService.onVariantsChanged(sources => {
-				for (const source of sources) {
-					for (const assembly of this.sourceToArtifacts.get(source)?.values() ?? []) {
-						this.requestRefresh(assembly);
-					}
-				}
-			}),
-			compilationService.onArtifactOptionsChanged(() => {
-				for (const document of this.documents.values()) {
-					this.requestRefresh(document.handler.artifactUri);
-				}
-			}),
-			configuration.onDidChange(() => {
-				for (const document of this.documents.values()) {
-					this.requestRefresh(document.handler.artifactUri);
-				}
-			}),
 			this.changeEmitter,
-			this.artifactStateEmitter,
 			this.diagnostics,
 			this.statusBar,
 		];
@@ -109,7 +79,7 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 	// (or fails to recompile).
 	provideTextDocumentContent(uri: Uri, token: CancellationToken): ProviderResult<string> {
 		const document = this.getOrCreateDocument(uri);
-		const handler = document.handler;
+		const handler = document.registered.handler;
 
 		if (!document.decorator) {
 			document.decorator = new ArtifactDecorator(
@@ -152,30 +122,30 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 	}
 
 	get onDidChangeArtifactState(): Event<ArtifactDocumentSnapshot> {
-		return this.artifactStateEmitter.event;
+		return this.registry.onDidChangeArtifactState;
 	}
 
 	getArtifactDocumentContent(uri: Uri): ArtifactDocumentContent | undefined {
-		return this.documents.get(documentKey(uri))?.assembly;
+		return this.documents.get(artifactDocumentKey(uri))?.assembly;
 	}
 
 	getRenderedArtifact(uri: Uri): RenderedTextArtifact | undefined {
-		const artifact = this.documents.get(documentKey(uri))?.handler.status.artifact;
+		const artifact = this.documents.get(artifactDocumentKey(uri))?.registered.handler.status.artifact;
 		return artifact?.presentation === 'text' ? artifact : undefined;
 	}
 
 	/** Returns already-known state only; activating a details view never compiles. */
 	getArtifactDocumentState(uri: Uri): ArtifactDocumentSnapshot | undefined {
-		const document = this.documents.get(documentKey(uri));
+		const document = this.documents.get(artifactDocumentKey(uri));
 		return document
-			? { identity: document.identity, status: document.handler.status }
+			? { identity: document.registered.identity, status: document.registered.handler.status }
 			: undefined;
 	}
 
 	getActiveArtifactDocumentState(): ArtifactDocumentSnapshot | undefined {
 		const document = this.activeArtifactDocument();
 		return document
-			? { identity: document.identity, status: document.handler.status }
+			? { identity: document.registered.identity, status: document.registered.handler.status }
 			: undefined;
 	}
 
@@ -184,120 +154,50 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 		if (!document) {
 			return false;
 		}
-		this.requestRefresh(document.handler.artifactUri);
+		this.requestRefresh(document.registered.uri);
 		return true;
 	}
 
 	cancelActiveArtifact(): boolean {
-		return this.activeArtifactDocument()?.handler.cancel() ?? false;
+		return this.activeArtifactDocument()?.registered.handler.cancel() ?? false;
 	}
 
 	requestRefresh(assemblyUri: Uri): void {
-		const document = this.documents.get(documentKey(assemblyUri));
-		if (!document) {
-			return;
-		}
-		document.handler.markStale();
-		if (document.pendingRefresh) {
-			clearTimeout(document.pendingRefresh);
-		}
-		document.pendingRefresh = setTimeout(() => {
-			document.pendingRefresh = undefined;
-			this.changeEmitter.fire(assemblyUri);
-		}, 50);
+		this.registry.requestRefresh(assemblyUri);
 	}
 
 	dispose(): void {
 		this.subscriptions.forEach(subscription => subscription.dispose());
 		for (const document of this.documents.values()) {
-			if (document.pendingRefresh) {
-				clearTimeout(document.pendingRefresh);
-			}
-			document.watcher.dispose();
 			document.decorator?.dispose();
-			document.handler.dispose();
+			this.registry.unregister(document.registered.uri);
 		}
 		this.documents.clear();
 	}
 
 	private getOrCreateDocument(assemblyUri: Uri): ArtifactDocument {
-		const key = documentKey(assemblyUri);
+		const key = artifactDocumentKey(assemblyUri);
 		const existing = this.documents.get(key);
 		if (existing) {
 			return existing;
 		}
 
-		const identity = parseArtifactUri(assemblyUri);
-		if (!identity) {
-			throw new CompilationError(`Invalid artifact document URI: ${assemblyUri.toString()}`);
-		}
-		const variant = this.compilationService.getVariants(identity.source)
-			.find(candidate => candidate.id === identity.variantId);
-		if (!variant) {
-			throw new CompilationError(`Compilation variant is no longer available: ${identity.variantId}`);
-		}
-		const handler = new ArtifactGenerator(
-			identity.source,
-			assemblyUri,
-			variant,
-			identity.artifactKind,
-			identity.presetId,
-			this.compilationService,
-			identity.artifactOutputId,
-		);
-		const profile = this.compilationService.toolchainRegistry
-			.getToolchainById(variant.toolchainProfileId)?.profile;
-		const documentIdentity: ArtifactDocumentIdentity = {
-			documentUri: assemblyUri.toString(),
-			sourceUri: identity.source.toString(),
-			sourceLabel: identity.source.fsPath,
-			artifactKind: identity.artifactKind,
-			artifactLabel: artifactDefinitions[identity.artifactKind].label,
-			...(identity.artifactOutputId
-				? { artifactOutputId: identity.artifactOutputId }
-				: {}),
-			presetId: identity.presetId,
-			variantId: variant.id,
-			variantLabel: variant.displayLabel,
-			toolchainId: profile?.id ?? variant.toolchainProfileId,
-			toolchainLabel: profile?.displayName ?? variant.toolchainProfileId,
-			toolchainKind: profile?.kind ?? 'unknown',
-			renderedIdentity: assemblyUri.toString(),
-		};
-
-		let assemblyUris = this.sourceToArtifacts.get(identity.source);
-		if (!assemblyUris) {
-			assemblyUris = sourceUriSet();
-			this.sourceToArtifacts.set(identity.source, assemblyUris);
-		}
-		assemblyUris.add(assemblyUri);
-
-		const watcher = workspace.createFileSystemWatcher(new RelativePattern(
-			Uri.file(path.dirname(identity.source.fsPath)),
-			path.basename(identity.source.fsPath),
-		));
+		const registered = this.registry.open(assemblyUri, {
+			refresh: document => this.changeEmitter.fire(document.uri),
+			onStatus: (document, status) => this.onHandlerStatus(document.uri, status),
+		});
 		const document: ArtifactDocument = {
-			identity: documentIdentity,
-			handler,
-			watcher: Disposable.from(
-				watcher,
-				watcher.onDidChange(() => this.requestRefresh(assemblyUri)),
-				handler.onDidChange(status => this.onHandlerStatus(assemblyUri, status)),
-			),
+			registered,
 			diagnostics: [],
 		};
 		this.documents.set(key, document);
-		this.artifactStateEmitter.fire({
-			identity: documentIdentity,
-			status: handler.status,
-		});
 		this.refreshStatusBar();
 
 		return document;
 	}
 
 	private onHandlerStatus(assemblyUri: Uri, status: ArtifactStatus): void {
-		const document = this.documents.get(documentKey(assemblyUri));
+		const document = this.documents.get(artifactDocumentKey(assemblyUri));
 		if (!document) {
 			return;
 		}
@@ -307,7 +207,6 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 			document.assembly = undefined;
 		}
 		this.refreshStatusBar();
-		this.artifactStateEmitter.fire({ identity: document.identity, status });
 	}
 
 	private setDiagnostics(document: ArtifactDocument, items: readonly CompileDiagnostic[]): void {
@@ -316,7 +215,7 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 	}
 
 	private onCloseTextDocument(document: TextDocument): void {
-		if (!this.documents.has(documentKey(document.uri))) {
+		if (!this.documents.has(artifactDocumentKey(document.uri))) {
 			return;
 		}
 
@@ -332,25 +231,14 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 	}
 
 	private unregisterDocument(uri: Uri): void {
-		const key = documentKey(uri);
+		const key = artifactDocumentKey(uri);
 		const document = this.documents.get(key);
 		if (!document) {
 			return;
 		}
 
-		if (document.pendingRefresh) {
-			clearTimeout(document.pendingRefresh);
-		}
-		document.watcher.dispose();
 		document.decorator?.dispose();
-
-		const assemblyUris = this.sourceToArtifacts.get(document.handler.sourceUri);
-		assemblyUris?.delete(uri);
-		if (assemblyUris?.size === 0) {
-			this.sourceToArtifacts.delete(document.handler.sourceUri);
-		}
-
-		document.handler.dispose();
+		this.registry.unregister(uri);
 		this.documents.delete(key);
 		this.rebuildDiagnostics();
 		this.refreshStatusBar();
@@ -358,7 +246,7 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 
 	private activeArtifactDocument(): ArtifactDocument | undefined {
 		const uri = window.activeTextEditor?.document.uri;
-		return uri ? this.documents.get(documentKey(uri)) : undefined;
+		return uri ? this.documents.get(artifactDocumentKey(uri)) : undefined;
 	}
 
 	private refreshStatusBar(): void {
@@ -371,7 +259,7 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 	}
 
 	private updateStatusBar(document: ArtifactDocument): void {
-		const { status } = document.handler;
+		const { status } = document.registered.handler;
 		switch (status.state) {
 			case 'compiling':
 				this.statusBar.text = '$(sync~spin) Compiling';
@@ -394,8 +282,8 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 				break;
 		}
 		this.statusBar.tooltip = [
-			`${document.identity.artifactLabel} · ${path.basename(document.identity.sourceLabel)}`,
-			`${document.identity.variantLabel} · ${document.identity.toolchainLabel}`,
+			`${document.registered.identity.artifactLabel} · ${path.basename(document.registered.identity.sourceLabel)}`,
+			`${document.registered.identity.variantLabel} · ${document.registered.identity.toolchainLabel}`,
 			status.state === 'failed' ? status.error.message : `State: ${status.state}`,
 			'Click for artifact actions',
 		].join('\n');

@@ -16,27 +16,21 @@ import {
 	window,
 	workspace,
 } from 'vscode';
-import type { ConfigurationService } from '../services/configuration-service.js';
-import type { CompilationService } from '../compilation/index.js';
 import type {
-	CompilationVariant,
 	ControlFlowGraph,
 	ControlFlowSourceLocation,
 	RenderedGraphArtifact,
-	ToolchainProfile,
 } from '../types/index.js';
-import {
-	parseArtifactUri,
-	type ArtifactUriIdentity,
-} from '../artifact-document/artifact-uri.js';
-import { ArtifactGenerator, type ArtifactStatus } from '../artifact-document/artifact-generator.js';
+import type { ArtifactStatus } from '../artifact-document/artifact-generator.js';
 import type {
-	ArtifactDocumentIdentity,
 	ArtifactDocumentSnapshot,
 } from '../artifact-document/artifact-identity.js';
-import { toComparisonKey } from '../utils.js';
+import {
+	artifactDocumentKey,
+	ArtifactDocumentRegistry,
+	type ArtifactRegistryDocument,
+} from '../artifact-document/artifact-document-registry.js';
 import { logChannel } from '../logger.js';
-import { getArtifactOutputChoices } from '../toolchains/toolchain-map.js';
 import {
 	parseWebviewMessage,
 	type GraphTheme,
@@ -45,54 +39,30 @@ import {
 } from './graph-protocol.js';
 
 interface GraphPanelDocument {
-	readonly key: string;
-	readonly uri: Uri;
-	readonly identity: ArtifactDocumentIdentity;
-	readonly handler: ArtifactGenerator;
+	readonly registered: ArtifactRegistryDocument;
 	readonly panel: WebviewPanel;
 	subscriptions: Disposable;
 	artifact?: RenderedGraphArtifact;
 	selectedGraphId?: string;
-	pendingRefresh?: NodeJS.Timeout;
 	ready: boolean;
 }
 
 export class GraphPanelManager implements Disposable {
 	private readonly documents = new Map<string, GraphPanelDocument>();
-	private readonly stateEmitter = new EventEmitter<ArtifactDocumentSnapshot>();
 	private readonly activeEmitter = new EventEmitter<ArtifactDocumentSnapshot | undefined>();
 	private readonly subscriptions: Disposable;
 	private activeDocument?: GraphPanelDocument;
 
-	readonly onDidChangeArtifactState: Event<ArtifactDocumentSnapshot> = this.stateEmitter.event;
 	readonly onDidChangeActiveGraph: Event<ArtifactDocumentSnapshot | undefined> = this.activeEmitter.event;
 
 	constructor(
 		private readonly context: ExtensionContext,
-		private readonly compilationService: CompilationService,
-		configuration: ConfigurationService,
+		private readonly registry: ArtifactDocumentRegistry,
 	) {
 		this.subscriptions = Disposable.from(
-			compilationService.onVariantsChanged(sources => {
-				const changed = new Set(sources.map(source => source.toString()));
-				for (const document of this.documents.values()) {
-					if (changed.has(parseArtifactUri(document.uri)?.source.toString() ?? '')) {
-						this.requestRefresh(document);
-					}
-				}
-			}),
-			compilationService.onArtifactOptionsChanged(kind => {
-				if (kind === 'control-flow-graph') {
-					this.documents.forEach(document => this.requestRefresh(document));
-				}
-			}),
-			configuration.onDidChange(() => {
-				this.documents.forEach(document => this.requestRefresh(document));
-			}),
 			window.onDidChangeActiveColorTheme(() => {
 				this.documents.forEach(document => this.postTheme(document));
 			}),
-			this.stateEmitter,
 			this.activeEmitter,
 		);
 	}
@@ -101,41 +71,47 @@ export class GraphPanelManager implements Disposable {
 		return this.activeDocument ? this.snapshot(this.activeDocument) : undefined;
 	}
 
+	get onDidChangeArtifactState(): Event<ArtifactDocumentSnapshot> {
+		return this.registry.onDidChangeArtifactState;
+	}
+
 	async open(uri: Uri): Promise<void> {
-		const key = panelKey(uri);
+		const key = artifactDocumentKey(uri);
 		const existing = this.documents.get(key);
 		if (existing) {
 			existing.panel.reveal(ViewColumn.Beside, true);
 			this.setActive(existing);
-			if (existing.handler.status.state === 'stale') {
+			if (existing.registered.handler.status.state === 'stale') {
 				this.requestRefresh(existing);
 			}
 			return;
 		}
 
-		const parsed = parseArtifactUri(uri);
+		const registered = this.registry.open(uri, {
+			refresh: registryDocument => {
+				const current = this.documents.get(artifactDocumentKey(registryDocument.uri));
+				if (current) {
+					void this.refresh(current);
+				}
+			},
+			onStatus: (registryDocument, status) => {
+				const current = this.documents.get(artifactDocumentKey(registryDocument.uri));
+				if (current) {
+					this.acceptStatus(current, status);
+				}
+			},
+		});
+		const parsed = registered.parsed;
 		if (
-			!parsed
-			|| parsed.artifactKind !== 'control-flow-graph'
+			parsed.artifactKind !== 'control-flow-graph'
 			|| !parsed.artifactOutputId
 		) {
+			this.registry.unregister(uri);
 			throw new Error(`Invalid control-flow graph URI: ${uri.toString()}`);
 		}
-		const variant = this.compilationService.getVariants(parsed.source)
-			.find(candidate => candidate.id === parsed.variantId);
-		if (!variant) {
-			throw new Error(`Compilation variant is no longer available: ${parsed.variantId}`);
-		}
-		const profile = this.compilationService.toolchainRegistry
-			.getToolchainById(variant.toolchainProfileId)?.profile;
-		const artifactOutput = profile
-			? getArtifactOutputChoices(profile, parsed.artifactKind)
-				.find(output => output.id === parsed.artifactOutputId)
-			: undefined;
-		const identity = graphDocumentIdentity(uri, parsed, variant, profile);
 		const panel = window.createWebviewPanel(
 			'coglens.controlFlowGraph',
-			`${path.basename(parsed.source.fsPath)} — ${artifactOutput?.label ?? parsed.artifactOutputId}`,
+			`${path.basename(parsed.source.fsPath)} — ${registered.identity.artifactOutputLabel ?? parsed.artifactOutputId}`,
 			{ viewColumn: ViewColumn.Beside, preserveFocus: true },
 			{
 				enableScripts: true,
@@ -143,27 +119,14 @@ export class GraphPanelManager implements Disposable {
 				localResourceRoots: [Uri.joinPath(this.context.extensionUri, 'dist', 'webview')],
 			},
 		);
-		const handler = new ArtifactGenerator(
-			parsed.source,
-			uri,
-			variant,
-			'control-flow-graph',
-			parsed.presetId,
-			this.compilationService,
-			parsed.artifactOutputId,
-		);
 		const document: GraphPanelDocument = {
-			key,
-			uri,
-			identity,
-			handler,
+			registered,
 			panel,
 			ready: false,
 			subscriptions: Disposable.from(),
 		};
 		panel.webview.html = this.html(panel);
 		const subscriptions = Disposable.from(
-			handler.onDidChange(status => this.acceptStatus(document, status)),
 			panel.webview.onDidReceiveMessage(message => this.acceptMessage(document, message)),
 			panel.onDidChangeViewState(event => {
 				if (event.webviewPanel.active) {
@@ -179,7 +142,6 @@ export class GraphPanelManager implements Disposable {
 		if (panel.active) {
 			this.setActive(document);
 		}
-		this.stateEmitter.fire(this.snapshot(document));
 		await this.refresh(document);
 	}
 
@@ -192,20 +154,13 @@ export class GraphPanelManager implements Disposable {
 	}
 
 	private requestRefresh(document: GraphPanelDocument): void {
-		document.handler.markStale();
-		if (document.pendingRefresh) {
-			clearTimeout(document.pendingRefresh);
-		}
-		document.pendingRefresh = setTimeout(() => {
-			document.pendingRefresh = undefined;
-			void this.refresh(document);
-		}, 50);
+		this.registry.requestRefresh(document.registered.uri);
 	}
 
 	private async refresh(document: GraphPanelDocument): Promise<void> {
 		const cancellation = new CancellationTokenSource();
 		try {
-			await document.handler.update(cancellation.token);
+			await document.registered.handler.update(cancellation.token);
 		} catch {
 			// ArtifactGenerator publishes the retained/failure state used by the panel and details view.
 		} finally {
@@ -220,7 +175,6 @@ export class GraphPanelManager implements Disposable {
 				document.selectedGraphId = status.artifact.graphs[0]?.id;
 			}
 		}
-		this.stateEmitter.fire(this.snapshot(document));
 		if (this.activeDocument === document) {
 			this.activeEmitter.fire(this.snapshot(document));
 		}
@@ -237,7 +191,7 @@ export class GraphPanelManager implements Disposable {
 			case 'ready':
 				document.ready = true;
 				this.postTheme(document);
-				this.postRender(document, document.handler.status);
+				this.postRender(document, document.registered.handler.status);
 				break;
 			case 'selectionChanged':
 				if (!document.artifact?.graphs.some(graph => graph.id === message.graphId)) {
@@ -295,7 +249,7 @@ export class GraphPanelManager implements Disposable {
 	): Promise<void> {
 		const uri = await window.showSaveDialog({
 			title: `Export ${label} control-flow graph`,
-			defaultUri: exportUri(document.identity.sourceUri, `${safeFilename(label)}.${extension}`),
+			defaultUri: exportUri(document.registered.identity.sourceUri, `${safeFilename(label)}.${extension}`),
 			filters: extension === 'svg' ? { SVG: ['svg'] } : { Graphviz: ['dot'] },
 		});
 		if (!uri) {
@@ -350,20 +304,17 @@ export class GraphPanelManager implements Disposable {
 	}
 
 	private snapshot(document: GraphPanelDocument): ArtifactDocumentSnapshot {
-		return { identity: document.identity, status: document.handler.status };
+		return { identity: document.registered.identity, status: document.registered.handler.status };
 	}
 
 	private remove(document: GraphPanelDocument): void {
-		if (this.documents.get(document.key) !== document) {
+		const key = artifactDocumentKey(document.registered.uri);
+		if (this.documents.get(key) !== document) {
 			return;
 		}
-		this.documents.delete(document.key);
-		if (document.pendingRefresh) {
-			clearTimeout(document.pendingRefresh);
-			document.pendingRefresh = undefined;
-		}
+		this.documents.delete(key);
 		document.subscriptions.dispose();
-		document.handler.dispose();
+		this.registry.unregister(document.registered.uri);
 		if (this.activeDocument === document) {
 			this.setActive(undefined);
 		}
@@ -461,37 +412,6 @@ function exportUri(sourceUri: string, filename: string): Uri | undefined {
 	}
 }
 
-function graphDocumentIdentity(
-	uri: Uri,
-	parsed: ArtifactUriIdentity,
-	variant: CompilationVariant,
-	profile: ToolchainProfile | undefined,
-): ArtifactDocumentIdentity {
-	if (parsed.artifactKind !== 'control-flow-graph' || !parsed.artifactOutputId) {
-		throw new Error('Control-flow graph identity requires an output selection.');
-	}
-	const artifactOutput = profile
-		? getArtifactOutputChoices(profile, parsed.artifactKind)
-			.find(output => output.id === parsed.artifactOutputId)
-		: undefined;
-	return {
-		documentUri: uri.toString(),
-		sourceUri: parsed.source.toString(),
-		sourceLabel: parsed.source.fsPath,
-		artifactKind: parsed.artifactKind,
-		artifactLabel: artifactOutput?.label ?? parsed.artifactOutputId,
-		artifactOutputId: parsed.artifactOutputId,
-		artifactOutputLabel: artifactOutput?.label ?? parsed.artifactOutputId,
-		presetId: parsed.presetId,
-		variantId: variant.id,
-		variantLabel: variant.displayLabel,
-		toolchainId: profile?.id ?? variant.toolchainProfileId,
-		toolchainLabel: profile?.displayName ?? variant.toolchainProfileId,
-		toolchainKind: profile?.kind ?? 'unknown',
-		renderedIdentity: uri.toString(),
-	};
-}
-
 function diagnosticMessages(
 	status: ArtifactStatus,
 	artifact?: RenderedGraphArtifact,
@@ -540,8 +460,4 @@ function currentTheme(): GraphTheme {
 		case ColorThemeKind.Dark: return 'dark';
 		default: return 'high-contrast';
 	}
-}
-
-function panelKey(uri: Uri): string {
-	return toComparisonKey(uri, true, process.platform === 'win32');
 }

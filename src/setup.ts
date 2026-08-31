@@ -864,7 +864,6 @@ export function createArtifactDetailsTreeView(
 		vscode.window.onDidChangeActiveTextEditor(followActiveEditor),
 		artifacts.onDidChangeArtifactState(snapshot => provider.acceptArtifactState(snapshot)),
 		...(graphs ? [
-			graphs.onDidChangeArtifactState(snapshot => provider.acceptArtifactState(snapshot)),
 			graphs.onDidChangeActiveGraph(snapshot => {
 				if (snapshot) {
 					provider.setActiveSnapshot(snapshot);
