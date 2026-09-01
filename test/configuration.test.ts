@@ -104,20 +104,11 @@ test('presets keep kind-specific production inputs and drop unknown artifact kin
 				productionOptions: { intel: true, labels: false },
 			},
 			bytes: { artifactKind: 'binary-disassembly', extraArguments: ['-Os'] },
-			explicitPython: { artifactKind: 'assembly', artifactDialect: 'python-bytecode' },
-			invalidDialect: { artifactKind: 'assembly', artifactDialect: 'native' },
 			unknown: { artifactKind: 'not-an-artifact' },
 		}),
 		[
 			{ id: 'optimized', artifactKind: 'assembly', extraArguments: ['-O3'], productionOptions: { intel: true } },
 			{ id: 'bytes', artifactKind: 'binary-disassembly', extraArguments: ['-Os'], productionOptions: {} },
-			{
-				id: 'explicitPython',
-				artifactKind: 'assembly',
-				artifactDialect: 'python-bytecode',
-				extraArguments: [],
-				productionOptions: {},
-			},
 		],
 	);
 });

@@ -101,7 +101,7 @@ test('instruction documentation is chosen from the instruction set the listing i
 test('LLVM IR and Python bytecode use their artifact-specific documentation tables', () => {
 	const llvm = textArtifact('llvm-ir', [{ text: '  %sum = add i32 %left, %right' }]);
 	assertDocuments(documentationForInstruction(llvm, llvm.lines[0].text), instructionSetLabels.llvmIr, 'add');
-	assert.equal(instructionMnemonic('llvm-ir', '  tail call void @work()'), 'call');
+	assert.equal(instructionMnemonic(llvm, '  tail call void @work()'), 'call');
 
 	const python = textArtifact(
 		'assembly',
@@ -130,9 +130,9 @@ test('.NET IL uses the CIL instruction documentation table', () => {
 		instructionSetLabels.dotNetIl,
 		'callvirt',
 	);
-	assert.equal(instructionMnemonic('assembly', dotnetIl.lines[0].text, 'dotnet-il'), 'ldarg.0');
+	assert.equal(instructionMnemonic(dotnetIl, dotnetIl.lines[0].text), 'ldarg.0');
 	assert.equal(
-		instructionMnemonic('assembly', 'IL_0000: constrained. [System.Runtime]System.Object', 'dotnet-il'),
+		instructionMnemonic(dotnetIl, 'IL_0000: constrained. [System.Runtime]System.Object'),
 		'constrained.',
 	);
 });

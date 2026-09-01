@@ -7,7 +7,7 @@ export * from './compilation-types.js';
 export * from './artifact-options.js';
 export type {
 	ArtifactKind,
-	ArtifactDialect,
+	ArtifactListingSyntax,
 	ArtifactDefinition,
 	ArtifactOptionDescriptor,
 	ArtifactNavigationFeatures,

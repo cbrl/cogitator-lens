@@ -9,7 +9,6 @@ import {
 } from 'vscode';
 import { CompilationService } from '../compilation/index.js';
 import type {
-	ArtifactDialect,
 	ArtifactKind,
 	CompilationVariant,
 	InvocationDetails,
@@ -65,7 +64,6 @@ export class ArtifactGenerator implements Disposable {
 		private readonly presetId: string,
 		private readonly compilationService: CompilationService,
 		private readonly artifactOutputId?: string,
-		private readonly artifactDialect?: ArtifactDialect,
 	) {
 		this.sourceUri = sourceUri;
 		this.artifactUri = artifactUri;
@@ -91,11 +89,9 @@ export class ArtifactGenerator implements Disposable {
 				);
 			}
 			const baseOptions = this.compilationService.getArtifactOptions(this.artifactKind);
-			const artifactDialect = this.artifactDialect ?? preset.artifactDialect;
 			const artifact = await this.compilationService.compile({
 				variant: this.variant,
 				artifactKind: this.artifactKind,
-				...(artifactDialect ? { artifactDialect } : {}),
 				...(this.artifactOutputId ? { artifactOutputId: this.artifactOutputId } : {}),
 				presetId: this.presetId,
 				extraArguments: preset.extraArguments,

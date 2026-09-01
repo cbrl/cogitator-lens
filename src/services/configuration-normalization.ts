@@ -9,12 +9,7 @@ import type {
 	ToolchainSettings,
 } from '../types/index.js';
 import { defaultArtifactOptions, immutableArtifactOptions } from '../types/index.js';
-import {
-	artifactDefinitions,
-	artifactDialectBelongsToKind,
-	getArtifactDialect,
-	getArtifactKind,
-} from '../artifacts/core/artifact-definitions.js';
+import { artifactDefinitions, getArtifactKind } from '../artifacts/core/artifact-definitions.js';
 import type { ArtifactPreset } from '../artifacts/ui/presets.js';
 import { createToolchainProfile, supportedToolchainKinds } from '../toolchains/toolchain-map.js';
 
@@ -132,14 +127,6 @@ export function parseArtifactPresets(raw: unknown): ArtifactPreset[] {
 		if (!artifactKind) {
 			return [];
 		}
-		const rawConfiguredDialect = asString(preset.artifactDialect);
-		const configuredDialect = getArtifactDialect(rawConfiguredDialect);
-		if (rawConfiguredDialect && !configuredDialect) {
-			return [];
-		}
-		if (configuredDialect && !artifactDialectBelongsToKind(configuredDialect, artifactKind)) {
-			return [];
-		}
 		const rawProductionOptions = asRecord(preset.productionOptions);
 		const productionOptions = Object.fromEntries(
 			Object.keys(defaultArtifactOptions.production).flatMap((key) =>
@@ -150,7 +137,6 @@ export function parseArtifactPresets(raw: unknown): ArtifactPreset[] {
 			{
 				id,
 				artifactKind,
-				...(configuredDialect ? { artifactDialect: configuredDialect } : {}),
 				extraArguments: asStringArray(preset.extraArguments),
 				productionOptions,
 			},

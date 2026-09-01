@@ -61,13 +61,8 @@ export type ArtifactKind =
 	| 'stack-analysis'
 	| 'control-flow-graph';
 
-/** A specialized representation carried by a generic artifact kind. */
-export type ArtifactDialect = 'python-bytecode' | 'dotnet-il';
-
-const dialectArtifactKinds = {
-	'python-bytecode': 'assembly',
-	'dotnet-il': 'assembly',
-} as const satisfies Record<ArtifactDialect, ArtifactKind>;
+/** How a rendered text listing is written, for mnemonic and token analysis. */
+export type ArtifactListingSyntax = 'native-assembly' | 'python-bytecode' | 'dotnet-il' | 'llvm-ir';
 
 export interface ArtifactDefinition {
 	readonly presentation: 'text' | 'graph';
@@ -78,6 +73,8 @@ export interface ArtifactDefinition {
 	readonly options: readonly ArtifactOptionDescriptor[];
 	readonly renderer: ArtifactRenderer;
 	readonly navigation: ArtifactNavigationFeatures;
+	/** Default listing syntax; a toolchain artifact cell may override it. */
+	readonly listingSyntax?: ArtifactListingSyntax;
 	readonly metricLabels?: Readonly<Record<string, string>>;
 }
 
@@ -175,6 +172,7 @@ const binaryDisassemblyOptions = [
 const artifactDefinitionTable = {
 	assembly: {
 		presentation: 'text',
+		listingSyntax: 'native-assembly',
 		label: 'Assembly',
 		icon: 'symbol-method',
 		filenameExtension: '.asm',
@@ -199,6 +197,7 @@ const artifactDefinitionTable = {
 	},
 	'binary-disassembly': {
 		presentation: 'text',
+		listingSyntax: 'native-assembly',
 		label: 'Binary disassembly',
 		icon: 'package',
 		filenameExtension: '.disasm',
@@ -247,6 +246,7 @@ const artifactDefinitionTable = {
 	},
 	'llvm-ir': {
 		presentation: 'text',
+		listingSyntax: 'llvm-ir',
 		label: 'LLVM IR',
 		icon: 'circuit-board',
 		filenameExtension: '.ll',
@@ -355,14 +355,6 @@ export function getArtifactDefinition(kind: string): ArtifactDefinition | undefi
 
 export function getArtifactKind(value: string): ArtifactKind | undefined {
 	return getArtifactDefinition(value) ? (value as ArtifactKind) : undefined;
-}
-
-export function getArtifactDialect(value: string): ArtifactDialect | undefined {
-	return Object.hasOwn(dialectArtifactKinds, value) ? (value as ArtifactDialect) : undefined;
-}
-
-export function artifactDialectBelongsToKind(dialect: ArtifactDialect, kind: ArtifactKind): boolean {
-	return dialectArtifactKinds[dialect] === kind;
 }
 
 export function artifactSupportsOption(kind: ArtifactKind, optionId: ArtifactOptionDescriptor['id']): boolean {

@@ -1,4 +1,4 @@
-import type { ArtifactKind, RenderedTextArtifact } from '../types/index.js';
+import type { RenderedTextArtifact } from '../types/index.js';
 import type { AssemblyInstructionInfo } from '../vendor/types/assembly-docs.interfaces.js';
 import type { BaseAssemblyDocumentationProvider } from '../vendor/lib/asm-docs/base.js';
 import { Amd64DocumentationProvider } from '../vendor/lib/asm-docs/amd64.js';
@@ -7,6 +7,7 @@ import { LLVMDocumentationProvider } from '../vendor/lib/asm-docs/llvm.js';
 import { PythonDocumentationProvider } from '../vendor/lib/asm-docs/python.js';
 import { Riscv64DocumentationProvider } from '../vendor/lib/asm-docs/riscv64.js';
 import { documentationForDotNetIlOpcode } from './generated/dotnet-il-opcodes.js';
+import { listingSyntaxFor } from './artifact-listing-syntax.js';
 
 export interface InstructionDocumentation {
 	readonly mnemonic: string;
@@ -68,17 +69,16 @@ const inferredProviders = new WeakMap<RenderedTextArtifact, NamedProvider>();
 /**
  * Looks up documentation emitted by Compiler Explorer's docenizers.
  *
- * LLVM IR identifies its instruction set through the artifact kind. .NET IL
- * and Python bytecode are assembly dialects. Native assembly target
- * architecture is not currently part of a compilation profile, so it is
- * inferred once per rendered listing by scoring its distinct mnemonics against
- * each documentation set.
+ * The rendered artifact's listing syntax selects its documentation set. Native
+ * assembly target architecture is not currently part of a compilation profile,
+ * so it is inferred once per rendered listing by scoring its distinct mnemonics
+ * against each documentation set.
  */
 export function documentationForInstruction(
 	artifact: RenderedTextArtifact,
 	text: string,
 ): InstructionDocumentation | undefined {
-	const mnemonic = instructionMnemonic(artifact.kind, text, artifact.artifactDialect);
+	const mnemonic = instructionMnemonic(artifact, text);
 	if (!mnemonic) {
 		return undefined;
 	}
@@ -98,46 +98,22 @@ export function documentationForOpcode(
 	return information ? documentation(mnemonic, namedProvider, information) : undefined;
 }
 
-export function instructionMnemonic(
-	kind: ArtifactKind,
-	text: string,
-	artifactDialect?: RenderedTextArtifact['artifactDialect'],
-): string | undefined {
-	if (artifactDialect === 'python-bytecode') {
-		// dis output: optional source line, current/jump markers, bytecode offset,
-		// then the uppercase opcode.
-		return /^\s*(?:\d+\s+)?(?:(?:-->)?\s*(?:>>)?\s*)?(?:\d+\s+)?([A-Z][A-Z0-9_]*)\b/u
-			.exec(text)?.[1]
-			?.toLowerCase();
-	}
-	if (kind === 'llvm-ir') {
-		// Cover both terminators and value-producing instructions, including the
-		// call instruction's optional tail-call marker.
-		return /^\s*(?:[%@](?:[-\w.$]+|"[^"]+")\s*=\s*)?(?:(?:musttail|notail|tail)\s+)?([a-z][\w.]*)\b/iu
-			.exec(text)?.[1]
-			?.toLowerCase();
-	}
-	if (artifactDialect === 'dotnet-il') {
-		// ILDasm output: an optional IL_ offset label, then the CIL opcode.
-		return /^\s*(?:IL_[\da-f]+:\s+)?([a-z][\w.]*)\s/iu.exec(`${text} `)?.[1]?.toLowerCase();
-	}
-	if (kind !== 'assembly' && kind !== 'binary-disassembly') {
-		return undefined;
-	}
-	return /^\s*(?:[.$_a-zA-Z][\w.$@?]*:\s*)?([a-zA-Z][\w.]*)/u.exec(text)?.[1]?.toLowerCase();
+export function instructionMnemonic(artifact: RenderedTextArtifact, text: string): string | undefined {
+	return listingSyntaxFor(artifact)?.mnemonic(text);
 }
 
 function providerForArtifact(artifact: RenderedTextArtifact): NamedProvider | undefined {
-	if (artifact.kind === 'llvm-ir') {
+	const documentationSet = listingSyntaxFor(artifact)?.documentationSet;
+	if (documentationSet === 'llvm') {
 		return llvmProvider;
 	}
-	if (artifact.artifactDialect === 'dotnet-il') {
+	if (documentationSet === 'dotnet-il') {
 		return dotNetIlProvider;
 	}
-	if (artifact.artifactDialect === 'python-bytecode') {
+	if (documentationSet === 'python') {
 		return pythonProvider;
 	}
-	if (artifact.kind !== 'assembly' && artifact.kind !== 'binary-disassembly') {
+	if (documentationSet !== 'infer-native') {
 		return undefined;
 	}
 	const cached = inferredProviders.get(artifact);
@@ -152,7 +128,7 @@ function providerForArtifact(artifact: RenderedTextArtifact): NamedProvider | un
 function inferAssemblyProvider(artifact: RenderedTextArtifact): NamedProvider {
 	const mnemonics = new Set<string>();
 	for (const line of artifact.lines) {
-		const mnemonic = instructionMnemonic(artifact.kind, line.disassembly ?? line.text, artifact.artifactDialect);
+		const mnemonic = instructionMnemonic(artifact, line.disassembly ?? line.text);
 		if (mnemonic) {
 			mnemonics.add(mnemonic);
 		}

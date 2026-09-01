@@ -180,7 +180,6 @@ test('Python bytecode rendering maps both supported disassembly layouts to sourc
 	const bytecode = (text: string) =>
 		renderPythonBytecode(
 			rawArtifact('assembly', text, {
-				artifactDialect: 'python-bytecode',
 				command: {
 					executable: process.execPath,
 					arguments: ['-m', 'dis', source],
@@ -245,7 +244,6 @@ test('.NET IL rendering exposes method-scoped labels, symbols, folds, and code m
 	].join('\n');
 	const rendered = renderDotNetIl(
 		rawArtifact('assembly', il, {
-			artifactDialect: 'dotnet-il',
 			dotnetSourceMapping: [
 				{
 					method: {

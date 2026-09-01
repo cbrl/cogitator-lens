@@ -179,13 +179,10 @@ export class CompilationService {
 		};
 		const cached = this.rawArtifactCache.get(key);
 		if (cached && (await validateArtifactInputs(cached.inputs))) {
-			if (request.artifactDialect && cached.artifactDialect !== request.artifactDialect) {
-				return dialectMismatch(request.artifactDialect, cached.artifactDialect);
-			}
 			request.onInvocation?.(invocationDetails(cached.command));
 			return {
 				status: 'available',
-				artifact: await this.renderArtifact(cached, options, renderContext, cell.renderer),
+				artifact: await this.renderArtifact(cached, options, renderContext, cell.renderer, cell.listingSyntax),
 			};
 		} else if (cached) {
 			this.rawArtifactCache.delete(key);
@@ -204,13 +201,10 @@ export class CompilationService {
 				},
 				cancellationToken,
 			);
-			if (request.artifactDialect && raw.artifactDialect !== request.artifactDialect) {
-				return dialectMismatch(request.artifactDialect, raw.artifactDialect);
-			}
 			this.rawArtifactCache.set(key, raw, variant.source);
 			return {
 				status: 'available',
-				artifact: await this.renderArtifact(raw, options, renderContext, cell.renderer),
+				artifact: await this.renderArtifact(raw, options, renderContext, cell.renderer, cell.listingSyntax),
 			};
 		} catch (error: unknown) {
 			if (error instanceof CancellationError || cancellationToken.isCancellationRequested) {
@@ -255,10 +249,16 @@ export class CompilationService {
 		options: ArtifactOptions,
 		context: ArtifactRenderContext,
 		outputRenderer?: import('../artifacts/core/artifact-definitions.js').ArtifactRenderer,
+		listingSyntax?: import('../artifacts/core/artifact-definitions.js').ArtifactListingSyntax,
 	): Promise<RenderedArtifact> {
 		const renderer =
 			outputRenderer ?? context.backend.getArtifactRenderer(raw.kind) ?? artifactDefinitions[raw.kind].renderer;
-		return await renderer(raw, options.display, context);
+		const rendered = await renderer(raw, options.display, context);
+		if (rendered.presentation !== 'text') {
+			return rendered;
+		}
+		const resolvedSyntax = listingSyntax ?? artifactDefinitions[raw.kind].listingSyntax;
+		return resolvedSyntax ? { ...rendered, listingSyntax: resolvedSyntax } : rendered;
 	}
 
 	private reloadUserConfiguration(): void {
@@ -316,16 +316,6 @@ export class CompilationService {
 			this.changeEmitter.fire(affectedSources);
 		}
 	}
-}
-
-function dialectMismatch(
-	requested: NonNullable<ArtifactRequest['artifactDialect']>,
-	produced: RawArtifact['artifactDialect'],
-): ArtifactProductionResult {
-	return {
-		status: 'unsupported',
-		explanation: `The selected toolchain produces ${produced ?? 'generic'} assembly, not ${requested}.`,
-	};
 }
 
 async function readSourceSnapshot(source: Uri): Promise<

@@ -1,9 +1,9 @@
 import type { DisplayOptions, RawArtifact, RenderedTextArtifact, RenderedArtifactLine } from '../../types/index.js';
 import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
+import { pythonBytecodeInstruction } from '../../artifact-document/artifact-listing-syntax.js';
 
 const sourceLinePrefix = /^\s{0,3}(\d+)\s+/;
-const instruction = /^\s*(?:\d+\s+)?(?:(?:-->)?\s*(?:>>)?\s*)?(?:\d+\s+)?[A-Z][A-Z0-9_]*\b/;
 
 export function renderPythonBytecode(
 	raw: RawArtifact,
@@ -27,7 +27,7 @@ export function renderPythonBytecode(
 			currentSourceLine = candidate > 0 ? candidate : undefined;
 		}
 
-		const isInstruction = instruction.test(text);
+		const isInstruction = pythonBytecodeInstruction.test(text);
 		if (isInstruction) {
 			instructionCount++;
 		}

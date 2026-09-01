@@ -408,7 +408,6 @@ export class ToolchainBackend {
 			);
 			return {
 				...artifact,
-				artifactDialect: 'dotnet-il',
 				...(sourceMapping ? { dotnetSourceMapping: sourceMapping } : {}),
 			};
 		});

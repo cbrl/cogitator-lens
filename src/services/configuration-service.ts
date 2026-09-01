@@ -122,7 +122,6 @@ export class ConfigurationService implements Disposable {
 			presets.map((preset) => {
 				const configuration: ArtifactPresetConfiguration = {
 					artifactKind: preset.artifactKind,
-					...(preset.artifactDialect ? { artifactDialect: preset.artifactDialect } : {}),
 					extraArguments: [...preset.extraArguments],
 					productionOptions: { ...preset.productionOptions },
 				};

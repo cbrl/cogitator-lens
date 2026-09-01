@@ -447,16 +447,9 @@ function verifyAssemblyUriRoundTrip(): void {
 		{ id: 'default:python' },
 		'assembly',
 		'default',
-		undefined,
-		'python-bytecode',
 	);
 	assert.match(pythonUri.path, /main\.asm$/);
 	assert.equal(parseArtifactUri(pythonUri)?.artifactKind, 'assembly');
-	assert.equal(parseArtifactUri(pythonUri)?.artifactDialect, 'python-bytecode');
-	assert.equal(
-		parseArtifactUri(pythonUri.with({ query: `${pythonUri.query.replace(/&dialect=[^&]+/u, '')}&dialect=native` })),
-		undefined,
-	);
 	const stackUri = getArtifactUri(
 		source,
 		{
@@ -478,6 +471,7 @@ function verifyArtifactNavigationProviders(): void {
 	const sourcePath = path.join('/project', 'main.cpp');
 	const artifact: RenderedTextArtifact = {
 		kind: 'binary-disassembly',
+		listingSyntax: 'native-assembly',
 		presentation: 'text',
 		diagnostics: [],
 		durationMs: 1,
@@ -554,7 +548,7 @@ function verifyArtifactNavigationProviders(): void {
 		const dotnetArtifact: RenderedTextArtifact = {
 			...artifact,
 			kind: 'assembly',
-			artifactDialect: 'dotnet-il',
+			listingSyntax: 'dotnet-il',
 			lines: [{ text: 'IL_0000: callvirt instance string [System.Runtime]System.Object::ToString()' }],
 			links: [],
 		};

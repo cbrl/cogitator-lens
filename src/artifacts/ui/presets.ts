@@ -1,9 +1,8 @@
-import type { ArtifactDialect, ArtifactKind, ProductionOptions } from '../../types/index.js';
+import type { ArtifactKind, ProductionOptions } from '../../types/index.js';
 
 export interface ArtifactPreset {
 	readonly id: string;
 	readonly artifactKind: ArtifactKind;
-	readonly artifactDialect?: ArtifactDialect;
 	readonly extraArguments: readonly string[];
 	readonly productionOptions: Partial<ProductionOptions>;
 }

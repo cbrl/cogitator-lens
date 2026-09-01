@@ -955,14 +955,6 @@
                   ],
                   "description": "Artifact kind produced by this preset"
                 },
-                "artifactDialect": {
-                  "type": "string",
-                  "enum": [
-                    "python-bytecode",
-                    "dotnet-il"
-                  ],
-                  "description": "Optional specialized representation of the generic artifact kind"
-                },
                 "extraArguments": {
                   "type": "array",
                   "items": {

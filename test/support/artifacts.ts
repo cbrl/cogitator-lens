@@ -2,12 +2,14 @@ import path from 'node:path';
 import type { ToolchainBackend } from '../../src/toolchains/toolchain-backend.js';
 import type {
 	ArtifactKind,
+	ArtifactListingSyntax,
 	ArtifactRenderContext,
 	RawArtifact,
 	RenderedArtifactLine,
 	RenderedTextArtifact,
 	ToolchainKind,
 } from '../../src/types/index.js';
+import { artifactDefinitions } from '../../src/artifacts/core/artifact-definitions.js';
 import type { ToolchainArtifactOutput } from '../../src/toolchains/toolchain-map.js';
 import { sourceUri, toolchainBackend } from './toolchains.js';
 
@@ -55,12 +57,12 @@ export function renderContext(
 export function textArtifact(
 	kind: ArtifactKind,
 	lines: readonly RenderedArtifactLine[],
-	artifactDialect?: RenderedTextArtifact['artifactDialect'],
+	listingSyntax: ArtifactListingSyntax | undefined = artifactDefinitions[kind].listingSyntax,
 ): RenderedTextArtifact {
 	const text = lines.map((line) => line.text).join('\n');
 	return {
 		kind,
-		...(artifactDialect ? { artifactDialect } : {}),
+		...(listingSyntax ? { listingSyntax } : {}),
 		presentation: 'text',
 		diagnostics: [],
 		durationMs: 0,

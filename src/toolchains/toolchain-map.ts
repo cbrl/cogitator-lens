@@ -3,6 +3,7 @@ import path from 'path';
 import type { CancellationToken, Uri } from 'vscode';
 import type {
 	ArtifactKind,
+	ArtifactListingSyntax,
 	ArtifactOptionAvailability,
 	ArtifactOptionId,
 	ArtifactRenderContext,
@@ -104,6 +105,8 @@ export type ArtifactProducer = (
 
 interface ToolchainArtifactImplementation {
 	readonly producer: ArtifactProducer;
+	/** Overrides the artifact kind's default listing syntax for this toolchain's output. */
+	readonly listingSyntax?: ArtifactListingSyntax;
 	/** Optional toolchain-specific rendering action; otherwise the artifact default is used. */
 	readonly renderer?: (raw: RawArtifact, options: DisplayOptions, context: ArtifactRenderContext) => RenderedArtifact;
 	readonly requiredTool?: {
@@ -498,6 +501,7 @@ const pythonArtifacts = artifactCells({
 		status: 'available',
 		producer: pythonBytecodeProducer,
 		renderer: renderPythonBytecode,
+		listingSyntax: 'python-bytecode',
 	},
 	ast: {
 		status: 'available',
@@ -568,6 +572,7 @@ const dotNetArtifacts = artifactCells({
 		status: 'available',
 		producer: dotNetIlProducer,
 		renderer: renderDotNetIl,
+		listingSyntax: 'dotnet-il',
 		requiredTools: [
 			{ name: 'compiler', label: 'Roslyn csc.dll' },
 			{ name: 'ildasm', label: '.NET IL disassembler (ildasm)' },

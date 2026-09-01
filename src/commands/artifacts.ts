@@ -190,7 +190,6 @@ async function openArtifact(
 		kind,
 		preset.id,
 		artifactOutput?.id,
-		preset.artifactDialect,
 	);
 	if (artifactDefinitions[kind].presentation === 'graph') {
 		await graphPanels.open(artifactUri);
@@ -386,7 +385,6 @@ function comparisonUri(source: vscode.Uri, target: ComparisonTarget, kind: Artif
 		kind,
 		target.preset?.id ?? 'default',
 		undefined,
-		target.preset?.artifactDialect,
 	);
 }
 
