@@ -21,6 +21,8 @@ import * as exec from '../exec.js';
 import { withTemporaryDirectory } from '../temporary-directory.js';
 import type { ToolchainDefinition } from './toolchain-map.js';
 import { snapshotArtifactInputs, type ArtifactInputMetadata } from '../compilation/artifact-inputs.js';
+import type { InstructionType } from '../artifacts/control-flow-graph/parsers/instruction-sets.js';
+import type { AssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/assembly-cfg-parser.js';
 
 const maxArtifactFileBytes = 50 * 1024 * 1024;
 
@@ -225,6 +227,7 @@ export class ToolchainBackend {
 	// `AsmParser` keeps that independent of a backend's assembly dialect (e.g. MSVC's
 	// `VcAsmParser`, whose own binary-mode parsing is an unimplemented upstream stub).
 	private readonly binaryAsmParser: AsmParser;
+	private readonly cfgParser?: AssemblyCfgParser;
 
 	constructor(profile: ToolchainProfile, definition: ToolchainDefinition, host: ToolchainHost) {
 		this.profile = profile;
@@ -232,6 +235,7 @@ export class ToolchainBackend {
 		this.host = host;
 		this.asmParser = definition.createParser?.();
 		this.binaryAsmParser = definition.createBinaryParser?.() ?? new AsmParser(noopPropertyGetter);
+		this.cfgParser = definition.createCfgParser?.();
 	}
 
 	async produceAssembly(
@@ -394,6 +398,10 @@ export class ToolchainBackend {
 	parseBinaryDisassembly(rawDisassembly: string, options: DisplayOptions): ParsedAsmResult {
 		const filters: ParseFiltersAndOutputOptions = { ...options, binary: true };
 		return this.binaryAsmParser.process(rawDisassembly, filters);
+	}
+
+	classifyAssemblyInstruction(instruction: string): InstructionType | undefined {
+		return this.cfgParser?.classifyInstruction(instruction);
 	}
 
 	renderArtifact(raw: RawArtifact, options: DisplayOptions, context: ArtifactRenderContext): RenderedArtifact {

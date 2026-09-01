@@ -18,6 +18,7 @@ import { renderPreprocessedSource } from '../preprocessed-source/preprocessed-so
 import { renderRustMir } from '../rust/rust-mir-renderer.js';
 import { renderNativeStackAnalysis } from '../stack-analysis/native-stack-analysis.js';
 import { renderControlFlowGraphArtifact } from '../control-flow-graph/control-flow-graph-renderer.js';
+import type { InstructionType } from '../control-flow-graph/parsers/instruction-sets.js';
 
 export interface ArtifactOptionDescriptor {
 	readonly id: keyof ArtifactOptions['production'] | keyof ArtifactOptions['display'];
@@ -383,6 +384,7 @@ function renderAssembly(
 			labelCount: Object.keys(parsed.labelDefinitions ?? {}).length,
 		}),
 		parsed,
+		(instruction) => context.backend.classifyAssemblyInstruction(instruction),
 	);
 }
 
@@ -399,14 +401,26 @@ function renderBinaryDisassembly(
 			instructionCount: parsed.asm.filter((line) => line.opcodes?.length).length,
 		}),
 		parsed,
+		(instruction) => context.backend.classifyAssemblyInstruction(instruction),
 	);
 }
 
-function withLabelNavigation(artifact: RenderedTextArtifact, parsed: ParsedAsmResult): RenderedTextArtifact {
+function withLabelNavigation(
+	artifact: RenderedTextArtifact,
+	parsed: ParsedAsmResult,
+	classifyInstruction: (instruction: string) => InstructionType | undefined,
+): RenderedTextArtifact {
 	const definitions = parsed.labelDefinitions ?? {};
 	const links = parsed.asm.flatMap((line, lineIndex) =>
 		(line.labels ?? []).flatMap((label) => {
 			const targetLine = definitions[label.target ?? label.name];
+			const instructionType = classifyInstruction(line.disassembly ?? line.text);
+			const edgeKind =
+				instructionType === 'unconditional-jump'
+					? ('unconditional' as const)
+					: instructionType === 'conditional-jump'
+						? ('true' as const)
+						: undefined;
 			return targetLine === undefined
 				? []
 				: [
@@ -415,6 +429,7 @@ function withLabelNavigation(artifact: RenderedTextArtifact, parsed: ParsedAsmRe
 							startCharacter: label.range.startCol,
 							endCharacter: label.range.endCol,
 							targetLine,
+							...(edgeKind ? { edgeKind } : {}),
 						},
 					];
 		}),

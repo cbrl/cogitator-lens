@@ -42,6 +42,10 @@ test('GNU disassembly renders addresses, bytes, links, source mappings, symbols,
 	);
 	assert.ok(rendered.sourceLocations.some((location) => location.sourceLine === 7));
 	assert.ok(rendered.links.some((link) => link.targetLine >= 0));
+	assert.ok(
+		rendered.links.every((link) => link.edgeKind === undefined),
+		'calls must not be drawn as jump edges',
+	);
 	assert.ok(rendered.symbols.some((symbol) => symbol.name === 'helper'));
 	assert.ok(rendered.folds.some((fold) => fold.endLine > fold.startLine));
 	assert.deepEqual([rendered.metrics.codeSizeBytes, rendered.metrics.instructionCount], [11, 5]);
@@ -59,6 +63,23 @@ test('dumpbin output is adapted before reusing the common raw-assembly parser', 
 	assert.ok(rendered.lines.some((line) => line.address === 9 && line.opcodes?.length === 3));
 	assert.ok(rendered.sourceLocations.some((location) => location.sourceLine === 3));
 	assert.ok(rendered.links.some((link) => link.targetLine >= 0));
+});
+
+test('label navigation marks only CFG-classified jumps as drawable edges', () => {
+	const rendered = renderDisassembly(
+		'gcc',
+		[
+			'0000000000000000 <main>:',
+			'   0: 75 02                 jne    4 <done>',
+			'   2: e8 02 00 00 00        call   9 <helper>',
+			'0000000000000004 <done>:',
+			'   4: c3                    ret',
+			'0000000000000009 <helper>:',
+			'   9: c3                    ret',
+		].join('\n'),
+	);
+	assert.equal(rendered.links.find((link) => rendered.lines[link.line].text.includes('jne'))?.edgeKind, 'true');
+	assert.equal(rendered.links.find((link) => rendered.lines[link.line].text.includes('call'))?.edgeKind, undefined);
 });
 
 test('malformed disassembler output produces a valid empty normalized artifact', () => {

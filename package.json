@@ -1,7 +1,7 @@
 {
   "name": "coglens",
   "displayName": "Cogitator Lens",
-  "description": "Divine the substratal invocations of your digital canticles",
+  "description": "An extension for inspecting compiler and interpreter artifacts",
   "version": "0.8.0",
   "icon": "resources/gear-phi.png",
   "publisher": "cbrl",

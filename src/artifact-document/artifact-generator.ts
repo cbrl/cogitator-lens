@@ -128,6 +128,7 @@ export class ArtifactGenerator implements Disposable {
 							rendered.toolOutputTruncated
 								? [...rendered.lines, { text: '[truncated; toolchain output was limited]' }]
 								: rendered.lines,
+							rendered.links,
 						)
 					: undefined;
 			this.transition('successful', {

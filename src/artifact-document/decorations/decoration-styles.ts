@@ -2,7 +2,7 @@
  * Text editor decoration styles shared by every ArtifactDecorator instance.
  */
 
-import { OverviewRulerLane, window, ThemeColor } from 'vscode';
+import { OverviewRulerLane, Uri, window, ThemeColor } from 'vscode';
 import type { OptimizationRemarkCategory } from '../../types/index.js';
 
 export const selectedLineDecoration = window.createTextEditorDecorationType({
@@ -36,6 +36,36 @@ export const binaryColumnsDecoration = window.createTextEditorDecorationType({
 		margin: '0 1.5em 0 0',
 	},
 });
+
+function jumpArrowIcon(path: string, forward: boolean): Uri {
+	const light = forward ? '#286f9e' : '#a34f00';
+	const dark = forward ? '#9cdcfe' : '#ffb454';
+	const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><style>path{fill:none;stroke:${light};stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}@media(prefers-color-scheme:dark){path{stroke:${dark}}}@media(forced-colors:active){path{stroke:CanvasText}}</style><path d="${path}"/></svg>`;
+	return Uri.parse(`data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`);
+}
+
+const forwardJumpSourceIcon = jumpArrowIcon('M14 8H10C7 8 5 10 5 13V15M2 12l3 3 3-3', true);
+const forwardJumpTargetIcon = jumpArrowIcon('M5 1v3c0 3 2 4 5 4h5m-3-3 3 3-3 3', true);
+const backwardJumpSourceIcon = jumpArrowIcon('M14 8H10C7 8 5 6 5 3V1M2 4l3-3 3 3', false);
+const backwardJumpTargetIcon = jumpArrowIcon('M5 15v-3c0-3 2-4 5-4h5m-3-3 3 3-3 3', false);
+
+function gutterDecoration(icon: Uri) {
+	return window.createTextEditorDecorationType({
+		gutterIconPath: icon,
+		gutterIconSize: 'contain',
+	});
+}
+
+export const jumpArrowDecorations = {
+	forward: {
+		source: gutterDecoration(forwardJumpSourceIcon),
+		target: gutterDecoration(forwardJumpTargetIcon),
+	},
+	backward: {
+		source: gutterDecoration(backwardJumpSourceIcon),
+		target: gutterDecoration(backwardJumpTargetIcon),
+	},
+} as const;
 
 export const sourceLineBandDecorations = Array.from({ length: 6 }, (_, index) => {
 	const background = new ThemeColor(`coglens.sourceLineBand.${index + 1}Background`);

@@ -17,6 +17,7 @@ import path from 'path';
 import { equalUri } from '../utils.js';
 import {
 	binaryColumnsDecoration,
+	jumpArrowDecorations,
 	optimizationRemarkDecorations,
 	stackUsageDecoration,
 	selectedLineDecoration,
@@ -39,6 +40,7 @@ import {
 	sourceLineBandIndex,
 	sourceScrollAnchor,
 } from './source-bridge.js';
+import { jumpArrows, type JumpArrowDirection } from './jump-arrows.js';
 
 /*
 Nice-to-have features:
@@ -209,6 +211,7 @@ export class ArtifactDecorator {
 			this.dimUnusedSourceLines(content);
 			this.decorateSourceDensity(content);
 			this.decorateListingColumns(content);
+			this.decorateJumpArrows(content);
 			this.decorateSourceLineBands(content);
 			this.decorateAnalysisAnnotations(content);
 
@@ -240,6 +243,10 @@ export class ArtifactDecorator {
 		this.clearMappingDecorations(editor);
 		editor.setDecorations(stateDecoration, []);
 		editor.setDecorations(binaryColumnsDecoration, []);
+		for (const decorations of Object.values(jumpArrowDecorations)) {
+			editor.setDecorations(decorations.source, []);
+			editor.setDecorations(decorations.target, []);
+		}
 		for (const decoration of Object.values(optimizationRemarkDecorations)) {
 			editor.setDecorations(decoration, []);
 		}
@@ -363,6 +370,34 @@ export class ArtifactDecorator {
 			];
 		});
 		editor.setDecorations(binaryColumnsDecoration, options);
+	}
+
+	private decorateJumpArrows(content: ArtifactDocumentContent): void {
+		const editor = this.editorTracker.getArtifactEditor(this.artifactUri);
+		if (!editor) {
+			return;
+		}
+		const options = {
+			forward: { source: [], target: [] },
+			backward: { source: [], target: [] },
+		} as Record<JumpArrowDirection, Record<'source' | 'target', Array<{ range: Range; hoverMessage: string }>>>;
+		for (const arrow of jumpArrows(content.links, editor.document.lineCount)) {
+			const source = arrow.sourceLine + 1;
+			const target = arrow.targetLine + 1;
+			const backward = arrow.direction === 'backward';
+			options[arrow.direction].source.push({
+				range: editor.document.lineAt(arrow.sourceLine).range,
+				hoverMessage: backward ? `Back edge to line ${target}` : `Branch forward to line ${target}`,
+			});
+			options[arrow.direction].target.push({
+				range: editor.document.lineAt(arrow.targetLine).range,
+				hoverMessage: backward ? `Loop target from line ${source}` : `Branch target from line ${source}`,
+			});
+		}
+		for (const direction of ['forward', 'backward'] as const) {
+			editor.setDecorations(jumpArrowDecorations[direction].source, options[direction].source);
+			editor.setDecorations(jumpArrowDecorations[direction].target, options[direction].target);
+		}
 	}
 
 	private decorateSourceLineBands(content: ArtifactDocumentContent): void {

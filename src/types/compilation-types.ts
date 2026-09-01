@@ -154,6 +154,8 @@ export interface ArtifactLink {
 	readonly startCharacter: number;
 	readonly endCharacter: number;
 	readonly targetLine: number;
+	/** CFG edge kind when the reference is a statically resolved branch. */
+	readonly edgeKind?: Extract<ControlFlowEdgeKind, 'unconditional' | 'true'>;
 }
 
 export interface ArtifactFold {

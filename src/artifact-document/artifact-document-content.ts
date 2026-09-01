@@ -1,6 +1,6 @@
 import { Uri } from 'vscode';
 import path from 'path';
-import type { ArtifactKind, RenderedArtifactLine } from '../types/index.js';
+import type { ArtifactKind, ArtifactLink, RenderedArtifactLine } from '../types/index.js';
 import { sourceUriMap, sourceUriSet, UriMap, UriSet } from '../uri-containers.js';
 
 /**
@@ -13,6 +13,7 @@ export interface ArtifactDocumentContent {
 	readonly sourceUri: Uri;
 	readonly artifactUri: Uri;
 	readonly lines: readonly RenderedArtifactLine[];
+	readonly links: readonly ArtifactLink[];
 	readonly allReferencedSrcUris: UriSet;
 	readonly sourceLineMappings: UriMap<Map<number, number[]>>;
 }
@@ -31,6 +32,7 @@ export function buildArtifactDocumentContent(
 	artifactUri: Uri,
 	kind: ArtifactKind,
 	lines: readonly RenderedArtifactLine[],
+	links: readonly ArtifactLink[] = [],
 ): ArtifactDocumentContent {
 	const allReferencedSrcUris = sourceUriSet();
 	const sourceLineMappings = sourceUriMap<Map<number, number[]>>();
@@ -55,5 +57,5 @@ export function buildArtifactDocumentContent(
 		lineMap.set(sourceLine, asmLines);
 	});
 
-	return { kind, sourceUri, artifactUri, lines, allReferencedSrcUris, sourceLineMappings };
+	return { kind, sourceUri, artifactUri, lines, links, allReferencedSrcUris, sourceLineMappings };
 }

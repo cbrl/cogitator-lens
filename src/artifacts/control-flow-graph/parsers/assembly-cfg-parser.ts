@@ -11,6 +11,7 @@ import { GraphIdAllocator, NodeIdAllocator } from '../cfg-parser-support.js';
 import type { GraphParseResult } from '../control-flow-graph-model.js';
 import type { AssemblyLine } from './assembly-line.js';
 import { InstructionSetInfo } from './instruction-sets.js';
+import type { InstructionType } from './instruction-sets.js';
 
 /** A half-open `[start, end)` range of assembly lines. */
 export interface Range {
@@ -52,6 +53,11 @@ export class AssemblyCfgParser {
 	static readonly dialect: string = 'asm';
 
 	constructor(protected readonly instructionSet: InstructionSetInfo) {}
+
+	/** The same textual edge classification used while constructing CFG blocks. */
+	classifyInstruction(instruction: string): InstructionType {
+		return this.instructionSet.classify(instruction);
+	}
 
 	parse(assembly: readonly AssemblyLine[]): GraphParseResult {
 		const diagnostics: string[] = [];

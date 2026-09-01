@@ -15,6 +15,7 @@ import {
 	sourceLineBandIndex,
 	sourceScrollAnchor,
 } from '../src/artifact-document/source-bridge.js';
+import { jumpArrows } from '../src/artifact-document/jump-arrows.js';
 import { invocationDetails, type ArtifactDetailsItem } from '../src/artifacts/ui/artifact-details.js';
 import { partitionArtifactPickerChoices } from '../src/artifacts/ui/artifact-picker.js';
 import type { RawArtifact, RenderedArtifact } from '../src/types/index.js';
@@ -178,6 +179,27 @@ test('source density and source highlights share one repeating color band', () =
 	assert.deepEqual(
 		[sourceLineBandIndex(0, 6), sourceLineBandIndex(5, 6), sourceLineBandIndex(6, 6), sourceLineBandIndex(14, 6)],
 		[0, 5, 0, 2],
+	);
+});
+
+test('jump arrows classify forward branches and back edges from navigation links', () => {
+	assert.deepEqual(
+		jumpArrows(
+			[
+				{ line: 2, startCharacter: 4, endCharacter: 8, targetLine: 7, edgeKind: 'true' },
+				{ line: 9, startCharacter: 4, endCharacter: 8, targetLine: 3, edgeKind: 'unconditional' },
+				{ line: 4, startCharacter: 4, endCharacter: 8, targetLine: 4, edgeKind: 'true' },
+				{ line: 12, startCharacter: 0, endCharacter: 2, targetLine: 1, edgeKind: 'unconditional' },
+				{ line: 2, startCharacter: 9, endCharacter: 13, targetLine: 7, edgeKind: 'true' },
+				{ line: 6, startCharacter: 4, endCharacter: 10, targetLine: 8 },
+			],
+			10,
+		),
+		[
+			{ sourceLine: 2, targetLine: 7, direction: 'forward' },
+			{ sourceLine: 4, targetLine: 4, direction: 'backward' },
+			{ sourceLine: 9, targetLine: 3, direction: 'backward' },
+		],
 	);
 });
 
