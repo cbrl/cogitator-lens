@@ -397,7 +397,7 @@ export class ToolchainBackend {
 				cancellationToken,
 			);
 			const artifact = this.buildRawArtifact(
-				'dotnet-il',
+				'assembly',
 				disassemblerResult.stdout,
 				[compilerResult.stderr, compilerResult.stdout, disassemblerResult.stderr].join('\n'),
 				source,
@@ -406,7 +406,11 @@ export class ToolchainBackend {
 				disassemblerExecutable,
 				disassemblerArguments,
 			);
-			return sourceMapping ? { ...artifact, dotnetSourceMapping: sourceMapping } : artifact;
+			return {
+				...artifact,
+				artifactDialect: 'dotnet-il',
+				...(sourceMapping ? { dotnetSourceMapping: sourceMapping } : {}),
+			};
 		});
 	}
 

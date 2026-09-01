@@ -75,25 +75,6 @@
         "extensions": [
           ".mir"
         ]
-      },
-      {
-        "id": "python-bytecode",
-        "aliases": [
-          "Python Bytecode"
-        ],
-        "extensions": [
-          ".pybytecode"
-        ]
-      },
-      {
-        "id": "coglens-dotnet-il",
-        "aliases": [
-          ".NET IL",
-          "CIL"
-        ],
-        "extensions": [
-          ".il"
-        ]
       }
     ],
     "grammars": [
@@ -116,16 +97,6 @@
         "language": "coglens-mir",
         "scopeName": "source.coglens-mir",
         "path": "./syntaxes/coglens-mir.tmLanguage.json"
-      },
-      {
-        "language": "python-bytecode",
-        "scopeName": "source.python-bytecode",
-        "path": "./syntaxes/python-bytecode.tmLanguage.json"
-      },
-      {
-        "language": "coglens-dotnet-il",
-        "scopeName": "source.coglens-dotnet-il",
-        "path": "./syntaxes/coglens-dotnet-il.tmLanguage.json"
       }
     ],
     "colors": [
@@ -949,18 +920,6 @@
                 "additionalProperties": false,
                 "properties": {}
               },
-              "python-bytecode": {
-                "type": "object",
-                "description": "Python bytecode options",
-                "additionalProperties": false,
-                "properties": {}
-              },
-              "dotnet-il": {
-                "type": "object",
-                "description": ".NET IL options",
-                "additionalProperties": false,
-                "properties": {}
-              },
               "control-flow-graph": {
                 "type": "object",
                 "description": "Control-flow graph options",
@@ -992,11 +951,17 @@
                     "rust-mir",
                     "optimization-remarks",
                     "stack-analysis",
-                    "python-bytecode",
-                    "dotnet-il",
                     "control-flow-graph"
                   ],
                   "description": "Artifact kind produced by this preset"
+                },
+                "artifactDialect": {
+                  "type": "string",
+                  "enum": [
+                    "python-bytecode",
+                    "dotnet-il"
+                  ],
+                  "description": "Optional specialized representation of the generic artifact kind"
                 },
                 "extraArguments": {
                   "type": "array",

@@ -68,16 +68,17 @@ const inferredProviders = new WeakMap<RenderedTextArtifact, NamedProvider>();
 /**
  * Looks up documentation emitted by Compiler Explorer's docenizers.
  *
- * LLVM IR, .NET IL, and Python bytecode identify their instruction set through
- * the artifact kind. Assembly target architecture is not currently part of a
- * compilation profile, so it is inferred once per rendered listing by scoring
- * its distinct mnemonics against each documentation set.
+ * LLVM IR identifies its instruction set through the artifact kind. .NET IL
+ * and Python bytecode are assembly dialects. Native assembly target
+ * architecture is not currently part of a compilation profile, so it is
+ * inferred once per rendered listing by scoring its distinct mnemonics against
+ * each documentation set.
  */
 export function documentationForInstruction(
 	artifact: RenderedTextArtifact,
 	text: string,
 ): InstructionDocumentation | undefined {
-	const mnemonic = instructionMnemonic(artifact.kind, text);
+	const mnemonic = instructionMnemonic(artifact.kind, text, artifact.artifactDialect);
 	if (!mnemonic) {
 		return undefined;
 	}
@@ -97,8 +98,12 @@ export function documentationForOpcode(
 	return information ? documentation(mnemonic, namedProvider, information) : undefined;
 }
 
-export function instructionMnemonic(kind: ArtifactKind, text: string): string | undefined {
-	if (kind === 'python-bytecode') {
+export function instructionMnemonic(
+	kind: ArtifactKind,
+	text: string,
+	artifactDialect?: RenderedTextArtifact['artifactDialect'],
+): string | undefined {
+	if (artifactDialect === 'python-bytecode') {
 		// dis output: optional source line, current/jump markers, bytecode offset,
 		// then the uppercase opcode.
 		return /^\s*(?:\d+\s+)?(?:(?:-->)?\s*(?:>>)?\s*)?(?:\d+\s+)?([A-Z][A-Z0-9_]*)\b/u
@@ -112,7 +117,7 @@ export function instructionMnemonic(kind: ArtifactKind, text: string): string | 
 			.exec(text)?.[1]
 			?.toLowerCase();
 	}
-	if (kind === 'dotnet-il') {
+	if (artifactDialect === 'dotnet-il') {
 		// ILDasm output: an optional IL_ offset label, then the CIL opcode.
 		return /^\s*(?:IL_[\da-f]+:\s+)?([a-z][\w.]*)\s/iu.exec(`${text} `)?.[1]?.toLowerCase();
 	}
@@ -126,10 +131,10 @@ function providerForArtifact(artifact: RenderedTextArtifact): NamedProvider | un
 	if (artifact.kind === 'llvm-ir') {
 		return llvmProvider;
 	}
-	if (artifact.kind === 'dotnet-il') {
+	if (artifact.artifactDialect === 'dotnet-il') {
 		return dotNetIlProvider;
 	}
-	if (artifact.kind === 'python-bytecode') {
+	if (artifact.artifactDialect === 'python-bytecode') {
 		return pythonProvider;
 	}
 	if (artifact.kind !== 'assembly' && artifact.kind !== 'binary-disassembly') {
@@ -147,7 +152,7 @@ function providerForArtifact(artifact: RenderedTextArtifact): NamedProvider | un
 function inferAssemblyProvider(artifact: RenderedTextArtifact): NamedProvider {
 	const mnemonics = new Set<string>();
 	for (const line of artifact.lines) {
-		const mnemonic = instructionMnemonic(artifact.kind, line.disassembly ?? line.text);
+		const mnemonic = instructionMnemonic(artifact.kind, line.disassembly ?? line.text, artifact.artifactDialect);
 		if (mnemonic) {
 			mnemonics.add(mnemonic);
 		}

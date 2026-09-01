@@ -55,9 +55,9 @@ test('the artifact picker hides unsupported choices and separates unavailable on
 			availability: { status: 'unavailable', explanation: 'No disassembler was detected.' },
 		},
 		{
-			artifactKind: 'python-bytecode',
-			label: 'Python bytecode',
-			availability: { status: 'unsupported', explanation: 'This toolchain has no Python bytecode producer.' },
+			artifactKind: 'ast',
+			label: 'Abstract syntax tree',
+			availability: { status: 'unsupported', explanation: 'This toolchain has no AST producer.' },
 		},
 	]);
 
@@ -103,7 +103,11 @@ test('LLVM IR and Python bytecode use their artifact-specific documentation tabl
 	assertDocuments(documentationForInstruction(llvm, llvm.lines[0].text), instructionSetLabels.llvmIr, 'add');
 	assert.equal(instructionMnemonic('llvm-ir', '  tail call void @work()'), 'call');
 
-	const python = textArtifact('python-bytecode', [{ text: '  4          10 BINARY_OP                0 (+)' }]);
+	const python = textArtifact(
+		'assembly',
+		[{ text: '  4          10 BINARY_OP                0 (+)' }],
+		'python-bytecode',
+	);
 	assertDocuments(
 		documentationForInstruction(python, python.lines[0].text),
 		instructionSetLabels.pythonBytecode,
@@ -112,19 +116,23 @@ test('LLVM IR and Python bytecode use their artifact-specific documentation tabl
 });
 
 test('.NET IL uses the CIL instruction documentation table', () => {
-	const dotnetIl = textArtifact('dotnet-il', [
-		{ text: 'IL_0000: ldarg.0' },
-		{ text: 'IL_0001: callvirt instance string [System.Runtime]System.Object::ToString()' },
-		{ text: 'IL_0006: ret' },
-	]);
+	const dotnetIl = textArtifact(
+		'assembly',
+		[
+			{ text: 'IL_0000: ldarg.0' },
+			{ text: 'IL_0001: callvirt instance string [System.Runtime]System.Object::ToString()' },
+			{ text: 'IL_0006: ret' },
+		],
+		'dotnet-il',
+	);
 	assertDocuments(
 		documentationForInstruction(dotnetIl, dotnetIl.lines[1].text),
 		instructionSetLabels.dotNetIl,
 		'callvirt',
 	);
-	assert.equal(instructionMnemonic('dotnet-il', dotnetIl.lines[0].text), 'ldarg.0');
+	assert.equal(instructionMnemonic('assembly', dotnetIl.lines[0].text, 'dotnet-il'), 'ldarg.0');
 	assert.equal(
-		instructionMnemonic('dotnet-il', 'IL_0000: constrained. [System.Runtime]System.Object'),
+		instructionMnemonic('assembly', 'IL_0000: constrained. [System.Runtime]System.Object', 'dotnet-il'),
 		'constrained.',
 	);
 });

@@ -26,7 +26,10 @@ const matrix: Readonly<
 		{ readonly available?: readonly ToolchainKind[]; readonly unavailable?: readonly ToolchainKind[] }
 	>
 > = {
-	assembly: { available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'msvc', 'rust', 'go', 'zig', 'nvcc'] },
+	assembly: {
+		available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'msvc', 'rust', 'python', 'go', 'zig', 'nvcc'],
+		unavailable: ['dotnet'],
+	},
 	'binary-disassembly': { unavailable: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'msvc', 'nvcc'] },
 	'preprocessed-source': { available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'msvc', 'nvcc'] },
 	ast: { available: ['clang', 'apple-clang', 'clang-cl', 'python'] },
@@ -34,8 +37,6 @@ const matrix: Readonly<
 	'rust-mir': { available: ['rust'] },
 	'optimization-remarks': { available: ['gcc', 'clang', 'apple-clang', 'clang-cl'] },
 	'stack-analysis': { available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'python'] },
-	'python-bytecode': { available: ['python'] },
-	'dotnet-il': { unavailable: ['dotnet'] },
 	'control-flow-graph': {
 		available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'msvc', 'rust', 'python', 'go', 'zig'],
 	},
@@ -102,7 +103,7 @@ test('an artifact that needs an external tool becomes available once the profile
 	assert.equal(
 		resolveArtifactAvailability(
 			toolchainProfile('dotnet', { tools: { compiler: 'csc.dll', ildasm: 'ildasm' } }),
-			'dotnet-il',
+			'assembly',
 		).status,
 		'available',
 	);

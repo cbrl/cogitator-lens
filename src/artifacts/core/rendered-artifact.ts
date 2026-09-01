@@ -13,6 +13,7 @@ export function renderedArtifact(
 ): RenderedTextArtifact {
 	return {
 		kind: raw.kind,
+		...(raw.artifactDialect ? { artifactDialect: raw.artifactDialect } : {}),
 		presentation: 'text',
 		diagnostics: raw.diagnostics,
 		durationMs: raw.durationMs,

@@ -179,6 +179,9 @@ export class CompilationService {
 		};
 		const cached = this.rawArtifactCache.get(key);
 		if (cached && (await validateArtifactInputs(cached.inputs))) {
+			if (request.artifactDialect && cached.artifactDialect !== request.artifactDialect) {
+				return dialectMismatch(request.artifactDialect, cached.artifactDialect);
+			}
 			request.onInvocation?.(invocationDetails(cached.command));
 			return {
 				status: 'available',
@@ -201,6 +204,9 @@ export class CompilationService {
 				},
 				cancellationToken,
 			);
+			if (request.artifactDialect && raw.artifactDialect !== request.artifactDialect) {
+				return dialectMismatch(request.artifactDialect, raw.artifactDialect);
+			}
 			this.rawArtifactCache.set(key, raw, variant.source);
 			return {
 				status: 'available',
@@ -310,6 +316,16 @@ export class CompilationService {
 			this.changeEmitter.fire(affectedSources);
 		}
 	}
+}
+
+function dialectMismatch(
+	requested: NonNullable<ArtifactRequest['artifactDialect']>,
+	produced: RawArtifact['artifactDialect'],
+): ArtifactProductionResult {
+	return {
+		status: 'unsupported',
+		explanation: `The selected toolchain produces ${produced ?? 'generic'} assembly, not ${requested}.`,
+	};
 }
 
 async function readSourceSnapshot(source: Uri): Promise<

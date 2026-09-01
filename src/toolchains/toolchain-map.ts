@@ -46,6 +46,7 @@ import {
 	rustMirOutput,
 } from '../artifacts/core/compiler-output-producer.js';
 import { pythonBytecodeProducer } from '../artifacts/python/python-bytecode-producer.js';
+import { renderPythonBytecode } from '../artifacts/python/python-bytecode-renderer.js';
 import { pythonControlFlowGraphProducer } from '../artifacts/python/python-cfg-producer.js';
 import { pythonAstProducer } from '../artifacts/ast/python-ast-producer.js';
 import { renderClangAst, renderPythonAst } from '../artifacts/ast/ast-renderer.js';
@@ -88,6 +89,7 @@ import { GoAsmParser } from '../vendor/lib/parsers/asm-parser-go.js';
 import { PTXAsmParser } from '../vendor/lib/parsers/asm-parser-ptx.js';
 import { SassAsmParser } from '../vendor/lib/parsers/asm-parser-sass.js';
 import { discoverDotNetTools, dotNetIlProducer, stripDotNetManagedArguments } from './dotnet.js';
+import { renderDotNetIl } from '../artifacts/dotnet/dotnet-il-renderer.js';
 
 export type ToolCapabilityStatus = 'available' | 'unavailable' | 'unsupported';
 
@@ -492,14 +494,15 @@ const rustArtifacts = artifactCells({
 });
 
 const pythonArtifacts = artifactCells({
+	assembly: {
+		status: 'available',
+		producer: pythonBytecodeProducer,
+		renderer: renderPythonBytecode,
+	},
 	ast: {
 		status: 'available',
 		producer: pythonAstProducer,
 		renderer: (raw, _options, context) => renderPythonAst(raw, context),
-	},
-	'python-bytecode': {
-		status: 'available',
-		producer: pythonBytecodeProducer,
 	},
 	'stack-analysis': {
 		status: 'available',
@@ -561,9 +564,10 @@ const nvccArtifacts = artifactCells({
 });
 
 const dotNetArtifacts = artifactCells({
-	'dotnet-il': {
+	assembly: {
 		status: 'available',
 		producer: dotNetIlProducer,
+		renderer: renderDotNetIl,
 		requiredTools: [
 			{ name: 'compiler', label: 'Roslyn csc.dll' },
 			{ name: 'ildasm', label: '.NET IL disassembler (ildasm)' },
@@ -873,6 +877,12 @@ export function resolveArtifactOptionAvailability(
 	const artifact = resolveArtifactAvailability(profile, kind);
 	if (artifact.status !== 'available') {
 		return artifact;
+	}
+	if (kind === 'assembly' && (profile.kind === 'python' || profile.kind === 'dotnet')) {
+		return {
+			status: 'unsupported',
+			explanation: `${profile.displayName} emits assembly without configurable assembly options.`,
+		};
 	}
 	if (id === 'demangle') {
 		return profile.tools.demangler

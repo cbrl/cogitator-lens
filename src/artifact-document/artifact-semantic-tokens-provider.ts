@@ -48,6 +48,8 @@ export function classifyArtifactLine(text: string, artifact: RenderedTextArtifac
 	};
 
 	const isLlvm = artifact.kind === 'llvm-ir';
+	const isPythonBytecode = artifact.artifactDialect === 'python-bytecode';
+	const isDotNetIl = artifact.artifactDialect === 'dotnet-il';
 	const commentStart = isLlvm ? text.indexOf(';') : assemblyCommentStart(text);
 	if (commentStart >= 0) {
 		candidates.push({
@@ -70,8 +72,17 @@ export function classifyArtifactLine(text: string, artifact: RenderedTextArtifac
 			(value) => documentationForOpcode(artifact, value) !== undefined,
 		);
 		addMatches(/^\s*[-a-zA-Z$._\d]+(?=:)/g, 'label', 70);
+	} else if (isPythonBytecode) {
+		const mnemonic = /^\s*(?:\d+\s+)?(?:(?:-->)?\s*(?:>>)?\s*)?(?:\d+\s+)?([A-Z][A-Z0-9_]*)\b/u.exec(text);
+		if (mnemonic) {
+			const start = text.indexOf(mnemonic[1]);
+			candidates.push({ start, length: mnemonic[1].length, type: 'keyword', priority: 65 });
+		}
 	} else {
 		addMatches(/^\s*[.$_a-zA-Z][\w.$@?]*(?=:)/g, 'label', 70);
+		if (isDotNetIl) {
+			addMatches(/\bIL_[\da-f]+\b/gi, 'label', 70);
+		}
 		addMatches(/^\s*\.[a-zA-Z][\w.]*/g, 'keyword', 65);
 		const mnemonic = /^\s*(?:[a-zA-Z][\w.]*:\s*)?([a-zA-Z][\w.]*)/.exec(text);
 		if (mnemonic?.index !== undefined && documentationForOpcode(artifact, mnemonic[1]) !== undefined) {
@@ -107,7 +118,7 @@ export class ArtifactSemanticTokensProvider implements DocumentSemanticTokensPro
 
 	provideDocumentSemanticTokens(document: TextDocument, _token: CancellationToken): ProviderResult<SemanticTokens> {
 		const artifact = this.artifactLookup(document.uri);
-		if (!artifact || !['assembly', 'binary-disassembly', 'llvm-ir', 'dotnet-il'].includes(artifact.kind)) {
+		if (!artifact || !['assembly', 'binary-disassembly', 'llvm-ir'].includes(artifact.kind)) {
 			return new SemanticTokensBuilder(artifactSemanticTokensLegend).build();
 		}
 		const builder = new SemanticTokensBuilder(artifactSemanticTokensLegend);

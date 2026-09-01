@@ -58,7 +58,6 @@ jobs:
           grep -q 'extension/LICENSE.txt' vsix-files.txt
           grep -q 'extension/THIRD_PARTY_NOTICES.md' vsix-files.txt
           grep -q 'extension/resources/gear-phi.png' vsix-files.txt
-          grep -q 'extension/syntaxes/python-bytecode.tmLanguage.json' vsix-files.txt
           grep -q 'extension/syntaxes/coglens-ast.tmLanguage.json' vsix-files.txt
           grep -q 'extension/syntaxes/coglens-mir.tmLanguage.json' vsix-files.txt
           ! grep -q 'extension/src/' vsix-files.txt

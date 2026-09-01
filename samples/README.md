@@ -19,11 +19,11 @@ The checked-in settings use executables found on `PATH`:
 | ---------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------- |
 | C, C++, Objective-C, Objective-C++ | `clang` or `clang++`  | Assembly, binary disassembly, preprocessing, AST, LLVM IR, optimization remarks, stack analysis, CFG |
 | CUDA device code                   | `nvcc`                | PTX assembly, SASS binary disassembly, preprocessing                                                 |
-| C#                                 | `dotnet`              | .NET IL                                                                                              |
+| C#                                 | `dotnet`              | Assembly (IL)                                                                                        |
 | Go                                 | `go`                  | Assembly, SSA CFG                                                                                    |
 | Zig                                | `zig`                 | Assembly, LLVM IR, CFG                                                                               |
 | Rust                               | `rustc`               | Assembly, LLVM IR, MIR, CFG                                                                          |
-| Python                             | `python`              | AST, bytecode, stack analysis, CFG                                                                   |
+| Python                             | `python`              | Assembly (bytecode), AST, stack analysis, CFG                                                        |
 
 Edit `.vscode/settings.json` in a standalone project, or the `settings` section of the umbrella
 workspace, if an executable has a different name or location. Binary disassembly additionally needs

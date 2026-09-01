@@ -445,11 +445,18 @@ function verifyAssemblyUriRoundTrip(): void {
 	const pythonUri = getArtifactUri(
 		vscode.Uri.file('/project/main.py'),
 		{ id: 'default:python' },
-		'python-bytecode',
+		'assembly',
 		'default',
+		undefined,
+		'python-bytecode',
 	);
-	assert.match(pythonUri.path, /main\.pybytecode$/);
-	assert.equal(parseArtifactUri(pythonUri)?.artifactKind, 'python-bytecode');
+	assert.match(pythonUri.path, /main\.asm$/);
+	assert.equal(parseArtifactUri(pythonUri)?.artifactKind, 'assembly');
+	assert.equal(parseArtifactUri(pythonUri)?.artifactDialect, 'python-bytecode');
+	assert.equal(
+		parseArtifactUri(pythonUri.with({ query: `${pythonUri.query.replace(/&dialect=[^&]+/u, '')}&dialect=native` })),
+		undefined,
+	);
 	const stackUri = getArtifactUri(
 		source,
 		{
@@ -546,7 +553,8 @@ function verifyArtifactNavigationProviders(): void {
 
 		const dotnetArtifact: RenderedTextArtifact = {
 			...artifact,
-			kind: 'dotnet-il',
+			kind: 'assembly',
+			artifactDialect: 'dotnet-il',
 			lines: [{ text: 'IL_0000: callvirt instance string [System.Runtime]System.Object::ToString()' }],
 			links: [],
 		};

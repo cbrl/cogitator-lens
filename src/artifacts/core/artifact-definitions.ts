@@ -12,8 +12,6 @@ import type { Uri } from 'vscode';
 import type { ParsedAsmResultLine } from '../../vendor/types/asmresult/asmresult.interfaces.js';
 import type { ParsedAsmResult } from '../../vendor/types/asmresult/asmresult.interfaces.js';
 import { renderLlvmIr } from '../llvm-ir/llvm-ir-renderer.js';
-import { renderPythonBytecode } from '../python/python-bytecode-renderer.js';
-import { renderDotNetIl } from '../dotnet/dotnet-il-renderer.js';
 import { renderedArtifact } from './rendered-artifact.js';
 import { renderPreprocessedSource } from '../preprocessed-source/preprocessed-source-renderer.js';
 import { renderRustMir } from '../rust/rust-mir-renderer.js';
@@ -61,9 +59,15 @@ export type ArtifactKind =
 	| 'rust-mir'
 	| 'optimization-remarks'
 	| 'stack-analysis'
-	| 'python-bytecode'
-	| 'dotnet-il'
 	| 'control-flow-graph';
+
+/** A specialized representation carried by a generic artifact kind. */
+export type ArtifactDialect = 'python-bytecode' | 'dotnet-il';
+
+const dialectArtifactKinds = {
+	'python-bytecode': 'assembly',
+	'dotnet-il': 'assembly',
+} as const satisfies Record<ArtifactDialect, ArtifactKind>;
 
 export interface ArtifactDefinition {
 	readonly presentation: 'text' | 'graph';
@@ -183,6 +187,14 @@ const artifactDefinitionTable = {
 			links: true,
 			folds: true,
 			symbols: true,
+		},
+		metricLabels: {
+			methodCount: 'Method count',
+			codeObjectCount: 'Code object count',
+			instructionCount: 'Instruction count',
+			sourceLineCount: 'Mapped source lines',
+			codeSizeBytes: 'Code size',
+			labelCount: 'Label count',
 		},
 	},
 	'binary-disassembly': {
@@ -306,44 +318,6 @@ const artifactDefinitionTable = {
 			unmappedEntryCount: 'Unmapped entry count',
 		},
 	},
-	'python-bytecode': {
-		presentation: 'text',
-		label: 'Python bytecode',
-		icon: 'symbol-number',
-		filenameExtension: '.pybytecode',
-		documentLanguage: 'artifact',
-		options: [],
-		renderer: renderPythonBytecode,
-		navigation: {
-			definitions: true,
-			sourceLocations: true,
-			links: false,
-			folds: false,
-			symbols: false,
-		},
-	},
-	'dotnet-il': {
-		presentation: 'text',
-		label: '.NET IL',
-		icon: 'symbol-number',
-		filenameExtension: '.il',
-		documentLanguage: 'artifact',
-		options: [],
-		renderer: renderDotNetIl,
-		navigation: {
-			definitions: true,
-			sourceLocations: true,
-			links: true,
-			folds: true,
-			symbols: true,
-		},
-		metricLabels: {
-			methodCount: 'Method count',
-			instructionCount: 'Instruction count',
-			labelCount: 'IL label count',
-			codeSizeBytes: 'IL code size',
-		},
-	},
 	'control-flow-graph': {
 		presentation: 'graph',
 		label: 'Control-flow graph',
@@ -377,6 +351,18 @@ export const supportedArtifactKinds = Object.freeze(Object.keys(artifactDefiniti
 
 export function getArtifactDefinition(kind: string): ArtifactDefinition | undefined {
 	return Object.hasOwn(artifactDefinitions, kind) ? artifactDefinitions[kind as ArtifactKind] : undefined;
+}
+
+export function getArtifactKind(value: string): ArtifactKind | undefined {
+	return getArtifactDefinition(value) ? (value as ArtifactKind) : undefined;
+}
+
+export function getArtifactDialect(value: string): ArtifactDialect | undefined {
+	return Object.hasOwn(dialectArtifactKinds, value) ? (value as ArtifactDialect) : undefined;
+}
+
+export function artifactDialectBelongsToKind(dialect: ArtifactDialect, kind: ArtifactKind): boolean {
+	return dialectArtifactKinds[dialect] === kind;
 }
 
 export function artifactSupportsOption(kind: ArtifactKind, optionId: ArtifactOptionDescriptor['id']): boolean {

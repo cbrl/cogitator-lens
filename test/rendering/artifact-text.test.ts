@@ -3,6 +3,8 @@ import path from 'node:path';
 import test from 'node:test';
 import { artifactDefinitions } from '../../src/artifacts/core/artifact-definitions.js';
 import { defaultArtifactOptions, type RawArtifact } from '../../src/types/index.js';
+import { renderPythonBytecode } from '../../src/artifacts/python/python-bytecode-renderer.js';
+import { renderDotNetIl } from '../../src/artifacts/dotnet/dotnet-il-renderer.js';
 import { rawArtifact, renderContext } from '../support/artifacts.js';
 import { readFixture } from '../support/environment.js';
 
@@ -176,8 +178,9 @@ test('Python bytecode rendering maps both supported disassembly layouts to sourc
 	const source = 'C:\\project\\main.py';
 	const context = renderContext('python', { file: source, text: 'def add(a, b):\n    return a + b\n' });
 	const bytecode = (text: string) =>
-		render['python-bytecode'].renderer(
-			rawArtifact('python-bytecode', text, {
+		renderPythonBytecode(
+			rawArtifact('assembly', text, {
+				artifactDialect: 'python-bytecode',
 				command: {
 					executable: process.execPath,
 					arguments: ['-m', 'dis', source],
@@ -240,8 +243,9 @@ test('.NET IL rendering exposes method-scoped labels, symbols, folds, and code m
 		'  IL_0003: ret',
 		'} // end of method Demo::Second',
 	].join('\n');
-	const rendered = render['dotnet-il'].renderer(
-		rawArtifact('dotnet-il', il, {
+	const rendered = renderDotNetIl(
+		rawArtifact('assembly', il, {
+			artifactDialect: 'dotnet-il',
 			dotnetSourceMapping: [
 				{
 					method: {

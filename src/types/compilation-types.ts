@@ -5,7 +5,7 @@
 
 import type { CancellationToken, Uri } from 'vscode';
 import type { ArtifactOptions } from './artifact-options.js';
-import type { ArtifactKind } from '../artifacts/core/artifact-definitions.js';
+import type { ArtifactDialect, ArtifactKind } from '../artifacts/core/artifact-definitions.js';
 import type { DotNetSourceMapping } from '../vendor/lib/parsers/pdb-parser-dotnet.js';
 
 export interface CompilationVariant {
@@ -39,6 +39,8 @@ export interface ManualCompilationVariantSettings {
 export interface ArtifactRequest {
 	variant: CompilationVariant;
 	artifactKind: ArtifactKind;
+	/** Narrows a generic artifact kind to a specialized representation when required. */
+	artifactDialect?: ArtifactDialect;
 	/** Selects the compiler output used by output-backed artifact kinds. */
 	artifactOutputId?: string;
 	presetId: string;
@@ -90,6 +92,8 @@ export interface ArtifactInputState {
 
 export interface RawArtifact {
 	kind: ArtifactKind;
+	/** The specialized representation carried by a generic artifact kind. */
+	readonly artifactDialect?: ArtifactDialect;
 	text: string;
 	diagnostics: readonly CompileDiagnostic[];
 	durationMs: number;
@@ -212,6 +216,8 @@ export interface ControlFlowGraph {
 
 export interface RenderedArtifactBase {
 	readonly kind: ArtifactKind;
+	/** The specialized representation carried by a generic artifact kind. */
+	readonly artifactDialect?: ArtifactDialect;
 	readonly presentation: 'text' | 'graph';
 	readonly diagnostics: readonly CompileDiagnostic[];
 	readonly durationMs: number;

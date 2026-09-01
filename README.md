@@ -23,19 +23,17 @@ metrics.
 
 ### Artifact support
 
-| Artifact             | GCC | Clang / Apple Clang | clang-cl | MSVC | Rust | Python     | .NET | Go        | Zig | nvcc       |
-| -------------------- | --- | ------------------- | -------- | ---- | ---- | ---------- | ---- | --------- | --- | ---------- |
-| Assembly             | Yes | Yes                 | Yes      | Yes  | Yes  | —          | —    | Yes       | Yes | Yes (PTX)  |
-| Binary disassembly   | Yes | Yes                 | Yes      | Yes  | —    | —          | —    | —         | —   | Yes (SASS) |
-| Preprocessed source  | Yes | Yes                 | Yes      | Yes  | —    | —          | —    | —         | —   | Yes        |
-| AST                  | —   | Yes                 | Yes      | —    | —    | Yes (3.9+) | —    | —         | —   | —          |
-| LLVM IR              | —   | Yes                 | Yes      | —    | Yes  | —          | —    | —         | Yes | —          |
-| Rust MIR             | —   | —                   | —        | —    | Yes  | —          | —    | —         | —   | —          |
-| .NET IL              | —   | —                   | —        | —    | —    | —          | Yes  | —         | —   | —          |
-| Optimization remarks | Yes | Yes                 | Yes      | —    | —    | —          | —    | —         | —   | —          |
-| Stack analysis       | Yes | Yes                 | Yes      | —    | —    | Yes        | —    | —         | —   | —          |
-| Python bytecode      | —   | —                   | —        | —    | —    | Yes        | —    | —         | —   | —          |
-| Control-flow graph   | Yes | Yes                 | Yes      | —    | Yes  | Yes        | —    | Yes (SSA) | Yes | —          |
+| Artifact             | GCC | Clang / Apple Clang | clang-cl | MSVC | Rust | Python         | .NET     | Go        | Zig | nvcc       |
+| -------------------- | --- | ------------------- | -------- | ---- | ---- | -------------- | -------- | --------- | --- | ---------- |
+| Assembly             | Yes | Yes                 | Yes      | Yes  | Yes  | Yes (bytecode) | Yes (IL) | Yes       | Yes | Yes (PTX)  |
+| Binary disassembly   | Yes | Yes                 | Yes      | Yes  | —    | —              | —        | —         | —   | Yes (SASS) |
+| Preprocessed source  | Yes | Yes                 | Yes      | Yes  | —    | —              | —        | —         | —   | Yes        |
+| AST                  | —   | Yes                 | Yes      | —    | —    | Yes (3.9+)     | —        | —         | —   | —          |
+| LLVM IR              | —   | Yes                 | Yes      | —    | Yes  | —              | —        | —         | Yes | —          |
+| Rust MIR             | —   | —                   | —        | —    | Yes  | —              | —        | —         | —   | —          |
+| Optimization remarks | Yes | Yes                 | Yes      | —    | —    | —              | —        | —         | —   | —          |
+| Stack analysis       | Yes | Yes                 | Yes      | —    | —    | Yes            | —        | —         | —   | —          |
+| Control-flow graph   | Yes | Yes                 | Yes      | —    | Yes  | Yes            | —        | Yes (SSA) | Yes | —          |
 
 ## Configuration
 
@@ -116,7 +114,8 @@ symbols.
 }
 ```
 
-.NET IL artifacts invoke the SDK's Roslyn `csc.dll` directly for a standalone C# file, then run
+For .NET, the Assembly artifact is IL. It invokes the SDK's Roslyn `csc.dll` directly for a
+standalone C# file, then runs
 `ildasm` over the generated library. Cogitator Lens discovers Roslyn from the configured `dotnet`
 host and looks for `ildasm` beside it, on `PATH`, or in the Windows .NET Framework SDK. Configure
 `tools.compiler` and `tools.ildasm` explicitly when those locations are nonstandard. Default and
@@ -163,7 +162,8 @@ invocation.
 ```
 
 Interpreter options such as `-O`, `-B`, and `-X` belong in the configured invocation. Python code
-is compiled or parsed without being imported or executed.
+is compiled or parsed without being imported or executed. For Python, the Assembly artifact is
+the interpreter's bytecode disassembly.
 
 When Microsoft's Python extension is installed, its selected and known environments are discovered
 automatically for workspace Python files.

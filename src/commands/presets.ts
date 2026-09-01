@@ -186,6 +186,7 @@ async function saveActiveArtifactAsPreset(
 	await upsertArtifactPreset(configuration, source, undefined, {
 		id,
 		artifactKind: snapshot.identity.artifactKind,
+		...(snapshot.identity.artifactDialect ? { artifactDialect: snapshot.identity.artifactDialect } : {}),
 		extraArguments: [...(inherited?.extraArguments ?? [])],
 		productionOptions: {
 			...compilationService.getArtifactOptions(snapshot.identity.artifactKind).production,

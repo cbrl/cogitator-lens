@@ -8,7 +8,13 @@ import {
 	Uri,
 } from 'vscode';
 import { CompilationService } from '../compilation/index.js';
-import type { ArtifactKind, CompilationVariant, InvocationDetails, RenderedArtifact } from '../types/index.js';
+import type {
+	ArtifactDialect,
+	ArtifactKind,
+	CompilationVariant,
+	InvocationDetails,
+	RenderedArtifact,
+} from '../types/index.js';
 import { CompilationError } from '../types/index.js';
 import { buildArtifactDocumentContent, type ArtifactDocumentContent } from './artifact-document-content.js';
 import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
@@ -59,6 +65,7 @@ export class ArtifactGenerator implements Disposable {
 		private readonly presetId: string,
 		private readonly compilationService: CompilationService,
 		private readonly artifactOutputId?: string,
+		private readonly artifactDialect?: ArtifactDialect,
 	) {
 		this.sourceUri = sourceUri;
 		this.artifactUri = artifactUri;
@@ -84,9 +91,11 @@ export class ArtifactGenerator implements Disposable {
 				);
 			}
 			const baseOptions = this.compilationService.getArtifactOptions(this.artifactKind);
+			const artifactDialect = this.artifactDialect ?? preset.artifactDialect;
 			const artifact = await this.compilationService.compile({
 				variant: this.variant,
 				artifactKind: this.artifactKind,
+				...(artifactDialect ? { artifactDialect } : {}),
 				...(this.artifactOutputId ? { artifactOutputId: this.artifactOutputId } : {}),
 				presetId: this.presetId,
 				extraArguments: preset.extraArguments,

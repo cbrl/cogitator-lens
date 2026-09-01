@@ -1,7 +1,12 @@
 import { Uri } from 'vscode';
 import path from 'path';
-import type { ArtifactKind, CompilationVariant } from '../types/index.js';
-import { artifactDefinitions, getArtifactDefinition } from '../artifacts/core/artifact-definitions.js';
+import type { ArtifactDialect, ArtifactKind, CompilationVariant } from '../types/index.js';
+import {
+	artifactDefinitions,
+	artifactDialectBelongsToKind,
+	getArtifactDialect,
+	getArtifactKind,
+} from '../artifacts/core/artifact-definitions.js';
 import { replaceExtension } from '../utils.js';
 
 export const artifactScheme = 'coglens-artifact';
@@ -10,6 +15,7 @@ export interface ArtifactUriIdentity {
 	readonly source: Uri;
 	readonly variantId: string;
 	readonly artifactKind: ArtifactKind;
+	readonly artifactDialect?: ArtifactDialect;
 	readonly presetId: string;
 	readonly artifactOutputId?: string;
 }
@@ -20,6 +26,7 @@ export function getArtifactUri(
 	artifactKind: ArtifactKind,
 	presetId: string,
 	artifactOutputId?: string,
+	artifactDialect?: ArtifactDialect,
 ): Uri {
 	if (artifactKind === 'control-flow-graph' && !artifactOutputId) {
 		throw new Error('Control-flow graph URIs require an output selection.');
@@ -35,6 +42,12 @@ export function getArtifactUri(
 	});
 	if (artifactOutputId) {
 		query.set('output', artifactOutputId);
+	}
+	if (artifactDialect) {
+		if (!artifactDialectBelongsToKind(artifactDialect, artifactKind)) {
+			throw new Error(`${artifactDialect} is not a dialect of ${artifactKind}.`);
+		}
+		query.set('dialect', artifactDialect);
 	}
 	return source.with({
 		scheme: artifactScheme,
@@ -57,16 +70,20 @@ export function parseArtifactUri(uri: Uri): ArtifactUriIdentity | undefined {
 	const query = new URLSearchParams(uri.query);
 	const rawSource = query.get('source');
 	const variantId = query.get('variant');
-	const artifactKind = query.get('artifact');
+	const configuredKind = query.get('artifact');
+	const artifactKind = configuredKind ? getArtifactKind(configuredKind) : undefined;
+	const rawConfiguredDialect = query.get('dialect');
+	const configuredDialect = getArtifactDialect(rawConfiguredDialect ?? '');
 	const presetId = query.get('preset');
 	const artifactOutputId = query.get('output') || undefined;
 	if (
 		!rawSource ||
 		!variantId ||
 		!artifactKind ||
-		!getArtifactDefinition(artifactKind) ||
+		(rawConfiguredDialect !== null && !configuredDialect) ||
 		!presetId ||
-		(artifactKind === 'control-flow-graph') !== Boolean(artifactOutputId)
+		(artifactKind === 'control-flow-graph') !== Boolean(artifactOutputId) ||
+		(configuredDialect !== undefined && !artifactDialectBelongsToKind(configuredDialect, artifactKind))
 	) {
 		return undefined;
 	}
@@ -77,7 +94,8 @@ export function parseArtifactUri(uri: Uri): ArtifactUriIdentity | undefined {
 	return {
 		source,
 		variantId,
-		artifactKind: artifactKind as ArtifactKind,
+		artifactKind,
+		...(configuredDialect ? { artifactDialect: configuredDialect } : {}),
 		presetId,
 		...(artifactOutputId ? { artifactOutputId } : {}),
 	};

@@ -52,6 +52,7 @@ export function buildArtifactIdentity(
 		sourceUri: parsed.source.toString(),
 		sourceLabel: parsed.source.fsPath,
 		artifactKind: parsed.artifactKind,
+		...(parsed.artifactDialect ? { artifactDialect: parsed.artifactDialect } : {}),
 		artifactLabel,
 		...(parsed.artifactOutputId
 			? {
@@ -136,6 +137,7 @@ export class ArtifactDocumentRegistry implements Disposable {
 			parsed.presetId,
 			this.compilationService,
 			parsed.artifactOutputId,
+			parsed.artifactDialect,
 		);
 		const watcher = workspace.createFileSystemWatcher(
 			new RelativePattern(Uri.file(path.dirname(parsed.source.fsPath)), path.basename(parsed.source.fsPath)),

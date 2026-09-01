@@ -52,10 +52,15 @@ export function renderContext(
 }
 
 /** A rendered text artifact carrying only the lines a test cares about. */
-export function textArtifact(kind: ArtifactKind, lines: readonly RenderedArtifactLine[]): RenderedTextArtifact {
+export function textArtifact(
+	kind: ArtifactKind,
+	lines: readonly RenderedArtifactLine[],
+	artifactDialect?: RenderedTextArtifact['artifactDialect'],
+): RenderedTextArtifact {
 	const text = lines.map((line) => line.text).join('\n');
 	return {
 		kind,
+		...(artifactDialect ? { artifactDialect } : {}),
 		presentation: 'text',
 		diagnostics: [],
 		durationMs: 0,
