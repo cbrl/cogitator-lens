@@ -84,6 +84,16 @@
         "extensions": [
           ".pybytecode"
         ]
+      },
+      {
+        "id": "coglens-dotnet-il",
+        "aliases": [
+          ".NET IL",
+          "CIL"
+        ],
+        "extensions": [
+          ".il"
+        ]
       }
     ],
     "grammars": [
@@ -111,6 +121,11 @@
         "language": "python-bytecode",
         "scopeName": "source.python-bytecode",
         "path": "./syntaxes/python-bytecode.tmLanguage.json"
+      },
+      {
+        "language": "coglens-dotnet-il",
+        "scopeName": "source.coglens-dotnet-il",
+        "path": "./syntaxes/coglens-dotnet-il.tmLanguage.json"
       }
     ],
     "colors": [
@@ -613,6 +628,7 @@
                     "apple-clang",
                     "rust",
                     "python",
+                    "dotnet",
                     "go",
                     "zig",
                     "nvcc"
@@ -939,6 +955,12 @@
                 "additionalProperties": false,
                 "properties": {}
               },
+              "dotnet-il": {
+                "type": "object",
+                "description": ".NET IL options",
+                "additionalProperties": false,
+                "properties": {}
+              },
               "control-flow-graph": {
                 "type": "object",
                 "description": "Control-flow graph options",
@@ -971,6 +993,7 @@
                     "optimization-remarks",
                     "stack-analysis",
                     "python-bytecode",
+                    "dotnet-il",
                     "control-flow-graph"
                   ],
                   "description": "Artifact kind produced by this preset"

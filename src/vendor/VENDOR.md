@@ -8,7 +8,7 @@ Pinned revision: `d0254d8419639df500712bc06725b039c897d13d`
 
 ## Upstream parser files
 
-The assembly parsers, their interfaces, `lib/properties.interfaces.ts`,
+The assembly parsers (including .NET and its portable-PDB parser), their interfaces, `lib/properties.interfaces.ts`,
 `static/panes/opt-view.interfaces.ts`, and the interfaces under `types/` are
 unmodified upstream files.
 

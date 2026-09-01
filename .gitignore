@@ -5,5 +5,7 @@ node_modules
 *.vsix
 external
 samples/**/build/
+samples/**/bin/
+samples/**/obj/
 samples/rust/target/
 samples/python/**/__pycache__/

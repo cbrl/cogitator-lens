@@ -107,7 +107,7 @@ export class ArtifactSemanticTokensProvider implements DocumentSemanticTokensPro
 
 	provideDocumentSemanticTokens(document: TextDocument, _token: CancellationToken): ProviderResult<SemanticTokens> {
 		const artifact = this.artifactLookup(document.uri);
-		if (!artifact || !['assembly', 'binary-disassembly', 'llvm-ir'].includes(artifact.kind)) {
+		if (!artifact || !['assembly', 'binary-disassembly', 'llvm-ir', 'dotnet-il'].includes(artifact.kind)) {
 			return new SemanticTokensBuilder(artifactSemanticTokensLegend).build();
 		}
 		const builder = new SemanticTokensBuilder(artifactSemanticTokensLegend);

@@ -35,6 +35,7 @@ const matrix: Readonly<
 	'optimization-remarks': { available: ['gcc', 'clang', 'apple-clang', 'clang-cl'] },
 	'stack-analysis': { available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'python'] },
 	'python-bytecode': { available: ['python'] },
+	'dotnet-il': { unavailable: ['dotnet'] },
 	'control-flow-graph': {
 		available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'msvc', 'rust', 'python', 'go', 'zig'],
 	},
@@ -51,6 +52,7 @@ const controlFlowOutputs: Readonly<Partial<Record<ToolchainKind, readonly string
 	msvc: ['assembly'],
 	rust: ['rust-mir', 'llvm-ir', 'assembly'],
 	python: ['python-bytecode'],
+	dotnet: [],
 	go: ['go-ssa'],
 	nvcc: [],
 };
@@ -94,6 +96,13 @@ test('an artifact that needs an external tool becomes available once the profile
 		resolveArtifactAvailability(
 			toolchainProfile('gcc', { tools: { disassembler: process.execPath } }),
 			'binary-disassembly',
+		).status,
+		'available',
+	);
+	assert.equal(
+		resolveArtifactAvailability(
+			toolchainProfile('dotnet', { tools: { compiler: 'csc.dll', ildasm: 'ildasm' } }),
+			'dotnet-il',
 		).status,
 		'available',
 	);

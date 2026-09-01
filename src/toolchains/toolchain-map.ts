@@ -87,6 +87,7 @@ import type { AssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/
 import { GoAsmParser } from '../vendor/lib/parsers/asm-parser-go.js';
 import { PTXAsmParser } from '../vendor/lib/parsers/asm-parser-ptx.js';
 import { SassAsmParser } from '../vendor/lib/parsers/asm-parser-sass.js';
+import { discoverDotNetTools, dotNetIlProducer, stripDotNetManagedArguments } from './dotnet.js';
 
 export type ToolCapabilityStatus = 'available' | 'unavailable' | 'unsupported';
 
@@ -107,6 +108,10 @@ interface ToolchainArtifactImplementation {
 		readonly name: string;
 		readonly label: string;
 	};
+	readonly requiredTools?: readonly {
+		readonly name: string;
+		readonly label: string;
+	}[];
 }
 
 export interface ToolchainArtifactOutput extends ToolchainArtifactImplementation {
@@ -555,6 +560,17 @@ const nvccArtifacts = artifactCells({
 	},
 });
 
+const dotNetArtifacts = artifactCells({
+	'dotnet-il': {
+		status: 'available',
+		producer: dotNetIlProducer,
+		requiredTools: [
+			{ name: 'compiler', label: 'Roslyn csc.dll' },
+			{ name: 'ildasm', label: '.NET IL disassembler (ildasm)' },
+		],
+	},
+});
+
 export const toolchainDefinitions = {
 	gcc: {
 		executablePattern: /^(?:gcc|g\+\+)(?:-\d+(?:\.\d+)*)?(?:\.exe)?$/i,
@@ -658,6 +674,13 @@ export const toolchainDefinitions = {
 		stripOwnedArguments: stripPythonManagedArguments,
 		discoverTools: toolDiscoverer({}),
 		artifacts: pythonArtifacts,
+	},
+	dotnet: {
+		executablePattern: /^dotnet(?:\.exe)?$/i,
+		languageIdentifiers: Object.freeze(['csharp']),
+		stripOwnedArguments: stripDotNetManagedArguments,
+		discoverTools: discoverDotNetTools,
+		artifacts: dotNetArtifacts,
 	},
 	go: {
 		executablePattern: /^go(?:\.exe)?$/i,
@@ -826,12 +849,17 @@ function resolveImplementationAvailability(
 	profile: ToolchainProfile,
 	cell: ResolvedToolchainArtifactCell,
 ): ResolvedToolchainArtifactCell {
-	if (cell.status === 'available' && cell.requiredTool && !profile.tools[cell.requiredTool.name]) {
+	const requiredTools =
+		cell.status === 'available'
+			? [...(cell.requiredTool ? [cell.requiredTool] : []), ...(cell.requiredTools ?? [])]
+			: [];
+	const missingTool = requiredTools.find((tool) => !profile.tools[tool.name]);
+	if (cell.status === 'available' && missingTool) {
 		return {
 			status: 'unavailable',
 			explanation:
-				`${cell.requiredTool.label} was not detected or configured as the ` +
-				`${cell.requiredTool.name} auxiliary tool for ${profile.displayName}.`,
+				`${missingTool.label} was not detected or configured as the ` +
+				`${missingTool.name} auxiliary tool for ${profile.displayName}.`,
 		};
 	}
 	return cell;

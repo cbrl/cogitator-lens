@@ -1,0 +1,17 @@
+{
+  "coglens.toolchains": [
+    {
+      "displayName": "Sample .NET",
+      "kind": "dotnet",
+      "executable": "dotnet"
+    }
+  ],
+  "coglens.defaultInvocation": {
+    "toolchain": "Sample .NET"
+  },
+  "coglens.artifactPresets": {
+    "dotnet-il": {
+      "artifactKind": "dotnet-il"
+    }
+  }
+}

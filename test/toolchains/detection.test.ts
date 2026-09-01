@@ -26,6 +26,7 @@ test('executable names resolve to the toolchain that owns them', () => {
 		['cl.exe', 'msvc'],
 		['rustc', 'rust'],
 		['python3.13', 'python'],
+		['dotnet.exe', 'dotnet'],
 		['go.exe', 'go'],
 		['zig', 'zig'],
 		['nvcc.exe', 'nvcc'],
@@ -69,6 +70,25 @@ test('profile creation discovers auxiliary tools beside the compiler and keeps c
 			tools: { analyzer: process.execPath },
 		});
 		assert.deepEqual(detected.tools, { demangler, disassembler, analyzer: process.execPath });
+	} finally {
+		fs.rmSync(directory, { recursive: true, force: true });
+	}
+});
+
+test('.NET profile creation discovers the newest SDK Roslyn compiler and sibling ILDasm', () => {
+	const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'coglens-dotnet-'));
+	try {
+		const executable = path.join(directory, process.platform === 'win32' ? 'dotnet.exe' : 'dotnet');
+		const ildasm = path.join(directory, process.platform === 'win32' ? 'ildasm.exe' : 'ildasm');
+		const olderCompiler = path.join(directory, 'sdk', '9.0.300', 'Roslyn', 'bincore', 'csc.dll');
+		const compiler = path.join(directory, 'sdk', '10.0.100', 'Roslyn', 'bincore', 'csc.dll');
+		for (const file of [executable, ildasm, olderCompiler, compiler]) {
+			fs.mkdirSync(path.dirname(file), { recursive: true });
+			fs.writeFileSync(file, '');
+		}
+
+		const profile = createToolchainProfile('dotnet', 'Detected .NET', executable);
+		assert.deepEqual(profile.tools, { compiler, ildasm });
 	} finally {
 		fs.rmSync(directory, { recursive: true, force: true });
 	}

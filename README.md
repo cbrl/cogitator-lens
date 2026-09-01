@@ -23,18 +23,19 @@ metrics.
 
 ### Artifact support
 
-| Artifact             | GCC | Clang / Apple Clang | clang-cl | MSVC | Rust | Python     | Go        | Zig | nvcc       |
-| -------------------- | --- | ------------------- | -------- | ---- | ---- | ---------- | --------- | --- | ---------- |
-| Assembly             | Yes | Yes                 | Yes      | Yes  | Yes  | —          | Yes       | Yes | Yes (PTX)  |
-| Binary disassembly   | Yes | Yes                 | Yes      | Yes  | —    | —          | —         | —   | Yes (SASS) |
-| Preprocessed source  | Yes | Yes                 | Yes      | Yes  | —    | —          | —         | —   | Yes        |
-| AST                  | —   | Yes                 | Yes      | —    | —    | Yes (3.9+) | —         | —   | —          |
-| LLVM IR              | —   | Yes                 | Yes      | —    | Yes  | —          | —         | Yes | —          |
-| Rust MIR             | —   | —                   | —        | —    | Yes  | —          | —         | —   | —          |
-| Optimization remarks | Yes | Yes                 | Yes      | —    | —    | —          | —         | —   | —          |
-| Stack analysis       | Yes | Yes                 | Yes      | —    | —    | Yes        | —         | —   | —          |
-| Python bytecode      | —   | —                   | —        | —    | —    | Yes        | —         | —   | —          |
-| Control-flow graph   | Yes | Yes                 | Yes      | —    | Yes  | Yes        | Yes (SSA) | Yes | —          |
+| Artifact             | GCC | Clang / Apple Clang | clang-cl | MSVC | Rust | Python     | .NET | Go        | Zig | nvcc       |
+| -------------------- | --- | ------------------- | -------- | ---- | ---- | ---------- | ---- | --------- | --- | ---------- |
+| Assembly             | Yes | Yes                 | Yes      | Yes  | Yes  | —          | —    | Yes       | Yes | Yes (PTX)  |
+| Binary disassembly   | Yes | Yes                 | Yes      | Yes  | —    | —          | —    | —         | —   | Yes (SASS) |
+| Preprocessed source  | Yes | Yes                 | Yes      | Yes  | —    | —          | —    | —         | —   | Yes        |
+| AST                  | —   | Yes                 | Yes      | —    | —    | Yes (3.9+) | —    | —         | —   | —          |
+| LLVM IR              | —   | Yes                 | Yes      | —    | Yes  | —          | —    | —         | Yes | —          |
+| Rust MIR             | —   | —                   | —        | —    | Yes  | —          | —    | —         | —   | —          |
+| .NET IL              | —   | —                   | —        | —    | —    | —          | Yes  | —         | —   | —          |
+| Optimization remarks | Yes | Yes                 | Yes      | —    | —    | —          | —    | —         | —   | —          |
+| Stack analysis       | Yes | Yes                 | Yes      | —    | —    | Yes        | —    | —         | —   | —          |
+| Python bytecode      | —   | —                   | —        | —    | —    | Yes        | —    | —         | —   | —          |
+| Control-flow graph   | Yes | Yes                 | Yes      | —    | Yes  | Yes        | —    | Yes (SSA) | Yes | —          |
 
 ## Configuration
 
@@ -45,7 +46,7 @@ sidebar.
 
 A toolchain has the form
 `{ displayName, kind, executable, defaultArguments?, environment?, tools? }`. Supported kinds are
-`gcc`, `clang`, `apple-clang`, `clang-cl`, `msvc`, `rust`, `python`, `go`, `zig`, and `nvcc`. Use
+`gcc`, `clang`, `apple-clang`, `clang-cl`, `msvc`, `rust`, `python`, `dotnet`, `go`, `zig`, and `nvcc`. Use
 `defaultArguments` for include paths and macro definitions. Set auxiliary tools, such as a
 disassembler or demangler, in `tools` when they are not found beside the compiler or on `PATH`.
 
@@ -97,6 +98,29 @@ automatically:
 
 Install `rustfilt` beside `rustc`, or configure it as the `demangler` tool, to demangle Rust
 symbols.
+
+### .NET
+
+```json
+{
+	"coglens.toolchains": [
+		{
+			"displayName": ".NET",
+			"kind": "dotnet",
+			"executable": "dotnet"
+		}
+	],
+	"coglens.defaultInvocation": {
+		"toolchain": ".NET"
+	}
+}
+```
+
+.NET IL artifacts invoke the SDK's Roslyn `csc.dll` directly for a standalone C# file, then run
+`ildasm` over the generated library. Cogitator Lens discovers Roslyn from the configured `dotnet`
+host and looks for `ildasm` beside it, on `PATH`, or in the Windows .NET Framework SDK. Configure
+`tools.compiler` and `tools.ildasm` explicitly when those locations are nonstandard. Default and
+preset arguments are passed to Roslyn as C# compiler options.
 
 ### Rust
 

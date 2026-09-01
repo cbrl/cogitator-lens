@@ -5,6 +5,7 @@
 		{ "name": "Objective-C sample", "path": "objective-c" },
 		{ "name": "Objective-C++ sample", "path": "objective-cpp" },
 		{ "name": "CUDA sample", "path": "cuda" },
+		{ "name": "C# sample", "path": "csharp" },
 		{ "name": "Go sample", "path": "go" },
 		{ "name": "Zig sample", "path": "zig" },
 		{ "name": "Rust sample", "path": "rust" },
@@ -53,6 +54,11 @@
 				"kind": "nvcc",
 				"executable": "nvcc",
 				"defaultArguments": ["-std=c++17"],
+			},
+			{
+				"displayName": "Sample .NET",
+				"kind": "dotnet",
+				"executable": "dotnet",
 			},
 			{
 				"displayName": "Sample Go",

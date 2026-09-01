@@ -6,6 +6,7 @@ import { Arm32DocumentationProvider, ArmArch64DocumentationProvider } from '../v
 import { LLVMDocumentationProvider } from '../vendor/lib/asm-docs/llvm.js';
 import { PythonDocumentationProvider } from '../vendor/lib/asm-docs/python.js';
 import { Riscv64DocumentationProvider } from '../vendor/lib/asm-docs/riscv64.js';
+import { documentationForDotNetIlOpcode } from './generated/dotnet-il-opcodes.js';
 
 export interface InstructionDocumentation {
 	readonly mnemonic: string;
@@ -26,6 +27,7 @@ export const instructionSetLabels = {
 	arm32: 'ARM32',
 	riscv64: 'RISC-V',
 	llvmIr: 'LLVM IR',
+	dotNetIl: '.NET IL',
 	pythonBytecode: 'Python bytecode',
 } as const;
 
@@ -37,6 +39,14 @@ interface NamedProvider {
 const llvmProvider: NamedProvider = {
 	label: instructionSetLabels.llvmIr,
 	provider: new LLVMDocumentationProvider(),
+};
+const dotNetIlProvider: NamedProvider = {
+	label: instructionSetLabels.dotNetIl,
+	provider: {
+		getInstructionInformation(instruction) {
+			return documentationForDotNetIlOpcode(instruction) ?? null;
+		},
+	},
 };
 const pythonProvider: NamedProvider = {
 	label: instructionSetLabels.pythonBytecode,
@@ -58,8 +68,8 @@ const inferredProviders = new WeakMap<RenderedTextArtifact, NamedProvider>();
 /**
  * Looks up documentation emitted by Compiler Explorer's docenizers.
  *
- * LLVM IR and Python bytecode identify their instruction set through the
- * artifact kind. Assembly target architecture is not currently part of a
+ * LLVM IR, .NET IL, and Python bytecode identify their instruction set through
+ * the artifact kind. Assembly target architecture is not currently part of a
  * compilation profile, so it is inferred once per rendered listing by scoring
  * its distinct mnemonics against each documentation set.
  */
@@ -102,6 +112,10 @@ export function instructionMnemonic(kind: ArtifactKind, text: string): string | 
 			.exec(text)?.[1]
 			?.toLowerCase();
 	}
+	if (kind === 'dotnet-il') {
+		// ILDasm output: an optional IL_ offset label, then the CIL opcode.
+		return /^\s*(?:IL_[\da-f]+:\s+)?([a-z][\w.]*)\s/iu.exec(`${text} `)?.[1]?.toLowerCase();
+	}
 	if (kind !== 'assembly' && kind !== 'binary-disassembly') {
 		return undefined;
 	}
@@ -111,6 +125,9 @@ export function instructionMnemonic(kind: ArtifactKind, text: string): string | 
 function providerForArtifact(artifact: RenderedTextArtifact): NamedProvider | undefined {
 	if (artifact.kind === 'llvm-ir') {
 		return llvmProvider;
+	}
+	if (artifact.kind === 'dotnet-il') {
+		return dotNetIlProvider;
 	}
 	if (artifact.kind === 'python-bytecode') {
 		return pythonProvider;

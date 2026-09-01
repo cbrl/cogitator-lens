@@ -19,6 +19,7 @@ The checked-in settings use executables found on `PATH`:
 | ---------------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------- |
 | C, C++, Objective-C, Objective-C++ | `clang` or `clang++`  | Assembly, binary disassembly, preprocessing, AST, LLVM IR, optimization remarks, stack analysis, CFG |
 | CUDA device code                   | `nvcc`                | PTX assembly, SASS binary disassembly, preprocessing                                                 |
+| C#                                 | `dotnet`              | .NET IL                                                                                              |
 | Go                                 | `go`                  | Assembly, SSA CFG                                                                                    |
 | Zig                                | `zig`                 | Assembly, LLVM IR, CFG                                                                               |
 | Rust                               | `rustc`               | Assembly, LLVM IR, MIR, CFG                                                                          |
@@ -52,6 +53,7 @@ cmake -S cpp -B cpp/build && cmake --build cpp/build
 cmake -S objective-c -B objective-c/build && cmake --build objective-c/build
 cmake -S objective-cpp -B objective-cpp/build && cmake --build objective-cpp/build
 cmake -S cuda -B cuda/build && cmake --build cuda/build
+dotnet build csharp/coglens-csharp-sample.csproj
 go test ./go/src/main.go
 zig test zig/src/main.zig
 cargo build --manifest-path rust/Cargo.toml

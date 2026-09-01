@@ -223,6 +223,83 @@ test('Python bytecode rendering maps both supported disassembly layouts to sourc
 	assert.equal(offsetBearing.metrics.instructionCount, 3);
 });
 
+test('.NET IL rendering exposes method-scoped labels, symbols, folds, and code metrics', () => {
+	const il = [
+		'.method public hidebysig static int32 First() cil managed',
+		'{',
+		'  // Code size 4 (0x4)',
+		'  IL_0000: ldc.i4.1',
+		'  IL_0001: br.s IL_0003',
+		'  IL_0003: ret',
+		'} // end of method Demo::First',
+		'.method public hidebysig static int32 Second() cil managed',
+		'{',
+		'  // Code size 4 (0x4)',
+		'  IL_0000: ldc.i4.2',
+		'  IL_0001: br.s IL_0003',
+		'  IL_0003: ret',
+		'} // end of method Demo::Second',
+	].join('\n');
+	const rendered = render['dotnet-il'].renderer(
+		rawArtifact('dotnet-il', il, {
+			dotnetSourceMapping: [
+				{
+					method: {
+						typeName: 'Demo',
+						typeArguments: [],
+						methodName: 'First',
+						methodArguments: [],
+						parameters: [],
+						returnType: 'int',
+					},
+					offsets: { 0: { file: null, line: 3, column: 2 }, 3: null },
+				},
+				{
+					method: {
+						typeName: 'Demo',
+						typeArguments: [],
+						methodName: 'Second',
+						methodArguments: [],
+						parameters: [],
+						returnType: 'int',
+					},
+					offsets: { 0: { file: null, line: 10, column: 4 } },
+				},
+			],
+		}),
+		display,
+		renderContext('dotnet', { file: '/project/source.cs' }),
+	);
+
+	assert.deepEqual(
+		rendered.symbols.map((symbol) => symbol.name),
+		['Demo::First', 'Demo::Second'],
+	);
+	assert.equal(rendered.folds.length, 2);
+	assert.deepEqual(rendered.metrics, {
+		methodCount: 2,
+		instructionCount: 6,
+		labelCount: 6,
+		codeSizeBytes: 8,
+	});
+	assert.deepEqual(
+		rendered.links.map((link) => rendered.lines[link.targetLine].text.trim()),
+		['IL_0003: ret', 'IL_0003: ret'],
+	);
+	assert.notEqual(rendered.links[0].targetLine, rendered.links[1].targetLine);
+	assert.ok(rendered.links.every((link) => link.edgeKind === 'unconditional'));
+	assert.deepEqual(
+		rendered.lines.filter((line) => line.source).map((line) => [line.source?.line, line.source?.column]),
+		[
+			[3, 1],
+			[3, 1],
+			[10, 3],
+			[10, 3],
+			[10, 3],
+		],
+	);
+});
+
 /** Restates where the compiler ran, which is what relative debug paths resolve against. */
 function compiledIn(workingDirectory: string, raw: RawArtifact): RawArtifact {
 	return { ...raw, command: { ...raw.command, workingDirectory: path.resolve(workingDirectory) } };

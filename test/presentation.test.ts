@@ -111,6 +111,24 @@ test('LLVM IR and Python bytecode use their artifact-specific documentation tabl
 	);
 });
 
+test('.NET IL uses the CIL instruction documentation table', () => {
+	const dotnetIl = textArtifact('dotnet-il', [
+		{ text: 'IL_0000: ldarg.0' },
+		{ text: 'IL_0001: callvirt instance string [System.Runtime]System.Object::ToString()' },
+		{ text: 'IL_0006: ret' },
+	]);
+	assertDocuments(
+		documentationForInstruction(dotnetIl, dotnetIl.lines[1].text),
+		instructionSetLabels.dotNetIl,
+		'callvirt',
+	);
+	assert.equal(instructionMnemonic('dotnet-il', dotnetIl.lines[0].text), 'ldarg.0');
+	assert.equal(
+		instructionMnemonic('dotnet-il', 'IL_0000: constrained. [System.Runtime]System.Object'),
+		'constrained.',
+	);
+});
+
 /**
  * Documentation is identified by the set it came from and the mnemonic it
  * documents; the prose and the upstream URL belong to the vendored tables.

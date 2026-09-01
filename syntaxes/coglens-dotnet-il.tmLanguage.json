@@ -1,0 +1,87 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": ".NET IL",
+  "scopeName": "source.coglens-dotnet-il",
+  "patterns": [
+    {
+      "include": "#comments"
+    },
+    {
+      "include": "#strings"
+    },
+    {
+      "match": "\\bIL_[0-9A-Fa-f]+(?=:)",
+      "name": "entity.name.label.dotnet-il"
+    },
+    {
+      "match": "(?<![\\w.])\\.[A-Za-z][\\w.]*",
+      "name": "keyword.control.directive.dotnet-il"
+    },
+    {
+      "match": "(?<=:)\\s*([A-Za-z][\\w.]*)",
+      "captures": {
+        "1": {
+          "name": "keyword.operator.opcode.dotnet-il"
+        }
+      }
+    },
+    {
+      "match": "\\b(?:bool|char|float32|float64|int8|int16|int32|int64|native\\s+(?:int|unsigned\\s+int)|object|string|uint8|uint16|uint32|uint64|unsigned\\s+int(?:8|16|32|64)?|void|class|valuetype)\\b",
+      "name": "storage.type.dotnet-il"
+    },
+    {
+      "match": "\\b(?:0x[0-9A-Fa-f]+|[0-9]+(?:\\.[0-9]+)?)\\b",
+      "name": "constant.numeric.dotnet-il"
+    },
+    {
+      "match": "\\bIL_[0-9A-Fa-f]+\\b",
+      "name": "variable.other.label-reference.dotnet-il"
+    }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "begin": "/\\*",
+          "end": "\\*/",
+          "name": "comment.block.dotnet-il"
+        },
+        {
+          "begin": "//",
+          "end": "$",
+          "name": "comment.line.double-slash.dotnet-il"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "begin": "\"",
+          "beginCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.begin.dotnet-il"
+            }
+          },
+          "end": "\"",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.end.dotnet-il"
+            }
+          },
+          "name": "string.quoted.double.dotnet-il",
+          "patterns": [
+            {
+              "match": "\\\\.",
+              "name": "constant.character.escape.dotnet-il"
+            }
+          ]
+        },
+        {
+          "begin": "'",
+          "end": "'",
+          "name": "string.quoted.single.dotnet-il"
+        }
+      ]
+    }
+  }
+}

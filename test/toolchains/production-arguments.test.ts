@@ -24,6 +24,7 @@ import { rustOutputArguments } from '../../src/toolchains/rust.js';
 import { nvccOutputArguments, nvdisasm } from '../../src/toolchains/nvcc.js';
 import { zigLlvmIrOutput, zigOutputArguments } from '../../src/toolchains/zig.js';
 import { intelOutputArguments } from '../../src/toolchains/toolchain-backend.js';
+import { dotNetIlDasmArguments, stripDotNetManagedArguments } from '../../src/toolchains/dotnet.js';
 import {
 	getToolchainDefinition,
 	supportedToolchainKinds,
@@ -70,6 +71,24 @@ test('disassembler arguments stay shell-free with a path that contains spaces', 
 		'artifact with spaces.obj',
 	]);
 	assert.deepEqual(nvdisasm.arguments('out.cubin'), ['out.cubin', '-c', '-g', '-hex']);
+	assert.deepEqual(dotNetIlDasmArguments('artifact with spaces.dll'), [
+		'artifact with spaces.dll',
+		'-utf8',
+		'-text',
+		'-nobar',
+		'-linenum',
+	]);
+});
+
+test('.NET argument stripping preserves Roslyn options but removes extension-owned outputs', () => {
+	assert.deepEqual(
+		stripDotNetManagedArguments(
+			['-optimize-', '-out:old.dll', '/target:exe', '-pdb', 'old.pdb', 'source.cs', '-langversion:preview'],
+			'C:\\project\\source.cs',
+			'C:\\project',
+		),
+		['-optimize-', '-langversion:preview'],
+	);
 });
 
 test('LLVM IR specifications request line tables and own their output file', () => {

@@ -6,7 +6,8 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "strict": true,
     "noEmit": true,
-    "types": ["node", "vscode"]
+    "types": ["node", "vscode"],
+	"sourceMap": true
   },
   "include": [
     "webview-src/**/*.ts",

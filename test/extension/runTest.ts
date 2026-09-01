@@ -544,6 +544,23 @@ function verifyArtifactNavigationProviders(): void {
 		assert.match(instructionContent.value, /Address:.*0x10/);
 		assert.match(instructionContent.value, /Branch.*target:.*helper:/);
 
+		const dotnetArtifact: RenderedTextArtifact = {
+			...artifact,
+			kind: 'dotnet-il',
+			lines: [{ text: 'IL_0000: callvirt instance string [System.Runtime]System.Object::ToString()' }],
+			links: [],
+		};
+		const dotnetProvider = new ArtifactNavigationProvider((uri) =>
+			uri.toString() === documentUri.toString() ? dotnetArtifact : undefined,
+		);
+		const dotnetHover = dotnetProvider.provideHover(document, new vscode.Position(0, 10), cancellation.token);
+		assert.ok(dotnetHover instanceof vscode.Hover);
+		const dotnetContent = dotnetHover.contents[0];
+		assert.ok(dotnetContent instanceof vscode.MarkdownString);
+		assert.match(dotnetContent.value, /\*\*callvirt\*\*.*\.NET IL/i);
+		assert.match(dotnetContent.value, /method.*associated.*object/i);
+		assert.match(dotnetContent.value, /Instruction reference/);
+
 		const symbols = provider.provideDocumentSymbols(document, cancellation.token);
 		assert.ok(Array.isArray(symbols));
 		assert.deepEqual(

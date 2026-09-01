@@ -23,6 +23,7 @@ import type { ToolchainDefinition } from './toolchain-map.js';
 import { snapshotArtifactInputs, type ArtifactInputMetadata } from '../compilation/artifact-inputs.js';
 import type { InstructionType } from '../artifacts/control-flow-graph/parsers/instruction-sets.js';
 import type { AssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/assembly-cfg-parser.js';
+import { DotNetPdbParser, type DotNetSourceMapping } from '../vendor/lib/parsers/pdb-parser-dotnet.js';
 
 const maxArtifactFileBytes = 50 * 1024 * 1024;
 
@@ -53,6 +54,12 @@ export interface BinaryDisassembler {
 	readonly tool: string;
 	readonly arguments: (objectFile: string) => readonly string[];
 	readonly normalizeOutput?: (output: string) => string;
+}
+
+export interface DotNetIlCompilation {
+	readonly compilerArguments: (assemblyFile: string, providerArguments: readonly string[]) => readonly string[];
+	readonly disassemblerTool: string;
+	readonly disassemblerArguments: (assemblyFile: string) => readonly string[];
 }
 
 export interface ToolchainHost {
@@ -330,6 +337,76 @@ export class ToolchainBackend {
 				disassemblerExecutable,
 				disassemblerArguments,
 			);
+		});
+	}
+
+	async produceDotNetIl(
+		source: Uri,
+		options: CompileOptions,
+		compilation: DotNetIlCompilation,
+		cancellationToken: CancellationToken,
+	): Promise<RawArtifact> {
+		return withTemporaryDirectory('coglens-', async (temporaryDirectory) => {
+			const assemblyFile = path.join(temporaryDirectory, 'output.dll');
+			const pdbFile = path.join(temporaryDirectory, 'output.pdb');
+			const { invocation, result: compilerResult } = await this.run(
+				source,
+				options,
+				(providerArguments) => compilation.compilerArguments(assemblyFile, providerArguments),
+				cancellationToken,
+			);
+			let sourceMapping: DotNetSourceMapping | undefined;
+			try {
+				const [assembly, pdb] = await Promise.all([
+					readBoundedArtifactBuffer(assemblyFile),
+					readBoundedArtifactBuffer(pdbFile),
+				]);
+				sourceMapping = new DotNetPdbParser(assembly, pdb).parse();
+			} catch (error) {
+				this.host.log(
+					`Portable PDB source mapping was unavailable: ${error instanceof Error ? error.message : String(error)}`,
+					'debug',
+				);
+			}
+			const disassemblerExecutable = this.profile.tools[compilation.disassemblerTool];
+			if (!disassemblerExecutable) {
+				throw new Error(`${this.profile.displayName} has no ${compilation.disassemblerTool} auxiliary tool.`);
+			}
+
+			const disassemblerArguments = compilation.disassemblerArguments(assemblyFile);
+			this.reportInvocation(options, invocation, disassemblerExecutable, disassemblerArguments);
+			this.host.log(`Command: ${disassemblerExecutable} ${disassemblerArguments.join(' ')}`);
+			const disassemblerResult = await exec.execute(disassemblerExecutable, disassemblerArguments, {
+				cwd: invocation.workingDirectory,
+				env: invocation.preparedEnvironment,
+				cancellationToken,
+			});
+			if (disassemblerResult.returnCode !== 0) {
+				throw new ToolExitError(
+					`.NET IL disassembler exited with code ${disassemblerResult.returnCode}`,
+					disassemblerResult.returnCode,
+					disassemblerResult.stdout,
+					disassemblerResult.stderr,
+				);
+			}
+
+			const inputMetadata = await this.collectDependencyInputs(
+				source,
+				invocation,
+				temporaryDirectory,
+				cancellationToken,
+			);
+			const artifact = this.buildRawArtifact(
+				'dotnet-il',
+				disassemblerResult.stdout,
+				[compilerResult.stderr, compilerResult.stdout, disassemblerResult.stderr].join('\n'),
+				source,
+				invocation,
+				inputMetadata,
+				disassemblerExecutable,
+				disassemblerArguments,
+			);
+			return sourceMapping ? { ...artifact, dotnetSourceMapping: sourceMapping } : artifact;
 		});
 	}
 
@@ -650,6 +727,14 @@ async function readBoundedArtifactFile(filename: string, optional = false): Prom
 	} finally {
 		await handle.close();
 	}
+}
+
+async function readBoundedArtifactBuffer(filename: string): Promise<Buffer> {
+	const stat = await fs.promises.stat(filename);
+	if (stat.size > maxArtifactFileBytes) {
+		throw artifactFileLimitError();
+	}
+	return fs.promises.readFile(filename);
 }
 
 function artifactFileLimitError(): exec.ExecError {

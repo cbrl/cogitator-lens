@@ -13,6 +13,7 @@ import type { ParsedAsmResultLine } from '../../vendor/types/asmresult/asmresult
 import type { ParsedAsmResult } from '../../vendor/types/asmresult/asmresult.interfaces.js';
 import { renderLlvmIr } from '../llvm-ir/llvm-ir-renderer.js';
 import { renderPythonBytecode } from '../python/python-bytecode-renderer.js';
+import { renderDotNetIl } from '../dotnet/dotnet-il-renderer.js';
 import { renderedArtifact } from './rendered-artifact.js';
 import { renderPreprocessedSource } from '../preprocessed-source/preprocessed-source-renderer.js';
 import { renderRustMir } from '../rust/rust-mir-renderer.js';
@@ -61,6 +62,7 @@ export type ArtifactKind =
 	| 'optimization-remarks'
 	| 'stack-analysis'
 	| 'python-bytecode'
+	| 'dotnet-il'
 	| 'control-flow-graph';
 
 export interface ArtifactDefinition {
@@ -318,6 +320,28 @@ const artifactDefinitionTable = {
 			links: false,
 			folds: false,
 			symbols: false,
+		},
+	},
+	'dotnet-il': {
+		presentation: 'text',
+		label: '.NET IL',
+		icon: 'symbol-number',
+		filenameExtension: '.il',
+		documentLanguage: 'artifact',
+		options: [],
+		renderer: renderDotNetIl,
+		navigation: {
+			definitions: true,
+			sourceLocations: true,
+			links: true,
+			folds: true,
+			symbols: true,
+		},
+		metricLabels: {
+			methodCount: 'Method count',
+			instructionCount: 'Instruction count',
+			labelCount: 'IL label count',
+			codeSizeBytes: 'IL code size',
 		},
 	},
 	'control-flow-graph': {
