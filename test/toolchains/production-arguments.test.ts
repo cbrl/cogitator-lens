@@ -77,11 +77,12 @@ test('disassembler arguments stay shell-free with a path that contains spaces', 
 });
 
 test('.NET argument stripping preserves Roslyn options but removes extension-owned outputs', () => {
+	const workingDirectory = path.resolve('project');
 	assert.deepEqual(
 		stripDotNetManagedArguments(
 			['-optimize-', '-out:old.dll', '/target:exe', '-pdb', 'old.pdb', 'source.cs', '-langversion:preview'],
-			'C:\\project\\source.cs',
-			'C:\\project',
+			path.join(workingDirectory, 'source.cs'),
+			workingDirectory,
 		),
 		['-optimize-', '-langversion:preview'],
 	);
