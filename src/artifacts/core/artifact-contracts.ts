@@ -2,6 +2,7 @@ import type { Uri } from 'vscode';
 import type { ToolchainBackend } from '../../toolchains/toolchain-backend.js';
 import type { ToolchainArtifactOutput } from '../../toolchains/toolchain-contracts.js';
 import type { ArtifactOptions, DisplayOptions, RawArtifact, RenderedArtifact } from '../../types/index.js';
+import type { ArtifactEditorLanguageId } from './editor-languages.js';
 
 export interface ArtifactOptionDescriptor {
 	readonly id: keyof ArtifactOptions['production'] | keyof ArtifactOptions['display'];
@@ -56,6 +57,8 @@ export interface ArtifactDefinition {
 	readonly icon: string;
 	readonly filenameExtension: string;
 	readonly documentLanguage: 'artifact' | 'source';
+	/** Language contribution used for artifact-owned text document extensions. */
+	readonly editorLanguageId?: ArtifactEditorLanguageId;
 	readonly options: readonly ArtifactOptionDescriptor[];
 	readonly renderer: ArtifactRenderer;
 	readonly navigation: ArtifactNavigationFeatures;

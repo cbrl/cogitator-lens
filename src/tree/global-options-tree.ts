@@ -10,7 +10,7 @@ import type {
 import { parseArtifactUri } from '../artifact-document/artifact-uri.js';
 import { TreeNode, TreeProvider } from './treedata.js';
 import { resolveArtifactAvailability, resolveArtifactOptionAvailability } from '../toolchains/toolchain-map.js';
-import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
+import { artifactDefinitions, defaultArtifactKind } from '../artifacts/core/artifact-definitions.js';
 import { groupNode, messageNode } from './tree-helpers.js';
 
 interface SelectedArtifact {
@@ -28,8 +28,8 @@ export interface GlobalOptionsNode extends TreeNode {
 
 export function buildArtifactOptionsTree(
 	options: ArtifactOptions,
-	profile?: ToolchainProfile,
-	kind: ArtifactKind = 'assembly',
+	profile: ToolchainProfile | undefined,
+	kind: ArtifactKind,
 ): GlobalOptionsNode[] {
 	if (!profile) {
 		return [
@@ -104,7 +104,7 @@ export class GlobalOptionsTreeProvider extends TreeProvider<GlobalOptionsNode> {
 
 	private selectedArtifact(): SelectedArtifact {
 		let source = vscode.window.activeTextEditor?.document.uri;
-		let kind: ArtifactKind = 'assembly';
+		let kind: ArtifactKind = defaultArtifactKind;
 		const identity = source ? parseArtifactUri(source) : undefined;
 		if (identity) {
 			source = identity.source;

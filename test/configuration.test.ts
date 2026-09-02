@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import test from 'node:test';
 import { effectiveArtifactPresets, resolveArtifactPreset } from '../src/artifacts/ui/presets.js';
 import {
 	parseArtifactOptions,
 	parseArtifactPresets,
+	parseAuxiliaryTools,
 	parseDefaultCompilationSettings,
 	parseManualCompilationVariants,
 	parseToolchainSettings,
@@ -15,6 +17,24 @@ import {
 	productionKey,
 	type ArtifactRequest,
 } from '../src/types/index.js';
+
+test('auxiliary tools require complete invocation metadata', () => {
+	assert.deepEqual(
+		parseAuxiliaryTools({
+			stringEntry: '/tools/c++filt',
+			missingMode: { executable: '/tools/undname' },
+			stdin: { executable: '/tools/c++filt', inputMode: 'stdin' },
+			fileArgument: { executable: 'C:\\Visual Studio\\undname.exe', inputMode: 'file-argument' },
+		}),
+		{
+			stdin: { executable: path.normalize('/tools/c++filt'), inputMode: 'stdin' },
+			fileArgument: {
+				executable: path.normalize('C:\\Visual Studio\\undname.exe'),
+				inputMode: 'file-argument',
+			},
+		},
+	);
+});
 
 test('toolchain settings are accepted for every supported kind and rejected for unknown ones', () => {
 	for (const setting of [
@@ -114,13 +134,13 @@ test('presets keep kind-specific production inputs and drop unknown artifact kin
 });
 
 test('the built-in default preset is total and a configured default replaces it', () => {
-	assert.deepEqual(resolveArtifactPreset('default'), {
+	assert.deepEqual(resolveArtifactPreset('default', [], 'assembly'), {
 		id: 'default',
 		artifactKind: 'assembly',
 		extraArguments: [],
 		productionOptions: {},
 	});
-	assert.equal(resolveArtifactPreset('missing'), undefined);
+	assert.equal(resolveArtifactPreset('missing', [], 'assembly'), undefined);
 
 	const configured = {
 		id: 'default',
@@ -128,7 +148,7 @@ test('the built-in default preset is total and a configured default replaces it'
 		extraArguments: ['--custom'],
 		productionOptions: { intel: true },
 	} as const;
-	assert.deepEqual(effectiveArtifactPresets([configured]).get('default'), configured);
+	assert.deepEqual(effectiveArtifactPresets([configured], 'assembly').get('default'), configured);
 	// A default preset that names another artifact cannot override the requested one.
 	assert.equal(
 		effectiveArtifactPresets([{ ...configured, artifactKind: 'binary-disassembly' }], 'assembly').get('default')

@@ -1,5 +1,5 @@
 import vscode from 'vscode';
-import type { ArtifactOptionId, IntelSyntaxSupport, ToolchainProfile } from '../types/index.js';
+import type { ArtifactOptionId, AuxiliaryTool, IntelSyntaxSupport, ToolchainProfile } from '../types/index.js';
 import { ToolchainRegistry } from '../compilation/index.js';
 import { TreeNode, TreeProvider } from './treedata.js';
 import { detailNode, groupNode, makeEnvironmentNode, makeListNode, noneNode } from './tree-helpers.js';
@@ -84,13 +84,13 @@ function capabilitiesNode(profile: ToolchainProfile): ToolchainTreeNode {
 	};
 }
 
-function makeToolsNode(tools: Readonly<Record<string, string>>): ToolchainTreeNode {
+function makeToolsNode(tools: Readonly<Record<string, AuxiliaryTool>>): ToolchainTreeNode {
 	const entries = Object.entries(tools);
 	return groupNode(
 		'Auxiliary tools',
 		'tools',
 		entries.length
-			? entries.map(([name, executable]) => detailNode(name, executable, 'symbol-method'))
+			? entries.map(([name, tool]) => detailNode(name, tool.executable, 'symbol-method'))
 			: [noneNode],
 		entries.length,
 	);

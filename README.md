@@ -89,10 +89,16 @@ automatically:
 	"kind": "clang",
 	"executable": "/opt/llvm/bin/clang++",
 	"tools": {
-		"disassembler": "/opt/llvm/bin/llvm-objdump"
+		"disassembler": {
+			"executable": "/opt/llvm/bin/llvm-objdump",
+			"inputMode": "stdin"
+		}
 	}
 }
 ```
+
+Each auxiliary tool declares how text-transform input is transported. Use `stdin` for ordinary
+tools and `file-argument` for tools such as MSVC's `undname`.
 
 Install `rustfilt` beside `rustc`, or configure it as the `demangler` tool, to demangle Rust
 symbols.

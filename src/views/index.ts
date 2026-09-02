@@ -47,6 +47,7 @@ export function createCompilationInfoTreeView(
 		view,
 		vscode.commands.registerCommand('coglens.RevealActiveSource', revealActiveSource),
 		compilationService.onVariantsChanged(() => provider.refresh()),
+		compilationService.onVariantSelectionChanged(() => provider.refresh()),
 	);
 	return provider;
 }
@@ -61,6 +62,7 @@ export function createGlobalOptionsTreeView(
 		view,
 		vscode.window.onDidChangeActiveTextEditor(() => provider.refresh()),
 		compilationService.onVariantsChanged(() => provider.refresh()),
+		compilationService.onVariantSelectionChanged(() => provider.refresh()),
 		compilationService.onArtifactOptionsChanged(() => provider.refresh()),
 		compilationService.toolchainRegistry.onDidChange(() => provider.refresh()),
 		view.onDidChangeCheckboxState((event) => {

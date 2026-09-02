@@ -3,8 +3,6 @@ import path from 'path';
 import type { CancellationToken } from 'vscode';
 import { VcAsmParser } from '../vendor/lib/parsers/asm-parser-vc.js';
 import { noopPropertyGetter } from '../vendor/compiler-props.js';
-import { withTemporaryDirectory } from '../temporary-directory.js';
-import { demangleViaStdin, ToolExitError } from './toolchain-backend.js';
 import type { ToolchainProfile } from '../types/index.js';
 import * as exec from '../exec.js';
 import { ExecError } from '../exec.js';
@@ -95,43 +93,6 @@ export async function captureWindowsEnvironment(
 		}
 	}
 	return visualStudioEnvironment;
-}
-
-/**
- * MSVC's own demangler (undname) only reads from a file, unlike every other
- * supported toolchain's demangler, which reads assembly from stdin. Tools
- * configured under the `demangler` slot that aren't literally undname (e.g.
- * clang-cl's llvm-cxxfilt) still go through the shared stdin path.
- */
-export async function windowsDemangle(
-	rawAssembly: string,
-	demanglerTool: string,
-	environment: NodeJS.ProcessEnv,
-	workingDirectory: string,
-	cancellationToken: CancellationToken,
-): Promise<string> {
-	if (!/^undname(?:\.exe)?$/i.test(path.basename(demanglerTool))) {
-		return demangleViaStdin(rawAssembly, demanglerTool, environment, workingDirectory, cancellationToken);
-	}
-
-	return withTemporaryDirectory('coglens-undname-', async (temporaryDirectory) => {
-		const inputFile = path.join(temporaryDirectory, 'assembly.txt');
-		await fs.promises.writeFile(inputFile, rawAssembly, 'utf8');
-		const result = await exec.execute(demanglerTool, [inputFile], {
-			cwd: workingDirectory,
-			env: environment,
-			cancellationToken,
-		});
-		if (result.returnCode !== 0) {
-			throw new ToolExitError(
-				`Demangler exited with code ${result.returnCode}`,
-				result.returnCode,
-				result.stdout,
-				result.stderr,
-			);
-		}
-		return result.stdout;
-	});
 }
 
 async function captureVisualStudioEnvironment(
@@ -308,8 +269,15 @@ export const msvc: ToolchainDefinition = {
 	outputArguments: msvcOutputArguments, stripOwnedArguments: stripCompilerManagedArguments,
 	dependencyCollection: msvcDependencyCollection, createParser: createMsvcAsmParser,
 	createCfgParser: () => new MsvcAssemblyCfgParser(), prepareEnvironment: captureWindowsEnvironment,
-	demangle: windowsDemangle,
-	discoverTools: toolDiscoverer({ demangler: 'undname', disassembler: 'dumpbin' }),
+	discoverTools: (executable) => {
+		const tools = toolDiscoverer({ demangler: 'undname', disassembler: 'dumpbin' })(executable);
+		return Object.freeze({
+			...tools,
+			...(tools.demangler
+				? { demangler: Object.freeze({ ...tools.demangler, inputMode: 'file-argument' as const }) }
+				: {}),
+		});
+	},
 	artifacts: artifactCells({
 		assembly: assemblyCell,
 		'binary-disassembly': binaryCell('dumpbin', binaryDisassemblyProducer(dumpbin)),

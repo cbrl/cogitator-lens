@@ -746,6 +746,10 @@ function verifyRegistryReconciliation(): void {
 
 function verifyVariantSnapshots(): void {
 	const database = new CompilationConfigDatabase();
+	let definitionChanges = 0;
+	let selectionChanges = 0;
+	const definitionSubscription = database.onDidChange(() => definitionChanges++);
+	const selectionSubscription = database.onDidSelect(() => selectionChanges++);
 	const source = vscode.Uri.file('/project/main.cpp');
 	const first = compilationVariant('cmake:first', source, 'Debug');
 	const second = compilationVariant('cmake:second', source, 'Release');
@@ -758,12 +762,16 @@ function verifyVariantSnapshots(): void {
 	);
 	assert.equal(database.selectVariant(source, second.id), true);
 	assert.equal(database.getSelectedVariant(source)?.id, second.id);
+	assert.equal(selectionChanges, 1);
+	assert.equal(definitionChanges, 2);
 	database.reconcile('cmake', [first]);
 	assert.deepEqual(
 		database.getVariants(source).map((item) => item.id),
 		[first.id],
 	);
 	assert.equal(database.getSelectedVariant(source)?.id, first.id);
+	selectionSubscription.dispose();
+	definitionSubscription.dispose();
 	database.dispose();
 }
 
@@ -1228,7 +1236,7 @@ function verifyManualVariantConfiguration(workspaceFolder: vscode.WorkspaceFolde
 function verifyTreeModels(workspaceFolder: vscode.WorkspaceFolder): void {
 	const profile: ToolchainProfile = {
 		...toolchainProfile('cmake:gcc', '-O2'),
-		tools: { demangler: process.execPath },
+		tools: { demangler: { executable: process.execPath, inputMode: 'stdin' } },
 	};
 	const compilerNode = buildToolchainTreeNode(profile, 'cmake');
 	assert.equal(compilerNode.description, 'CMake');
@@ -1236,7 +1244,7 @@ function verifyTreeModels(workspaceFolder: vscode.WorkspaceFolder): void {
 		assert.ok(findTreeNode(compilerNode, expectedGroup), `Missing toolchain tree group: ${expectedGroup}`);
 	}
 
-	const optionRoots = buildArtifactOptionsTree(defaultArtifactOptions, profile);
+	const optionRoots = buildArtifactOptionsTree(defaultArtifactOptions, profile, 'assembly');
 	const outputOptions = optionRoots.find((node) => node.label === 'Production Options');
 	assert.equal(outputOptions?.children?.find((node) => node.label === 'Intel syntax')?.disabled, false);
 	assert.equal(outputOptions?.children?.find((node) => node.label === 'Demangle symbols')?.disabled, false);
@@ -1244,7 +1252,7 @@ function verifyTreeModels(workspaceFolder: vscode.WorkspaceFolder): void {
 		...profile,
 		kind: 'msvc',
 		tools: {},
-	});
+	}, 'assembly');
 	const msvcOutput = msvcOptions.find((node) => node.label === 'Production Options');
 	const intel = msvcOutput?.children?.find((node) => node.label === 'Intel syntax');
 	const demangle = msvcOutput?.children?.find((node) => node.label === 'Demangle symbols');

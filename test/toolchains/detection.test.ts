@@ -69,9 +69,29 @@ test('profile creation discovers auxiliary tools beside the compiler and keeps c
 			fs.writeFileSync(file, '');
 		}
 		const detected = createToolchainProfile('gcc', 'Detected GCC', executable, {
-			tools: { analyzer: process.execPath },
+			tools: { analyzer: { executable: process.execPath, inputMode: 'stdin' } },
 		});
-		assert.deepEqual(detected.tools, { demangler, disassembler, analyzer: process.execPath });
+		assert.deepEqual(detected.tools, {
+			demangler: { executable: demangler, inputMode: 'stdin' },
+			disassembler: { executable: disassembler, inputMode: 'stdin' },
+			analyzer: { executable: process.execPath, inputMode: 'stdin' },
+		});
+	} finally {
+		fs.rmSync(directory, { recursive: true, force: true });
+	}
+});
+
+test('MSVC discovery declares undname file input independently of its runtime basename', () => {
+	const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'coglens-msvc-tools-'));
+	try {
+		const named = (name: string) => path.join(directory, process.platform === 'win32' ? `${name}.exe` : name);
+		const compiler = named('cl');
+		const demangler = named('undname');
+		for (const file of [compiler, demangler]) {
+			fs.writeFileSync(file, '');
+		}
+		const profile = createToolchainProfile('msvc', 'Detected MSVC', compiler);
+		assert.deepEqual(profile.tools.demangler, { executable: demangler, inputMode: 'file-argument' });
 	} finally {
 		fs.rmSync(directory, { recursive: true, force: true });
 	}
@@ -90,7 +110,10 @@ test('.NET profile creation discovers the newest SDK Roslyn compiler and sibling
 		}
 
 		const profile = createToolchainProfile('dotnet', 'Detected .NET', executable);
-		assert.deepEqual(profile.tools, { compiler, ildasm });
+		assert.deepEqual(profile.tools, {
+			compiler: { executable: compiler, inputMode: 'stdin' },
+			ildasm: { executable: ildasm, inputMode: 'stdin' },
+		});
 	} finally {
 		fs.rmSync(directory, { recursive: true, force: true });
 	}

@@ -12,10 +12,25 @@ import { generateManifest, validateOptionDescriptors } from '../scripts/generate
 interface Manifest {
 	readonly capabilities: { readonly untrustedWorkspaces: { readonly supported: boolean } };
 	readonly contributes: {
+		readonly languages: readonly { readonly id: string; readonly extensions: readonly string[] }[];
+		readonly grammars: readonly { readonly language: string; readonly scopeName: string; readonly path: string }[];
 		readonly keybindings: readonly { readonly command: string; readonly when: string }[];
 		readonly configuration: readonly {
 			readonly properties: {
-				readonly 'coglens.toolchains': { items: { properties: { kind: { enum: string[] } } } };
+				readonly 'coglens.toolchains': {
+					items: {
+						properties: {
+							kind: { enum: string[] };
+							tools: {
+								additionalProperties: {
+									type: string;
+									required: string[];
+									properties: { inputMode: { enum: string[] } };
+								};
+							};
+						};
+					};
+				};
 				readonly 'coglens.artifactOptions': Readonly<
 					Record<'properties', Readonly<Record<string, { properties: Readonly<Record<string, unknown>> }>>>
 				>;
@@ -42,6 +57,10 @@ test('the manifest settings schema stays synchronized with the code tables', () 
 		[...configuration['coglens.toolchains'].items.properties.kind.enum].sort(),
 		[...supportedToolchainKinds].sort(),
 	);
+	const toolSchema = configuration['coglens.toolchains'].items.properties.tools.additionalProperties;
+	assert.equal(toolSchema.type, 'object');
+	assert.deepEqual(toolSchema.required, ['executable', 'inputMode']);
+	assert.deepEqual(toolSchema.properties.inputMode.enum, ['stdin', 'file-argument']);
 	for (const kind of supportedArtifactKinds) {
 		assert.deepEqual(
 			Object.keys(configuration['coglens.artifactOptions'].properties[kind].properties).sort(),
@@ -59,6 +78,20 @@ test('the manifest settings schema stays synchronized with the code tables', () 
 		).sort(),
 		Object.keys(defaultArtifactOptions.production).sort(),
 	);
+});
+
+test('artifact editor languages and grammars are derived from artifact definitions', () => {
+	const extensionsByLanguage = new Map(
+		manifest.contributes.languages.map((language) => [language.id, [...language.extensions].sort()]),
+	);
+	assert.deepEqual(extensionsByLanguage.get('coglens-asm'), ['.asm', '.disasm']);
+	assert.deepEqual(extensionsByLanguage.get('coglens-llvm-ir'), ['.ll']);
+	assert.deepEqual(extensionsByLanguage.get('coglens-ast'), ['.ast']);
+	assert.deepEqual(extensionsByLanguage.get('coglens-mir'), ['.mir']);
+	assert.ok(manifest.contributes.languages.some((language) => language.id === 'zig'));
+	for (const language of ['coglens-asm', 'coglens-llvm-ir', 'coglens-ast', 'coglens-mir']) {
+		assert.equal(manifest.contributes.grammars.filter((grammar) => grammar.language === language).length, 1);
+	}
 });
 
 test('manifest generation rejects conflicting duplicate option descriptors', () => {

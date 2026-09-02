@@ -39,12 +39,14 @@ export class CompilationService {
 	private readonly variants = new CompilationConfigDatabase();
 	private readonly changeEmitter = new EventEmitter<readonly Uri[]>();
 	private readonly artifactOptionsChangeEmitter = new EventEmitter<ArtifactKind>();
+	private readonly variantSelectionEmitter = new EventEmitter<Uri>();
 	private readonly subscriptions: Disposable[] = [];
 	private readonly rawArtifactCache = new RawArtifactCache();
 	private readonly currentArtifactOptions = new Map<ArtifactKind, ArtifactOptions>();
 
 	readonly onVariantsChanged: Event<readonly Uri[]> = this.changeEmitter.event;
 	readonly onArtifactOptionsChanged: Event<ArtifactKind> = this.artifactOptionsChangeEmitter.event;
+	readonly onVariantSelectionChanged: Event<Uri> = this.variantSelectionEmitter.event;
 
 	constructor(
 		private readonly configuration: ConfigurationService,
@@ -59,6 +61,7 @@ export class CompilationService {
 		this.subscriptions.push(
 			configuration.onDidChange(() => this.reloadUserConfiguration()),
 			this.variants.onDidChange((sources) => this.changeEmitter.fire(sources)),
+			this.variants.onDidSelect((source) => this.variantSelectionEmitter.fire(source)),
 			this.toolchainRegistry.onDidChange(() => {
 				this.rawArtifactCache.clear();
 				this.changeEmitter.fire(this.variantsSources());
@@ -239,6 +242,7 @@ export class CompilationService {
 		this.subscriptions.forEach((subscription) => subscription.dispose());
 		this.changeEmitter.dispose();
 		this.artifactOptionsChangeEmitter.dispose();
+		this.variantSelectionEmitter.dispose();
 		this.variants.dispose();
 		this.toolchainRegistry.dispose();
 		this.rawArtifactCache.clear();

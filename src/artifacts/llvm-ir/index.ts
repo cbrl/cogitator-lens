@@ -9,6 +9,7 @@ export const llvmIrArtifact = {
 	icon: 'circuit-board',
 	filenameExtension: '.ll',
 	documentLanguage: 'artifact',
+	editorLanguageId: 'coglens-llvm-ir',
 	renderer: renderLlvmIr,
 	navigation: {
 		definitions: true,

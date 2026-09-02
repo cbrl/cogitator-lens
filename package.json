@@ -627,9 +627,26 @@
                 },
                 "tools": {
                   "type": "object",
-                  "description": "Named auxiliary tool executables",
+                  "description": "Named auxiliary tools with explicit invocation metadata",
                   "additionalProperties": {
-                    "type": "string"
+                    "type": "object",
+                    "required": [
+                      "executable",
+                      "inputMode"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "executable": {
+                        "type": "string"
+                      },
+                      "inputMode": {
+                        "type": "string",
+                        "enum": [
+                          "stdin",
+                          "file-argument"
+                        ]
+                      }
+                    }
                   },
                   "default": {}
                 }

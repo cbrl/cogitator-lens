@@ -37,6 +37,9 @@ export const artifactDefinitions: typeof artifactDefinitionTable & Record<Artifa
 
 export const supportedArtifactKinds = Object.freeze(Object.keys(artifactDefinitions) as ArtifactKind[]);
 
+/** Artifact kind used when a source-focused UI has no artifact identity. */
+export const defaultArtifactKind = 'assembly' satisfies ArtifactKind;
+
 export function getArtifactDefinition(kind: string): ArtifactDefinition | undefined {
 	return Object.hasOwn(artifactDefinitions, kind) ? artifactDefinitions[kind as ArtifactKind] : undefined;
 }

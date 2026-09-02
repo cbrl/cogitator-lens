@@ -15,6 +15,7 @@ import type {
 	ArtifactRenderContext,
 	RenderedArtifact,
 	CompileDiagnostic,
+	AuxiliaryTool,
 } from '../types/index.js';
 import * as exec from '../exec.js';
 import { withTemporaryDirectory } from '../temporary-directory.js';
@@ -120,22 +121,52 @@ export function intelOutputArguments(
 		: [];
 }
 
-export async function demangleViaStdin(
-	rawAssembly: string,
-	demanglerTool: string,
+/** Runs a text-transforming auxiliary tool using its declared input transport. */
+export async function executeTextTool(
+	input: string,
+	tool: AuxiliaryTool,
 	environment: NodeJS.ProcessEnv,
 	workingDirectory: string,
 	cancellationToken: CancellationToken,
 ): Promise<string> {
-	const result = await exec.execute(demanglerTool, [], {
+	switch (tool.inputMode) {
+		case 'file-argument':
+			return withTemporaryDirectory('coglens-tool-', async (temporaryDirectory) => {
+				const inputFile = path.join(temporaryDirectory, 'input.txt');
+				await fs.promises.writeFile(inputFile, input, 'utf8');
+				return executeTextToolInvocation(
+					tool.executable,
+					[inputFile],
+					undefined,
+					environment,
+					workingDirectory,
+					cancellationToken,
+				);
+			});
+		case 'stdin':
+			return executeTextToolInvocation(tool.executable, [], input, environment, workingDirectory, cancellationToken);
+		default:
+			throw new Error(`Unsupported auxiliary-tool input mode: ${String(tool.inputMode)}`);
+	}
+}
+
+async function executeTextToolInvocation(
+	executable: string,
+	args: readonly string[],
+	stdin: string | undefined,
+	environment: NodeJS.ProcessEnv,
+	workingDirectory: string,
+	cancellationToken: CancellationToken,
+): Promise<string> {
+	const result = await exec.execute(executable, args, {
 		cwd: workingDirectory,
 		env: environment,
 		cancellationToken,
-		stdin: rawAssembly,
+		...(stdin === undefined ? {} : { stdin }),
 	});
 	if (result.returnCode !== 0) {
 		throw new ToolExitError(
-			`Demangler exited with code ${result.returnCode}`,
+			`Auxiliary tool exited with code ${result.returnCode}`,
 			result.returnCode,
 			result.stdout,
 			result.stderr,
@@ -264,15 +295,15 @@ export class ToolchainBackend {
 				cancellationToken,
 			);
 			const producerData = await spec.producerData?.(files);
-			const toolExecutable = this.profile.tools[spec.tool];
-			if (!toolExecutable) {
+			const tool = this.profile.tools[spec.tool];
+			if (!tool) {
 				throw new Error(`${this.profile.displayName} has no ${spec.tool} auxiliary tool.`);
 			}
 
 			const toolArguments = spec.toolArguments(files);
-			this.reportInvocation(options, invocation, toolExecutable, toolArguments);
-			this.host.log(`Command: ${toolExecutable} ${toolArguments.join(' ')}`);
-			const toolResult = await exec.execute(toolExecutable, toolArguments, {
+			this.reportInvocation(options, invocation, tool.executable, toolArguments);
+			this.host.log(`Command: ${tool.executable} ${toolArguments.join(' ')}`);
+			const toolResult = await exec.execute(tool.executable, toolArguments, {
 				cwd: invocation.workingDirectory,
 				env: invocation.preparedEnvironment,
 				cancellationToken,
@@ -299,7 +330,7 @@ export class ToolchainBackend {
 				source,
 				invocation,
 				inputMetadata,
-				toolExecutable,
+				tool.executable,
 				toolArguments,
 			);
 			return {
@@ -589,8 +620,7 @@ export class ToolchainBackend {
 		if (!options.demangle || !this.profile.tools.demangler) {
 			return rawAssembly;
 		}
-		const demangle = this.definition.demangle ?? demangleViaStdin;
-		return demangle(rawAssembly, this.profile.tools.demangler, environment, workingDirectory, cancellationToken);
+		return executeTextTool(rawAssembly, this.profile.tools.demangler, environment, workingDirectory, cancellationToken);
 	}
 }
 

@@ -46,7 +46,7 @@ export function dotNetCsharpArguments(
 	assemblyFile: string,
 	_providerArguments: readonly string[],
 ): readonly string[] {
-	const compiler = profile.tools.compiler;
+	const compiler = profile.tools.compiler?.executable;
 	if (!compiler) {
 		throw new Error(
 			`Roslyn csc.dll was not detected or configured as the compiler auxiliary tool for ${profile.displayName}.`,
@@ -108,12 +108,12 @@ export function stripDotNetManagedArguments(
 }
 
 /** Discovers the Roslyn compiler and ILDasm associated with a configured dotnet host. */
-export function discoverDotNetTools(executable: string): Readonly<Record<string, string>> {
+export function discoverDotNetTools(executable: string): Readonly<Record<string, import('../types/index.js').AuxiliaryTool>> {
 	const compiler = discoverRoslynCompiler(executable);
 	const ildasm = discoverIlDasm(executable);
 	return Object.freeze({
-		...(compiler ? { compiler } : {}),
-		...(ildasm ? { ildasm } : {}),
+		...(compiler ? { compiler: Object.freeze({ executable: compiler, inputMode: 'stdin' as const }) } : {}),
+		...(ildasm ? { ildasm: Object.freeze({ executable: ildasm, inputMode: 'stdin' as const }) } : {}),
 	});
 }
 

@@ -240,7 +240,10 @@ test('nvcc produces line-mapped PTX and nvdisasm produces SASS', async (t) => {
 	assert.ok(parsed.asm.some((line) => /fma\.rn\.f32|mul\.wide|st\.global/u.test(line.text)));
 	assert.ok(parsed.asm.some((line) => line.source?.file?.endsWith('kernel.cu')));
 
-	const sassBackend = toolchainBackend('nvcc', { executable: 'nvcc', tools: { disassembler: 'nvdisasm' } });
+	const sassBackend = toolchainBackend('nvcc', {
+		executable: 'nvcc',
+		tools: { disassembler: { executable: 'nvdisasm', inputMode: 'stdin' } },
+	});
 	const sass = await availableCell('nvcc', 'binary-disassembly').producer(
 		sassBackend,
 		sourceUri(source),

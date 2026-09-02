@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import test from 'node:test';
 import { execute, ExecError, type CancellationLike } from '../../src/exec.js';
-import { windowsDemangle } from '../../src/toolchains/msvc.js';
+import { executeTextTool } from '../../src/toolchains/toolchain-backend.js';
 import { neverCancelled } from '../support/toolchains.js';
 
 class TestCancellationToken implements CancellationLike {
@@ -101,12 +101,26 @@ class FakeChildProcess extends EventEmitter {
 }
 
 test('a tool that reads its input from stdin is driven through the shared exec path', async () => {
-	const output = await windowsDemangle(
+	const output = await executeTextTool(
 		'process.stdout.write("demangled-symbol")',
-		process.execPath,
+		{ executable: process.execPath, inputMode: 'stdin' },
 		process.env,
 		process.cwd(),
 		neverCancelled,
 	);
 	assert.equal(output, 'demangled-symbol');
+});
+
+test('a file-argument text tool receives a temporary input path', async () => {
+	const output = await executeTextTool(
+		'process.stdout.write("file-input")',
+		{
+			executable: process.execPath,
+			inputMode: 'file-argument',
+		},
+		process.env,
+		process.cwd(),
+		neverCancelled,
+	);
+	assert.equal(output, 'file-input');
 });

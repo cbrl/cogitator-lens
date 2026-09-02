@@ -15,6 +15,7 @@ import {
 import {
 	defaultArtifactOptions,
 	type ArtifactKind,
+	type AuxiliaryTool,
 	type ProductionOptions,
 	type RawArtifact,
 	type ToolchainKind,
@@ -34,7 +35,11 @@ export const neverCancelled = {
 } as never;
 
 /** A configured toolchain that runs the current Node binary unless told otherwise. */
-export function toolchainProfile(kind: ToolchainKind, overrides: Partial<ToolchainProfile> = {}): ToolchainProfile {
+type ToolchainProfileOverrides = Omit<Partial<ToolchainProfile>, 'tools'> & {
+	readonly tools?: Readonly<Record<string, AuxiliaryTool>>;
+};
+
+export function toolchainProfile(kind: ToolchainKind, overrides: ToolchainProfileOverrides = {}): ToolchainProfile {
 	return {
 		id: `test:${kind}`,
 		displayName: `Test ${kind}`,
@@ -42,12 +47,12 @@ export function toolchainProfile(kind: ToolchainKind, overrides: Partial<Toolcha
 		executable: process.execPath,
 		defaultArguments: [],
 		environment: {},
-		tools: {},
 		...overrides,
+		tools: overrides.tools ?? {},
 	};
 }
 
-export function toolchainBackend(kind: ToolchainKind, overrides: Partial<ToolchainProfile> = {}): ToolchainBackend {
+export function toolchainBackend(kind: ToolchainKind, overrides: ToolchainProfileOverrides = {}): ToolchainBackend {
 	return new ToolchainBackend(toolchainProfile(kind, overrides), toolchainDefinitions[kind], testToolchainHost);
 }
 

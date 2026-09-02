@@ -19,8 +19,8 @@ export function defaultArtifactPreset(artifactKind: ArtifactKind): ArtifactPrese
 }
 
 export function effectiveArtifactPresets(
-	configured: readonly ArtifactPreset[] = [],
-	artifactKind: ArtifactKind = 'assembly',
+	configured: readonly ArtifactPreset[],
+	artifactKind: ArtifactKind,
 ): ReadonlyMap<string, ArtifactPreset> {
 	return new Map([
 		['default', defaultArtifactPreset(artifactKind)],
@@ -42,8 +42,8 @@ export function effectiveArtifactPresets(
 
 export function resolveArtifactPreset(
 	id: string,
-	configured: readonly ArtifactPreset[] = [],
-	artifactKind: ArtifactKind = 'assembly',
+	configured: readonly ArtifactPreset[],
+	artifactKind: ArtifactKind,
 ): ArtifactPreset | undefined {
 	return effectiveArtifactPresets(configured, artifactKind).get(id);
 }

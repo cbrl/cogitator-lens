@@ -1,7 +1,6 @@
 import path from 'path';
 import { randomUUID } from 'crypto';
 import * as vscode from 'vscode';
-import { getArtifactUri, type ArtifactDocumentProvider } from '../artifact-document/artifact-document-provider.js';
 import type { CompilationService } from '../compilation/index.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
 import { supportedLanguageIdentifiers } from '../toolchains/toolchain-map.js';
@@ -12,11 +11,10 @@ import { inputStringArray, inputStringRecord, pickFrom } from '../ui/quick-input
 export interface VariantCommandDependencies {
 	readonly compilationService: CompilationService;
 	readonly configuration: ConfigurationService;
-	readonly artifacts: ArtifactDocumentProvider;
 }
 
 export function register(context: vscode.ExtensionContext, deps: VariantCommandDependencies): void {
-	const { compilationService, configuration, artifacts } = deps;
+	const { compilationService, configuration } = deps;
 	context.subscriptions.push(
 		vscode.commands.registerCommand('coglens.AddCompilationVariant', async (node?: CompilationInfoTreeNode) =>
 			configureManualVariant(node?.source ?? activeFileUri(), undefined, compilationService, configuration),
@@ -45,12 +43,7 @@ export function register(context: vscode.ExtensionContext, deps: VariantCommandD
 			if (!isSupportedSourceDocument(editor.document)) {
 				return;
 			}
-			if (await pickVariant(editor.document.uri, compilationService)) {
-				const variant = compilationService.getSelectedVariant(editor.document.uri);
-				if (variant) {
-					artifacts.requestRefresh(getArtifactUri(editor.document.uri, variant, 'assembly', 'default'));
-				}
-			}
+			await pickVariant(editor.document.uri, compilationService);
 		}),
 	);
 }

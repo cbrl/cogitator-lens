@@ -1,5 +1,5 @@
 import path from 'path';
-import type { ToolchainKind, ToolchainProfile } from '../types/index.js';
+import type { AuxiliaryTool, ToolchainKind, ToolchainProfile } from '../types/index.js';
 import { gcc } from './gcc.js';
 import { clang, appleClang } from './clang.js';
 import { clangCl } from './clang-cl.js';
@@ -62,7 +62,7 @@ export interface ToolchainProfileOverrides {
 	readonly id?: string;
 	readonly defaultArguments?: readonly string[];
 	readonly environment?: Readonly<Record<string, string>>;
-	readonly tools?: Readonly<Record<string, string>>;
+	readonly tools?: Readonly<Record<string, AuxiliaryTool>>;
 }
 
 /** Creates a normalized profile with discovered tools, optionally overridden by persisted settings. */
@@ -72,8 +72,22 @@ export function createToolchainProfile(kind: ToolchainKind, displayName: string,
 	return {
 		id: overrides.id ?? normalizedExecutableLocalId(normalized), displayName, kind, executable: normalized,
 		defaultArguments: overrides.defaultArguments ?? [], environment: overrides.environment ?? {},
-		tools: Object.freeze({ ...definition.discoverTools(normalized), ...overrides.tools }),
+		tools: Object.freeze({ ...definition.discoverTools(normalized), ...normalizeAuxiliaryTools(overrides.tools) }),
 	};
+}
+
+/** Normalizes configured auxiliary-tool executable paths. */
+export function normalizeAuxiliaryTools(
+	tools: Readonly<Record<string, AuxiliaryTool>> | undefined,
+): Readonly<Record<string, AuxiliaryTool>> {
+	return Object.freeze(
+		Object.fromEntries(
+			Object.entries(tools ?? {}).map(([name, tool]) => [
+				name,
+				Object.freeze({ executable: path.normalize(tool.executable), inputMode: tool.inputMode }),
+			]),
+		),
+	);
 }
 
 /** Produces the platform-stable local identifier used to deduplicate executable paths. */

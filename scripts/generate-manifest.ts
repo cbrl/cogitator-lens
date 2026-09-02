@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { artifactDefinitions, supportedArtifactKinds } from '../src/artifacts/core/artifact-definitions.js';
 import type { ArtifactOptionDescriptor } from '../src/artifacts/core/artifact-contracts.js';
+import { artifactEditorLanguages } from '../src/artifacts/core/editor-languages.js';
 import { supportedToolchainKinds } from '../src/toolchains/toolchain-kinds.js';
 import { defaultArtifactOptions } from '../src/types/artifact-options.js';
 
@@ -10,6 +11,7 @@ type JsonObject = Record<string, unknown>;
 /** Replaces only manifest fragments whose source of truth is a code registry. */
 export function generateManifest(manifest: JsonObject): JsonObject {
 	const generated = structuredClone(manifest);
+	generateEditorContributions(generated);
 	const properties = configurationProperties(generated);
 	const toolchains = properties['coglens.toolchains'] as JsonObject;
 	const toolchainItems = toolchains.items as JsonObject;
@@ -57,6 +59,38 @@ export function generateManifest(manifest: JsonObject): JsonObject {
 			]),
 	);
 	return generated;
+}
+
+/** Rebuilds artifact-owned language and grammar contributions while preserving third-party entries. */
+function generateEditorContributions(manifest: JsonObject): void {
+	const contributes = manifest.contributes as JsonObject;
+	const generatedIds = new Set(Object.keys(artifactEditorLanguages));
+	const existingLanguages = (contributes.languages as JsonObject[] | undefined) ?? [];
+	const existingGrammars = (contributes.grammars as JsonObject[] | undefined) ?? [];
+	const extensions = new Map<string, string[]>();
+	for (const definition of Object.values(artifactDefinitions)) {
+		if (definition.editorLanguageId) {
+			const values = extensions.get(definition.editorLanguageId) ?? [];
+			if (!values.includes(definition.filenameExtension)) values.push(definition.filenameExtension);
+			extensions.set(definition.editorLanguageId, values);
+		}
+	}
+	contributes.languages = [
+		...existingLanguages.filter((language) => !generatedIds.has(String(language.id))),
+		...Object.entries(artifactEditorLanguages).map(([id, language]) => ({
+			id,
+			aliases: [...language.aliases],
+			extensions: extensions.get(id) ?? [],
+		})),
+	];
+	contributes.grammars = [
+		...existingGrammars.filter((grammar) => !generatedIds.has(String(grammar.language))),
+		...Object.entries(artifactEditorLanguages).map(([language, metadata]) => ({
+			language,
+			scopeName: metadata.grammar.scopeName,
+			path: metadata.grammar.path,
+		})),
+	];
 }
 
 /** Validates that repeated option IDs describe the same setting everywhere. */

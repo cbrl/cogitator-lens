@@ -12,6 +12,7 @@ import type { GraphParseResult } from '../artifacts/control-flow-graph/control-f
 import { toAssemblyLines } from '../artifacts/control-flow-graph/parsers/assembly-line.js';
 import type {
 	CompileOptions,
+	AuxiliaryTool,
 	DisplayOptions,
 	IntelSyntaxSupport,
 	RawArtifact,
@@ -118,16 +119,9 @@ export interface ToolchainDefinitionShape {
 		environment: NodeJS.ProcessEnv,
 		cancellationToken: CancellationToken,
 	) => Promise<NodeJS.ProcessEnv>;
-	readonly demangle?: (
-		rawAssembly: string,
-		demanglerTool: string,
-		environment: NodeJS.ProcessEnv,
-		workingDirectory: string,
-		cancellationToken: CancellationToken,
-	) => Promise<string>;
 	/** Omit when the toolchain cannot enumerate inputs beyond the main source. */
 	readonly dependencyCollection?: DependencyCollectionSpec;
-	readonly discoverTools: (executable: string) => Readonly<Record<string, string>>;
+	readonly discoverTools: (executable: string) => Readonly<Record<string, AuxiliaryTool>>;
 	readonly artifacts: Readonly<Record<ArtifactKind, ToolchainArtifactCell>>;
 }
 
@@ -223,10 +217,12 @@ export const siblingOrPath = (executable: string, name: string): string | undefi
 
 export const discoveredTools = (
 	candidates: Readonly<Record<string, string | undefined>>,
-): Readonly<Record<string, string>> =>
+): Readonly<Record<string, AuxiliaryTool>> =>
 	Object.freeze(
 		Object.fromEntries(
-			Object.entries(candidates).filter((entry): entry is [string, string] => entry[1] !== undefined),
+			Object.entries(candidates).flatMap(([name, executable]) =>
+				executable ? [[name, Object.freeze({ executable, inputMode: 'stdin' as const })]] : [],
+			),
 		),
 	);
 
@@ -236,7 +232,7 @@ export interface AuxiliaryToolNames {
 }
 
 /** Creates a sibling-or-PATH auxiliary-tool discovery function for a toolchain definition. */
-export function toolDiscoverer(names: AuxiliaryToolNames): (executable: string) => Readonly<Record<string, string>> {
+export function toolDiscoverer(names: AuxiliaryToolNames): (executable: string) => Readonly<Record<string, AuxiliaryTool>> {
 	return (executable) =>
 		discoveredTools({
 			demangler: names.demangler ? siblingOrPath(executable, toolExecutableName(names.demangler)) : undefined,

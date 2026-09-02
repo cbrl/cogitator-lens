@@ -13,7 +13,7 @@ import {
 import { cFamilyLanguageIdentifiers, clangAstProducer, defaultAsmParser, stripCompilerManagedArguments } from './c-family.js';
 import {
 	captureWindowsEnvironment, clangClOutputArguments, msvcDependencyCollection,
-	msvcPreprocessedSourceProducer, windowsDemangle,
+	msvcPreprocessedSourceProducer,
 } from './msvc.js';
 import { composeDiagnosticParsers } from '../diagnostics.js';
 import { parseGnuDiagnostics } from './c-family/diagnostics.js';
@@ -29,7 +29,7 @@ export const clangCl: ToolchainDefinition = {
 	dependencyCollection: msvcDependencyCollection,
 	createParser: defaultAsmParser,
 	createCfgParser: () => new ClangAssemblyCfgParser(new InstructionSetInfo()),
-	prepareEnvironment: captureWindowsEnvironment, demangle: windowsDemangle,
+	prepareEnvironment: captureWindowsEnvironment,
 	discoverTools: toolDiscoverer({ demangler: 'llvm-cxxfilt', disassembler: 'llvm-objdump' }),
 	artifacts: artifactCells({
 		assembly: assemblyCell,

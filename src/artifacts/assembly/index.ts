@@ -45,6 +45,7 @@ export const assemblyArtifact = {
 	icon: 'symbol-method',
 	filenameExtension: '.asm',
 	documentLanguage: 'artifact',
+	editorLanguageId: 'coglens-asm',
 	renderer: renderAssembly,
 	navigation: {
 		definitions: true,

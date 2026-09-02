@@ -7,8 +7,10 @@ export class CompilationConfigDatabase implements Disposable {
 	private readonly bySource = sourceUriMap<Map<string, CompilationVariant>>();
 	private readonly selectedVariant = sourceUriMap<string>();
 	private readonly changeEmitter = new EventEmitter<readonly Uri[]>();
+	private readonly selectionEmitter = new EventEmitter<Uri>();
 
 	readonly onDidChange: Event<readonly Uri[]> = this.changeEmitter.event;
+	readonly onDidSelect: Event<Uri> = this.selectionEmitter.event;
 
 	getVariants(source: Uri): readonly CompilationVariant[] {
 		return [...(this.bySource.get(source)?.values() ?? [])];
@@ -36,8 +38,11 @@ export class CompilationConfigDatabase implements Disposable {
 		if (!this.bySource.get(source)?.has(variantId)) {
 			return false;
 		}
+		const previous = this.selectedVariant.get(source);
 		this.selectedVariant.set(source, variantId);
-		this.changeEmitter.fire([source]);
+		if (previous !== variantId) {
+			this.selectionEmitter.fire(source);
+		}
 		return true;
 	}
 
@@ -131,6 +136,7 @@ export class CompilationConfigDatabase implements Disposable {
 
 	dispose(): void {
 		this.changeEmitter.dispose();
+		this.selectionEmitter.dispose();
 		this.bySource.clear();
 		this.selectedVariant.clear();
 	}

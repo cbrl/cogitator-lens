@@ -2,6 +2,7 @@ import path from 'path';
 import type {
 	ArtifactOptions,
 	ArtifactKind,
+	AuxiliaryTool,
 	DefaultCompilationSettings,
 	ManualCompilationVariantSettings,
 	ToolchainKind,
@@ -36,6 +37,21 @@ function asStringRecord(value: unknown): Record<string, string> {
 	);
 }
 
+/** Parses complete auxiliary-tool invocation metadata from configuration. */
+export function parseAuxiliaryTools(value: unknown): Record<string, AuxiliaryTool> {
+	return Object.fromEntries(
+		Object.entries(asRecord(value)).flatMap(([name, raw]) => {
+			const tool = asRecord(raw);
+			const executable = asString(tool.executable);
+			const inputMode = tool.inputMode;
+			if (!executable || (inputMode !== 'stdin' && inputMode !== 'file-argument')) {
+				return [];
+			}
+			return [[name, Object.freeze({ executable: path.normalize(executable), inputMode })]];
+		}),
+	);
+}
+
 function asRecord(value: unknown): Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value)
 		? (value as Record<string, unknown>)
@@ -60,7 +76,7 @@ export function parseToolchainSettings(raw: unknown): ToolchainProfile | undefin
 		id: displayName,
 		defaultArguments: asStringArray(value.defaultArguments),
 		environment: asStringRecord(value.environment),
-		tools: asStringRecord(value.tools),
+		tools: parseAuxiliaryTools(value.tools),
 	});
 }
 

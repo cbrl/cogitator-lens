@@ -8,6 +8,7 @@ export const astArtifact = {
 	icon: 'symbol-structure',
 	filenameExtension: '.ast',
 	documentLanguage: 'artifact',
+	editorLanguageId: 'coglens-ast',
 	renderer: renderToolchainArtifact,
 	navigation: {
 		definitions: true,

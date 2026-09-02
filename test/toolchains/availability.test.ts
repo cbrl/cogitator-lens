@@ -95,14 +95,19 @@ test('artifact availability matches the declared matrix for every toolchain', ()
 test('an artifact that needs an external tool becomes available once the profile names it', () => {
 	assert.equal(
 		resolveArtifactAvailability(
-			toolchainProfile('gcc', { tools: { disassembler: process.execPath } }),
+			toolchainProfile('gcc', { tools: { disassembler: { executable: process.execPath, inputMode: 'stdin' } } }),
 			'binary-disassembly',
 		).status,
 		'available',
 	);
 	assert.equal(
 		resolveArtifactAvailability(
-			toolchainProfile('dotnet', { tools: { compiler: 'csc.dll', ildasm: 'ildasm' } }),
+			toolchainProfile('dotnet', {
+				tools: {
+					compiler: { executable: 'csc.dll', inputMode: 'stdin' },
+					ildasm: { executable: 'ildasm', inputMode: 'stdin' },
+				},
+			}),
 			'assembly',
 		).status,
 		'available',
@@ -146,7 +151,9 @@ test('production options are available, inherent, or unsupported per toolchain',
 		resolveArtifactOptionAvailability(toolchainProfile('gcc'), 'assembly', 'demangle').status,
 		'unavailable',
 	);
-	const withDemangler = toolchainProfile('clang', { tools: { demangler: process.execPath } });
+	const withDemangler = toolchainProfile('clang', {
+		tools: { demangler: { executable: process.execPath, inputMode: 'stdin' } },
+	});
 	assert.equal(resolveArtifactOptionAvailability(withDemangler, 'assembly', 'demangle').status, 'available');
 	assert.equal(resolveArtifactOptionAvailability(withDemangler, 'assembly', 'intel').status, 'available');
 
