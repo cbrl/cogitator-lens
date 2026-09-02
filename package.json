@@ -2,7 +2,7 @@
   "name": "coglens",
   "displayName": "Cogitator Lens",
   "description": "An extension for inspecting compiler and interpreter artifacts",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "icon": "resources/gear-phi.png",
   "publisher": "cbrl",
   "license": "MPL-2.0",
