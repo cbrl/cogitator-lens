@@ -14,11 +14,18 @@ import type { ToolchainDefinition, ToolchainDefinitionShape } from './toolchain-
 import { supportedToolchainKinds } from './toolchain-kinds.js';
 
 export type {
-	ArtifactProducer, ResolvedToolchainArtifactCell, ToolchainArtifactCell, ToolchainArtifactImplementation,
-	ToolchainArtifactOutput, ToolchainDefinition, ToolchainDefinitionShape,
+	ArtifactProducer,
+	ResolvedToolchainArtifactCell,
+	ToolchainArtifactCell,
+	ToolchainArtifactImplementation,
+	ToolchainArtifactOutput,
+	ToolchainDefinition,
+	ToolchainDefinitionShape,
 } from './toolchain-contracts.js';
 export {
-	resolveArtifactAvailability, getArtifactOutputChoices, resolveArtifactOutput,
+	resolveArtifactAvailability,
+	getArtifactOutputChoices,
+	resolveArtifactOutput,
 	resolveArtifactOptionAvailability,
 } from './toolchain-artifacts.js';
 
@@ -44,11 +51,18 @@ export function getToolchainDefinition(kind: ToolchainKind): ToolchainDefinition
 }
 
 /** Detects a definition by executable name, resolving overlapping patterns with \`disambiguate\`. */
-export function detectToolchainDefinition(executable: string, versionOutput = '', platform: NodeJS.Platform = process.platform): { kind: ToolchainKind; definition: ToolchainDefinition } | undefined {
+export function detectToolchainDefinition(
+	executable: string,
+	versionOutput = '',
+	platform: NodeJS.Platform = process.platform,
+): { kind: ToolchainKind; definition: ToolchainDefinition } | undefined {
 	const executableName = path.basename(executable);
-	const matches = supportedToolchainKinds.filter((kind) => toolchainDefinitions[kind].executablePattern.test(executableName));
-	const kind = matches.find((candidate) => getToolchainDefinition(candidate).disambiguate?.(versionOutput, platform))
-		?? matches.find((candidate) => getToolchainDefinition(candidate).disambiguate === undefined);
+	const matches = supportedToolchainKinds.filter((kind) =>
+		toolchainDefinitions[kind].executablePattern.test(executableName),
+	);
+	const kind =
+		matches.find((candidate) => getToolchainDefinition(candidate).disambiguate?.(versionOutput, platform)) ??
+		matches.find((candidate) => getToolchainDefinition(candidate).disambiguate === undefined);
 	return kind ? { kind, definition: toolchainDefinitions[kind] } : undefined;
 }
 
@@ -66,12 +80,21 @@ export interface ToolchainProfileOverrides {
 }
 
 /** Creates a normalized profile with discovered tools, optionally overridden by persisted settings. */
-export function createToolchainProfile(kind: ToolchainKind, displayName: string, executable: string, overrides: ToolchainProfileOverrides = {}): ToolchainProfile {
+export function createToolchainProfile(
+	kind: ToolchainKind,
+	displayName: string,
+	executable: string,
+	overrides: ToolchainProfileOverrides = {},
+): ToolchainProfile {
 	const definition = toolchainDefinitions[kind];
 	const normalized = path.normalize(executable);
 	return {
-		id: overrides.id ?? normalizedExecutableLocalId(normalized), displayName, kind, executable: normalized,
-		defaultArguments: overrides.defaultArguments ?? [], environment: overrides.environment ?? {},
+		id: overrides.id ?? normalizedExecutableLocalId(normalized),
+		displayName,
+		kind,
+		executable: normalized,
+		defaultArguments: overrides.defaultArguments ?? [],
+		environment: overrides.environment ?? {},
 		tools: Object.freeze({ ...definition.discoverTools(normalized), ...normalizeAuxiliaryTools(overrides.tools) }),
 	};
 }

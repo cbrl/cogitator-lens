@@ -23,7 +23,10 @@ export function dotNetSourceMappingFor(raw: RawArtifact): DotNetSourceMapping | 
 
 /** Narrows untrusted producer data before exposing it to the IL renderer. */
 function isDotNetSourceMappingData(value: unknown): value is DotNetSourceMappingData {
-	return typeof value === 'object' && value !== null &&
+	return (
+		typeof value === 'object' &&
+		value !== null &&
 		(value as { kind?: unknown }).kind === 'dotnet-source-mapping' &&
-		Array.isArray((value as { sourceMapping?: unknown }).sourceMapping);
+		Array.isArray((value as { sourceMapping?: unknown }).sourceMapping)
+	);
 }

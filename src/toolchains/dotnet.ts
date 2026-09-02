@@ -108,7 +108,9 @@ export function stripDotNetManagedArguments(
 }
 
 /** Discovers the Roslyn compiler and ILDasm associated with a configured dotnet host. */
-export function discoverDotNetTools(executable: string): Readonly<Record<string, import('../types/index.js').AuxiliaryTool>> {
+export function discoverDotNetTools(
+	executable: string,
+): Readonly<Record<string, import('../types/index.js').AuxiliaryTool>> {
 	const compiler = discoverRoslynCompiler(executable);
 	const ildasm = discoverIlDasm(executable);
 	return Object.freeze({
@@ -283,7 +285,10 @@ export const dotnet: ToolchainDefinition = {
 	discoverTools: discoverDotNetTools,
 	artifacts: artifactCells({
 		assembly: {
-			status: 'available', producer: dotNetIlProducer, renderer: renderDotNetIl, listingSyntax: 'dotnet-il',
+			status: 'available',
+			producer: dotNetIlProducer,
+			renderer: renderDotNetIl,
+			listingSyntax: 'dotnet-il',
 			requiredTools: [
 				{ name: 'compiler', label: 'Roslyn csc.dll' },
 				{ name: 'ildasm', label: '.NET IL disassembler (ildasm)' },

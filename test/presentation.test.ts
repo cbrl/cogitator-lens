@@ -131,10 +131,7 @@ test('.NET IL uses the CIL instruction documentation table', () => {
 		'callvirt',
 	);
 	assert.equal(instructionMnemonic(dotnetIl, dotnetIl.lines[0].text), 'ldarg.0');
-	assert.equal(
-		instructionMnemonic(dotnetIl, 'IL_0000: constrained. [System.Runtime]System.Object'),
-		'constrained.',
-	);
+	assert.equal(instructionMnemonic(dotnetIl, 'IL_0000: constrained. [System.Runtime]System.Object'), 'constrained.');
 });
 
 /**

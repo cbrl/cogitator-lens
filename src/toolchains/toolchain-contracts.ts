@@ -232,7 +232,9 @@ export interface AuxiliaryToolNames {
 }
 
 /** Creates a sibling-or-PATH auxiliary-tool discovery function for a toolchain definition. */
-export function toolDiscoverer(names: AuxiliaryToolNames): (executable: string) => Readonly<Record<string, AuxiliaryTool>> {
+export function toolDiscoverer(
+	names: AuxiliaryToolNames,
+): (executable: string) => Readonly<Record<string, AuxiliaryTool>> {
 	return (executable) =>
 		discoveredTools({
 			demangler: names.demangler ? siblingOrPath(executable, toolExecutableName(names.demangler)) : undefined,

@@ -89,9 +89,7 @@ function makeToolsNode(tools: Readonly<Record<string, AuxiliaryTool>>): Toolchai
 	return groupNode(
 		'Auxiliary tools',
 		'tools',
-		entries.length
-			? entries.map(([name, tool]) => detailNode(name, tool.executable, 'symbol-method'))
-			: [noneNode],
+		entries.length ? entries.map(([name, tool]) => detailNode(name, tool.executable, 'symbol-method')) : [noneNode],
 		entries.length,
 	);
 }

@@ -244,30 +244,33 @@ test('.NET IL rendering exposes method-scoped labels, symbols, folds, and code m
 	].join('\n');
 	const rendered = renderDotNetIl(
 		rawArtifact('assembly', il, {
-			producerData: { kind: 'dotnet-source-mapping', sourceMapping: [
-				{
-					method: {
-						typeName: 'Demo',
-						typeArguments: [],
-						methodName: 'First',
-						methodArguments: [],
-						parameters: [],
-						returnType: 'int',
+			producerData: {
+				kind: 'dotnet-source-mapping',
+				sourceMapping: [
+					{
+						method: {
+							typeName: 'Demo',
+							typeArguments: [],
+							methodName: 'First',
+							methodArguments: [],
+							parameters: [],
+							returnType: 'int',
+						},
+						offsets: { 0: { file: null, line: 3, column: 2 }, 3: null },
 					},
-					offsets: { 0: { file: null, line: 3, column: 2 }, 3: null },
-				},
-				{
-					method: {
-						typeName: 'Demo',
-						typeArguments: [],
-						methodName: 'Second',
-						methodArguments: [],
-						parameters: [],
-						returnType: 'int',
+					{
+						method: {
+							typeName: 'Demo',
+							typeArguments: [],
+							methodName: 'Second',
+							methodArguments: [],
+							parameters: [],
+							returnType: 'int',
+						},
+						offsets: { 0: { file: null, line: 10, column: 4 } },
 					},
-					offsets: { 0: { file: null, line: 10, column: 4 } },
-				},
-			] },
+				],
+			},
 		}),
 		display,
 		renderContext('dotnet', { file: '/project/source.cs' }),

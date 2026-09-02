@@ -13,7 +13,10 @@ test('artifact rendering prefers the selected output, then the backend, then the
 	const raw = rawArtifact('preprocessed-source', 'int value;');
 	const context = renderContext('gcc');
 	const backendRenderer = renderer('backend');
-	const backend = { ...context.backend, getArtifactRenderer: () => backendRenderer } as unknown as typeof context.backend;
+	const backend = {
+		...context.backend,
+		getArtifactRenderer: () => backendRenderer,
+	} as unknown as typeof context.backend;
 	const overriddenContext = { ...context, backend };
 
 	const selected = await renderArtifact(raw, defaultArtifactOptions, overriddenContext, renderer('output'));
@@ -26,6 +29,12 @@ test('artifact rendering prefers the selected output, then the backend, then the
 
 test('artifact rendering prefers a cell listing syntax over the kind default', async () => {
 	const raw = rawArtifact('assembly', 'nop');
-	const rendered = await renderArtifact(raw, defaultArtifactOptions, renderContext('gcc'), renderer('nop'), 'python-bytecode');
+	const rendered = await renderArtifact(
+		raw,
+		defaultArtifactOptions,
+		renderContext('gcc'),
+		renderer('nop'),
+		'python-bytecode',
+	);
 	assert.equal(rendered.presentation === 'text' ? rendered.listingSyntax : undefined, 'python-bytecode');
 });

@@ -18,9 +18,7 @@ import {
 	type ToolchainProfile,
 } from '../../src/types/index.js';
 import { sourceUriMap } from '../../src/uri-containers.js';
-import {
-	composeDiagnosticParsers,
-} from '../../src/diagnostics.js';
+import { composeDiagnosticParsers } from '../../src/diagnostics.js';
 import { parseGnuDiagnostics } from '../../src/toolchains/c-family/diagnostics.js';
 import { parseParenthesizedDiagnostics } from '../../src/toolchains/msvc/diagnostics.js';
 import { parsePythonDiagnostics } from '../../src/toolchains/python/diagnostics.js';
@@ -1248,11 +1246,15 @@ function verifyTreeModels(workspaceFolder: vscode.WorkspaceFolder): void {
 	const outputOptions = optionRoots.find((node) => node.label === 'Production Options');
 	assert.equal(outputOptions?.children?.find((node) => node.label === 'Intel syntax')?.disabled, false);
 	assert.equal(outputOptions?.children?.find((node) => node.label === 'Demangle symbols')?.disabled, false);
-	const msvcOptions = buildArtifactOptionsTree(defaultArtifactOptions, {
-		...profile,
-		kind: 'msvc',
-		tools: {},
-	}, 'assembly');
+	const msvcOptions = buildArtifactOptionsTree(
+		defaultArtifactOptions,
+		{
+			...profile,
+			kind: 'msvc',
+			tools: {},
+		},
+		'assembly',
+	);
 	const msvcOutput = msvcOptions.find((node) => node.label === 'Production Options');
 	const intel = msvcOutput?.children?.find((node) => node.label === 'Intel syntax');
 	const demangle = msvcOutput?.children?.find((node) => node.label === 'Demangle symbols');

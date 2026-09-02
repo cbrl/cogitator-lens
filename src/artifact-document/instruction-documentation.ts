@@ -61,10 +61,7 @@ export function instructionMnemonic(artifact: RenderedTextArtifact, text: string
 }
 
 /** Selects the documentation provider covering the most mnemonics in an assembly artifact. */
-function inferAssemblyProvider(
-	artifact: RenderedTextArtifact,
-	providers: readonly NamedProvider[],
-): NamedProvider {
+function inferAssemblyProvider(artifact: RenderedTextArtifact, providers: readonly NamedProvider[]): NamedProvider {
 	const mnemonics = new Set<string>();
 	for (const line of artifact.lines) {
 		const mnemonic = instructionMnemonic(artifact, line.disassembly ?? line.text);

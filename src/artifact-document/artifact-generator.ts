@@ -8,12 +8,7 @@ import {
 	Uri,
 } from 'vscode';
 import { CompilationService } from '../compilation/index.js';
-import type {
-	ArtifactKind,
-	CompilationVariant,
-	InvocationDetails,
-	RenderedArtifact,
-} from '../types/index.js';
+import type { ArtifactKind, CompilationVariant, InvocationDetails, RenderedArtifact } from '../types/index.js';
 import { CompilationError } from '../types/index.js';
 import { buildArtifactDocumentContent, type ArtifactDocumentContent } from './artifact-document-content.js';
 import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';

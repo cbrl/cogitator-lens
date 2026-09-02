@@ -1,10 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { renderControlFlowGraphArtifact } from '../../src/artifacts/control-flow-graph/control-flow-graph-renderer.js';
-import {
-	clangClLlvmIrOutput,
-	llvmIrOutput,
-} from '../../src/artifacts/core/compiler-output-producer.js';
+import { clangClLlvmIrOutput, llvmIrOutput } from '../../src/artifacts/core/compiler-output-producer.js';
 import { rustLlvmIrOutput, rustMirOutput } from '../../src/toolchains/rust.js';
 import { clangClOptimizationRemarksOutput } from '../../src/artifacts/optimization-remarks/clang-cl-optimization-remarks.js';
 import { pythonCfgHelper, pythonControlFlowGraphProducer } from '../../src/artifacts/python/python-cfg-producer.js';

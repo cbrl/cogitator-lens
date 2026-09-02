@@ -16,8 +16,8 @@ scripts/compiler-explorer-docenizers/
 samples/**/build/
 samples/rust/target/
 
-# Local workspace files are intentionally not normalized by project formatting.
-.vscode/settings.json
+# Local workspace files
+.vscode/
 
 # Python cache
 samples/python/**/__pycache__/

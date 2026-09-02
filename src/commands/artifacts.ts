@@ -184,13 +184,7 @@ async function openArtifact(
 	if (!preset) {
 		return;
 	}
-	const artifactUri = getArtifactUri(
-		editor.document.uri,
-		variant,
-		kind,
-		preset.id,
-		artifactOutput?.id,
-	);
+	const artifactUri = getArtifactUri(editor.document.uri, variant, kind, preset.id, artifactOutput?.id);
 	if (artifactDefinitions[kind].presentation === 'graph') {
 		await graphPanels.open(artifactUri);
 		return;
@@ -379,13 +373,7 @@ function targetSupportsKind(
 }
 
 function comparisonUri(source: vscode.Uri, target: ComparisonTarget, kind: ArtifactKind): vscode.Uri {
-	return getArtifactUri(
-		source,
-		target.variant,
-		kind,
-		target.preset?.id ?? 'default',
-		undefined,
-	);
+	return getArtifactUri(source, target.variant, kind, target.preset?.id ?? 'default', undefined);
 }
 
 export function isSupportedSourceDocument(document: vscode.TextDocument): boolean {

@@ -144,7 +144,14 @@ export async function executeTextTool(
 				);
 			});
 		case 'stdin':
-			return executeTextToolInvocation(tool.executable, [], input, environment, workingDirectory, cancellationToken);
+			return executeTextToolInvocation(
+				tool.executable,
+				[],
+				input,
+				environment,
+				workingDirectory,
+				cancellationToken,
+			);
 		default:
 			throw new Error(`Unsupported auxiliary-tool input mode: ${String(tool.inputMode)}`);
 	}
@@ -285,7 +292,10 @@ export class ToolchainBackend {
 		return withTemporaryDirectory('coglens-', async (temporaryDirectory) => {
 			const files = Object.freeze(
 				Object.fromEntries(
-					Object.entries(spec.workspaceFiles).map(([name, filename]) => [name, path.join(temporaryDirectory, filename)]),
+					Object.entries(spec.workspaceFiles).map(([name, filename]) => [
+						name,
+						path.join(temporaryDirectory, filename),
+					]),
 				),
 			);
 			const { invocation, result: compilerResult } = await this.run(
@@ -620,7 +630,13 @@ export class ToolchainBackend {
 		if (!options.demangle || !this.profile.tools.demangler) {
 			return rawAssembly;
 		}
-		return executeTextTool(rawAssembly, this.profile.tools.demangler, environment, workingDirectory, cancellationToken);
+		return executeTextTool(
+			rawAssembly,
+			this.profile.tools.demangler,
+			environment,
+			workingDirectory,
+			cancellationToken,
+		);
 	}
 }
 

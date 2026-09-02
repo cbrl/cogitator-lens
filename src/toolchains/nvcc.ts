@@ -4,7 +4,13 @@ import { noopPropertyGetter } from '../vendor/compiler-props.js';
 import { PTXAsmParser } from '../vendor/lib/parsers/asm-parser-ptx.js';
 import { SassAsmParser } from '../vendor/lib/parsers/asm-parser-sass.js';
 import { binaryDisassemblyProducer } from '../artifacts/binary-disassembly/binary-disassembly-producer.js';
-import { artifactCells, assemblyCell, binaryCell, toolDiscoverer, type ToolchainDefinition } from './toolchain-contracts.js';
+import {
+	artifactCells,
+	assemblyCell,
+	binaryCell,
+	toolDiscoverer,
+	type ToolchainDefinition,
+} from './toolchain-contracts.js';
 import { gnuPreprocessedSourceProducer } from './c-family.js';
 import { captureWindowsEnvironment } from './msvc.js';
 import { composeDiagnosticParsers } from '../diagnostics.js';
@@ -12,7 +18,8 @@ import { parseGnuDiagnostics } from './c-family/diagnostics.js';
 import { parseParenthesizedDiagnostics } from './msvc/diagnostics.js';
 
 // Managed arguments that do not have a separate value (i.e. have no value or use the --arg=xyz form).
-const managedArgsUnitary = /^(?:-o.+|--output-file=|--ptx$|-ptx$|--cubin$|-cubin$|--compile$|-c$|-S$|-E$|--generate-line-info$|-lineinfo$|--keep-device-functions$)/u;
+const managedArgsUnitary =
+	/^(?:-o.+|--output-file=|--ptx$|-ptx$|--cubin$|-cubin$|--compile$|-c$|-S$|-E$|--generate-line-info$|-lineinfo$|--keep-device-functions$)/u;
 
 /** Builds nvcc arguments that emit line-mapped PTX or a cubin for disassembly. */
 export function nvccOutputArguments(target: 'assembly' | 'object', outputFile: string): readonly string[] {
@@ -55,8 +62,11 @@ export const nvcc: ToolchainDefinition = {
 	executablePattern: /^nvcc(?:\.exe)?$/i,
 	parseDiagnostics: composeDiagnosticParsers(parseParenthesizedDiagnostics, parseGnuDiagnostics),
 	languageIdentifiers: Object.freeze(['cuda', 'cuda-cpp']),
-	includeFlag: '-I', defineFlag: '-D', objectFilename: process.platform === 'win32' ? 'output.obj' : 'output.o',
-	outputArguments: nvccOutputArguments, stripOwnedArguments: stripNvccManagedArguments,
+	includeFlag: '-I',
+	defineFlag: '-D',
+	objectFilename: process.platform === 'win32' ? 'output.obj' : 'output.o',
+	outputArguments: nvccOutputArguments,
+	stripOwnedArguments: stripNvccManagedArguments,
 	createParser: () => new PTXAsmParser(noopPropertyGetter),
 	createBinaryParser: () => new SassAsmParser(noopPropertyGetter),
 	...(process.platform === 'win32' ? { prepareEnvironment: captureWindowsEnvironment } : {}),

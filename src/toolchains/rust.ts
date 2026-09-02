@@ -6,7 +6,15 @@ import { ClangAssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/
 import { InstructionSetInfo } from '../artifacts/control-flow-graph/parsers/instruction-sets.js';
 import { hasOption } from '../utils.js';
 import type { ArtifactOutputSpec, DependencyCollectionSpec } from './toolchain-backend.js';
-import { artifactCells, assemblyCell, assemblyControlFlowGraphOutput, controlFlowGraphOutput, outputArtifactCell, toolDiscoverer, type ToolchainDefinition } from './toolchain-contracts.js';
+import {
+	artifactCells,
+	assemblyCell,
+	assemblyControlFlowGraphOutput,
+	controlFlowGraphOutput,
+	outputArtifactCell,
+	toolDiscoverer,
+	type ToolchainDefinition,
+} from './toolchain-contracts.js';
 import { defaultAsmParser, stripCompilerManagedArguments } from './c-family.js';
 import { parseRustDiagnostics } from './rust/diagnostics.js';
 
@@ -15,40 +23,74 @@ const rustManagedFlagAssignments = /^(?:--emit|--error-format|--json|--out-dir|-
 
 /** Supplies crate metadata required by standalone rustc invocations unless the provider specifies it. */
 function rustDefaults(providerArguments: readonly string[]): readonly string[] {
-	return [...(hasOption(providerArguments, '--crate-name') ? [] : ['--crate-name=coglens_artifact']),
-		...(hasOption(providerArguments, '--crate-type') ? [] : ['--crate-type=lib'])];
+	return [
+		...(hasOption(providerArguments, '--crate-name') ? [] : ['--crate-name=coglens_artifact']),
+		...(hasOption(providerArguments, '--crate-type') ? [] : ['--crate-type=lib']),
+	];
 }
 
 /** Builds rustc assembly/object arguments while supplying stable crate defaults when absent. */
-export function rustOutputArguments(target: 'assembly' | 'object', outputFile: string, providerArguments: readonly string[]): readonly string[] {
-	return [...rustDefaults(providerArguments), target === 'assembly' ? '--emit=asm' : '--emit=obj', '-C', 'debuginfo=1',
-		'--error-format=human', '--color=never', '-o', outputFile];
+export function rustOutputArguments(
+	target: 'assembly' | 'object',
+	outputFile: string,
+	providerArguments: readonly string[],
+): readonly string[] {
+	return [
+		...rustDefaults(providerArguments),
+		target === 'assembly' ? '--emit=asm' : '--emit=obj',
+		'-C',
+		'debuginfo=1',
+		'--error-format=human',
+		'--color=never',
+		'-o',
+		outputFile,
+	];
 }
 
 /** Builds rustc \`--emit\` arguments for MIR or LLVM IR files. */
-export function rustArtifactArguments(emit: 'mir' | 'llvm-ir', outputFile: string, providerArguments: readonly string[]): readonly string[] {
-	return [...rustDefaults(providerArguments), `--emit=${emit}=${outputFile}`,
-		...(emit === 'llvm-ir' ? ['-C', 'debuginfo=1'] : []), '--error-format=human', '--color=never'];
+export function rustArtifactArguments(
+	emit: 'mir' | 'llvm-ir',
+	outputFile: string,
+	providerArguments: readonly string[],
+): readonly string[] {
+	return [
+		...rustDefaults(providerArguments),
+		`--emit=${emit}=${outputFile}`,
+		...(emit === 'llvm-ir' ? ['-C', 'debuginfo=1'] : []),
+		'--error-format=human',
+		'--color=never',
+	];
 }
 
 export const rustMirOutput: ArtifactOutputSpec = Object.freeze({
 	output: { filename: 'output.mir' },
-	arguments: (outputFile: string, _temporaryDirectory: string, providerArguments: readonly string[]) => rustArtifactArguments('mir', outputFile, providerArguments),
+	arguments: (outputFile: string, _temporaryDirectory: string, providerArguments: readonly string[]) =>
+		rustArtifactArguments('mir', outputFile, providerArguments),
 });
 
 export const rustLlvmIrOutput: ArtifactOutputSpec = Object.freeze({
 	output: { filename: 'output.ll' },
-	arguments: (outputFile: string, _temporaryDirectory: string, providerArguments: readonly string[]) => rustArtifactArguments('llvm-ir', outputFile, providerArguments),
+	arguments: (outputFile: string, _temporaryDirectory: string, providerArguments: readonly string[]) =>
+		rustArtifactArguments('llvm-ir', outputFile, providerArguments),
 });
 
 /** Removes backend-managed Rust output flags in addition to shared compiler-managed arguments. */
-export function stripRustManagedArguments(args: readonly string[], sourceFile: string, workingDirectory?: string): string[] {
+export function stripRustManagedArguments(
+	args: readonly string[],
+	sourceFile: string,
+	workingDirectory?: string,
+): string[] {
 	const stripped = stripCompilerManagedArguments(args, sourceFile, workingDirectory);
 	const result: string[] = [];
 	for (let index = 0; index < stripped.length; index++) {
 		const argument = stripped[index];
-		if (rustManagedFlagsWithValues.has(argument)) { index++; continue; }
-		if (rustManagedFlagAssignments.test(argument)) {continue;}
+		if (rustManagedFlagsWithValues.has(argument)) {
+			index++;
+			continue;
+		}
+		if (rustManagedFlagAssignments.test(argument)) {
+			continue;
+		}
 		result.push(argument);
 	}
 	return result;
@@ -56,8 +98,12 @@ export function stripRustManagedArguments(args: readonly string[], sourceFile: s
 
 const rustDependencyCollection: DependencyCollectionSpec = Object.freeze({
 	outputFilename: 'dependencies.d',
-	arguments: (outputFile: string, _temporaryDirectory: string, providerArguments: readonly string[]) => [...rustDefaults(providerArguments),
-		`--emit=dep-info=${outputFile}`, '--error-format=human', '--color=never'],
+	arguments: (outputFile: string, _temporaryDirectory: string, providerArguments: readonly string[]) => [
+		...rustDefaults(providerArguments),
+		`--emit=dep-info=${outputFile}`,
+		'--error-format=human',
+		'--color=never',
+	],
 	parse: parseMakeDepfile,
 });
 
@@ -65,18 +111,35 @@ export const rust: ToolchainDefinition = {
 	executablePattern: /^rustc(?:\.exe)?$/i,
 	parseDiagnostics: parseRustDiagnostics,
 	languageIdentifiers: Object.freeze(['rust']),
-	intelSyntax: 'selectable', intelArguments: Object.freeze(['-C', 'llvm-args=-x86-asm-syntax=intel']),
-	defineFlag: '--cfg=', objectFilename: 'output.o', outputArguments: rustOutputArguments,
-	stripOwnedArguments: stripRustManagedArguments, dependencyCollection: rustDependencyCollection,
-	createParser: defaultAsmParser, createCfgParser: () => new ClangAssemblyCfgParser(new InstructionSetInfo()),
+	intelSyntax: 'selectable',
+	intelArguments: Object.freeze(['-C', 'llvm-args=-x86-asm-syntax=intel']),
+	defineFlag: '--cfg=',
+	objectFilename: 'output.o',
+	outputArguments: rustOutputArguments,
+	stripOwnedArguments: stripRustManagedArguments,
+	dependencyCollection: rustDependencyCollection,
+	createParser: defaultAsmParser,
+	createCfgParser: () => new ClangAssemblyCfgParser(new InstructionSetInfo()),
 	discoverTools: toolDiscoverer({ demangler: 'rustfilt' }),
 	artifacts: artifactCells({
 		assembly: assemblyCell,
 		'llvm-ir': { status: 'available', producer: artifactProducer('llvm-ir', rustLlvmIrOutput) },
 		'rust-mir': { status: 'available', producer: artifactProducer('rust-mir', rustMirOutput) },
 		'control-flow-graph': outputArtifactCell([
-			controlFlowGraphOutput('rust-mir', 'Rust MIR CFG', 'Build a source-level graph from rustc MIR output.', artifactProducer('control-flow-graph', rustMirOutput), (raw) => parseRustMirControlFlowGraphs(raw.text, raw.command.workingDirectory)),
-			controlFlowGraphOutput('llvm-ir', 'LLVM IR CFG', 'Build a graph from rustc LLVM IR output.', artifactProducer('control-flow-graph', rustLlvmIrOutput), (raw) => parseLlvmControlFlowGraphs(raw.text, raw.command.workingDirectory)),
+			controlFlowGraphOutput(
+				'rust-mir',
+				'Rust MIR CFG',
+				'Build a source-level graph from rustc MIR output.',
+				artifactProducer('control-flow-graph', rustMirOutput),
+				(raw) => parseRustMirControlFlowGraphs(raw.text, raw.command.workingDirectory),
+			),
+			controlFlowGraphOutput(
+				'llvm-ir',
+				'LLVM IR CFG',
+				'Build a graph from rustc LLVM IR output.',
+				artifactProducer('control-flow-graph', rustLlvmIrOutput),
+				(raw) => parseLlvmControlFlowGraphs(raw.text, raw.command.workingDirectory),
+			),
 			assemblyControlFlowGraphOutput,
 		]),
 	}),

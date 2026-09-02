@@ -2,9 +2,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 import type { Uri } from 'vscode';
-import {
-	composeDiagnosticParsers,
-} from '../../src/diagnostics.js';
+import { composeDiagnosticParsers } from '../../src/diagnostics.js';
 import { parseGnuDiagnostics } from '../../src/toolchains/c-family/diagnostics.js';
 import { parseGoDiagnostics } from '../../src/toolchains/go/diagnostics.js';
 import { parseParenthesizedDiagnostics } from '../../src/toolchains/msvc/diagnostics.js';

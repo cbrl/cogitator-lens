@@ -26,7 +26,6 @@ export const llvmObjdump: BinaryDisassembler = Object.freeze({
 	normalizeOutput: normalizeDisassemblySourcePaths,
 });
 
-
 export function normalizeDisassemblySourcePaths(output: string): string {
 	return output
 		.split(/\r?\n/)

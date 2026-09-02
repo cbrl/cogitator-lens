@@ -1,10 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {
-	classifyArtifactLine,
-	listingSyntaxes,
-	type LineToken,
-} from '../src/artifacts/core/listing-syntax.js';
+import { classifyArtifactLine, listingSyntaxes, type LineToken } from '../src/artifacts/core/listing-syntax.js';
 
 const documentedOpcodes = new Set(['push', 'callvirt', 'binary_op', 'add', 'call']);
 const context = { isDocumentedOpcode: (candidate: string) => documentedOpcodes.has(candidate.toLowerCase()) };

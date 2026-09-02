@@ -36,14 +36,40 @@ export const gnuIntelArguments = Object.freeze(['-masm=intel']);
 export const defaultAsmParser = (): AsmParser => new AsmParser(noopPropertyGetter);
 
 const flagsWithSeparateValues = new Set([
-	'-o', '-MF', '-MT', '-MQ', '-dumpdir', '-foptimization-record-file',
-	'/clang:-o', '/clang:-foptimization-record-file', '/Fo', '/Fa', '/Fd', '/Fi', '/sourceDependencies',
+	'-o',
+	'-MF',
+	'-MT',
+	'-MQ',
+	'-dumpdir',
+	'-foptimization-record-file',
+	'/clang:-o',
+	'/clang:-foptimization-record-file',
+	'/Fo',
+	'/Fa',
+	'/Fd',
+	'/Fi',
+	'/sourceDependencies',
 ]);
 const flagsWithJoinedValues = /^(?:-o|-MF|-MT|-MQ|-dumpdir=|\/[Ff][OoAaDdIi]|\/[Ss]ource[Dd]ependencies:).+/;
-const artifactOutputFlags = /^(?:-emit-llvm|-fdump-tree-cfg(?:-[^=]+)*(?:=.*)?|-save-temps(?:=.*)?|-f(?:no-)?stack-usage|-fsave-optimization-record(?:=.*)?|-foptimization-record-file(?:=.*)?|-fopt-info(?:-[^=]+)?(?:=.*)?|\/clang:-(?:emit-llvm|S|gline-tables-only|save-temps(?:=.*)?|f(?:no-)?stack-usage|fsave-optimization-record(?:=.*)?|foptimization-record-file(?:=.*)?))$/;
+const artifactOutputFlags =
+	/^(?:-emit-llvm|-fdump-tree-cfg(?:-[^=]+)*(?:=.*)?|-save-temps(?:=.*)?|-f(?:no-)?stack-usage|-fsave-optimization-record(?:=.*)?|-foptimization-record-file(?:=.*)?|-fopt-info(?:-[^=]+)?(?:=.*)?|\/clang:-(?:emit-llvm|S|gline-tables-only|save-temps(?:=.*)?|f(?:no-)?stack-usage|fsave-optimization-record(?:=.*)?|foptimization-record-file(?:=.*)?))$/;
 const compilerManagedFlags = new Set([
-	'-S', '-c', '-E', '-fsyntax-only', '-M', '-MM', '-MD', '-MMD',
-	'/c', '/FA', '/FAc', '/FAs', '/FAcs', '/E', '/EP', '/P',
+	'-S',
+	'-c',
+	'-E',
+	'-fsyntax-only',
+	'-M',
+	'-MM',
+	'-MD',
+	'-MMD',
+	'/c',
+	'/FA',
+	'/FAc',
+	'/FAs',
+	'/FAcs',
+	'/E',
+	'/EP',
+	'/P',
 ]);
 
 /** Removes source, output, dependency, and artifact switches owned by the C-family backend. */
@@ -55,10 +81,20 @@ export function stripCompilerManagedArguments(
 	const result: string[] = [];
 	for (let index = 0; index < args.length; index++) {
 		const argument = args[index];
-		if (samePath(argument, sourceFile, workingDirectory) || compilerManagedFlags.has(argument)) {continue;}
-		if (flagsWithSeparateValues.has(argument)) { index++; continue; }
-		if (argument === '-Xclang' && args[index + 1] === '-ast-dump') { index++; continue; }
-		if (flagsWithJoinedValues.test(argument) || artifactOutputFlags.test(argument)) {continue;}
+		if (samePath(argument, sourceFile, workingDirectory) || compilerManagedFlags.has(argument)) {
+			continue;
+		}
+		if (flagsWithSeparateValues.has(argument)) {
+			index++;
+			continue;
+		}
+		if (argument === '-Xclang' && args[index + 1] === '-ast-dump') {
+			index++;
+			continue;
+		}
+		if (flagsWithJoinedValues.test(argument) || artifactOutputFlags.test(argument)) {
+			continue;
+		}
 		result.push(argument);
 	}
 	return result;
