@@ -1,13 +1,9 @@
 import type { RenderedTextArtifact } from '../types/index.js';
 import type { AssemblyInstructionInfo } from '../vendor/types/assembly-docs.interfaces.js';
-import type { BaseAssemblyDocumentationProvider } from '../vendor/lib/asm-docs/base.js';
-import { Amd64DocumentationProvider } from '../vendor/lib/asm-docs/amd64.js';
-import { Arm32DocumentationProvider, ArmArch64DocumentationProvider } from '../vendor/lib/asm-docs/arm.js';
-import { LLVMDocumentationProvider } from '../vendor/lib/asm-docs/llvm.js';
-import { PythonDocumentationProvider } from '../vendor/lib/asm-docs/python.js';
-import { Riscv64DocumentationProvider } from '../vendor/lib/asm-docs/riscv64.js';
-import { documentationForDotNetIlOpcode } from './generated/dotnet-il-opcodes.js';
-import { listingSyntaxFor } from './artifact-listing-syntax.js';
+import { instructionSetLabels } from '../artifacts/core/instruction-set-labels.js';
+import { listingSyntaxFor, type NamedProvider } from '../artifacts/core/listing-syntax.js';
+
+export { instructionSetLabels };
 
 export interface InstructionDocumentation {
 	readonly mnemonic: string;
@@ -15,54 +11,6 @@ export interface InstructionDocumentation {
 	readonly tooltip: string;
 	readonly url: string;
 }
-
-/**
- * The name reported for each documentation set.
- *
- * Kept as a table so a caller can name the instruction set it expects without
- * repeating the display text.
- */
-export const instructionSetLabels = {
-	amd64: 'x86 / AMD64',
-	aarch64: 'AArch64',
-	arm32: 'ARM32',
-	riscv64: 'RISC-V',
-	llvmIr: 'LLVM IR',
-	dotNetIl: '.NET IL',
-	pythonBytecode: 'Python bytecode',
-} as const;
-
-interface NamedProvider {
-	readonly label: string;
-	readonly provider: BaseAssemblyDocumentationProvider;
-}
-
-const llvmProvider: NamedProvider = {
-	label: instructionSetLabels.llvmIr,
-	provider: new LLVMDocumentationProvider(),
-};
-const dotNetIlProvider: NamedProvider = {
-	label: instructionSetLabels.dotNetIl,
-	provider: {
-		getInstructionInformation(instruction) {
-			return documentationForDotNetIlOpcode(instruction) ?? null;
-		},
-	},
-};
-const pythonProvider: NamedProvider = {
-	label: instructionSetLabels.pythonBytecode,
-	provider: new PythonDocumentationProvider(),
-};
-
-// Put AMD64 first so a listing containing only architecture-neutral mnemonics
-// gets the extension's conventional host target. Distinctive opcodes in a
-// normal listing cause the scoring below to select the actual instruction set.
-const assemblyProviders: readonly NamedProvider[] = [
-	{ label: instructionSetLabels.amd64, provider: new Amd64DocumentationProvider() },
-	{ label: instructionSetLabels.aarch64, provider: new ArmArch64DocumentationProvider() },
-	{ label: instructionSetLabels.arm32, provider: new Arm32DocumentationProvider() },
-	{ label: instructionSetLabels.riscv64, provider: new Riscv64DocumentationProvider() },
-];
 
 const inferredProviders = new WeakMap<RenderedTextArtifact, NamedProvider>();
 
@@ -90,9 +38,19 @@ export function documentationForOpcode(
 	artifact: RenderedTextArtifact,
 	mnemonic: string,
 ): InstructionDocumentation | undefined {
-	const namedProvider = providerForArtifact(artifact);
-	if (!namedProvider) {
+	const providerDeclaration = listingSyntaxFor(artifact)?.documentation;
+	if (!providerDeclaration) {
 		return undefined;
+	}
+	let namedProvider: NamedProvider;
+	if ('infer' in providerDeclaration) {
+		const cached = inferredProviders.get(artifact);
+		namedProvider = cached ?? inferAssemblyProvider(artifact, providerDeclaration.infer);
+		if (!cached) {
+			inferredProviders.set(artifact, namedProvider);
+		}
+	} else {
+		namedProvider = providerDeclaration;
 	}
 	const information = namedProvider.provider.getInstructionInformation(mnemonic);
 	return information ? documentation(mnemonic, namedProvider, information) : undefined;
@@ -102,30 +60,10 @@ export function instructionMnemonic(artifact: RenderedTextArtifact, text: string
 	return listingSyntaxFor(artifact)?.mnemonic(text);
 }
 
-function providerForArtifact(artifact: RenderedTextArtifact): NamedProvider | undefined {
-	const documentationSet = listingSyntaxFor(artifact)?.documentationSet;
-	if (documentationSet === 'llvm') {
-		return llvmProvider;
-	}
-	if (documentationSet === 'dotnet-il') {
-		return dotNetIlProvider;
-	}
-	if (documentationSet === 'python') {
-		return pythonProvider;
-	}
-	if (documentationSet !== 'infer-native') {
-		return undefined;
-	}
-	const cached = inferredProviders.get(artifact);
-	if (cached) {
-		return cached;
-	}
-	const inferred = inferAssemblyProvider(artifact);
-	inferredProviders.set(artifact, inferred);
-	return inferred;
-}
-
-function inferAssemblyProvider(artifact: RenderedTextArtifact): NamedProvider {
+function inferAssemblyProvider(
+	artifact: RenderedTextArtifact,
+	providers: readonly NamedProvider[],
+): NamedProvider {
 	const mnemonics = new Set<string>();
 	for (const line of artifact.lines) {
 		const mnemonic = instructionMnemonic(artifact, line.disassembly ?? line.text);
@@ -137,9 +75,9 @@ function inferAssemblyProvider(artifact: RenderedTextArtifact): NamedProvider {
 		}
 	}
 
-	const scores = assemblyProviders.map(() => 0);
+	const scores = providers.map(() => 0);
 	for (const mnemonic of mnemonics) {
-		const matches = assemblyProviders
+		const matches = providers
 			.map((candidate, index) => (candidate.provider.getInstructionInformation(mnemonic) ? index : -1))
 			.filter((index) => index >= 0);
 		for (const index of matches) {
@@ -154,7 +92,7 @@ function inferAssemblyProvider(artifact: RenderedTextArtifact): NamedProvider {
 			bestIndex = index;
 		}
 	}
-	return assemblyProviders[bestIndex];
+	return providers[bestIndex];
 }
 
 function documentation(

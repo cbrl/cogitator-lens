@@ -4,7 +4,7 @@ import {
 	classifyArtifactLine,
 	listingSyntaxes,
 	type LineToken,
-} from '../src/artifact-document/artifact-listing-syntax.js';
+} from '../src/artifacts/core/listing-syntax.js';
 
 const documentedOpcodes = new Set(['push', 'callvirt', 'binary_op', 'add', 'call']);
 const context = { isDocumentedOpcode: (candidate: string) => documentedOpcodes.has(candidate.toLowerCase()) };

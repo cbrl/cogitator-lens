@@ -1,7 +1,7 @@
 import type { DisplayOptions, RawArtifact, RenderedTextArtifact, RenderedArtifactLine } from '../../types/index.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
-import { pythonBytecodeInstruction } from '../../artifact-document/artifact-listing-syntax.js';
+import { pythonBytecodeInstruction } from './python-bytecode-listing.js';
 
 const sourceLinePrefix = /^\s{0,3}(\d+)\s+/;
 

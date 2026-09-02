@@ -10,7 +10,7 @@ import {
 } from 'vscode';
 import type { RenderedTextArtifact } from '../types/index.js';
 import { documentationForOpcode } from './instruction-documentation.js';
-import { artifactSemanticTokenTypes, classifyArtifactLine, listingSyntaxFor } from './artifact-listing-syntax.js';
+import { artifactSemanticTokenTypes, classifyArtifactLine, listingSyntaxFor } from '../artifacts/core/listing-syntax.js';
 
 type ArtifactLookup = (uri: Uri) => RenderedTextArtifact | undefined;
 
