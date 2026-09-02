@@ -1,6 +1,7 @@
-import { CancellationError, Disposable, Event, EventEmitter, Memento, Uri, workspace } from 'vscode';
+import { CancellationError, Disposable, Event, EventEmitter, Memento, RelativePattern, Uri, workspace } from 'vscode';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'node:url';
 import type { ConfigurationService } from '../services/configuration-service.js';
 import type {
 	ArtifactKind,
@@ -30,7 +31,7 @@ import type { ToolchainArtifactOutput } from '../toolchains/toolchain-contracts.
 import { ToolchainRegistry } from './toolchain-registry.js';
 import { CompilationConfigDatabase } from './compilation-config.js';
 import { resolveArtifactPreset, type ArtifactPreset } from '../artifacts/ui/presets.js';
-import { validateArtifactInputs } from './artifact-inputs.js';
+import { artifactInputComparisonKey, validateArtifactInputs } from './artifact-inputs.js';
 import { RawArtifactCache } from './raw-artifact-cache.js';
 import { renderArtifact } from './artifact-rendering.js';
 
@@ -42,6 +43,7 @@ export class CompilationService {
 	private readonly variantSelectionEmitter = new EventEmitter<Uri>();
 	private readonly subscriptions: Disposable[] = [];
 	private readonly rawArtifactCache = new RawArtifactCache();
+	private readonly inputWatchers = new Map<string, Disposable>();
 	private readonly currentArtifactOptions = new Map<ArtifactKind, ArtifactOptions>();
 
 	readonly onVariantsChanged: Event<readonly Uri[]> = this.changeEmitter.event;
@@ -57,19 +59,15 @@ export class CompilationService {
 			this.currentArtifactOptions.set(kind, configuration.getArtifactOptions(kind));
 		}
 		this.reloadUserConfiguration();
-		const inputWatcher = workspace.createFileSystemWatcher('**/*');
 		this.subscriptions.push(
 			configuration.onDidChange(() => this.reloadUserConfiguration()),
 			this.variants.onDidChange((sources) => this.changeEmitter.fire(sources)),
 			this.variants.onDidSelect((source) => this.variantSelectionEmitter.fire(source)),
 			this.toolchainRegistry.onDidChange(() => {
 				this.rawArtifactCache.clear();
+				this.syncInputWatchers();
 				this.changeEmitter.fire(this.variantsSources());
 			}),
-			inputWatcher,
-			inputWatcher.onDidChange((uri) => this.handleInputChange(uri)),
-			inputWatcher.onDidDelete((uri) => this.handleInputChange(uri)),
-			inputWatcher.onDidCreate((uri) => this.handleInputChange(uri)),
 		);
 	}
 
@@ -189,6 +187,7 @@ export class CompilationService {
 			};
 		} else if (cached) {
 			this.rawArtifactCache.delete(key);
+			this.syncInputWatchers();
 		}
 
 		try {
@@ -205,6 +204,7 @@ export class CompilationService {
 				cancellationToken,
 			);
 			this.rawArtifactCache.set(key, raw, variant.source);
+			this.syncInputWatchers();
 			return {
 				status: 'available',
 				artifact: await renderArtifact(raw, options, renderContext, cell.renderer, cell.listingSyntax),
@@ -240,6 +240,8 @@ export class CompilationService {
 
 	dispose(): void {
 		this.subscriptions.forEach((subscription) => subscription.dispose());
+		this.inputWatchers.forEach((watcher) => watcher.dispose());
+		this.inputWatchers.clear();
 		this.changeEmitter.dispose();
 		this.artifactOptionsChangeEmitter.dispose();
 		this.variantSelectionEmitter.dispose();
@@ -299,8 +301,44 @@ export class CompilationService {
 
 	private handleInputChange(uri: Uri): void {
 		const affectedSources = this.rawArtifactCache.evictInput(uri);
+		this.syncInputWatchers();
 		if (affectedSources.length > 0) {
 			this.changeEmitter.fire(affectedSources);
+		}
+	}
+
+	private syncInputWatchers(): void {
+		const inputs = new Map(
+			this.rawArtifactCache.getInputUris().map((uri) => [artifactInputComparisonKey(uri), uri] as const),
+		);
+		for (const [key, watcher] of this.inputWatchers) {
+			if (!inputs.has(key)) {
+				watcher.dispose();
+				this.inputWatchers.delete(key);
+			}
+		}
+		for (const [key, inputUri] of inputs) {
+			if (this.inputWatchers.has(key)) {
+				continue;
+			}
+			let inputPath: string;
+			try {
+				inputPath = fileURLToPath(inputUri);
+			} catch {
+				continue;
+			}
+			const watcher = workspace.createFileSystemWatcher(
+				new RelativePattern(Uri.file(path.dirname(inputPath)), path.basename(inputPath)),
+			);
+			this.inputWatchers.set(
+				key,
+				Disposable.from(
+					watcher,
+					watcher.onDidChange((uri) => this.handleInputChange(uri)),
+					watcher.onDidDelete((uri) => this.handleInputChange(uri)),
+					watcher.onDidCreate((uri) => this.handleInputChange(uri)),
+				),
+			);
 		}
 	}
 }

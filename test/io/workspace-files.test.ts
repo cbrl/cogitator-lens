@@ -82,6 +82,29 @@ test('clearing the raw artifact cache also clears its invalidation index', () =>
 
 	assert.equal(cache.get('artifact'), undefined);
 	assert.deepEqual(cache.evictInput(fakeUri(input)), []);
+	assert.deepEqual(cache.getInputUris(), []);
+});
+
+test('the raw artifact cache reports each live input once', () => {
+	const cache = new RawArtifactCache();
+	const sharedInput = path.resolve('shared-input.h');
+	const otherInput = path.resolve('other-input.h');
+	cache.set('first', cachedArtifact(sharedInput), fakeUri(path.resolve('first.cpp')));
+	cache.set('second', cachedArtifact(sharedInput), fakeUri(path.resolve('second.cpp')));
+	cache.set('other', cachedArtifact(otherInput), fakeUri(path.resolve('other.cpp')));
+
+	assert.deepEqual(
+		new Set(cache.getInputUris()),
+		new Set([pathToFileURL(sharedInput).href, pathToFileURL(otherInput).href]),
+	);
+
+	cache.delete('first');
+	assert.deepEqual(
+		new Set(cache.getInputUris()),
+		new Set([pathToFileURL(sharedInput).href, pathToFileURL(otherInput).href]),
+	);
+	cache.delete('second');
+	assert.deepEqual(cache.getInputUris(), [pathToFileURL(otherInput).href]);
 });
 
 function cachedArtifact(input: string) {

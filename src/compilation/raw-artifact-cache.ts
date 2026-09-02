@@ -12,6 +12,19 @@ export class RawArtifactCache {
 		return this.artifacts.get(key);
 	}
 
+	getInputUris(): readonly string[] {
+		const inputs = new Map<string, string>();
+		for (const artifact of this.artifacts.values()) {
+			for (const input of artifact.inputs) {
+				const key = artifactInputComparisonKey(input.uri);
+				if (!inputs.has(key)) {
+					inputs.set(key, input.uri);
+				}
+			}
+		}
+		return [...inputs.values()];
+	}
+
 	set(key: string, artifact: RawArtifact, source: Uri): void {
 		this.delete(key);
 		this.artifacts.set(key, artifact);
