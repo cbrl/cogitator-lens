@@ -2,12 +2,12 @@ import { displayOptionDescriptors, type ArtifactDefinition } from '../core/artif
 import { renderPreprocessedSource } from './preprocessed-source-renderer.js';
 
 export const preprocessedSourceArtifact = {
-	presentation: 'text',
 	label: 'Preprocessed source',
+	options: [displayOptionDescriptors.showIncludedFiles],
+	presentation: 'text',
 	icon: 'file-code',
 	filenameExtension: '.preprocessed',
 	documentLanguage: 'source',
-	options: [displayOptionDescriptors.showIncludedFiles],
 	renderer: renderPreprocessedSource,
 	navigation: {
 		definitions: true,

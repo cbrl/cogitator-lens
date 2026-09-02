@@ -73,7 +73,6 @@ export interface SecondaryToolSpec {
 
 export interface ToolchainHost {
 	log(message: string, level?: 'info' | 'debug'): void;
-	parseDiagnostics(output: string, source: Uri, workingDirectory: string): readonly CompileDiagnostic[];
 }
 
 export interface ArtifactOutputSpec {
@@ -372,6 +371,11 @@ export class ToolchainBackend {
 		return this.asmParser.process(rawAssembly, filters);
 	}
 
+	/** Parses output using the diagnostic grammar selected by this toolchain definition. */
+	parseDiagnostics(output: string, source: Uri, workingDirectory: string): readonly CompileDiagnostic[] {
+		return this.definition.parseDiagnostics(output, source, workingDirectory);
+	}
+
 	parseBinaryDisassembly(rawDisassembly: string, options: DisplayOptions): ParsedAsmResult {
 		const filters: ParseFiltersAndOutputOptions = { ...options, binary: true };
 		return this.binaryAsmParser.process(rawDisassembly, filters);
@@ -452,7 +456,7 @@ export class ToolchainBackend {
 		return {
 			kind,
 			text,
-			diagnostics: this.host.parseDiagnostics(diagnosticOutput, source, invocation.workingDirectory),
+			diagnostics: this.parseDiagnostics(diagnosticOutput, source, invocation.workingDirectory),
 			durationMs: performance.now() - invocation.started,
 			generatedAt: Date.now(),
 			truncated: false,

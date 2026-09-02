@@ -2,13 +2,13 @@ import type { ArtifactDefinition } from '../core/artifact-contracts.js';
 import { renderControlFlowGraphArtifact } from './control-flow-graph-renderer.js';
 
 export const controlFlowGraphArtifact = {
+	label: 'Control-flow graph',
+	options: [],
 	presentation: 'graph',
 	requiresOutputSelection: true,
-	label: 'Control-flow graph',
 	icon: 'type-hierarchy',
 	filenameExtension: '.cfg',
 	documentLanguage: 'artifact',
-	options: [],
 	renderer: renderControlFlowGraphArtifact,
 	navigation: {
 		definitions: false,

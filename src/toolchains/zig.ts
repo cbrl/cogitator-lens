@@ -5,6 +5,7 @@ import { ClangAssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/
 import { InstructionSetInfo } from '../artifacts/control-flow-graph/parsers/instruction-sets.js';
 import { artifactCells, assemblyCell, assemblyControlFlowGraphOutput, controlFlowGraphOutput, outputArtifactCell, toolDiscoverer, type ToolchainDefinition } from './toolchain-contracts.js';
 import { defaultAsmParser } from './c-family.js';
+import { parseGnuDiagnostics } from './c-family/diagnostics.js';
 
 /** Builds Zig \`build-obj\` arguments that emit assembly or an object file into the workspace. */
 export function zigOutputArguments(target: 'assembly' | 'object', outputFile: string): readonly string[] {
@@ -54,6 +55,7 @@ export function stripZigManagedArguments(
 
 export const zig: ToolchainDefinition = {
 	executablePattern: /^zig(?:\.exe)?$/i,
+	parseDiagnostics: parseGnuDiagnostics,
 	languageIdentifiers: Object.freeze(['zig']),
 	intelSyntax: 'selectable', intelArguments: Object.freeze(['-mllvm', '--x86-asm-syntax=intel']),
 	includeFlag: '-I', defineFlag: '-D', objectFilename: 'output.o', outputArguments: zigOutputArguments,

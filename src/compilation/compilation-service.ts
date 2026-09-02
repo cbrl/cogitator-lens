@@ -29,7 +29,6 @@ import { resolveArtifactOutput } from '../toolchains/toolchain-map.js';
 import type { ToolchainArtifactOutput } from '../toolchains/toolchain-contracts.js';
 import { ToolchainRegistry } from './toolchain-registry.js';
 import { CompilationConfigDatabase } from './compilation-config.js';
-import { parseToolDiagnostics } from '../diagnostics.js';
 import { resolveArtifactPreset, type ArtifactPreset } from '../artifacts/ui/presets.js';
 import { validateArtifactInputs } from './artifact-inputs.js';
 import { RawArtifactCache } from './raw-artifact-cache.js';
@@ -221,7 +220,7 @@ export class CompilationService {
 				};
 			}
 			const output = toolErrorOutput(error);
-			const diagnostics = parseToolDiagnostics(
+			const diagnostics = backend.parseDiagnostics(
 				`${output.stderr}\n${output.stdout}`,
 				variant.source,
 				variant.workingDirectory,

@@ -1,8 +1,8 @@
-import type { toolchainDefinitions } from '../toolchains/toolchain-map.js';
+import type { RegisteredToolchainKind } from '../toolchains/toolchain-kinds.js';
 import type { InvocationDetails } from './compilation-types.js';
 
 /** Toolchain configuration at the public settings boundary. */
-export type ToolchainKind = keyof typeof toolchainDefinitions;
+export type ToolchainKind = RegisteredToolchainKind;
 
 export type IntelSyntaxSupport = 'selectable' | 'inherent' | 'unsupported';
 

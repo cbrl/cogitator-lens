@@ -15,6 +15,7 @@ import { MsvcAssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/a
 import { artifactCells, assemblyCell, assemblyControlFlowGraphOutput, binaryCell, outputArtifactCell, toolDiscoverer, type ToolchainDefinition } from './toolchain-contracts.js';
 import type { BinaryDisassembler, DependencyCollectionSpec } from './toolchain-backend.js';
 import { cFamilyLanguageIdentifiers, stripCompilerManagedArguments } from './c-family.js';
+import { parseParenthesizedDiagnostics } from './msvc/diagnostics.js';
 
 export const visualStudioDiscoveryArguments = [
 	'-latest',
@@ -301,6 +302,7 @@ export const msvcPreprocessedSourceProducer = artifactProducer('preprocessed-sou
 
 export const msvc: ToolchainDefinition = {
 	executablePattern: /^cl\.exe$/i,
+	parseDiagnostics: parseParenthesizedDiagnostics,
 	languageIdentifiers: cFamilyLanguageIdentifiers,
 	intelSyntax: 'inherent', includeFlag: '/I', defineFlag: '/D', objectFilename: 'output.obj',
 	outputArguments: msvcOutputArguments, stripOwnedArguments: stripCompilerManagedArguments,

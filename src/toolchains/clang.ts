@@ -14,6 +14,7 @@ import {
 	cFamilyLanguageIdentifiers, clangAstProducer, defaultAsmParser, gnuDependencyCollection,
 	gnuIntelArguments, gnuOutputArguments, gnuPreprocessedSourceProducer, stripCompilerManagedArguments,
 } from './c-family.js';
+import { parseGnuDiagnostics } from './c-family/diagnostics.js';
 
 const artifacts = artifactCells({
 	assembly: assemblyCell,
@@ -36,6 +37,7 @@ const artifacts = artifactCells({
 
 export const clang: ToolchainDefinition = {
 	executablePattern: /^clang(?:\+\+)?(?:-\d+(?:\.\d+)*)?(?:\.exe)?$/i,
+	parseDiagnostics: parseGnuDiagnostics,
 	languageIdentifiers: cFamilyLanguageIdentifiers,
 	intelSyntax: 'selectable', intelArguments: gnuIntelArguments,
 	includeFlag: '-I', defineFlag: '-D', objectFilename: 'output.o',

@@ -7,6 +7,7 @@ import { pythonControlFlowGraphProducer } from '../artifacts/python/python-cfg-p
 import { pythonStackAnalysisProducer, renderPythonStackAnalysis } from '../artifacts/stack-analysis/python-stack-analysis.js';
 import { parsePythonControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/python-cfg-parser.js';
 import { artifactCells, controlFlowGraphOutput, outputArtifactCell, toolDiscoverer, type ToolchainDefinition } from './toolchain-contracts.js';
+import { parsePythonDiagnostics } from './python/diagnostics.js';
 
 /** Removes interpreter mode switches and the source path owned by Python artifact production. */
 export function stripPythonManagedArguments(args: readonly string[], sourceFile: string, workingDirectory: string): string[] {
@@ -23,6 +24,7 @@ export function stripPythonManagedArguments(args: readonly string[], sourceFile:
 
 export const python: ToolchainDefinition = {
 	executablePattern: /^(?:python(?:\d+(?:\.\d+)*)?|py)(?:\.exe)?$/i,
+	parseDiagnostics: parsePythonDiagnostics,
 	languageIdentifiers: Object.freeze(['python']), stripOwnedArguments: stripPythonManagedArguments,
 	discoverTools: toolDiscoverer({}),
 	artifacts: artifactCells({

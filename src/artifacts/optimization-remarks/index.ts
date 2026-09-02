@@ -2,12 +2,12 @@ import type { ArtifactDefinition } from '../core/artifact-contracts.js';
 import { renderToolchainArtifact } from '../core/toolchain-rendered-artifact.js';
 
 export const optimizationRemarksArtifact = {
-	presentation: 'text',
 	label: 'Optimization remarks',
+	options: [],
+	presentation: 'text',
 	icon: 'lightbulb',
 	filenameExtension: '.opt',
 	documentLanguage: 'source',
-	options: [],
 	renderer: renderToolchainArtifact,
 	navigation: {
 		definitions: true,

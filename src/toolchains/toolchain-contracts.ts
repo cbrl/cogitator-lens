@@ -21,6 +21,7 @@ import type {
 import type { AsmParser } from '../vendor/lib/parsers/asm-parser.js';
 import type { AssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/assembly-cfg-parser.js';
 import type { DependencyCollectionSpec, ToolchainBackend } from './toolchain-backend.js';
+import type { DiagnosticParser } from '../diagnostics.js';
 
 export const disassemblerToolName = 'disassembler';
 
@@ -83,6 +84,8 @@ export type ToolchainArtifactCell =
 
 export interface ToolchainDefinitionShape {
 	readonly executablePattern: RegExp;
+	/** Parses only the diagnostic formats emitted by this toolchain and its host compiler. */
+	readonly parseDiagnostics: DiagnosticParser;
 	/** Selects this definition when multiple definitions match the same executable name. */
 	readonly disambiguate?: (versionOutput: string, platform: NodeJS.Platform) => boolean;
 	readonly languageIdentifiers: readonly string[];

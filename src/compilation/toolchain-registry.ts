@@ -4,7 +4,6 @@ import { ToolchainBackend } from '../toolchains/toolchain-backend.js';
 import { getToolchainDefinition, resolveArtifactAvailability } from '../toolchains/toolchain-map.js';
 import type { ConfigurationOrigin } from '../buildsystems/variant-provider.js';
 import { structurallyEqual } from '../utils.js';
-import { parseToolDiagnostics } from '../diagnostics.js';
 import { logChannel } from '../logger.js';
 
 interface RegistryEntry {
@@ -101,7 +100,6 @@ export class ToolchainRegistry implements Disposable {
 				log(message, level = 'info') {
 					logChannel[level](message);
 				},
-				parseDiagnostics: parseToolDiagnostics,
 			}),
 		};
 	}

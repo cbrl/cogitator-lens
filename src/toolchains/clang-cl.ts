@@ -15,9 +15,13 @@ import {
 	captureWindowsEnvironment, clangClOutputArguments, msvcDependencyCollection,
 	msvcPreprocessedSourceProducer, windowsDemangle,
 } from './msvc.js';
+import { composeDiagnosticParsers } from '../diagnostics.js';
+import { parseGnuDiagnostics } from './c-family/diagnostics.js';
+import { parseParenthesizedDiagnostics } from './msvc/diagnostics.js';
 
 export const clangCl: ToolchainDefinition = {
 	executablePattern: /^clang-cl(?:\.exe)?$/i,
+	parseDiagnostics: composeDiagnosticParsers(parseGnuDiagnostics, parseParenthesizedDiagnostics),
 	languageIdentifiers: cFamilyLanguageIdentifiers,
 	intelSyntax: 'inherent', includeFlag: '/I', defineFlag: '/D', objectFilename: 'output.obj',
 	outputArguments: clangClOutputArguments,

@@ -345,7 +345,11 @@ export class ArtifactDecorator {
 
 	private decorateListingColumns(content: ArtifactDocumentContent): void {
 		const editor = this.editorTracker.getArtifactEditor(this.artifactUri);
-		if (!editor || !this.artifactOptions(content.kind).display.binaryColumns) {
+		if (
+			!editor ||
+			!artifactSupportsOption(content.kind, 'binaryColumns') ||
+			!this.artifactOptions(content.kind).display.binaryColumns
+		) {
 			return;
 		}
 		const addressWidth = Math.max(

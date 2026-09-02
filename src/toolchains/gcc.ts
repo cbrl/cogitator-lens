@@ -13,9 +13,11 @@ import {
 	cFamilyLanguageIdentifiers, defaultAsmParser, gnuDependencyCollection, gnuIntelArguments,
 	gnuOutputArguments, gnuPreprocessedSourceProducer, stripCompilerManagedArguments,
 } from './c-family.js';
+import { parseGnuDiagnostics } from './c-family/diagnostics.js';
 
 export const gcc: ToolchainDefinition = {
 	executablePattern: /^(?:gcc|g\+\+)(?:-\d+(?:\.\d+)*)?(?:\.exe)?$/i,
+	parseDiagnostics: parseGnuDiagnostics,
 	languageIdentifiers: cFamilyLanguageIdentifiers,
 	intelSyntax: 'selectable', intelArguments: gnuIntelArguments,
 	includeFlag: '-I', defineFlag: '-D', objectFilename: 'output.o',

@@ -2,12 +2,12 @@ import type { ArtifactDefinition } from '../core/artifact-contracts.js';
 import { renderNativeStackAnalysis } from './native-stack-analysis.js';
 
 export const stackAnalysisArtifact = {
-	presentation: 'text',
 	label: 'Stack analysis',
+	options: [],
+	presentation: 'text',
 	icon: 'layers',
 	filenameExtension: '.stack',
 	documentLanguage: 'source',
-	options: [],
 	renderer: renderNativeStackAnalysis,
 	navigation: {
 		definitions: true,

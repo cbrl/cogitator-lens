@@ -7,6 +7,9 @@ import { binaryDisassemblyProducer } from '../artifacts/binary-disassembly/binar
 import { artifactCells, assemblyCell, binaryCell, toolDiscoverer, type ToolchainDefinition } from './toolchain-contracts.js';
 import { gnuPreprocessedSourceProducer } from './c-family.js';
 import { captureWindowsEnvironment } from './msvc.js';
+import { composeDiagnosticParsers } from '../diagnostics.js';
+import { parseGnuDiagnostics } from './c-family/diagnostics.js';
+import { parseParenthesizedDiagnostics } from './msvc/diagnostics.js';
 
 // Managed arguments that do not have a separate value (i.e. have no value or use the --arg=xyz form).
 const managedArgsUnitary = /^(?:-o.+|--output-file=|--ptx$|-ptx$|--cubin$|-cubin$|--compile$|-c$|-S$|-E$|--generate-line-info$|-lineinfo$|--keep-device-functions$)/u;
@@ -50,6 +53,7 @@ export function stripNvccManagedArguments(
 
 export const nvcc: ToolchainDefinition = {
 	executablePattern: /^nvcc(?:\.exe)?$/i,
+	parseDiagnostics: composeDiagnosticParsers(parseParenthesizedDiagnostics, parseGnuDiagnostics),
 	languageIdentifiers: Object.freeze(['cuda', 'cuda-cpp']),
 	includeFlag: '-I', defineFlag: '-D', objectFilename: process.platform === 'win32' ? 'output.obj' : 'output.o',
 	outputArguments: nvccOutputArguments, stripOwnedArguments: stripNvccManagedArguments,

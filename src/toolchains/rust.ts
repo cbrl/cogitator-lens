@@ -8,6 +8,7 @@ import { hasOption } from '../utils.js';
 import type { ArtifactOutputSpec, DependencyCollectionSpec } from './toolchain-backend.js';
 import { artifactCells, assemblyCell, assemblyControlFlowGraphOutput, controlFlowGraphOutput, outputArtifactCell, toolDiscoverer, type ToolchainDefinition } from './toolchain-contracts.js';
 import { defaultAsmParser, stripCompilerManagedArguments } from './c-family.js';
+import { parseRustDiagnostics } from './rust/diagnostics.js';
 
 const rustManagedFlagsWithValues = new Set(['--emit', '--error-format', '--json', '--out-dir', '--color']);
 const rustManagedFlagAssignments = /^(?:--emit|--error-format|--json|--out-dir|--color)=/;
@@ -62,6 +63,7 @@ const rustDependencyCollection: DependencyCollectionSpec = Object.freeze({
 
 export const rust: ToolchainDefinition = {
 	executablePattern: /^rustc(?:\.exe)?$/i,
+	parseDiagnostics: parseRustDiagnostics,
 	languageIdentifiers: Object.freeze(['rust']),
 	intelSyntax: 'selectable', intelArguments: Object.freeze(['-C', 'llvm-args=-x86-asm-syntax=intel']),
 	defineFlag: '--cfg=', objectFilename: 'output.o', outputArguments: rustOutputArguments,

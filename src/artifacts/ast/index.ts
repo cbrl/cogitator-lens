@@ -2,12 +2,12 @@ import { displayOptionDescriptors, type ArtifactDefinition } from '../core/artif
 import { renderToolchainArtifact } from '../core/toolchain-rendered-artifact.js';
 
 export const astArtifact = {
-	presentation: 'text',
 	label: 'Abstract syntax tree',
+	options: [displayOptionDescriptors.showSystemDeclarations],
+	presentation: 'text',
 	icon: 'symbol-structure',
 	filenameExtension: '.ast',
 	documentLanguage: 'artifact',
-	options: [displayOptionDescriptors.showSystemDeclarations],
 	renderer: renderToolchainArtifact,
 	navigation: {
 		definitions: true,

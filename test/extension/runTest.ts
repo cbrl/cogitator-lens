@@ -18,7 +18,13 @@ import {
 	type ToolchainProfile,
 } from '../../src/types/index.js';
 import { sourceUriMap } from '../../src/uri-containers.js';
-import { parseToolDiagnostics } from '../../src/diagnostics.js';
+import {
+	composeDiagnosticParsers,
+} from '../../src/diagnostics.js';
+import { parseGnuDiagnostics } from '../../src/toolchains/c-family/diagnostics.js';
+import { parseParenthesizedDiagnostics } from '../../src/toolchains/msvc/diagnostics.js';
+import { parsePythonDiagnostics } from '../../src/toolchains/python/diagnostics.js';
+import { parseRustDiagnostics } from '../../src/toolchains/rust/diagnostics.js';
 import { CompilationService } from '../../src/compilation/compilation-service.js';
 import type { ConfigurationService } from '../../src/services/configuration-service.js';
 import {
@@ -46,7 +52,6 @@ import { isSupportedSourceDocument } from '../../src/commands/artifacts.js';
 
 const extensionToolchainHost = {
 	log() {},
-	parseDiagnostics: parseToolDiagnostics,
 };
 
 export async function run(): Promise<void> {
@@ -772,7 +777,7 @@ function verifyUriMapping(): void {
 function verifyDiagnostics(workspaceFolder: vscode.WorkspaceFolder): void {
 	const workingDirectory = vscode.Uri.joinPath(workspaceFolder.uri, 'build').fsPath;
 	const fallback = vscode.Uri.joinPath(workspaceFolder.uri, 'src', 'main.cpp');
-	const diagnostics = parseToolDiagnostics(
+	const diagnostics = composeDiagnosticParsers(parseGnuDiagnostics, parseParenthesizedDiagnostics)(
 		[
 			'../src/main.cpp:4:7: error: expected expression',
 			'../src/main.cpp(8,3): warning C4100: unreferenced parameter',
@@ -789,7 +794,7 @@ function verifyDiagnostics(workspaceFolder: vscode.WorkspaceFolder): void {
 	assert.equal(diagnostics[1].line, 7);
 	assert.equal(diagnostics[1].severity, 'warning');
 
-	const rustDiagnostics = parseToolDiagnostics(
+	const rustDiagnostics = parseRustDiagnostics(
 		[
 			'error[E0308]: mismatched types',
 			`  --> ${path.join(workingDirectory, 'source.rs')}:5:9`,
@@ -806,7 +811,7 @@ function verifyDiagnostics(workspaceFolder: vscode.WorkspaceFolder): void {
 	assert.equal(rustDiagnostics[0].message, '[E0308] mismatched types');
 	assert.equal(rustDiagnostics[1].severity, 'warning');
 
-	const pythonDiagnostics = parseToolDiagnostics(
+	const pythonDiagnostics = parsePythonDiagnostics(
 		[
 			`  File "${path.join(workingDirectory, 'source.py')}", line 3`,
 			'    value =',

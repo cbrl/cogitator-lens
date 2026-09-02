@@ -11,6 +11,7 @@ import { go } from './go.js';
 import { zig } from './zig.js';
 import { nvcc } from './nvcc.js';
 import type { ToolchainDefinition, ToolchainDefinitionShape } from './toolchain-contracts.js';
+import { supportedToolchainKinds } from './toolchain-kinds.js';
 
 export type {
 	ArtifactProducer, ResolvedToolchainArtifactCell, ToolchainArtifactCell, ToolchainArtifactImplementation,
@@ -51,7 +52,7 @@ export function detectToolchainDefinition(executable: string, versionOutput = ''
 	return kind ? { kind, definition: toolchainDefinitions[kind] } : undefined;
 }
 
-export const supportedToolchainKinds: readonly ToolchainKind[] = Object.keys(toolchainDefinitions) as ToolchainKind[];
+export { supportedToolchainKinds } from './toolchain-kinds.js';
 
 export const supportedLanguageIdentifiers: ReadonlySet<string> = new Set(
 	supportedToolchainKinds.flatMap((kind) => toolchainDefinitions[kind].languageIdentifiers),

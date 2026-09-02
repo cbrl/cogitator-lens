@@ -5,6 +5,7 @@ import { noopPropertyGetter } from '../vendor/compiler-props.js';
 import { GoAsmParser } from '../vendor/lib/parsers/asm-parser-go.js';
 import { parseGoSsaControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/go-ssa-cfg-parser.js';
 import { artifactCells, controlFlowGraphOutput, outputArtifactCell, toolDiscoverer, type ToolchainDefinition } from './toolchain-contracts.js';
+import { parseGoDiagnostics } from './go/diagnostics.js';
 
 const goFunctionPattern =
 	/^\s*func\s+(?:\(\s*(?:[\p{L}_][\p{L}\p{N}_]*\s+)?(\*?\s*[\p{L}_][\p{L}\p{N}_]*)\s*\)\s*)?([\p{L}_][\p{L}\p{N}_]*)\s*\(/gmu;
@@ -126,6 +127,7 @@ export async function inferGoSsaFunction(filename: string): Promise<string | und
 
 export const go: ToolchainDefinition = {
 	executablePattern: /^go(?:\.exe)?$/i,
+	parseDiagnostics: parseGoDiagnostics,
 	languageIdentifiers: Object.freeze(['go']),
 	stripOwnedArguments: stripGoManagedArguments,
 	assembleArguments: (owned, provider, sourcePath) => [...owned.slice(0, 1), ...provider, ...owned.slice(1), sourcePath],

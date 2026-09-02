@@ -22,10 +22,9 @@ import {
 } from '../../src/types/index.js';
 import { rawArtifact } from './artifacts.js';
 
-/** A host that neither logs nor interprets tool diagnostics. */
+/** A host that suppresses backend logging during tests. */
 export const testToolchainHost: ToolchainHost = {
 	log() {},
-	parseDiagnostics: () => [],
 };
 
 /** A cancellation token that is never signalled. */

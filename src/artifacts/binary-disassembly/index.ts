@@ -1,22 +1,20 @@
-import { displayOptionDescriptors, type ArtifactDefinition, type ArtifactOptionDescriptor } from '../core/artifact-contracts.js';
+import { displayOptionDescriptors, type ArtifactDefinition } from '../core/artifact-contracts.js';
 import { renderBinaryDisassembly } from './binary-disassembly-renderer.js';
 
-const binaryDisassemblyOptions = [
-	displayOptionDescriptors.labels,
-	displayOptionDescriptors.libraryCode,
-	displayOptionDescriptors.dontMaskFilenames,
-	displayOptionDescriptors.binaryColumns,
-	displayOptionDescriptors.sourceLineColorBands,
-] as const satisfies readonly ArtifactOptionDescriptor[];
-
 export const binaryDisassemblyArtifact = {
+	label: 'Binary disassembly',
+	options: [
+		displayOptionDescriptors.labels,
+		displayOptionDescriptors.libraryCode,
+		displayOptionDescriptors.dontMaskFilenames,
+		displayOptionDescriptors.binaryColumns,
+		displayOptionDescriptors.sourceLineColorBands,
+	],
 	presentation: 'text',
 	listingSyntax: 'native-assembly',
-	label: 'Binary disassembly',
 	icon: 'package',
 	filenameExtension: '.disasm',
 	documentLanguage: 'artifact',
-	options: binaryDisassemblyOptions,
 	renderer: renderBinaryDisassembly,
 	navigation: {
 		definitions: true,

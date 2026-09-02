@@ -7,6 +7,7 @@ import { artifactDefinitions, supportedArtifactKinds } from '../src/artifacts/co
 import { supportedToolchainKinds } from '../src/toolchains/toolchain-map.js';
 import { defaultArtifactOptions } from '../src/types/index.js';
 import { repositoryRoot } from './support/environment.js';
+import { generateManifest, validateOptionDescriptors } from '../scripts/generate-manifest.js';
 
 interface Manifest {
 	readonly capabilities: { readonly untrustedWorkspaces: { readonly supported: boolean } };
@@ -36,6 +37,7 @@ const manifest = JSON.parse(fs.readFileSync(path.join(repositoryRoot, 'package.j
 const configuration = manifest.contributes.configuration[0].properties;
 
 test('the manifest settings schema stays synchronized with the code tables', () => {
+	assert.deepEqual(generateManifest(manifest as unknown as Record<string, unknown>), manifest);
 	assert.deepEqual(
 		[...configuration['coglens.toolchains'].items.properties.kind.enum].sort(),
 		[...supportedToolchainKinds].sort(),
@@ -56,6 +58,17 @@ test('the manifest settings schema stays synchronized with the code tables', () 
 			configuration['coglens.artifactPresets'].additionalProperties.properties.productionOptions.properties,
 		).sort(),
 		Object.keys(defaultArtifactOptions.production).sort(),
+	);
+});
+
+test('manifest generation rejects conflicting duplicate option descriptors', () => {
+	assert.throws(
+		() =>
+			validateOptionDescriptors([
+				{ options: [{ id: 'intel', group: 'production', label: 'Intel syntax', description: 'first' }] },
+				{ options: [{ id: 'intel', group: 'production', label: 'Intel syntax', description: 'second' }] },
+			]),
+		/Conflicting artifact option descriptor: intel/u,
 	);
 });
 

@@ -779,112 +779,133 @@
             "properties": {
               "assembly": {
                 "type": "object",
+                "title": "Assembly options",
                 "description": "Assembly options",
                 "additionalProperties": false,
                 "properties": {
                   "intel": {
                     "type": "boolean",
+                    "title": "Intel syntax",
                     "default": false,
                     "description": "Emit Intel syntax when supported by the selected toolchain"
                   },
                   "demangle": {
                     "type": "boolean",
+                    "title": "Demangle symbols",
                     "default": false,
                     "description": "Run the configured demangler before rendering assembly"
                   },
                   "labels": {
                     "type": "boolean",
+                    "title": "Hide unused labels",
                     "default": true,
                     "description": "Remove labels that are not referenced"
                   },
                   "libraryCode": {
                     "type": "boolean",
+                    "title": "Hide library code",
                     "default": false,
                     "description": "Hide code from system libraries"
                   },
                   "directives": {
                     "type": "boolean",
+                    "title": "Hide directives",
                     "default": true,
                     "description": "Hide assembler directives"
                   },
                   "commentOnly": {
                     "type": "boolean",
+                    "title": "Hide comment-only lines",
                     "default": true,
                     "description": "Remove comment-only lines"
                   },
                   "trim": {
                     "type": "boolean",
+                    "title": "Trim horizontal whitespace",
                     "default": false,
                     "description": "Remove excessive horizontal whitespace"
                   },
                   "dontMaskFilenames": {
                     "type": "boolean",
+                    "title": "Show full filenames",
                     "default": true,
                     "description": "Keep source filenames visible in rendered output"
                   },
                   "binaryColumns": {
                     "type": "boolean",
+                    "title": "Show address and opcode columns",
                     "default": true,
-                    "description": "Show parsed instruction addresses and encoded bytes"
+                    "description": "Show parsed instruction addresses and encoded bytes beside the listing"
                   },
                   "sourceLineColorBands": {
                     "type": "boolean",
+                    "title": "Show source-line color bands",
                     "default": true,
-                    "description": "Connect source and generated lines with stable color bands"
+                    "description": "Use stable color bands to connect source lines with generated output"
                   }
                 }
               },
               "binary-disassembly": {
                 "type": "object",
+                "title": "Binary disassembly options",
                 "description": "Binary disassembly options",
                 "additionalProperties": false,
                 "properties": {
                   "labels": {
                     "type": "boolean",
+                    "title": "Hide unused labels",
                     "default": true,
                     "description": "Remove labels that are not referenced"
                   },
                   "libraryCode": {
                     "type": "boolean",
+                    "title": "Hide library code",
                     "default": false,
                     "description": "Hide code from system libraries"
                   },
                   "dontMaskFilenames": {
                     "type": "boolean",
+                    "title": "Show full filenames",
                     "default": true,
                     "description": "Keep source filenames visible in rendered output"
                   },
                   "binaryColumns": {
                     "type": "boolean",
+                    "title": "Show address and opcode columns",
                     "default": true,
-                    "description": "Show parsed instruction addresses and encoded bytes"
+                    "description": "Show parsed instruction addresses and encoded bytes beside the listing"
                   },
                   "sourceLineColorBands": {
                     "type": "boolean",
+                    "title": "Show source-line color bands",
                     "default": true,
-                    "description": "Connect source and generated lines with stable color bands"
+                    "description": "Use stable color bands to connect source lines with generated output"
                   }
                 }
               },
               "preprocessed-source": {
                 "type": "object",
+                "title": "Preprocessed source options",
                 "description": "Preprocessed source options",
                 "additionalProperties": false,
                 "properties": {
                   "showIncludedFiles": {
                     "type": "boolean",
+                    "title": "Show included files",
                     "default": true,
-                    "description": "Include content originating from headers"
+                    "description": "Include content originating from headers in preprocessed output"
                   }
                 }
               },
               "ast": {
                 "type": "object",
+                "title": "Abstract syntax tree options",
                 "description": "Abstract syntax tree options",
                 "additionalProperties": false,
                 "properties": {
                   "showSystemDeclarations": {
                     "type": "boolean",
+                    "title": "Show system declarations",
                     "default": false,
                     "description": "Include declarations originating from compiler and system headers"
                   }
@@ -892,36 +913,42 @@
               },
               "llvm-ir": {
                 "type": "object",
+                "title": "LLVM IR options",
                 "description": "LLVM IR options",
                 "additionalProperties": false,
                 "properties": {
                   "sourceLineColorBands": {
                     "type": "boolean",
+                    "title": "Show source-line color bands",
                     "default": true,
-                    "description": "Connect source and generated lines with stable color bands"
+                    "description": "Use stable color bands to connect source lines with generated output"
                   }
                 }
               },
               "rust-mir": {
                 "type": "object",
+                "title": "Rust MIR options",
                 "description": "Rust MIR options",
                 "additionalProperties": false,
                 "properties": {}
               },
               "optimization-remarks": {
                 "type": "object",
+                "title": "Optimization remarks options",
                 "description": "Optimization remarks options",
                 "additionalProperties": false,
                 "properties": {}
               },
               "stack-analysis": {
                 "type": "object",
+                "title": "Stack analysis options",
                 "description": "Stack analysis options",
                 "additionalProperties": false,
                 "properties": {}
               },
               "control-flow-graph": {
                 "type": "object",
+                "title": "Control-flow graph options",
                 "description": "Control-flow graph options",
                 "additionalProperties": false,
                 "properties": {}
@@ -970,11 +997,13 @@
                   "properties": {
                     "intel": {
                       "type": "boolean",
-                      "description": "Emit Intel syntax when supported"
+                      "title": "Intel syntax",
+                      "description": "Emit Intel syntax when supported by the selected toolchain"
                     },
                     "demangle": {
                       "type": "boolean",
-                      "description": "Demangle symbols when supported"
+                      "title": "Demangle symbols",
+                      "description": "Run the configured demangler before rendering assembly"
                     }
                   }
                 }
@@ -1124,18 +1153,20 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
-    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "compile": "npm run manifest:check && npm run check-types && npm run lint && node esbuild.js",
     "watch": "node esbuild.js --watch",
     "watch:esbuild": "node esbuild.js --watch",
     "watch:tsc": "tsc --noEmit --watch --project tsconfig.json",
-    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "package": "npm run manifest:check && npm run check-types && npm run lint && node esbuild.js --production",
     "compile-tests": "tsc -p tsconfig.extension-tests.json",
     "watch-tests": "tsc -p tsconfig.extension-tests.json -w",
-    "pretest": "npm run compile-tests && npm run compile && npm run lint",
+    "pretest": "npm run manifest:check && npm run compile-tests && npm run compile && npm run lint",
     "check-types": "tsc --noEmit && tsc --noEmit -p tsconfig.unit.json && tsc --noEmit -p tsconfig.webview.json",
     "lint": "eslint src webview-src test",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "manifest:generate": "node --import tsx scripts/generate-manifest.ts --write",
+    "manifest:check": "node --import tsx scripts/generate-manifest.ts --check",
     "test": "npm run test:unit",
     "test:unit": "node --import tsx --test \"test/**/*.test.ts\"",
     "test:extension": "npm run compile-tests && npm run compile && node scripts/run-extension-tests.mjs",

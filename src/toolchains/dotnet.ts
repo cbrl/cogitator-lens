@@ -8,6 +8,7 @@ import { dotNetSourceMappingData } from '../artifacts/dotnet/dotnet-source-mappi
 import { renderDotNetIl } from '../artifacts/dotnet/dotnet-il-renderer.js';
 import { readBoundedArtifactBuffer } from './toolchain-backend.js';
 import { artifactCells, type ToolchainDefinition } from './toolchain-contracts.js';
+import { parseParenthesizedDiagnostics } from './msvc/diagnostics.js';
 
 export const dotNetIlProducer: ArtifactProducer = (backend, source, options, cancellationToken) =>
 	backend.produceWithTool(
@@ -276,6 +277,7 @@ function compareFrameworksDescending(left: string, right: string): number {
 
 export const dotnet: ToolchainDefinition = {
 	executablePattern: /^dotnet(?:\.exe)?$/i,
+	parseDiagnostics: parseParenthesizedDiagnostics,
 	languageIdentifiers: Object.freeze(['csharp']),
 	stripOwnedArguments: stripDotNetManagedArguments,
 	discoverTools: discoverDotNetTools,

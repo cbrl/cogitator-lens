@@ -2,13 +2,13 @@ import { displayOptionDescriptors, type ArtifactDefinition } from '../core/artif
 import { renderLlvmIr } from './llvm-ir-renderer.js';
 
 export const llvmIrArtifact = {
+	label: 'LLVM IR',
+	options: [displayOptionDescriptors.sourceLineColorBands],
 	presentation: 'text',
 	listingSyntax: 'llvm-ir',
-	label: 'LLVM IR',
 	icon: 'circuit-board',
 	filenameExtension: '.ll',
 	documentLanguage: 'artifact',
-	options: [displayOptionDescriptors.sourceLineColorBands],
 	renderer: renderLlvmIr,
 	navigation: {
 		definitions: true,
