@@ -18,8 +18,7 @@ import { equalUri } from '../utils.js';
 import {
 	binaryColumnsDecoration,
 	jumpArrowDecorations,
-	optimizationRemarkDecorations,
-	stackUsageDecoration,
+	annotationStyleDecorations,
 	selectedLineDecoration,
 	selectedSourceRangeDecoration,
 	stateDecoration,
@@ -30,8 +29,7 @@ import {
 import { EditorTracker } from './decorations/editor-tracker.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
 import type { ArtifactStatus, ArtifactState } from './artifact-generator.js';
-import type { ArtifactKind, ArtifactOptions, ArtifactLineAnnotation, RenderedArtifactLine } from '../types/index.js';
-import { formatArtifactLineAnnotation } from '../artifacts/analysis/analysis-source-renderer.js';
+import type { ArtifactKind, ArtifactOptions, RenderedArtifactLine } from '../types/index.js';
 import { artifactSupportsOption } from '../artifacts/core/artifact-definitions.js';
 import {
 	artifactScrollAnchor,
@@ -247,10 +245,9 @@ export class ArtifactDecorator {
 			editor.setDecorations(decorations.source, []);
 			editor.setDecorations(decorations.target, []);
 		}
-		for (const decoration of Object.values(optimizationRemarkDecorations)) {
+		for (const decoration of Object.values(annotationStyleDecorations)) {
 			editor.setDecorations(decoration, []);
 		}
-		editor.setDecorations(stackUsageDecoration, []);
 	}
 
 	private clearMappingDecorations(editor: TextEditor): void {
@@ -587,19 +584,14 @@ export class ArtifactDecorator {
 	}
 
 	private decorateAnalysisAnnotations(content: ArtifactDocumentContent): void {
-		for (const [category, decoration] of Object.entries(optimizationRemarkDecorations)) {
-			this.annotationDecorations(
-				content,
-				(candidate) => candidate.kind === 'optimization-remark' && candidate.category === category,
-				decoration,
-			);
+		for (const [style, decoration] of Object.entries(annotationStyleDecorations)) {
+			this.annotationDecorations(content, style, decoration);
 		}
-		this.annotationDecorations(content, (candidate) => candidate.kind === 'stack-usage', stackUsageDecoration);
 	}
 
 	private annotationDecorations(
 		content: ArtifactDocumentContent,
-		predicate: (annotation: ArtifactLineAnnotation) => boolean,
+		style: string,
 		decoration: TextEditorDecorationType,
 	): void {
 		const editor = this.editorTracker.getArtifactEditor(this.artifactUri);
@@ -610,7 +602,7 @@ export class ArtifactDecorator {
 			if (index >= editor.document.lineCount) {
 				return [];
 			}
-			const annotations = line.annotations?.filter(predicate) ?? [];
+			const annotations = line.annotations?.filter((annotation) => annotation.style === style) ?? [];
 			if (annotations.length === 0) {
 				return [];
 			}
@@ -620,7 +612,7 @@ export class ArtifactDecorator {
 					range: new Range(end, end),
 					renderOptions: {
 						after: {
-							contentText: annotations.map(formatArtifactLineAnnotation).join(' · '),
+							contentText: annotations.map((annotation) => annotation.text).join(' · '),
 						},
 					},
 				},

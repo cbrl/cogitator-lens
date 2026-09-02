@@ -123,10 +123,17 @@ export interface RenderedArtifactLineSource {
 
 export type OptimizationRemarkCategory = 'passed' | 'missed' | 'analysis';
 
+/** Decoration style selected by an artifact renderer for an inline annotation. */
+export type ArtifactLineAnnotationStyle =
+	'optimization-passed' | 'optimization-missed' | 'optimization-analysis' | 'stack-usage';
+
 export interface OptimizationRemarkLineAnnotation {
 	readonly kind: 'optimization-remark';
 	readonly category: OptimizationRemarkCategory;
 	readonly message: string;
+	/** Renderer-owned presentation text displayed beside the artifact line. */
+	readonly text: string;
+	readonly style: `optimization-${OptimizationRemarkCategory}`;
 }
 
 export type StackUsageQualifier = 'static' | 'dynamic' | 'dynamic-bounded' | 'vm';
@@ -137,6 +144,9 @@ export interface StackUsageLineAnnotation {
 	readonly value: number;
 	readonly unit: 'bytes' | 'vm-slots';
 	readonly qualifier: StackUsageQualifier;
+	/** Renderer-owned presentation text displayed beside the artifact line. */
+	readonly text: string;
+	readonly style: 'stack-usage';
 }
 
 export type ArtifactLineAnnotation = OptimizationRemarkLineAnnotation | StackUsageLineAnnotation;

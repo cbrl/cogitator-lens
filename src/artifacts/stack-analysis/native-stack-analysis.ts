@@ -281,6 +281,8 @@ export function renderStackUsage(
 				value: entry.value,
 				unit: entry.unit,
 				qualifier: entry.qualifier,
+				text: formatStackUsage(entry),
+				style: 'stack-usage',
 			},
 		})),
 		{
@@ -298,4 +300,12 @@ export function renderStackUsage(
 			},
 		},
 	);
+}
+
+/** Formats one stack record for inline and unmapped-entry presentation. */
+function formatStackUsage(entry: StackUsageEntry): string {
+	const unit =
+		entry.unit === 'vm-slots' ? `VM slot${entry.value === 1 ? '' : 's'}` : `byte${entry.value === 1 ? '' : 's'}`;
+	const qualifier = entry.qualifier === 'vm' ? '' : `, ${entry.qualifier}`;
+	return `stack: ${entry.value} ${unit}${qualifier} — ${entry.functionName}`;
 }

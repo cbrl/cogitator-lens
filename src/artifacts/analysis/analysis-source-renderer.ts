@@ -92,7 +92,7 @@ export function renderAnalysisSource(
 			{ text: '' },
 			{ text: 'Unmapped entries' },
 			...unmapped.map((entry) => ({
-				text: formatArtifactLineAnnotation(entry.annotation),
+				text: entry.annotation.text,
 			})),
 		);
 	}
@@ -109,21 +109,6 @@ export function renderAnalysisSource(
 	}
 
 	return renderedArtifact(raw, lines, options.metrics);
-}
-
-export function formatArtifactLineAnnotation(annotation: ArtifactLineAnnotation): string {
-	switch (annotation.kind) {
-		case 'optimization-remark':
-			return `[${annotation.category}] ${annotation.message}`;
-		case 'stack-usage': {
-			const unit =
-				annotation.unit === 'vm-slots'
-					? `VM slot${annotation.value === 1 ? '' : 's'}`
-					: `byte${annotation.value === 1 ? '' : 's'}`;
-			const qualifier = annotation.qualifier === 'vm' ? '' : `, ${annotation.qualifier}`;
-			return `stack: ${annotation.value} ${unit}${qualifier} — ${annotation.functionName}`;
-		}
-	}
 }
 
 function clampColumn(column: number | undefined, lineLength: number): number {

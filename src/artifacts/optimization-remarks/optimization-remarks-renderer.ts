@@ -55,6 +55,8 @@ function renderOptimizationRemarks(
 				kind: 'optimization-remark',
 				category: remark.category,
 				message: `${remark.pass}: ${remark.message}`,
+				text: `[${remark.category}] ${remark.pass}: ${remark.message}`,
+				style: `optimization-${remark.category}`,
 			},
 		})),
 		{

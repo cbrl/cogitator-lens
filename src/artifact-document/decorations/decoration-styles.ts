@@ -3,7 +3,7 @@
  */
 
 import { OverviewRulerLane, Uri, window, ThemeColor } from 'vscode';
-import type { OptimizationRemarkCategory } from '../../types/index.js';
+import type { ArtifactLineAnnotationStyle, OptimizationRemarkCategory } from '../../types/index.js';
 
 export const selectedLineDecoration = window.createTextEditorDecorationType({
 	isWholeLine: true,
@@ -114,15 +114,9 @@ function optimizationRemarkDecoration(category: OptimizationRemarkCategory) {
 	});
 }
 
-export const optimizationRemarkDecorations = {
-	passed: optimizationRemarkDecoration('passed'),
-	missed: optimizationRemarkDecoration('missed'),
-	analysis: optimizationRemarkDecoration('analysis'),
-} as const;
-
 const stackUsageBackground = new ThemeColor('coglens.stackUsage.background');
 
-export const stackUsageDecoration = window.createTextEditorDecorationType({
+const stackUsageDecoration = window.createTextEditorDecorationType({
 	after: {
 		backgroundColor: stackUsageBackground,
 		margin: '0 0 0 1.5em',
@@ -130,3 +124,11 @@ export const stackUsageDecoration = window.createTextEditorDecorationType({
 	overviewRulerColor: stackUsageBackground,
 	overviewRulerLane: OverviewRulerLane.Right,
 });
+
+/** Total mapping from renderer-selected annotation styles to editor decorations. */
+export const annotationStyleDecorations = {
+	'optimization-passed': optimizationRemarkDecoration('passed'),
+	'optimization-missed': optimizationRemarkDecoration('missed'),
+	'optimization-analysis': optimizationRemarkDecoration('analysis'),
+	'stack-usage': stackUsageDecoration,
+} as const satisfies Record<ArtifactLineAnnotationStyle, ReturnType<typeof window.createTextEditorDecorationType>>;

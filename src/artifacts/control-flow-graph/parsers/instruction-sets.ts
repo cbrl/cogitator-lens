@@ -178,18 +178,3 @@ function msvcInstruction(instruction: string): string {
 function opcodeOf(instruction: string): string {
 	return instruction.trim().split(/\s+/u)[0].toLowerCase();
 }
-
-/** The instruction sets a toolchain profile may name for its assembly output. */
-export const instructionSets = {
-	base: InstructionSetInfo,
-	arm32: ArmInstructionSetInfo,
-	aarch64: ArmInstructionSetInfo,
-	xtensa: XtensaInstructionSetInfo,
-	msvc: MsvcInstructionSetInfo,
-} as const satisfies Record<string, new () => InstructionSetInfo>;
-
-export type InstructionSetName = keyof typeof instructionSets;
-
-export function createInstructionSetInfo(name: InstructionSetName = 'base'): InstructionSetInfo {
-	return new instructionSets[name]();
-}
