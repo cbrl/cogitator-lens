@@ -4,9 +4,8 @@ import { renderControlFlowGraphArtifact } from '../../src/artifacts/control-flow
 import {
 	clangClLlvmIrOutput,
 	llvmIrOutput,
-	rustLlvmIrOutput,
-	rustMirOutput,
 } from '../../src/artifacts/core/compiler-output-producer.js';
+import { rustLlvmIrOutput, rustMirOutput } from '../../src/toolchains/rust.js';
 import { clangClOptimizationRemarksOutput } from '../../src/artifacts/optimization-remarks/clang-cl-optimization-remarks.js';
 import { pythonCfgHelper, pythonControlFlowGraphProducer } from '../../src/artifacts/python/python-cfg-producer.js';
 import { pythonAstHelper } from '../../src/artifacts/ast/python-ast-producer.js';

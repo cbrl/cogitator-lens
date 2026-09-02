@@ -3,6 +3,7 @@ import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
 import { parsedLine, withLabelNavigation } from './assembly-navigation.js';
 
+/** Renders compiler assembly and augments it with navigable labels and source locations. */
 export function renderAssembly(
 	raw: RawArtifact,
 	options: DisplayOptions,

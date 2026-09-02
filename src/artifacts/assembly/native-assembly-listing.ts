@@ -21,6 +21,7 @@ const assemblyProviders = [
 	{ label: instructionSetLabels.riscv64, provider: new Riscv64DocumentationProvider() },
 ] as const;
 
+/** Tokenizes labels, directives, mnemonics, and common register forms in native assembly. */
 export function nativeAssemblyTokens(text: string, context: ListingTokenContext): readonly LineToken[] {
 	const candidates: LineToken[] = [];
 	addMatches(candidates, text, /^\s*[.$_a-zA-Z][\w.$@?]*(?=:)/g, 'label', 70);

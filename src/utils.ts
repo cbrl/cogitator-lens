@@ -41,3 +41,8 @@ export function toComparisonKey(
 export function structurallyEqual<T>(left: T, right: T): boolean {
 	return JSON.stringify(left) === JSON.stringify(right);
 }
+
+/** Whether a command line contains either `--name` or `--name=value`. */
+export function hasOption(args: readonly string[], name: string): boolean {
+	return args.some((argument) => argument === name || argument.startsWith(`${name}=`));
+}

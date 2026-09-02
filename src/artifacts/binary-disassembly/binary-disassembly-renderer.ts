@@ -3,6 +3,7 @@ import { parsedLine, withLabelNavigation } from '../assembly/assembly-navigation
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
 
+/** Renders normalized disassembler output with instruction and code-size metrics. */
 export function renderBinaryDisassembly(
 	raw: RawArtifact,
 	options: DisplayOptions,

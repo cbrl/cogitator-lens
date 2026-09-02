@@ -60,6 +60,7 @@ export function instructionMnemonic(artifact: RenderedTextArtifact, text: string
 	return listingSyntaxFor(artifact)?.mnemonic(text);
 }
 
+/** Selects the documentation provider covering the most mnemonics in an assembly artifact. */
 function inferAssemblyProvider(
 	artifact: RenderedTextArtifact,
 	providers: readonly NamedProvider[],

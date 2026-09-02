@@ -11,6 +11,7 @@ import { DotNetAsmParser } from '../../vendor/lib/parsers/asm-parser-dotnet.js';
 import type { DotNetMethodSourceMapping, DotNetSourceMapping } from '../../vendor/lib/parsers/pdb-parser-dotnet.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
+import { dotNetSourceMappingFor } from './dotnet-source-mapping.js';
 
 const dotNetParser = new DotNetAsmParser();
 const instructionPattern = /^\s*(IL_[0-9a-f]+):\s+(\S+)/i;
@@ -44,7 +45,7 @@ export function renderDotNetIl(
 			: line.source,
 	}));
 	const methods = findMethods(lines);
-	applySourceMappings(lines, methods, raw.dotnetSourceMapping, context);
+	applySourceMappings(lines, methods, dotNetSourceMappingFor(raw), context);
 	const scopes = methodScopes(lines.length, methods);
 	const definitions = new Map<string, number>();
 	let instructionCount = 0;

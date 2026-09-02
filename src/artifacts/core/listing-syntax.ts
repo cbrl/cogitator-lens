@@ -44,6 +44,7 @@ export interface ListingSyntaxDefinition {
 	readonly tokens: (text: string, context: ListingTokenContext) => readonly LineToken[];
 }
 
+/** Appends every regex match that is eligible for semantic-token classification. */
 export function addMatches(
 	candidates: LineToken[],
 	text: string,
@@ -67,6 +68,7 @@ export const listingSyntaxes: Readonly<Record<ArtifactListingSyntax, ListingSynt
 	'llvm-ir': llvmIrListing,
 };
 
+/** Returns the syntax declaration selected by a rendered artifact, if it has one. */
 export function listingSyntaxFor(artifact: RenderedTextArtifact): ListingSyntaxDefinition | undefined {
 	return artifact.listingSyntax ? listingSyntaxes[artifact.listingSyntax] : undefined;
 }

@@ -102,7 +102,7 @@ export interface ToolchainDefinitionShape {
 		providerArguments: readonly string[],
 		sourcePath: string,
 	) => readonly string[];
-	readonly stripOwnedArguments?: (
+	readonly stripOwnedArguments: (
 		args: readonly string[],
 		sourceFile: string,
 		workingDirectory: string,
@@ -136,6 +136,7 @@ export const assemblyCell: ToolchainArtifactCell = {
 		backend.produceAssembly(source, options, cancellationToken),
 };
 
+/** Creates a binary-disassembly cell that requires the named disassembler. */
 export const binaryCell = (label: string, producer: ArtifactProducer): ToolchainArtifactCell => ({
 	status: 'available',
 	producer,
@@ -145,6 +146,7 @@ export const binaryCell = (label: string, producer: ArtifactProducer): Toolchain
 	},
 });
 
+/** Creates a cell whose artifact flavor must be selected from a non-empty output list. */
 export function outputArtifactCell(
 	outputs: readonly [ToolchainArtifactOutput, ...ToolchainArtifactOutput[]],
 ): ToolchainArtifactCell {
@@ -154,6 +156,7 @@ export function outputArtifactCell(
 	});
 }
 
+/** Describes one selectable CFG source and the parser that turns it into graphs. */
 export const controlFlowGraphOutput = (
 	id: string,
 	label: string,
@@ -174,6 +177,7 @@ export const assemblyControlFlowGraphOutput = controlFlowGraphOutput(
 	},
 );
 
+/** Creates the standard unsupported cell for a toolchain with no producer for a kind. */
 export function unsupportedCell(kind: ArtifactKind): ToolchainArtifactCell {
 	return {
 		status: 'unsupported',
@@ -181,6 +185,7 @@ export function unsupportedCell(kind: ArtifactKind): ToolchainArtifactCell {
 	};
 }
 
+/** Completes a toolchain's cell table by marking every unoverridden artifact kind unsupported. */
 export function artifactCells(
 	overrides: Partial<Record<ArtifactKind, ToolchainArtifactCell>>,
 ): Readonly<Record<ArtifactKind, ToolchainArtifactCell>> {
@@ -189,10 +194,14 @@ export function artifactCells(
 	) as Readonly<Record<ArtifactKind, ToolchainArtifactCell>>;
 }
 
+/** Returns a path only when it currently exists on disk. */
 export const existingFile = (candidate: string): string | undefined =>
 	fs.existsSync(candidate) ? candidate : undefined;
+
 export const sibling = (executable: string, name: string): string => path.join(path.dirname(executable), name);
+
 export const toolExecutableName = (name: string): string => (process.platform === 'win32' ? `${name}.exe` : name);
+
 export const executableOnPath = (name: string): string | undefined => {
 	for (const directory of (process.env.PATH ?? '').split(path.delimiter)) {
 		if (directory) {
@@ -204,8 +213,11 @@ export const executableOnPath = (name: string): string | undefined => {
 	}
 	return undefined;
 };
+
+/** Locates a tool next to its compiler first, then falls back to the process PATH. */
 export const siblingOrPath = (executable: string, name: string): string | undefined =>
 	existingFile(sibling(executable, name)) ?? executableOnPath(name);
+
 export const discoveredTools = (
 	candidates: Readonly<Record<string, string | undefined>>,
 ): Readonly<Record<string, string>> =>
@@ -220,6 +232,7 @@ export interface AuxiliaryToolNames {
 	readonly disassembler?: string;
 }
 
+/** Creates a sibling-or-PATH auxiliary-tool discovery function for a toolchain definition. */
 export function toolDiscoverer(names: AuxiliaryToolNames): (executable: string) => Readonly<Record<string, string>> {
 	return (executable) =>
 		discoveredTools({

@@ -1,11 +1,16 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { ArtifactProducer } from './toolchain-contracts.js';
+import { noopPropertyGetter } from '../vendor/compiler-props.js';
+import { GoAsmParser } from '../vendor/lib/parsers/asm-parser-go.js';
+import { parseGoSsaControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/go-ssa-cfg-parser.js';
+import { artifactCells, controlFlowGraphOutput, outputArtifactCell, toolDiscoverer, type ToolchainDefinition } from './toolchain-contracts.js';
 
 const goFunctionPattern =
 	/^\s*func\s+(?:\(\s*(?:[\p{L}_][\p{L}\p{N}_]*\s+)?(\*?\s*[\p{L}_][\p{L}\p{N}_]*)\s*\)\s*)?([\p{L}_][\p{L}\p{N}_]*)\s*\(/gmu;
 const goPackagePattern = /^\s*package\s+([\p{L}_][\p{L}\p{N}_]*)\b/mu;
 
+/** Builds \`go build\` arguments, preserving any configured compiler flags for assembly output. */
 export function goOutputArguments(
 	target: 'assembly' | 'object',
 	outputFile: string,
@@ -22,6 +27,7 @@ export function goOutputArguments(
 		: ['build', '-o', outputFile];
 }
 
+/** Removes \`go build\` subcommands, generated output paths, and the source path from provider arguments. */
 export function stripGoManagedArguments(
 	args: readonly string[],
 	sourceFile: string,
@@ -95,6 +101,7 @@ export const goSsaControlFlowGraphProducer: ArtifactProducer = async (backend, s
 	);
 };
 
+/** Selects a stable source function name suitable for \`GOSSAFUNC\` when none is configured. */
 export async function inferGoSsaFunction(filename: string): Promise<string | undefined> {
 	const source = await fs.readFile(filename, 'utf8');
 	const functions = [...source.matchAll(goFunctionPattern)].map((match) => ({
@@ -116,3 +123,19 @@ export async function inferGoSsaFunction(filename: string): Promise<string | und
 		? `${packageName === 'main' ? 'main' : 'command-line-arguments'}.${selected.name}`
 		: selected.name;
 }
+
+export const go: ToolchainDefinition = {
+	executablePattern: /^go(?:\.exe)?$/i,
+	languageIdentifiers: Object.freeze(['go']),
+	stripOwnedArguments: stripGoManagedArguments,
+	assembleArguments: (owned, provider, sourcePath) => [...owned.slice(0, 1), ...provider, ...owned.slice(1), sourcePath],
+	createParser: () => new GoAsmParser(noopPropertyGetter),
+	discoverTools: toolDiscoverer({}),
+	artifacts: artifactCells({
+		assembly: { status: 'available', producer: goAssemblyProducer },
+		'control-flow-graph': outputArtifactCell([
+			controlFlowGraphOutput('go-ssa', 'Go SSA CFG', 'Build a source-level graph from the final GOSSAFUNC SSA snapshot.', goSsaControlFlowGraphProducer,
+				(raw, _options, context) => parseGoSsaControlFlowGraphs(raw.text, context.source.uri.toString())),
+		]),
+	}),
+};

@@ -2,6 +2,7 @@ import type { RenderedArtifactLine, RenderedTextArtifact } from '../../types/ind
 import type { ParsedAsmResultLine, ParsedAsmResult } from '../../vendor/types/asmresult/asmresult.interfaces.js';
 import type { InstructionType } from '../control-flow-graph/parsers/instruction-sets.js';
 
+/** Adds symbol, link, and fold metadata derived from a parsed assembly listing. */
 export function withLabelNavigation(
 	artifact: RenderedTextArtifact,
 	parsed: ParsedAsmResult,
@@ -44,6 +45,7 @@ export function withLabelNavigation(
 	return { ...artifact, links, folds, symbols };
 }
 
+/** Converts a compiler-explorer parser line into the extension's line type. */
 export function parsedLine(line: ParsedAsmResultLine): RenderedArtifactLine {
 	return {
 		text: line.text,

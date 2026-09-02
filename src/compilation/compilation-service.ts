@@ -11,7 +11,6 @@ import type {
 	CompilationVariant,
 	ProviderSnapshot,
 	RawArtifact,
-	RenderedArtifact,
 	SourceState,
 } from '../types/index.js';
 import type { ArtifactRenderContext } from '../artifacts/core/artifact-contracts.js';
@@ -25,7 +24,7 @@ import {
 } from '../types/index.js';
 import { ToolExitError } from '../toolchains/toolchain-backend.js';
 import { ExecError } from '../exec.js';
-import { artifactDefinitions, supportedArtifactKinds } from '../artifacts/core/artifact-definitions.js';
+import { supportedArtifactKinds } from '../artifacts/core/artifact-definitions.js';
 import { resolveArtifactOutput } from '../toolchains/toolchain-map.js';
 import type { ToolchainArtifactOutput } from '../toolchains/toolchain-contracts.js';
 import { ToolchainRegistry } from './toolchain-registry.js';
@@ -34,6 +33,7 @@ import { parseToolDiagnostics } from '../diagnostics.js';
 import { resolveArtifactPreset, type ArtifactPreset } from '../artifacts/ui/presets.js';
 import { validateArtifactInputs } from './artifact-inputs.js';
 import { RawArtifactCache } from './raw-artifact-cache.js';
+import { renderArtifact } from './artifact-rendering.js';
 
 export class CompilationService {
 	readonly toolchainRegistry: ToolchainRegistry;
@@ -183,7 +183,7 @@ export class CompilationService {
 			request.onInvocation?.(invocationDetails(cached.command));
 			return {
 				status: 'available',
-				artifact: await this.renderArtifact(cached, options, renderContext, cell.renderer, cell.listingSyntax),
+				artifact: await renderArtifact(cached, options, renderContext, cell.renderer, cell.listingSyntax),
 			};
 		} else if (cached) {
 			this.rawArtifactCache.delete(key);
@@ -205,7 +205,7 @@ export class CompilationService {
 			this.rawArtifactCache.set(key, raw, variant.source);
 			return {
 				status: 'available',
-				artifact: await this.renderArtifact(raw, options, renderContext, cell.renderer, cell.listingSyntax),
+				artifact: await renderArtifact(raw, options, renderContext, cell.renderer, cell.listingSyntax),
 			};
 		} catch (error: unknown) {
 			if (error instanceof CancellationError || cancellationToken.isCancellationRequested) {
@@ -243,23 +243,6 @@ export class CompilationService {
 		this.variants.dispose();
 		this.toolchainRegistry.dispose();
 		this.rawArtifactCache.clear();
-	}
-
-	private async renderArtifact(
-		raw: RawArtifact,
-		options: ArtifactOptions,
-		context: ArtifactRenderContext,
-		outputRenderer?: import('../artifacts/core/artifact-contracts.js').ArtifactRenderer,
-		listingSyntax?: import('../artifacts/core/artifact-contracts.js').ArtifactListingSyntax,
-	): Promise<RenderedArtifact> {
-		const renderer =
-			outputRenderer ?? context.backend.getArtifactRenderer(raw.kind) ?? artifactDefinitions[raw.kind].renderer;
-		const rendered = await renderer(raw, options.display, context);
-		if (rendered.presentation !== 'text') {
-			return rendered;
-		}
-		const resolvedSyntax = listingSyntax ?? artifactDefinitions[raw.kind].listingSyntax;
-		return resolvedSyntax ? { ...rendered, listingSyntax: resolvedSyntax } : rendered;
 	}
 
 	private reloadUserConfiguration(): void {

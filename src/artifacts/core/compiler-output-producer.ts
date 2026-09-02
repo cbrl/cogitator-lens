@@ -56,34 +56,3 @@ export const gccControlFlowGraphOutput: ArtifactOutputSpec = Object.freeze({
 		path.join(temporaryDirectory, 'output.o'),
 	],
 });
-
-export const rustMirOutput: ArtifactOutputSpec = Object.freeze({
-	output: { filename: 'output.mir' },
-	arguments: (outputFile: string, _temporaryDirectory: string, providerArguments: readonly string[]) =>
-		rustArtifactArguments('mir', outputFile, providerArguments),
-});
-
-export const rustLlvmIrOutput: ArtifactOutputSpec = Object.freeze({
-	output: { filename: 'output.ll' },
-	arguments: (outputFile: string, _temporaryDirectory: string, providerArguments: readonly string[]) =>
-		rustArtifactArguments('llvm-ir', outputFile, providerArguments),
-});
-
-export function rustArtifactArguments(
-	emit: 'mir' | 'llvm-ir',
-	outputFile: string,
-	providerArguments: readonly string[],
-): readonly string[] {
-	return [
-		...(hasOption(providerArguments, '--crate-name') ? [] : ['--crate-name=coglens_artifact']),
-		...(hasOption(providerArguments, '--crate-type') ? [] : ['--crate-type=lib']),
-		`--emit=${emit}=${outputFile}`,
-		...(emit === 'llvm-ir' ? ['-C', 'debuginfo=1'] : []),
-		'--error-format=human',
-		'--color=never',
-	];
-}
-
-function hasOption(args: readonly string[], name: string): boolean {
-	return args.some((argument) => argument === name || argument.startsWith(`${name}=`));
-}

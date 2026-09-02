@@ -1,16 +1,12 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
-import {
-	dumpbin,
-	gnuObjdump,
-	llvmObjdump,
-} from '../../src/artifacts/binary-disassembly/binary-disassembly-producer.js';
+import { gnuObjdump, llvmObjdump } from '../../src/artifacts/binary-disassembly/binary-disassembly-producer.js';
+import { dumpbin } from '../../src/toolchains/msvc.js';
 import {
 	clangClLlvmIrOutput,
 	gccControlFlowGraphOutput,
 	llvmIrOutput,
-	rustArtifactArguments,
 } from '../../src/artifacts/core/compiler-output-producer.js';
 import { clangClOptimizationRemarksOutput } from '../../src/artifacts/optimization-remarks/clang-cl-optimization-remarks.js';
 import { clangOptimizationRemarksOutput } from '../../src/artifacts/optimization-remarks/clang-optimization-remarks.js';
@@ -20,7 +16,7 @@ import {
 	nativeStackUsageOutput,
 } from '../../src/artifacts/stack-analysis/native-stack-analysis.js';
 import { flattenCmakeArguments } from '../../src/buildsystems/cmake-arguments.js';
-import { rustOutputArguments } from '../../src/toolchains/rust.js';
+import { rustArtifactArguments, rustOutputArguments } from '../../src/toolchains/rust.js';
 import { nvccOutputArguments, nvdisasm } from '../../src/toolchains/nvcc.js';
 import { zigLlvmIrOutput, zigOutputArguments } from '../../src/toolchains/zig.js';
 import { intelOutputArguments } from '../../src/toolchains/toolchain-backend.js';

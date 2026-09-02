@@ -3,16 +3,34 @@ import path from 'path';
 import type { ArtifactProducer } from './toolchain-contracts.js';
 import type { ToolchainProfile } from '../types/index.js';
 import { samePath } from '../toolchain-arguments.js';
+import { DotNetPdbParser } from '../vendor/lib/parsers/pdb-parser-dotnet.js';
+import { dotNetSourceMappingData } from '../artifacts/dotnet/dotnet-source-mapping.js';
+import { renderDotNetIl } from '../artifacts/dotnet/dotnet-il-renderer.js';
+import { readBoundedArtifactBuffer } from './toolchain-backend.js';
+import { artifactCells, type ToolchainDefinition } from './toolchain-contracts.js';
 
 export const dotNetIlProducer: ArtifactProducer = (backend, source, options, cancellationToken) =>
-	backend.produceDotNetIl(
+	backend.produceWithTool(
+		'assembly',
 		source,
 		options,
 		{
-			compilerArguments: (assemblyFile, providerArguments) =>
-				dotNetCsharpArguments(backend.profile, assemblyFile, providerArguments),
-			disassemblerTool: 'ildasm',
-			disassemblerArguments: dotNetIlDasmArguments,
+			workspaceFiles: { assembly: 'output.dll', pdb: 'output.pdb' },
+			compilerArguments: (files, providerArguments) =>
+				dotNetCsharpArguments(backend.profile, files.assembly, providerArguments),
+			tool: 'ildasm',
+			toolArguments: (files) => dotNetIlDasmArguments(files.assembly),
+			producerData: async (files) => {
+				try {
+					const [assembly, pdb] = await Promise.all([
+						readBoundedArtifactBuffer(files.assembly),
+						readBoundedArtifactBuffer(files.pdb),
+					]);
+					return dotNetSourceMappingData(new DotNetPdbParser(assembly, pdb).parse());
+				} catch {
+					return undefined;
+				}
+			},
 		},
 		cancellationToken,
 	);
@@ -65,6 +83,7 @@ export function dotNetIlDasmArguments(assemblyFile: string): readonly string[] {
 	return [assemblyFile, '-utf8', '-text', '-nobar', '-linenum'];
 }
 
+/** Removes Roslyn output settings and the source path owned by .NET artifact production. */
 export function stripDotNetManagedArguments(
 	args: readonly string[],
 	sourceFile: string,
@@ -87,6 +106,7 @@ export function stripDotNetManagedArguments(
 	return result;
 }
 
+/** Discovers the Roslyn compiler and ILDasm associated with a configured dotnet host. */
 export function discoverDotNetTools(executable: string): Readonly<Record<string, string>> {
 	const compiler = discoverRoslynCompiler(executable);
 	const ildasm = discoverIlDasm(executable);
@@ -253,3 +273,19 @@ function compareVersionsDescending(left: string, right: string): number {
 function compareFrameworksDescending(left: string, right: string): number {
 	return compareVersionsDescending(left.replace(/^net/i, ''), right.replace(/^net/i, ''));
 }
+
+export const dotnet: ToolchainDefinition = {
+	executablePattern: /^dotnet(?:\.exe)?$/i,
+	languageIdentifiers: Object.freeze(['csharp']),
+	stripOwnedArguments: stripDotNetManagedArguments,
+	discoverTools: discoverDotNetTools,
+	artifacts: artifactCells({
+		assembly: {
+			status: 'available', producer: dotNetIlProducer, renderer: renderDotNetIl, listingSyntax: 'dotnet-il',
+			requiredTools: [
+				{ name: 'compiler', label: 'Roslyn csc.dll' },
+				{ name: 'ildasm', label: '.NET IL disassembler (ildasm)' },
+			],
+		},
+	}),
+};

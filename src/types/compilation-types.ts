@@ -6,7 +6,6 @@
 import type { CancellationToken, Uri } from 'vscode';
 import type { ArtifactOptions } from './artifact-options.js';
 import type { ArtifactKind, ArtifactListingSyntax } from '../artifacts/core/artifact-contracts.js';
-import type { DotNetSourceMapping } from '../vendor/lib/parsers/pdb-parser-dotnet.js';
 
 export interface CompilationVariant {
 	id: string;
@@ -99,8 +98,8 @@ export interface RawArtifact {
 	truncated: boolean;
 	readonly inputs: readonly ArtifactInputState[];
 	readonly dependencyCoverage: 'complete' | 'source-only';
-	/** Portable-PDB sequence points retained for .NET IL rendering. */
-	readonly dotnetSourceMapping?: DotNetSourceMapping;
+	/** Producer-owned metadata interpreted by the artifact's renderer. */
+	readonly producerData?: unknown;
 }
 
 export interface ArtifactSourceLocation {

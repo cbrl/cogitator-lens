@@ -16,7 +16,6 @@ import type {
 	RenderedArtifact,
 	CompileDiagnostic,
 } from '../types/index.js';
-import { samePath } from '../toolchain-arguments.js';
 import * as exec from '../exec.js';
 import { withTemporaryDirectory } from '../temporary-directory.js';
 import type { ToolchainDefinition } from './toolchain-contracts.js';
@@ -25,7 +24,6 @@ import type { InstructionType } from '../artifacts/control-flow-graph/parsers/in
 import type { AssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/assembly-cfg-parser.js';
 import type { AssemblyLine } from '../artifacts/control-flow-graph/parsers/assembly-line.js';
 import type { GraphParseResult } from '../artifacts/control-flow-graph/control-flow-graph-model.js';
-import { DotNetPdbParser, type DotNetSourceMapping } from '../vendor/lib/parsers/pdb-parser-dotnet.js';
 
 const maxArtifactFileBytes = 50 * 1024 * 1024;
 
@@ -58,10 +56,19 @@ export interface BinaryDisassembler {
 	readonly normalizeOutput?: (output: string) => string;
 }
 
-export interface DotNetIlCompilation {
-	readonly compilerArguments: (assemblyFile: string, providerArguments: readonly string[]) => readonly string[];
-	readonly disassemblerTool: string;
-	readonly disassemblerArguments: (assemblyFile: string) => readonly string[];
+export interface SecondaryToolSpec {
+	/** Logical workspace-file names mapped to filenames reserved in the temporary directory. */
+	readonly workspaceFiles: Readonly<Record<string, string>>;
+	readonly compilerArguments: (
+		files: Readonly<Record<string, string>>,
+		providerArguments: readonly string[],
+	) => readonly string[];
+	/** Profile key of the auxiliary tool that consumes the compiler output. */
+	readonly tool: string;
+	readonly toolArguments: (files: Readonly<Record<string, string>>) => readonly string[];
+	readonly normalizeOutput?: (output: string) => string;
+	/** Runs after the compiler, before the tool; its result becomes RawArtifact.producerData. */
+	readonly producerData?: (files: Readonly<Record<string, string>>) => Promise<unknown>;
 }
 
 export interface ToolchainHost {
@@ -98,78 +105,6 @@ export interface DependencyCollectionSpec {
 	) => readonly string[];
 	/** Converts the toolchain's dependency format into local input paths. */
 	readonly parse: (text: string, workingDirectory: string) => readonly string[];
-}
-
-const flagsWithSeparateValues = new Set([
-	'-o',
-	'-MF',
-	'-MT',
-	'-MQ',
-	'-dumpdir',
-	'-foptimization-record-file',
-	'/clang:-o',
-	'/clang:-foptimization-record-file',
-	'/Fo',
-	'/Fa',
-	'/Fd',
-	'/Fi',
-	'/sourceDependencies',
-]);
-const flagsWithJoinedValues = /^(?:-o|-MF|-MT|-MQ|-dumpdir=|\/[Ff][OoAaDdIi]|\/[Ss]ource[Dd]ependencies:).+/;
-const artifactOutputFlags =
-	/^(?:-emit-llvm|-fdump-tree-cfg(?:-[^=]+)*(?:=.*)?|-save-temps(?:=.*)?|-f(?:no-)?stack-usage|-fsave-optimization-record(?:=.*)?|-foptimization-record-file(?:=.*)?|-fopt-info(?:-[^=]+)?(?:=.*)?|\/clang:-(?:emit-llvm|S|gline-tables-only|save-temps(?:=.*)?|f(?:no-)?stack-usage|fsave-optimization-record(?:=.*)?|foptimization-record-file(?:=.*)?))$/;
-const compilerManagedFlags = new Set([
-	'-S',
-	'-c',
-	'-E',
-	'-fsyntax-only',
-	'-M',
-	'-MM',
-	'-MD',
-	'-MMD',
-	'/c',
-	'/FA',
-	'/FAc',
-	'/FAs',
-	'/FAcs',
-	'/E',
-	'/EP',
-	'/P',
-]);
-
-/**
- * Strips the output-file and compile-mode flags this extension supplies itself
- * (via `ToolchainDefinition.outputArguments`), so a toolchain's own default
- * arguments can't conflict with them.
- */
-export function stripCompilerManagedArguments(
-	args: readonly string[],
-	sourceFile: string,
-	workingDirectory?: string,
-): string[] {
-	const result: string[] = [];
-	for (let index = 0; index < args.length; index++) {
-		const argument = args[index];
-		if (samePath(argument, sourceFile, workingDirectory) || compilerManagedFlags.has(argument)) {
-			continue;
-		}
-		if (flagsWithSeparateValues.has(argument)) {
-			index++;
-			continue;
-		}
-		if (argument === '-Xclang' && args[index + 1] === '-ast-dump') {
-			index++;
-			continue;
-		}
-		if (flagsWithJoinedValues.test(argument)) {
-			continue;
-		}
-		if (artifactOutputFlags.test(argument)) {
-			continue;
-		}
-		result.push(argument);
-	}
-	return result;
 }
 
 /**
@@ -290,105 +225,65 @@ export class ToolchainBackend {
 		}
 		const outputArguments = this.definition.outputArguments;
 		const objectFilename = this.definition.objectFilename;
-		return withTemporaryDirectory('coglens-', async (temporaryDirectory) => {
-			const objectFile = path.join(temporaryDirectory, objectFilename);
-			const { invocation, result: compilerResult } = await this.run(
-				source,
-				options,
-				(providerArguments) => outputArguments('object', objectFile, providerArguments),
-				cancellationToken,
-			);
-			const disassemblerExecutable = this.profile.tools[disassembler.tool];
-			if (!disassemblerExecutable) {
-				throw new Error(`${this.profile.displayName} has no ${disassembler.tool} auxiliary tool.`);
-			}
-
-			const disassemblerArguments = disassembler.arguments(objectFile);
-			this.reportInvocation(options, invocation, disassemblerExecutable, disassemblerArguments);
-			this.host.log(`Command: ${disassemblerExecutable} ${disassemblerArguments.join(' ')}`);
-			const disassemblerResult = await exec.execute(disassemblerExecutable, disassemblerArguments, {
-				cwd: invocation.workingDirectory,
-				env: invocation.preparedEnvironment,
-				cancellationToken,
-			});
-			if (disassemblerResult.returnCode !== 0) {
-				throw new ToolExitError(
-					`Disassembler exited with code ${disassemblerResult.returnCode}`,
-					disassemblerResult.returnCode,
-					disassemblerResult.stdout,
-					disassemblerResult.stderr,
-				);
-			}
-
-			const text = disassembler.normalizeOutput
-				? disassembler.normalizeOutput(disassemblerResult.stdout)
-				: disassemblerResult.stdout;
-			const inputMetadata = await this.collectDependencyInputs(
-				source,
-				invocation,
-				temporaryDirectory,
-				cancellationToken,
-			);
-			return this.buildRawArtifact(
-				'binary-disassembly',
-				text,
-				[compilerResult.stderr, compilerResult.stdout, disassemblerResult.stderr].join('\n'),
-				source,
-				invocation,
-				inputMetadata,
-				disassemblerExecutable,
-				disassemblerArguments,
-			);
-		});
+		return this.produceWithTool(
+			'binary-disassembly',
+			source,
+			options,
+			{
+				workspaceFiles: { object: objectFilename },
+				compilerArguments: (files, providerArguments) =>
+					outputArguments('object', files.object, providerArguments),
+				tool: disassembler.tool,
+				toolArguments: (files) => disassembler.arguments(files.object),
+				normalizeOutput: disassembler.normalizeOutput,
+			},
+			cancellationToken,
+		);
 	}
 
-	async produceDotNetIl(
+	/**
+	 * Produces a compiler artifact, then feeds its temporary workspace files to an auxiliary tool.
+	 * The optional producer-data hook runs between those two steps and is retained on the result.
+	 */
+	async produceWithTool(
+		kind: ArtifactKind,
 		source: Uri,
 		options: CompileOptions,
-		compilation: DotNetIlCompilation,
+		spec: SecondaryToolSpec,
 		cancellationToken: CancellationToken,
 	): Promise<RawArtifact> {
 		return withTemporaryDirectory('coglens-', async (temporaryDirectory) => {
-			const assemblyFile = path.join(temporaryDirectory, 'output.dll');
-			const pdbFile = path.join(temporaryDirectory, 'output.pdb');
+			const files = Object.freeze(
+				Object.fromEntries(
+					Object.entries(spec.workspaceFiles).map(([name, filename]) => [name, path.join(temporaryDirectory, filename)]),
+				),
+			);
 			const { invocation, result: compilerResult } = await this.run(
 				source,
 				options,
-				(providerArguments) => compilation.compilerArguments(assemblyFile, providerArguments),
+				(providerArguments) => spec.compilerArguments(files, providerArguments),
 				cancellationToken,
 			);
-			let sourceMapping: DotNetSourceMapping | undefined;
-			try {
-				const [assembly, pdb] = await Promise.all([
-					readBoundedArtifactBuffer(assemblyFile),
-					readBoundedArtifactBuffer(pdbFile),
-				]);
-				sourceMapping = new DotNetPdbParser(assembly, pdb).parse();
-			} catch (error) {
-				this.host.log(
-					`Portable PDB source mapping was unavailable: ${error instanceof Error ? error.message : String(error)}`,
-					'debug',
-				);
-			}
-			const disassemblerExecutable = this.profile.tools[compilation.disassemblerTool];
-			if (!disassemblerExecutable) {
-				throw new Error(`${this.profile.displayName} has no ${compilation.disassemblerTool} auxiliary tool.`);
+			const producerData = await spec.producerData?.(files);
+			const toolExecutable = this.profile.tools[spec.tool];
+			if (!toolExecutable) {
+				throw new Error(`${this.profile.displayName} has no ${spec.tool} auxiliary tool.`);
 			}
 
-			const disassemblerArguments = compilation.disassemblerArguments(assemblyFile);
-			this.reportInvocation(options, invocation, disassemblerExecutable, disassemblerArguments);
-			this.host.log(`Command: ${disassemblerExecutable} ${disassemblerArguments.join(' ')}`);
-			const disassemblerResult = await exec.execute(disassemblerExecutable, disassemblerArguments, {
+			const toolArguments = spec.toolArguments(files);
+			this.reportInvocation(options, invocation, toolExecutable, toolArguments);
+			this.host.log(`Command: ${toolExecutable} ${toolArguments.join(' ')}`);
+			const toolResult = await exec.execute(toolExecutable, toolArguments, {
 				cwd: invocation.workingDirectory,
 				env: invocation.preparedEnvironment,
 				cancellationToken,
 			});
-			if (disassemblerResult.returnCode !== 0) {
+			if (toolResult.returnCode !== 0) {
 				throw new ToolExitError(
-					`.NET IL disassembler exited with code ${disassemblerResult.returnCode}`,
-					disassemblerResult.returnCode,
-					disassemblerResult.stdout,
-					disassemblerResult.stderr,
+					`Auxiliary tool exited with code ${toolResult.returnCode}`,
+					toolResult.returnCode,
+					toolResult.stdout,
+					toolResult.stderr,
 				);
 			}
 
@@ -399,18 +294,18 @@ export class ToolchainBackend {
 				cancellationToken,
 			);
 			const artifact = this.buildRawArtifact(
-				'assembly',
-				disassemblerResult.stdout,
-				[compilerResult.stderr, compilerResult.stdout, disassemblerResult.stderr].join('\n'),
+				kind,
+				spec.normalizeOutput ? spec.normalizeOutput(toolResult.stdout) : toolResult.stdout,
+				[compilerResult.stderr, compilerResult.stdout, toolResult.stderr].join('\n'),
 				source,
 				invocation,
 				inputMetadata,
-				disassemblerExecutable,
-				disassemblerArguments,
+				toolExecutable,
+				toolArguments,
 			);
 			return {
 				...artifact,
-				...(sourceMapping ? { dotnetSourceMapping: sourceMapping } : {}),
+				...(producerData === undefined ? {} : { producerData }),
 			};
 		});
 	}
@@ -486,6 +381,7 @@ export class ToolchainBackend {
 		return this.cfgParser?.classifyInstruction(instruction);
 	}
 
+	/** Parses assembly CFG input with this backend's configured dialect parser. */
 	parseAssemblyControlFlowGraph(lines: readonly AssemblyLine[]): GraphParseResult {
 		if (!this.cfgParser) {
 			throw new Error(`${this.profile.displayName} has no assembly CFG parser.`);
@@ -588,8 +484,7 @@ export class ToolchainBackend {
 			? await this.definition.prepareEnvironment(this.profile, environment, cancellationToken)
 			: environment;
 
-		const strip = this.definition.stripOwnedArguments ?? stripCompilerManagedArguments;
-		const providerArguments = strip(
+		const providerArguments = this.definition.stripOwnedArguments(
 			[...this.profile.defaultArguments, ...(options.args ?? [])],
 			source.fsPath,
 			workingDirectory,
@@ -733,7 +628,8 @@ async function readBoundedArtifactFile(filename: string, optional = false): Prom
 	}
 }
 
-async function readBoundedArtifactBuffer(filename: string): Promise<Buffer> {
+/** Reads an artifact file only when it is within the backend's defensive size limit. */
+export async function readBoundedArtifactBuffer(filename: string): Promise<Buffer> {
 	const stat = await fs.promises.stat(filename);
 	if (stat.size > maxArtifactFileBytes) {
 		throw artifactFileLimitError();

@@ -13,7 +13,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { artifactDefinitions } from '../../src/artifacts/core/artifact-definitions.js';
 import { pythonAstHelper } from '../../src/artifacts/ast/python-ast-producer.js';
-import { rustArtifactArguments } from '../../src/artifacts/core/compiler-output-producer.js';
+import { rustArtifactArguments } from '../../src/toolchains/rust.js';
 import { renderControlFlowGraphArtifact } from '../../src/artifacts/control-flow-graph/control-flow-graph-renderer.js';
 import { controlFlowGraphMetrics } from '../../src/artifacts/control-flow-graph/control-flow-graph-model.js';
 import { parsePythonControlFlowGraphs } from '../../src/artifacts/control-flow-graph/parsers/python-cfg-parser.js';

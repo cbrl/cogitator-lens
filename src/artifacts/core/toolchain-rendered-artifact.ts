@@ -1,6 +1,7 @@
 import type { DisplayOptions, RawArtifact, RenderedTextArtifact } from '../../types/index.js';
 import type { ArtifactRenderContext } from './artifact-contracts.js';
 
+/** Delegates rendering to the toolchain while enforcing the text-artifact contract. */
 export function renderToolchainArtifact(
 	raw: RawArtifact,
 	options: DisplayOptions,

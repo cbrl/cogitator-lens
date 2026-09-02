@@ -3,8 +3,8 @@ import test from 'node:test';
 import { artifactDefinitions } from '../../src/artifacts/core/artifact-definitions.js';
 import {
 	normalizeDisassemblySourcePaths,
-	normalizeDumpbinOutput,
 } from '../../src/artifacts/binary-disassembly/binary-disassembly-producer.js';
+import { normalizeDumpbinOutput } from '../../src/toolchains/msvc.js';
 import { defaultArtifactOptions, type ToolchainKind } from '../../src/types/index.js';
 import { rawArtifact, renderContext } from '../support/artifacts.js';
 import { readFixture } from '../support/environment.js';

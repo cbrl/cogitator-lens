@@ -3,7 +3,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { CommandLineSyntaxError, tokenizePosix, tokenizeWindows } from '../../src/tokenize.js';
 import { removeSourceArgument } from '../../src/toolchain-arguments.js';
-import { stripCompilerManagedArguments } from '../../src/toolchains/toolchain-backend.js';
+import { stripCompilerManagedArguments } from '../../src/toolchains/c-family.js';
 import { stripPythonManagedArguments } from '../../src/toolchains/python.js';
 import { stripRustManagedArguments } from '../../src/toolchains/rust.js';
 
