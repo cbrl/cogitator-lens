@@ -1,4 +1,4 @@
-import type { ArtifactProducer } from '../../toolchains/toolchain-map.js';
+import type { ArtifactProducer } from '../../toolchains/toolchain-contracts.js';
 import { ToolExitError } from '../../toolchains/toolchain-backend.js';
 import { UnsupportedToolVersionError } from '../../types/index.js';
 

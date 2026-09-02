@@ -225,6 +225,19 @@ test('Zig and nvcc emit through their own build drivers', () => {
 	]);
 });
 
+test('command-driven toolchains place provider arguments after their command', () => {
+	for (const kind of ['go', 'zig'] as const) {
+		const assemble = getToolchainDefinition(kind).assembleArguments;
+		assert.ok(assemble);
+		assert.deepEqual(assemble(['build-obj', '--owned'], ['--provider'], 'source.zig'), [
+			'build-obj',
+			'--provider',
+			'--owned',
+			'source.zig',
+		]);
+	}
+});
+
 test('dependency collection names its own output and keeps the project crate identity', () => {
 	const gcc = getToolchainDefinition('gcc').dependencyCollection;
 	assert.ok(gcc);

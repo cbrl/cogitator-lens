@@ -1,8 +1,8 @@
 import path from 'path';
 import type { DisplayOptions, RawArtifact, RenderedTextArtifact, StackUsageQualifier } from '../../types/index.js';
-import type { ArtifactProducer } from '../../toolchains/toolchain-map.js';
+import type { ArtifactProducer } from '../../toolchains/toolchain-contracts.js';
 import type { ArtifactOutputSpec } from '../../toolchains/toolchain-backend.js';
-import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
+import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { artifactProducer } from '../core/compiler-output-producer.js';
 import {
 	type AnalysisParserDiagnostic,

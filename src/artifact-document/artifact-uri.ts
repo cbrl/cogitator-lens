@@ -21,10 +21,11 @@ export function getArtifactUri(
 	presetId: string,
 	artifactOutputId?: string,
 ): Uri {
-	if (artifactKind === 'control-flow-graph' && !artifactOutputId) {
-		throw new Error('Control-flow graph URIs require an output selection.');
+	const definition = artifactDefinitions[artifactKind];
+	if (definition.requiresOutputSelection && !artifactOutputId) {
+		throw new Error(`${definition.label} URIs require an output selection.`);
 	}
-	if (artifactKind !== 'control-flow-graph' && artifactOutputId) {
+	if (!definition.requiresOutputSelection && artifactOutputId) {
 		throw new Error(`${artifactKind} URIs do not accept an output selection.`);
 	}
 	const query = new URLSearchParams({
@@ -61,12 +62,15 @@ export function parseArtifactUri(uri: Uri): ArtifactUriIdentity | undefined {
 	const artifactKind = configuredKind ? getArtifactKind(configuredKind) : undefined;
 	const presetId = query.get('preset');
 	const artifactOutputId = query.get('output') || undefined;
+	const requiresOutputSelection = artifactKind
+		? artifactDefinitions[artifactKind].requiresOutputSelection === true
+		: false;
 	if (
 		!rawSource ||
 		!variantId ||
 		!artifactKind ||
 		!presetId ||
-		(artifactKind === 'control-flow-graph') !== Boolean(artifactOutputId)
+		requiresOutputSelection !== Boolean(artifactOutputId)
 	) {
 		return undefined;
 	}

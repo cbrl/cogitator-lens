@@ -1,6 +1,6 @@
 import path from 'node:path';
 import type { DisplayOptions, RawArtifact, RenderedTextArtifact, RenderedArtifactLine } from '../../types/index.js';
-import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
+import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
 
 const functionHeader = /^\s*fn\s+(.+?)\s*\(.*\).*\{\s*$/;

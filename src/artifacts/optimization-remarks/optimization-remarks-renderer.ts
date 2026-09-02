@@ -6,7 +6,7 @@ import type {
 	RenderedTextArtifact,
 } from '../../types/index.js';
 import type { OptRemark } from '../../vendor/static/panes/opt-view.interfaces.js';
-import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
+import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderAnalysisSource, sameSourcePath } from '../analysis/analysis-source-renderer.js';
 
 export interface OptimizationRemark {

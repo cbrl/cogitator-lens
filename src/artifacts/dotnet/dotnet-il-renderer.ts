@@ -9,7 +9,7 @@ import type {
 } from '../../types/index.js';
 import { DotNetAsmParser } from '../../vendor/lib/parsers/asm-parser-dotnet.js';
 import type { DotNetMethodSourceMapping, DotNetSourceMapping } from '../../vendor/lib/parsers/pdb-parser-dotnet.js';
-import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
+import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
 
 const dotNetParser = new DotNetAsmParser();

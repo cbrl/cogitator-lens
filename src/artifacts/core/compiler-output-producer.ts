@@ -2,7 +2,7 @@ import type { CancellationToken, Uri } from 'vscode';
 import path from 'path';
 import type { ArtifactKind, CompileOptions, RawArtifact } from '../../types/index.js';
 import type { ArtifactOutputSpec, ToolchainBackend } from '../../toolchains/toolchain-backend.js';
-import type { ArtifactProducer } from '../../toolchains/toolchain-map.js';
+import type { ArtifactProducer } from '../../toolchains/toolchain-contracts.js';
 
 /**
  * Produces a control-flow graph from the assembly listing a toolchain already

@@ -131,8 +131,9 @@ test('a selected control-flow output is rendered by the parser that output decla
 	);
 
 	// The assembly output renders whatever the toolchain's assembly parser returns.
+	const rustBackend = toolchainBackend('rust');
 	const backend = {
-		profile: toolchainBackend('rust').profile,
+		profile: rustBackend.profile,
 		parseAssembly: () => ({
 			asm: [
 				{ text: 'selected:' },
@@ -143,6 +144,7 @@ test('a selected control-flow output is rendered by the parser that output decla
 			],
 			labelDefinitions: {},
 		}),
+		parseAssemblyControlFlowGraph: rustBackend.parseAssemblyControlFlowGraph.bind(rustBackend),
 	} as never;
 	const assembly = renderControlFlowGraphArtifact(
 		rawArtifact('control-flow-graph', ''),

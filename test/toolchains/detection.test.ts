@@ -35,6 +35,8 @@ test('executable names resolve to the toolchain that owns them', () => {
 	}
 	// Apple's clang only announces itself in its version banner.
 	assert.equal(detectToolchainDefinition('clang', 'Apple clang version 17', 'linux')?.kind, 'apple-clang');
+	assert.equal(detectToolchainDefinition('clang', 'clang version 19', 'darwin')?.kind, 'apple-clang');
+	assert.equal(detectToolchainDefinition('clang', 'clang version 19', 'linux')?.kind, 'clang');
 	assert.equal(detectToolchainDefinition('not-gcc', '', 'linux'), undefined);
 	assert.equal(detectToolchainDefinition('compiler-wrapper', '', 'linux'), undefined);
 	assert.ok(toolchainDefinitions.nvcc.languageIdentifiers.includes('cuda-cpp'));

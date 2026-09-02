@@ -1,21 +1,12 @@
-import fs from 'fs';
 import path from 'path';
-import type { CancellationToken, Uri } from 'vscode';
 import type {
 	ArtifactKind,
-	ArtifactListingSyntax,
 	ArtifactOptionAvailability,
 	ArtifactOptionId,
-	ArtifactRenderContext,
-	CompileOptions,
-	DisplayOptions,
-	IntelSyntaxSupport,
-	RawArtifact,
-	RenderedArtifact,
 	ToolchainKind,
 	ToolchainProfile,
 } from '../types/index.js';
-import { ToolchainBackend, type DependencyCollectionSpec } from '../toolchains/toolchain-backend.js';
+import type { DependencyCollectionSpec } from '../toolchains/toolchain-backend.js';
 import { AsmParser } from '../vendor/lib/parsers/asm-parser.js';
 import { noopPropertyGetter } from '../vendor/compiler-props.js';
 import {
@@ -30,7 +21,7 @@ import { stripPythonManagedArguments } from './python.js';
 import { goAssemblyProducer, goSsaControlFlowGraphProducer, stripGoManagedArguments } from './go.js';
 import { zigLlvmIrOutput, zigOutputArguments, stripZigManagedArguments } from './zig.js';
 import { nvccOutputArguments, nvdisasm, stripNvccManagedArguments } from './nvcc.js';
-import { artifactDefinitions, supportedArtifactKinds } from '../artifacts/core/artifact-definitions.js';
+import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
 import {
 	binaryDisassemblyProducer,
 	dumpbin,
@@ -38,7 +29,6 @@ import {
 	llvmObjdump,
 } from '../artifacts/binary-disassembly/binary-disassembly-producer.js';
 import {
-	assemblyControlFlowGraphProducer,
 	clangClLlvmIrOutput,
 	artifactProducer,
 	gccControlFlowGraphOutput,
@@ -72,8 +62,6 @@ import {
 	pythonStackAnalysisProducer,
 	renderPythonStackAnalysis,
 } from '../artifacts/stack-analysis/python-stack-analysis.js';
-import type { GraphParseResult } from '../artifacts/control-flow-graph/control-flow-graph-model.js';
-import { toAssemblyLines } from '../artifacts/control-flow-graph/parsers/assembly-line.js';
 import {
 	ClangAssemblyCfgParser,
 	GccAssemblyCfgParser,
@@ -85,216 +73,39 @@ import { parseLlvmControlFlowGraphs } from '../artifacts/control-flow-graph/pars
 import { parsePythonControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/python-cfg-parser.js';
 import { parseRustMirControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/rust-mir-cfg-parser.js';
 import { parseGoSsaControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/go-ssa-cfg-parser.js';
-import type { AssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/assembly-cfg-parser.js';
 import { GoAsmParser } from '../vendor/lib/parsers/asm-parser-go.js';
 import { PTXAsmParser } from '../vendor/lib/parsers/asm-parser-ptx.js';
 import { SassAsmParser } from '../vendor/lib/parsers/asm-parser-sass.js';
 import { discoverDotNetTools, dotNetIlProducer, stripDotNetManagedArguments } from './dotnet.js';
 import { renderDotNetIl } from '../artifacts/dotnet/dotnet-il-renderer.js';
+import {
+	artifactCells,
+	assemblyCell,
+	assemblyControlFlowGraphOutput,
+	binaryCell,
+	controlFlowGraphOutput,
+	outputArtifactCell,
+	toolDiscoverer,
+	type ToolchainArtifactCell,
+	type ToolchainArtifactOutput,
+	type ToolchainDefinition,
+	type ToolchainDefinitionShape,
+	type ResolvedToolchainArtifactCell,
+} from './toolchain-contracts.js';
+
+export type {
+	ArtifactProducer,
+	ResolvedToolchainArtifactCell,
+	ToolchainArtifactCell,
+	ToolchainArtifactImplementation,
+	ToolchainArtifactOutput,
+	ToolchainDefinition,
+	ToolchainDefinitionShape,
+} from './toolchain-contracts.js';
 
 export type ToolCapabilityStatus = 'available' | 'unavailable' | 'unsupported';
 
-export const disassemblerToolName = 'disassembler';
-
-export type ArtifactProducer = (
-	backend: ToolchainBackend,
-	source: Uri,
-	options: CompileOptions,
-	cancellationToken: CancellationToken,
-) => Promise<RawArtifact>;
-
-interface ToolchainArtifactImplementation {
-	readonly producer: ArtifactProducer;
-	/** Overrides the artifact kind's default listing syntax for this toolchain's output. */
-	readonly listingSyntax?: ArtifactListingSyntax;
-	/** Optional toolchain-specific rendering action; otherwise the artifact default is used. */
-	readonly renderer?: (raw: RawArtifact, options: DisplayOptions, context: ArtifactRenderContext) => RenderedArtifact;
-	readonly requiredTool?: {
-		readonly name: string;
-		readonly label: string;
-	};
-	readonly requiredTools?: readonly {
-		readonly name: string;
-		readonly label: string;
-	}[];
-}
-
-export interface ToolchainArtifactOutput extends ToolchainArtifactImplementation {
-	/** Stable identifier persisted in artifact document URIs and production cache keys. */
-	readonly id: string;
-	readonly label: string;
-	readonly description: string;
-	readonly parseGraphs?: (
-		raw: RawArtifact,
-		options: DisplayOptions,
-		context: ArtifactRenderContext,
-	) => GraphParseResult;
-}
-
-type ResolvedToolchainArtifactCell =
-	| (ToolchainArtifactImplementation & { readonly status: 'available'; readonly id?: never })
-	| (ToolchainArtifactOutput & { readonly status: 'available' })
-	| {
-			readonly status: 'unavailable' | 'unsupported';
-			readonly explanation: string;
-	  };
-
-export type ToolchainArtifactCell =
-	| (ToolchainArtifactImplementation & {
-			readonly status: 'available';
-			readonly outputs?: never;
-	  })
-	| {
-			readonly status: 'available';
-			readonly outputs: readonly [ToolchainArtifactOutput, ...ToolchainArtifactOutput[]];
-	  }
-	| {
-			readonly status: 'unavailable' | 'unsupported';
-			readonly explanation: string;
-	  };
-
-export interface ToolchainDefinitionShape {
-	readonly executablePattern: RegExp;
-	readonly languageIdentifiers: readonly string[];
-	readonly intelSyntax?: IntelSyntaxSupport;
-	readonly intelArguments?: readonly string[];
-	readonly includeFlag?: string;
-	readonly defineFlag?: string;
-	readonly objectFilename?: string;
-	readonly outputArguments?: (
-		target: 'assembly' | 'object',
-		outputFile: string,
-		providerArguments: readonly string[],
-	) => readonly string[];
-	/** Controls argument order for drivers whose first argument is a required subcommand. */
-	readonly ownedArgumentPlacement?: 'before-provider' | 'command-before-provider';
-	readonly stripOwnedArguments?: (
-		args: readonly string[],
-		sourceFile: string,
-		workingDirectory: string,
-	) => readonly string[];
-	readonly createParser?: () => AsmParser;
-	readonly createBinaryParser?: () => AsmParser;
-	readonly createCfgParser?: () => AssemblyCfgParser;
-	readonly prepareEnvironment?: (
-		profile: ToolchainProfile,
-		environment: NodeJS.ProcessEnv,
-		cancellationToken: CancellationToken,
-	) => Promise<NodeJS.ProcessEnv>;
-	readonly demangle?: (
-		rawAssembly: string,
-		demanglerTool: string,
-		environment: NodeJS.ProcessEnv,
-		workingDirectory: string,
-		cancellationToken: CancellationToken,
-	) => Promise<string>;
-	/** Omit when the toolchain cannot enumerate inputs beyond the main source. */
-	readonly dependencyCollection?: DependencyCollectionSpec;
-	readonly discoverTools: (executable: string) => Readonly<Record<string, string>>;
-	readonly artifacts: Readonly<Record<ArtifactKind, ToolchainArtifactCell>>;
-}
-
 const cFamilyLanguageIdentifiers = Object.freeze(['c', 'cpp', 'objective-c', 'objective-cpp', 'cuda']);
-
-const assemblyCell: ToolchainArtifactCell = {
-	status: 'available',
-	producer: (backend, source, options, cancellationToken) =>
-		backend.produceAssembly(source, options, cancellationToken),
-};
-
-const binaryCell = (label: string, producer: ArtifactProducer): ToolchainArtifactCell => ({
-	status: 'available',
-	producer,
-	requiredTool: {
-		name: disassemblerToolName,
-		label,
-	},
-});
-
-function outputArtifactCell(
-	outputs: readonly [ToolchainArtifactOutput, ...ToolchainArtifactOutput[]],
-): ToolchainArtifactCell {
-	return Object.freeze({
-		status: 'available',
-		outputs: Object.freeze([...outputs]) as readonly [ToolchainArtifactOutput, ...ToolchainArtifactOutput[]],
-	});
-}
-
-const controlFlowGraphOutput = (
-	id: string,
-	label: string,
-	description: string,
-	producer: ArtifactProducer,
-	parseGraphs: NonNullable<ToolchainArtifactOutput['parseGraphs']>,
-): ToolchainArtifactOutput => Object.freeze({ id, label, description, producer, parseGraphs });
-
-const parseAssemblyControlFlowGraphs: NonNullable<ToolchainArtifactOutput['parseGraphs']> = (raw, options, context) => {
-	const parsedAssembly = context.backend.parseAssembly(raw.text, options);
-	const lines = toAssemblyLines(parsedAssembly.asm, context.source.uri.toString(), raw.command.workingDirectory);
-	const definition: ToolchainDefinitionShape = toolchainDefinitions[context.backend.profile.kind];
-	return definition.createCfgParser!().parse(lines);
-};
-
-const assemblyControlFlowGraphOutput = controlFlowGraphOutput(
-	'assembly',
-	'Assembly CFG',
-	'Build a machine-level graph from the compiler assembly listing.',
-	assemblyControlFlowGraphProducer,
-	parseAssemblyControlFlowGraphs,
-);
-
-function unsupportedCell(kind: ArtifactKind): ToolchainArtifactCell {
-	return {
-		status: 'unsupported',
-		explanation: `This toolchain has no ${artifactDefinitions[kind].label.toLowerCase()} producer.`,
-	};
-}
-
-function artifactCells(
-	overrides: Partial<Record<ArtifactKind, ToolchainArtifactCell>>,
-): Readonly<Record<ArtifactKind, ToolchainArtifactCell>> {
-	return Object.freeze(
-		Object.fromEntries(supportedArtifactKinds.map((kind) => [kind, overrides[kind] ?? unsupportedCell(kind)])),
-	) as Readonly<Record<ArtifactKind, ToolchainArtifactCell>>;
-}
-
-const existingFile = (candidate: string): string | undefined => (fs.existsSync(candidate) ? candidate : undefined);
-const sibling = (executable: string, name: string): string => path.join(path.dirname(executable), name);
-const toolExecutableName = (name: string): string => (process.platform === 'win32' ? `${name}.exe` : name);
-const executableOnPath = (name: string): string | undefined => {
-	for (const directory of (process.env.PATH ?? '').split(path.delimiter)) {
-		if (directory) {
-			const candidate = path.join(directory, name);
-			if (fs.existsSync(candidate)) {
-				return candidate;
-			}
-		}
-	}
-	return undefined;
-};
-const siblingOrPath = (executable: string, name: string): string | undefined =>
-	existingFile(sibling(executable, name)) ?? executableOnPath(name);
-const discoveredTools = (candidates: Readonly<Record<string, string | undefined>>): Readonly<Record<string, string>> =>
-	Object.freeze(
-		Object.fromEntries(
-			Object.entries(candidates).filter((entry): entry is [string, string] => entry[1] !== undefined),
-		),
-	);
-
-interface AuxiliaryToolNames {
-	readonly demangler?: string;
-	readonly disassembler?: string;
-}
-
-function toolDiscoverer(names: AuxiliaryToolNames): (executable: string) => Readonly<Record<string, string>> {
-	return (executable) =>
-		discoveredTools({
-			demangler: names.demangler ? siblingOrPath(executable, toolExecutableName(names.demangler)) : undefined,
-			disassembler: names.disassembler
-				? siblingOrPath(executable, toolExecutableName(names.disassembler))
-				: undefined,
-		});
-}
 
 function gnuOutputArguments(lineTableArguments: readonly string[]) {
 	return (target: 'assembly' | 'object', outputFile: string): readonly string[] =>
@@ -645,6 +456,7 @@ export const toolchainDefinitions = {
 	},
 	'apple-clang': {
 		executablePattern: /^clang(?:\+\+)?(?:-\d+(?:\.\d+)*)?(?:\.exe)?$/i,
+		disambiguate: (versionOutput, platform) => /apple clang/i.test(versionOutput) || platform === 'darwin',
 		languageIdentifiers: cFamilyLanguageIdentifiers,
 		intelSyntax: 'selectable',
 		intelArguments: gnuIntelArguments,
@@ -695,7 +507,12 @@ export const toolchainDefinitions = {
 		executablePattern: /^go(?:\.exe)?$/i,
 		languageIdentifiers: Object.freeze(['go']),
 		stripOwnedArguments: stripGoManagedArguments,
-		ownedArgumentPlacement: 'command-before-provider',
+		assembleArguments: (owned, provider, sourcePath) => [
+			...owned.slice(0, 1),
+			...provider,
+			...owned.slice(1),
+			sourcePath,
+		],
 		createParser: () => new GoAsmParser(noopPropertyGetter),
 		discoverTools: toolDiscoverer({}),
 		artifacts: goArtifacts,
@@ -710,7 +527,12 @@ export const toolchainDefinitions = {
 		objectFilename: 'output.o',
 		outputArguments: zigOutputArguments,
 		stripOwnedArguments: stripZigManagedArguments,
-		ownedArgumentPlacement: 'command-before-provider',
+		assembleArguments: (owned, provider, sourcePath) => [
+			...owned.slice(0, 1),
+			...provider,
+			...owned.slice(1),
+			sourcePath,
+		],
 		createParser: defaultAsmParser,
 		createCfgParser: () => new ClangAssemblyCfgParser(new InstructionSetInfo()),
 		discoverTools: toolDiscoverer({ demangler: 'llvm-cxxfilt', disassembler: 'llvm-objdump' }),
@@ -737,8 +559,6 @@ export const toolchainDefinitions = {
  * so that accessing a per-kind-optional field like `prepareEnvironment` doesn't
  * require narrowing a six-member union of distinct literal object types first.
  */
-export type ToolchainDefinition = ToolchainDefinitionShape;
-
 export function getToolchainDefinition(kind: ToolchainKind): ToolchainDefinition {
 	return toolchainDefinitions[kind];
 }
@@ -752,11 +572,9 @@ export function detectToolchainDefinition(
 	const matches = supportedToolchainKinds.filter((kind) =>
 		toolchainDefinitions[kind].executablePattern.test(executableName),
 	);
-	if (matches.includes('apple-clang')) {
-		const kind = /apple clang/i.test(versionOutput) || platform === 'darwin' ? 'apple-clang' : 'clang';
-		return { kind, definition: toolchainDefinitions[kind] };
-	}
-	const kind = matches[0];
+	const kind =
+		matches.find((candidate) => getToolchainDefinition(candidate).disambiguate?.(versionOutput, platform)) ??
+		matches.find((candidate) => getToolchainDefinition(candidate).disambiguate === undefined);
 	return kind ? { kind, definition: toolchainDefinitions[kind] } : undefined;
 }
 
@@ -879,15 +697,23 @@ export function resolveArtifactOptionAvailability(
 	kind: ArtifactKind,
 	id: ArtifactOptionId,
 ): ArtifactOptionAvailability {
+	const cell = getToolchainDefinition(profile.kind).artifacts[kind];
+	const definition = artifactDefinitions[kind];
+	if (
+		cell.status === 'available' &&
+		cell.outputs === undefined &&
+		(cell.listingSyntax ?? definition.listingSyntax) !== definition.listingSyntax
+	) {
+		const listingSyntax = cell.listingSyntax?.replaceAll('-', ' ') ?? 'toolchain-specific output';
+		const defaultListingSyntax = definition.listingSyntax?.replaceAll('-', ' ') ?? 'the default listing syntax';
+		return {
+			status: 'unsupported',
+			explanation: `${profile.displayName} emits ${listingSyntax} rather than ${defaultListingSyntax}.`,
+		};
+	}
 	const artifact = resolveArtifactAvailability(profile, kind);
 	if (artifact.status !== 'available') {
 		return artifact;
-	}
-	if (kind === 'assembly' && (profile.kind === 'python' || profile.kind === 'dotnet')) {
-		return {
-			status: 'unsupported',
-			explanation: `${profile.displayName} emits assembly without configurable assembly options.`,
-		};
 	}
 	if (id === 'demangle') {
 		return profile.tools.demangler

@@ -160,4 +160,10 @@ test('production options are available, inherent, or unsupported per toolchain',
 		resolveArtifactOptionAvailability(toolchainProfile('python'), 'assembly', 'intel').status,
 		'unsupported',
 	);
+	const pythonDemangle = resolveArtifactOptionAvailability(toolchainProfile('python'), 'assembly', 'demangle');
+	assert.equal(pythonDemangle.status, 'unsupported');
+	assert.match(pythonDemangle.explanation, /python bytecode rather than native assembly/i);
+	const dotNetIntel = resolveArtifactOptionAvailability(toolchainProfile('dotnet'), 'assembly', 'intel');
+	assert.equal(dotNetIntel.status, 'unsupported');
+	assert.match(dotNetIntel.explanation, /dotnet il rather than native assembly/i);
 });

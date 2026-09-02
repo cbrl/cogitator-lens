@@ -25,6 +25,7 @@ import {
 	type ArtifactRegistryDocument,
 } from '../artifact-document/artifact-document-registry.js';
 import { logChannel } from '../logger.js';
+import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
 import {
 	parseWebviewMessage,
 	type GraphTheme,
@@ -96,7 +97,12 @@ export class GraphPanelManager implements Disposable {
 			},
 		});
 		const parsed = registered.parsed;
-		if (parsed.artifactKind !== 'control-flow-graph' || !parsed.artifactOutputId) {
+		const definition = artifactDefinitions[parsed.artifactKind];
+		if (
+			definition.presentation !== 'graph' ||
+			definition.requiresOutputSelection !== true ||
+			!parsed.artifactOutputId
+		) {
 			this.registry.unregister(uri);
 			throw new Error(`Invalid control-flow graph URI: ${uri.toString()}`);
 		}

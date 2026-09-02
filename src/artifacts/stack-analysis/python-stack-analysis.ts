@@ -1,6 +1,6 @@
 import type { DisplayOptions, RawArtifact, RenderedTextArtifact } from '../../types/index.js';
-import type { ArtifactProducer } from '../../toolchains/toolchain-map.js';
-import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
+import type { ArtifactProducer } from '../../toolchains/toolchain-contracts.js';
+import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderStackUsage, type StackUsageEntry } from './native-stack-analysis.js';
 
 export interface PythonStackUsageRecord {

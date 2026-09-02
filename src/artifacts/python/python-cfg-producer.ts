@@ -1,4 +1,4 @@
-import type { ArtifactProducer } from '../../toolchains/toolchain-map.js';
+import type { ArtifactProducer } from '../../toolchains/toolchain-contracts.js';
 import { artifactProducer } from '../core/compiler-output-producer.js';
 
 /** Python inspects compiled code objects but never imports or executes the source module. */

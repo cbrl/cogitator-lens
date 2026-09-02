@@ -6,7 +6,7 @@ import type {
 	RenderedTextArtifact,
 	RenderedArtifactLine,
 } from '../../types/index.js';
-import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
+import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
 
 export interface SourceAnalysisEntry {

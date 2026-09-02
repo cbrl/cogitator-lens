@@ -7,7 +7,7 @@ import type {
 	RenderedGraphArtifact,
 } from '../../types/index.js';
 import { invocationDetails } from '../../types/index.js';
-import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
+import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import {
 	controlFlowGraphMetrics,
 	validateControlFlowGraphs,

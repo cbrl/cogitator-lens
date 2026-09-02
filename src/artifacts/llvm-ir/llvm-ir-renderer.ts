@@ -1,6 +1,6 @@
 import path from 'path';
 import type { DisplayOptions, RawArtifact, RenderedTextArtifact, RenderedArtifactLine } from '../../types/index.js';
-import type { ArtifactRenderContext } from '../core/artifact-definitions.js';
+import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { LLVMIRDemangler } from '../../vendor/lib/demangler/llvm.js';
 import { LlvmIrParser } from '../../vendor/lib/llvm-ir.js';
 import { noopPropertyGetter } from '../../vendor/compiler-props.js';

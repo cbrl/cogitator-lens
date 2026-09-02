@@ -5,7 +5,7 @@
 
 import type { CancellationToken, Uri } from 'vscode';
 import type { ArtifactOptions } from './artifact-options.js';
-import type { ArtifactKind, ArtifactListingSyntax } from '../artifacts/core/artifact-definitions.js';
+import type { ArtifactKind, ArtifactListingSyntax } from '../artifacts/core/artifact-contracts.js';
 import type { DotNetSourceMapping } from '../vendor/lib/parsers/pdb-parser-dotnet.js';
 
 export interface CompilationVariant {

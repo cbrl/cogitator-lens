@@ -1,9 +1,9 @@
 import vscode from 'vscode';
-import type { IntelSyntaxSupport, ToolchainProfile } from '../types/index.js';
+import type { ArtifactOptionId, IntelSyntaxSupport, ToolchainProfile } from '../types/index.js';
 import { ToolchainRegistry } from '../compilation/index.js';
 import { TreeNode, TreeProvider } from './treedata.js';
 import { detailNode, groupNode, makeEnvironmentNode, makeListNode, noneNode } from './tree-helpers.js';
-import { getToolchainDefinition, resolveArtifactAvailability } from '../toolchains/toolchain-map.js';
+import { resolveArtifactAvailability, resolveArtifactOptionAvailability } from '../toolchains/toolchain-map.js';
 import { artifactDefinitions, supportedArtifactKinds } from '../artifacts/core/artifact-definitions.js';
 import { type ConfigurationOrigin, variantProviderDefinitions } from '../buildsystems/variant-provider.js';
 
@@ -47,23 +47,29 @@ function toolchainInformationNode(profile: ToolchainProfile, origin: Configurati
 }
 
 function capabilitiesNode(profile: ToolchainProfile): ToolchainTreeNode {
-	const definition = getToolchainDefinition(profile.kind);
 	const capabilities: Array<{
 		label: string;
-		status: 'available' | 'unavailable' | IntelSyntaxSupport;
+		status: 'available' | 'unavailable' | 'selectable' | 'inherent' | 'unsupported';
 	}> = supportedArtifactKinds.map((kind) => ({
 		label: artifactDefinitions[kind].label,
 		status: resolveArtifactAvailability(profile, kind).status,
 	}));
-	if (definition.artifacts.assembly.status === 'available') {
-		capabilities.push({
-			label: 'Symbol demangling',
-			status: profile.tools.demangler ? 'available' : 'unavailable',
-		});
-		capabilities.push({
-			label: 'Intel syntax',
-			status: definition.intelSyntax ?? 'unsupported',
-		});
+	for (const [id, label] of [
+		['demangle', 'Symbol demangling'],
+		['intel', 'Intel syntax'],
+	] as const satisfies readonly (readonly [ArtifactOptionId, string])[]) {
+		const availability = resolveArtifactOptionAvailability(profile, 'assembly', id);
+		if (availability.status !== 'unsupported') {
+			capabilities.push({
+				label,
+				status:
+					'reason' in availability && availability.reason === 'inherent'
+						? 'inherent'
+						: availability.status === 'available' && id === 'intel'
+							? 'selectable'
+							: availability.status,
+			});
+		}
 	}
 	const available = capabilities
 		.map((capability) => capability.status)

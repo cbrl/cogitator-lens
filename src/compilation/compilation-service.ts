@@ -14,7 +14,7 @@ import type {
 	RenderedArtifact,
 	SourceState,
 } from '../types/index.js';
-import type { ArtifactRenderContext } from '../artifacts/core/artifact-definitions.js';
+import type { ArtifactRenderContext } from '../artifacts/core/artifact-contracts.js';
 import {
 	artifactOptionsEqual,
 	CompilationError,
@@ -26,7 +26,8 @@ import {
 import { ToolExitError } from '../toolchains/toolchain-backend.js';
 import { ExecError } from '../exec.js';
 import { artifactDefinitions, supportedArtifactKinds } from '../artifacts/core/artifact-definitions.js';
-import { resolveArtifactOutput, type ToolchainArtifactOutput } from '../toolchains/toolchain-map.js';
+import { resolveArtifactOutput } from '../toolchains/toolchain-map.js';
+import type { ToolchainArtifactOutput } from '../toolchains/toolchain-contracts.js';
 import { ToolchainRegistry } from './toolchain-registry.js';
 import { CompilationConfigDatabase } from './compilation-config.js';
 import { parseToolDiagnostics } from '../diagnostics.js';
@@ -248,8 +249,8 @@ export class CompilationService {
 		raw: RawArtifact,
 		options: ArtifactOptions,
 		context: ArtifactRenderContext,
-		outputRenderer?: import('../artifacts/core/artifact-definitions.js').ArtifactRenderer,
-		listingSyntax?: import('../artifacts/core/artifact-definitions.js').ArtifactListingSyntax,
+		outputRenderer?: import('../artifacts/core/artifact-contracts.js').ArtifactRenderer,
+		listingSyntax?: import('../artifacts/core/artifact-contracts.js').ArtifactListingSyntax,
 	): Promise<RenderedArtifact> {
 		const renderer =
 			outputRenderer ?? context.backend.getArtifactRenderer(raw.kind) ?? artifactDefinitions[raw.kind].renderer;

@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import type { ArtifactProducer } from './toolchain-map.js';
+import type { ArtifactProducer } from './toolchain-contracts.js';
 import type { ToolchainProfile } from '../types/index.js';
 import { samePath } from '../toolchain-arguments.js';
 

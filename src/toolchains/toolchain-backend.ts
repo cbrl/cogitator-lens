@@ -19,10 +19,12 @@ import type {
 import { samePath } from '../toolchain-arguments.js';
 import * as exec from '../exec.js';
 import { withTemporaryDirectory } from '../temporary-directory.js';
-import type { ToolchainDefinition } from './toolchain-map.js';
+import type { ToolchainDefinition } from './toolchain-contracts.js';
 import { snapshotArtifactInputs, type ArtifactInputMetadata } from '../compilation/artifact-inputs.js';
 import type { InstructionType } from '../artifacts/control-flow-graph/parsers/instruction-sets.js';
 import type { AssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/assembly-cfg-parser.js';
+import type { AssemblyLine } from '../artifacts/control-flow-graph/parsers/assembly-line.js';
+import type { GraphParseResult } from '../artifacts/control-flow-graph/control-flow-graph-model.js';
 import { DotNetPdbParser, type DotNetSourceMapping } from '../vendor/lib/parsers/pdb-parser-dotnet.js';
 
 const maxArtifactFileBytes = 50 * 1024 * 1024;
@@ -484,6 +486,13 @@ export class ToolchainBackend {
 		return this.cfgParser?.classifyInstruction(instruction);
 	}
 
+	parseAssemblyControlFlowGraph(lines: readonly AssemblyLine[]): GraphParseResult {
+		if (!this.cfgParser) {
+			throw new Error(`${this.profile.displayName} has no assembly CFG parser.`);
+		}
+		return this.cfgParser.parse(lines);
+	}
+
 	renderArtifact(raw: RawArtifact, options: DisplayOptions, context: ArtifactRenderContext): RenderedArtifact {
 		const renderer = this.getArtifactRenderer(raw.kind);
 		if (!renderer) {
@@ -587,17 +596,9 @@ export class ToolchainBackend {
 		);
 
 		const compilerArguments = ownedArguments(providerArguments);
-		const argumentsList =
-			this.definition.ownedArgumentPlacement === 'before-provider'
-				? [...compilerArguments, ...providerArguments, source.fsPath]
-				: this.definition.ownedArgumentPlacement === 'command-before-provider'
-					? [
-							...compilerArguments.slice(0, 1),
-							...providerArguments,
-							...compilerArguments.slice(1),
-							source.fsPath,
-						]
-					: [...providerArguments, ...compilerArguments, source.fsPath];
+		const argumentsList = this.definition.assembleArguments
+			? this.definition.assembleArguments(compilerArguments, providerArguments, source.fsPath)
+			: [...providerArguments, ...compilerArguments, source.fsPath];
 
 		const invocation = {
 			workingDirectory,
