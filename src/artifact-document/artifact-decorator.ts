@@ -303,6 +303,13 @@ export class ArtifactDecorator {
 	}
 
 	private decorateSourceDensity(content: ArtifactDocumentContent): void {
+		if (
+			!artifactSupportsOption(content.kind, 'sourceLineColorBands') ||
+			!this.artifactOptions(content.kind).display.sourceLineColorBands
+		) {
+			return;
+		}
+
 		for (const editor of this.getAllSourceEditors(content)) {
 			const mapping = content.sourceLineMappings.get(editor.document.uri);
 			if (!mapping) {
@@ -349,6 +356,7 @@ export class ArtifactDecorator {
 		) {
 			return;
 		}
+
 		const addressWidth = Math.max(
 			4,
 			...content.lines.map((line) => (line.address === undefined ? 0 : line.address.toString(16).length)),
@@ -378,6 +386,7 @@ export class ArtifactDecorator {
 		if (!editor) {
 			return;
 		}
+
 		const options = {
 			forward: { source: [], target: [] },
 			backward: { source: [], target: [] },
@@ -408,10 +417,12 @@ export class ArtifactDecorator {
 		) {
 			return;
 		}
+
 		const asmEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
 		if (!asmEditor) {
 			return;
 		}
+
 		const asmRanges = sourceLineBandDecorations.map(() => [] as Range[]);
 		for (const editor of this.getAllSourceEditors()) {
 			const sourceRanges = sourceLineBandDecorations.map(() => [] as Range[]);
