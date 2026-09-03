@@ -5,6 +5,8 @@ import { CompilationService } from '../compilation/index.js';
 import { TreeNode, TreeProvider } from './treedata.js';
 import { compareLabels, detailNode, groupNode, makeEnvironmentNode, makeListNode } from './tree-helpers.js';
 import { type ConfigurationOrigin, variantProviderDefinitions } from '../buildsystems/variant-provider.js';
+import { canonicalLocalPath } from '../local-file-identity.js';
+import { sourceUriComparisonKey } from '../uri-containers.js';
 
 type GroupKey = 'project' | 'target' | 'configuration';
 
@@ -29,7 +31,7 @@ export function buildCompilationInfoTree(compilationService: CompilationService)
 	const groups = new Map<string, WorkspaceVariantGroup>();
 	for (const source of compilationService.getAllSources()) {
 		for (const variant of compilationService.getVariants(source)) {
-			const folder = vscode.workspace.getWorkspaceFolder(variant.source);
+			const folder = workspaceFolderForSource(variant.source);
 			const key = folder?.uri.toString() ?? 'external';
 			const group = groups.get(key) ?? { folder, variants: [] };
 			group.variants.push(variant);
@@ -94,7 +96,7 @@ function sourceTree(
 	const root: SourcePathNode = { label: '', children: new Map(), variants: [] };
 	for (const variant of variants) {
 		const relativePath = folder
-			? path.relative(folder.uri.fsPath, variant.source.fsPath)
+			? path.relative(canonicalLocalPath(folder.uri.fsPath), canonicalLocalPath(variant.source.fsPath))
 			: externalDisplayPath(variant.source.fsPath);
 
 		const segments = path.normalize(relativePath).split(path.sep).filter(Boolean);
@@ -263,7 +265,7 @@ function findSourceNode(
 	source: vscode.Uri,
 ): CompilationInfoTreeNode | undefined {
 	for (const node of nodes) {
-		if (node.source?.toString() === source.toString() && !node.variant) {
+		if (node.source && sourceUriComparisonKey(node.source) === sourceUriComparisonKey(source) && !node.variant) {
 			return node;
 		}
 		const found = findSourceNode(node.children ?? [], source);
@@ -272,4 +274,19 @@ function findSourceNode(
 		}
 	}
 	return undefined;
+}
+
+function workspaceFolderForSource(source: vscode.Uri): vscode.WorkspaceFolder | undefined {
+	const direct = vscode.workspace.getWorkspaceFolder(source);
+	if (direct || source.scheme !== 'file') {
+		return direct;
+	}
+	const sourcePath = canonicalLocalPath(source.fsPath);
+	return vscode.workspace.workspaceFolders?.find((folder) => {
+		if (folder.uri.scheme !== 'file') {
+			return false;
+		}
+		const relative = path.relative(canonicalLocalPath(folder.uri.fsPath), sourcePath);
+		return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+	});
 }

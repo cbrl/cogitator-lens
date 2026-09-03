@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import type { CancellationToken } from 'vscode';
+import { localFileComparisonKey } from '../local-file-identity.js';
 import { VcAsmParser } from '../vendor/lib/parsers/asm-parser-vc.js';
 import { noopPropertyGetter } from '../vendor/compiler-props.js';
 import type { ToolchainProfile } from '../types/index.js';
@@ -81,7 +82,7 @@ export async function captureWindowsEnvironment(
 	cancellationToken: CancellationToken,
 ): Promise<NodeJS.ProcessEnv> {
 	const architecture = vcvarsArchitecture(profile.executable);
-	const cacheKey = `${path.normalize(profile.executable).toLowerCase()}\0${architecture}`;
+	const cacheKey = `${localFileComparisonKey(profile.executable)}\0${architecture}`;
 	let environmentPromise = environmentCache.get(cacheKey);
 	if (!environmentPromise) {
 		environmentPromise = captureVisualStudioEnvironment(

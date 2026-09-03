@@ -1,9 +1,9 @@
 import { AsmParser } from '../vendor/lib/parsers/asm-parser.js';
 import { noopPropertyGetter } from '../vendor/compiler-props.js';
-import { samePath } from '../toolchain-arguments.js';
 import { artifactProducer } from '../artifacts/core/compiler-output-producer.js';
 import { parseMakeDepfile } from '../compilation/artifact-inputs.js';
 import type { DependencyCollectionSpec } from './toolchain-backend.js';
+import { sameLocalFile } from '../local-file-identity.js';
 
 export const cFamilyLanguageIdentifiers = Object.freeze(['c', 'cpp', 'objective-c', 'objective-cpp', 'cuda']);
 
@@ -81,7 +81,7 @@ export function stripCompilerManagedArguments(
 	const result: string[] = [];
 	for (let index = 0; index < args.length; index++) {
 		const argument = args[index];
-		if (samePath(argument, sourceFile, workingDirectory) || compilerManagedFlags.has(argument)) {
+		if (sameLocalFile(argument, sourceFile, workingDirectory) || compilerManagedFlags.has(argument)) {
 			continue;
 		}
 		if (flagsWithSeparateValues.has(argument)) {

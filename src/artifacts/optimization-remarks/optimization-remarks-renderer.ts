@@ -7,7 +7,8 @@ import type {
 } from '../../types/index.js';
 import type { OptRemark } from '../../vendor/static/panes/opt-view.interfaces.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
-import { renderAnalysisSource, sameSourcePath } from '../analysis/analysis-source-renderer.js';
+import { renderAnalysisSource } from '../analysis/analysis-source-renderer.js';
+import { sameLocalFile } from '../../local-file-identity.js';
 
 export interface OptimizationRemark {
 	readonly file?: string;
@@ -40,7 +41,7 @@ function renderOptimizationRemarks(
 			remark.line !== undefined &&
 			remark.line >= 1 &&
 			remark.line <= sourceLineCount &&
-			sameSourcePath(remark.file, sourceFile),
+			sameLocalFile(remark.file, sourceFile),
 	);
 	const categoryCount = (category: OptimizationRemarkCategory): number =>
 		mappedRemarks.filter((remark) => remark.category === category).length;

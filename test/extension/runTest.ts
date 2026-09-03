@@ -778,6 +778,21 @@ function verifyUriMapping(): void {
 	map.set(vscode.Uri.file('/Project/Source.cpp'), 1);
 	const lookup = map.get(vscode.Uri.file('/project/source.cpp').with({ fragment: 'ignored' }));
 	assert.equal(lookup, process.platform === 'win32' ? 1 : undefined);
+
+	if (process.platform !== 'win32') {
+		const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'coglens-uri-identity-'));
+		try {
+			const physical = path.join(temporary, 'physical');
+			const alias = path.join(temporary, 'alias');
+			fs.mkdirSync(physical);
+			fs.writeFileSync(path.join(physical, 'source.cpp'), 'int main() {}\n');
+			fs.symlinkSync(physical, alias, 'dir');
+			map.set(vscode.Uri.file(path.join(physical, 'source.cpp')), 2);
+			assert.equal(map.get(vscode.Uri.file(path.join(alias, 'source.cpp'))), 2);
+		} finally {
+			fs.rmSync(temporary, { recursive: true, force: true });
+		}
+	}
 }
 
 function verifyDiagnostics(workspaceFolder: vscode.WorkspaceFolder): void {

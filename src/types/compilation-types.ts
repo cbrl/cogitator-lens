@@ -6,6 +6,7 @@
 import type { CancellationToken, Uri } from 'vscode';
 import type { ArtifactOptions } from './artifact-options.js';
 import type { ArtifactKind, ArtifactListingSyntax } from '../artifacts/core/artifact-contracts.js';
+import { localFileComparisonKey, localFileUriComparisonKey } from '../local-file-identity.js';
 
 export interface CompilationVariant {
 	id: string;
@@ -273,6 +274,11 @@ export function productionKey(request: ArtifactRequest, source: SourceState): Pr
 	} = request;
 	return JSON.stringify({
 		...productionInputs,
+		variant: {
+			...productionInputs.variant,
+			source: localFileUriComparisonKey(productionInputs.variant.source),
+			workingDirectory: localFileComparisonKey(productionInputs.variant.workingDirectory),
+		},
 		options: { production: options.production },
 		source,
 	}) as ProductionKey;

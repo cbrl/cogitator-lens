@@ -14,6 +14,7 @@ import {
 } from './toolchain-contracts.js';
 import { defaultAsmParser } from './c-family.js';
 import { parseGnuDiagnostics } from './c-family/diagnostics.js';
+import { sameLocalFile } from '../local-file-identity.js';
 
 /** Builds Zig \`build-obj\` arguments that emit assembly or an object file into the workspace. */
 export function zigOutputArguments(target: 'assembly' | 'object', outputFile: string): readonly string[] {
@@ -39,14 +40,13 @@ export function stripZigManagedArguments(
 	sourceFile: string,
 	workingDirectory: string,
 ): string[] {
-	const source = path.resolve(sourceFile);
 	const result: string[] = [];
 	for (let index = 0; index < args.length; index++) {
 		const argument = args[index];
 		if (index === 0 && /^build-(?:obj|exe|lib)$/u.test(argument)) {
 			continue;
 		}
-		if (path.resolve(workingDirectory, argument) === source) {
+		if (sameLocalFile(argument, sourceFile, workingDirectory)) {
 			continue;
 		}
 		if (['--cache-dir', '--global-cache-dir', '--name'].includes(argument)) {

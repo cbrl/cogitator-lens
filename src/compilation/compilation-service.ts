@@ -34,6 +34,7 @@ import { resolveArtifactPreset, type ArtifactPreset } from '../artifacts/ui/pres
 import { artifactInputComparisonKey, validateArtifactInputs } from './artifact-inputs.js';
 import { RawArtifactCache } from './raw-artifact-cache.js';
 import { renderArtifact } from './artifact-rendering.js';
+import { sourceUriComparisonKey } from '../uri-containers.js';
 
 export class CompilationService {
 	readonly toolchainRegistry: ToolchainRegistry;
@@ -134,7 +135,9 @@ export class CompilationService {
 				toolchainProfileId: ToolchainRegistry.profileId(snapshot.provider, variant.toolchainProfileId),
 			})),
 		);
-		const sources = new Map(snapshot.variants.map((variant) => [variant.source.toString(), variant.source]));
+		const sources = new Map(
+			snapshot.variants.map((variant) => [sourceUriComparisonKey(variant.source), variant.source]),
+		);
 		for (const source of sources.values()) {
 			const persisted = this.workspaceState?.get<string>(this.selectionKey(source));
 			if (persisted) {
@@ -279,7 +282,7 @@ export class CompilationService {
 			return undefined;
 		}
 		return {
-			id: `default:${file.toString()}`,
+			id: `default:${sourceUriComparisonKey(file)}`,
 			provider: 'default',
 			source: file,
 			toolchainProfileId: backend.profile.id,
@@ -296,11 +299,11 @@ export class CompilationService {
 	}
 
 	private selectionKey(file: Uri): string {
-		return `coglens.variant.${file.toString()}`;
+		return `coglens.variant.${sourceUriComparisonKey(file)}`;
 	}
 
-	private handleInputChange(uri: Uri): void {
-		const affectedSources = this.rawArtifactCache.evictInput(uri);
+	private handleInputChange(inputKey: string): void {
+		const affectedSources = this.rawArtifactCache.evictInputKey(inputKey);
 		this.syncInputWatchers();
 		if (affectedSources.length > 0) {
 			this.changeEmitter.fire(affectedSources);
@@ -334,9 +337,9 @@ export class CompilationService {
 				key,
 				Disposable.from(
 					watcher,
-					watcher.onDidChange((uri) => this.handleInputChange(uri)),
-					watcher.onDidDelete((uri) => this.handleInputChange(uri)),
-					watcher.onDidCreate((uri) => this.handleInputChange(uri)),
+					watcher.onDidChange(() => this.handleInputChange(key)),
+					watcher.onDidDelete(() => this.handleInputChange(key)),
+					watcher.onDidCreate(() => this.handleInputChange(key)),
 				),
 			);
 		}

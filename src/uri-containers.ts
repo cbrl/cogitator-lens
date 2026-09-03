@@ -1,9 +1,11 @@
 import vscode from 'vscode';
 import { toComparisonKey } from './utils.js';
+import { localFileUriComparisonKey } from './local-file-identity.js';
 
 type UriComparisonOptions = {
 	ignoreFragment?: boolean;
 	ignorePathCase?: boolean;
+	physicalFileIdentity?: boolean;
 };
 
 /**
@@ -17,10 +19,12 @@ export class UriMap<T> {
 
 	private readonly ignoreFragment: boolean;
 	private readonly ignorePathCase: boolean;
+	private readonly physicalFileIdentity: boolean;
 
 	constructor(options: UriComparisonOptions | undefined = undefined) {
 		this.ignoreFragment = options?.ignoreFragment ?? false;
 		this.ignorePathCase = options?.ignorePathCase ?? false;
+		this.physicalFileIdentity = options?.physicalFileIdentity ?? false;
 	}
 
 	public get size(): number {
@@ -60,6 +64,9 @@ export class UriMap<T> {
 	}
 
 	private getKey(uri: vscode.Uri): string {
+		if (this.physicalFileIdentity) {
+			return sourceUriComparisonKey(uri);
+		}
 		return toComparisonKey(uri, this.ignoreFragment, this.ignorePathCase);
 	}
 }
@@ -75,10 +82,12 @@ export class UriSet {
 
 	private readonly ignoreFragment: boolean;
 	private readonly ignorePathCase: boolean;
+	private readonly physicalFileIdentity: boolean;
 
 	constructor(options: UriComparisonOptions | undefined = undefined) {
 		this.ignoreFragment = options?.ignoreFragment ?? false;
 		this.ignorePathCase = options?.ignorePathCase ?? false;
+		this.physicalFileIdentity = options?.physicalFileIdentity ?? false;
 	}
 
 	public get size(): number {
@@ -107,6 +116,9 @@ export class UriSet {
 	}
 
 	private getKey(uri: vscode.Uri): string {
+		if (this.physicalFileIdentity) {
+			return sourceUriComparisonKey(uri);
+		}
 		return toComparisonKey(uri, this.ignoreFragment, this.ignorePathCase);
 	}
 }
@@ -114,7 +126,15 @@ export class UriSet {
 const sourceIdentityOptions = {
 	ignoreFragment: true,
 	ignorePathCase: process.platform === 'win32',
+	physicalFileIdentity: true,
 } as const;
+
+/** Comparison key for source URIs, resolving local paths through symlinks. */
+export function sourceUriComparisonKey(uri: vscode.Uri): string {
+	return uri.scheme === 'file'
+		? localFileUriComparisonKey(uri)
+		: toComparisonKey(uri, true, process.platform === 'win32');
+}
 
 export function sourceUriMap<T>(): UriMap<T> {
 	return new UriMap<T>(sourceIdentityOptions);

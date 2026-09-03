@@ -12,6 +12,7 @@ import {
 	type ToolchainDefinition,
 } from './toolchain-contracts.js';
 import { parseGoDiagnostics } from './go/diagnostics.js';
+import { sameLocalFile } from '../local-file-identity.js';
 
 const goFunctionPattern =
 	/^\s*func\s+(?:\(\s*(?:[\p{L}_][\p{L}\p{N}_]*\s+)?(\*?\s*[\p{L}_][\p{L}\p{N}_]*)\s*\)\s*)?([\p{L}_][\p{L}\p{N}_]*)\s*\(/gmu;
@@ -40,14 +41,13 @@ export function stripGoManagedArguments(
 	sourceFile: string,
 	workingDirectory: string,
 ): string[] {
-	const source = path.resolve(sourceFile);
 	const result: string[] = [];
 	for (let index = 0; index < args.length; index++) {
 		const argument = args[index];
 		if (
 			(index === 0 && ['build', 'run', 'install'].includes(argument)) ||
 			(index <= 1 && args[0] === 'tool' && ['tool', 'compile'].includes(argument)) ||
-			path.resolve(workingDirectory, argument) === source
+			sameLocalFile(argument, sourceFile, workingDirectory)
 		) {
 			continue;
 		}

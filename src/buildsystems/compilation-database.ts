@@ -6,6 +6,8 @@ import { compilationDatabaseProviderId, parseCompilationDatabase } from './compi
 import type { ConfigurationService } from '../services/configuration-service.js';
 import type { CompilationVariant, ToolchainProfile, ProviderSnapshot } from '../types/index.js';
 import * as logger from '../logger.js';
+import { canonicalLocalPath, localFileComparisonKey } from '../local-file-identity.js';
+import { sourceUriComparisonKey } from '../uri-containers.js';
 
 interface DatabaseFile {
 	readonly folder: WorkspaceFolder;
@@ -92,7 +94,7 @@ export class CompilationDatabaseVariantProvider extends VariantProvider {
 			}
 			for (const configuredPath of this.configuration.getCompilationDatabases(folder.uri)) {
 				const filePath = path.resolve(folder.uri.fsPath, configuredPath);
-				const key = process.platform === 'win32' ? filePath.toLowerCase() : filePath;
+				const key = localFileComparisonKey(filePath);
 				files.set(key, { folder, filePath });
 			}
 		}
@@ -116,14 +118,14 @@ export class CompilationDatabaseVariantProvider extends VariantProvider {
 		const profiles = new Map<string, ToolchainProfile>();
 		const variants: CompilationVariant[] = [];
 		const databaseLabel = relativeDatabaseLabel(database);
-		const databaseIdentity = normalizeIdentity(database.filePath);
+		const databaseIdentity = localFileComparisonKey(database.filePath);
 
 		for (const entry of entries) {
 			profiles.set(entry.toolchainProfile.id, entry.toolchainProfile);
 			const source = Uri.file(entry.sourceFile);
 			const outputLabel = entry.output ? ` · ${path.basename(entry.output)}` : '';
 			variants.push({
-				id: `${this.providerId}:${databaseIdentity}|${entry.entryIndex}|${source.toString()}`,
+				id: `${this.providerId}:${databaseIdentity}|${entry.entryIndex}|${sourceUriComparisonKey(source)}`,
 				provider: this.providerId,
 				project: database.folder.name,
 				target: entry.output ? path.basename(entry.output) : undefined,
@@ -150,11 +152,9 @@ export class CompilationDatabaseVariantProvider extends VariantProvider {
 }
 
 function relativeDatabaseLabel(database: DatabaseFile): string {
-	const relative = path.relative(database.folder.uri.fsPath, database.filePath);
+	const relative = path.relative(
+		canonicalLocalPath(database.folder.uri.fsPath),
+		canonicalLocalPath(database.filePath),
+	);
 	return relative && !relative.startsWith('..') && !path.isAbsolute(relative) ? relative : database.filePath;
-}
-
-function normalizeIdentity(value: string): string {
-	const normalized = path.normalize(value);
-	return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }

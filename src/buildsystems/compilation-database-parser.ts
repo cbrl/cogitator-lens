@@ -1,9 +1,10 @@
 import path from 'path';
 import { removeSourceArgument } from '../toolchain-arguments.js';
 import { detectToolchainDefinition } from '../toolchains/toolchain-map.js';
-import { createToolchainProfile, normalizedExecutableLocalId } from '../toolchains/toolchain-map.js';
+import { createToolchainProfile } from '../toolchains/toolchain-map.js';
 import { tokenizeCommandLine } from '../tokenize.js';
 import type { ToolchainProfile } from '../types/index.js';
+import { localFileComparisonKey } from '../local-file-identity.js';
 
 export const compilationDatabaseProviderId = 'compilation-database';
 
@@ -107,7 +108,7 @@ function parseEntry(
 	}
 
 	const executableName = path.basename(executable);
-	const profileId = normalizedExecutableLocalId(executable);
+	const profileId = localFileComparisonKey(executable);
 	const toolchainProfile = createToolchainProfile(compilerKind, `${executableName} — ${executable}`, executable, {
 		id: profileId,
 	});

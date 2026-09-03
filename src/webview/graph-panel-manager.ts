@@ -16,6 +16,7 @@ import {
 	window,
 	workspace,
 } from 'vscode';
+import { localFileUriComparisonKey } from '../local-file-identity.js';
 import type { ControlFlowGraph, ControlFlowSourceLocation, RenderedGraphArtifact } from '../types/index.js';
 import type { ArtifactStatus } from '../artifact-document/artifact-generator.js';
 import type { ArtifactDocumentSnapshot } from '../artifact-document/artifact-identity.js';
@@ -414,11 +415,16 @@ function diagnosticMessages(status: ArtifactStatus, artifact?: RenderedGraphArti
 }
 
 async function openSource(source: ControlFlowSourceLocation): Promise<void> {
-	const uri = Uri.parse(source.uri, true);
+	let uri = Uri.parse(source.uri, true);
 	if (uri.scheme !== 'file' && uri.scheme !== 'vscode-remote') {
 		return;
 	}
-	const document = await workspace.openTextDocument(uri);
+	const sourceKey = localFileUriComparisonKey(uri);
+	const visible = window.visibleTextEditors.find(
+		(candidate) => localFileUriComparisonKey(candidate.document.uri) === sourceKey,
+	);
+	uri = visible?.document.uri ?? uri;
+	const document = visible?.document ?? (await workspace.openTextDocument(uri));
 	const start = new Position(source.line, source.column);
 	const requestedEnd = new Position(source.endLine ?? source.line, source.endColumn ?? source.column);
 	const selection = new Range(start, requestedEnd.isBefore(start) ? start : requestedEnd);
@@ -432,7 +438,10 @@ async function openSource(source: ControlFlowSourceLocation): Promise<void> {
 
 function highlightVisibleSource(source: ControlFlowSourceLocation): void {
 	const uri = Uri.parse(source.uri, true);
-	const editor = window.visibleTextEditors.find((candidate) => candidate.document.uri.toString() === uri.toString());
+	const sourceKey = localFileUriComparisonKey(uri);
+	const editor = window.visibleTextEditors.find(
+		(candidate) => localFileUriComparisonKey(candidate.document.uri) === sourceKey,
+	);
 	if (!editor) {
 		return;
 	}

@@ -3,14 +3,12 @@ import { Disposable, Uri, workspace } from 'vscode';
 import * as cmakeTools from 'vscode-cmake-tools';
 import { VariantProvider } from './variant-provider.js';
 import type { CompilationVariant, ProviderSnapshot, ToolchainProfile } from '../types/index.js';
-import {
-	createToolchainProfile,
-	detectToolchainDefinition,
-	normalizedExecutableLocalId,
-} from '../toolchains/toolchain-map.js';
+import { createToolchainProfile, detectToolchainDefinition } from '../toolchains/toolchain-map.js';
 import { flattenCmakeArguments } from './cmake-arguments.js';
 import { tokenizeCommandLine } from '../tokenize.js';
 import * as logger from '../logger.js';
+import { sourceUriComparisonKey } from '../uri-containers.js';
+import { localFileComparisonKey } from '../local-file-identity.js';
 
 interface ProjectState {
 	uri: Uri;
@@ -174,7 +172,7 @@ export class CmakeVariantProvider extends VariantProvider {
 							continue;
 						}
 
-						const executableId = normalizedExecutableLocalId(toolchain.path);
+						const executableId = localFileComparisonKey(toolchain.path);
 						const profileId = executableId;
 						const profile = createToolchainProfile(
 							detected.kind,
@@ -199,7 +197,7 @@ export class CmakeVariantProvider extends VariantProvider {
 								project.name,
 								target.name,
 								String(groupIndex),
-								sourceUri.toString(),
+								sourceUriComparisonKey(sourceUri),
 							].join('|');
 
 							variants.push({

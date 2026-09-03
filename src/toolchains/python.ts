@@ -1,4 +1,4 @@
-import { samePath } from '../toolchain-arguments.js';
+import { sameLocalFile } from '../local-file-identity.js';
 import { pythonBytecodeProducer } from '../artifacts/python/python-bytecode-producer.js';
 import { renderPythonBytecode } from '../artifacts/python/python-bytecode-renderer.js';
 import { pythonAstProducer } from '../artifacts/ast/python-ast-producer.js';
@@ -27,7 +27,7 @@ export function stripPythonManagedArguments(
 	const result: string[] = [];
 	for (let index = 0; index < args.length; index++) {
 		const argument = args[index];
-		if (samePath(argument, sourceFile, workingDirectory) || argument === '--') {
+		if (sameLocalFile(argument, sourceFile, workingDirectory) || argument === '--') {
 			continue;
 		}
 		if (argument === '-m' || argument === '-c') {

@@ -6,6 +6,7 @@ import type {
 	RenderedArtifact,
 	RenderedArtifactMetric,
 } from '../../types/index.js';
+import { localFileUriComparisonKey } from '../../local-file-identity.js';
 import { invocationDetails } from '../../types/index.js';
 
 export { invocationDetails } from '../../types/index.js';
@@ -89,7 +90,7 @@ function currentDiagnostics(
 	const keys = new Set<string>();
 	return diagnostics.filter((diagnostic) => {
 		const key = [
-			diagnostic.uri.toString(),
+			localFileUriComparisonKey(diagnostic.uri),
 			diagnostic.line,
 			diagnostic.column,
 			diagnostic.severity,

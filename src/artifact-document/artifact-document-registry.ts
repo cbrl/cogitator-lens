@@ -7,6 +7,7 @@ import { getArtifactOutputChoices } from '../toolchains/toolchain-map.js';
 import type { CompilationVariant, ToolchainProfile } from '../types/index.js';
 import { CompilationError } from '../types/index.js';
 import { toComparisonKey } from '../utils.js';
+import { sourceUriComparisonKey } from '../uri-containers.js';
 import { parseArtifactUri, type ArtifactUriIdentity } from './artifact-uri.js';
 import { ArtifactGenerator, type ArtifactStatus } from './artifact-generator.js';
 import type { ArtifactDocumentIdentity, ArtifactDocumentSnapshot } from './artifact-identity.js';
@@ -83,9 +84,9 @@ export class ArtifactDocumentRegistry implements Disposable {
 	) {
 		this.subscriptions = Disposable.from(
 			compilationService.onVariantsChanged((sources) => {
-				const changed = new Set(sources.map((source) => source.toString()));
+				const changed = new Set(sources.map(sourceUriComparisonKey));
 				for (const document of this.documents.values()) {
-					if (changed.has(document.parsed.source.toString())) {
+					if (changed.has(sourceUriComparisonKey(document.parsed.source))) {
 						this.requestRefresh(document.uri);
 					}
 				}

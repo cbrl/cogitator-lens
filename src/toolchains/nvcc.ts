@@ -16,6 +16,7 @@ import { captureWindowsEnvironment } from './msvc.js';
 import { composeDiagnosticParsers } from '../diagnostics.js';
 import { parseGnuDiagnostics } from './c-family/diagnostics.js';
 import { parseParenthesizedDiagnostics } from './msvc/diagnostics.js';
+import { sameLocalFile } from '../local-file-identity.js';
 
 // Managed arguments that do not have a separate value (i.e. have no value or use the --arg=xyz form).
 const managedArgsUnitary =
@@ -39,11 +40,10 @@ export function stripNvccManagedArguments(
 	sourceFile: string,
 	workingDirectory: string,
 ): string[] {
-	const source = path.resolve(sourceFile);
 	const result: string[] = [];
 	for (let index = 0; index < args.length; index++) {
 		const argument = args[index];
-		if (path.resolve(workingDirectory, argument) === source) {
+		if (sameLocalFile(argument, sourceFile, workingDirectory)) {
 			continue;
 		}
 		if (['-o', '--output-file'].includes(argument)) {

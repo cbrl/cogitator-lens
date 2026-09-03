@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import type { ArtifactProducer } from './toolchain-contracts.js';
 import type { ToolchainProfile } from '../types/index.js';
-import { samePath } from '../toolchain-arguments.js';
+import { canonicalLocalPath, sameLocalFile } from '../local-file-identity.js';
 import { DotNetPdbParser } from '../vendor/lib/parsers/pdb-parser-dotnet.js';
 import { dotNetSourceMappingData } from '../artifacts/dotnet/dotnet-source-mapping.js';
 import { renderDotNetIl } from '../artifacts/dotnet/dotnet-il-renderer.js';
@@ -95,7 +95,7 @@ export function stripDotNetManagedArguments(
 	const managed = /^[-/](?:out|target|debug|pdb|refout|doc)(?::|=)|^[-/]nologo$/i;
 	for (let index = 0; index < args.length; index++) {
 		const argument = args[index];
-		if (samePath(argument, sourceFile, workingDirectory) || managed.test(argument)) {
+		if (sameLocalFile(argument, sourceFile, workingDirectory) || managed.test(argument)) {
 			continue;
 		}
 		if (separateValue.test(argument)) {
@@ -187,11 +187,9 @@ function dotNetReferenceAssemblies(compiler: string): readonly string[] {
 
 function executableRoots(executable: string): readonly string[] {
 	const roots = [path.dirname(path.resolve(executable))];
-	try {
-		roots.unshift(path.dirname(fs.realpathSync(executable)));
-	} catch {
-		// A configured path may not exist yet; availability will report the missing tools.
-	}
+	// Preserve the configured path when it names a complete installation, but
+	// also support launchers symlinked from outside the installation root.
+	roots.push(path.dirname(canonicalLocalPath(executable)));
 	return [...new Set(roots)];
 }
 

@@ -33,6 +33,7 @@ import {
 	ArtifactDocumentRegistry,
 	type ArtifactRegistryDocument,
 } from './artifact-document-registry.js';
+import { localFileUriComparisonKey } from '../local-file-identity.js';
 import type { ArtifactDocumentSnapshot } from './artifact-identity.js';
 
 interface ArtifactDocument {
@@ -289,7 +290,7 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 		const grouped = new Map<string, { uri: Uri; diagnostics: Diagnostic[] }>();
 		for (const document of this.documents.values()) {
 			for (const item of document.diagnostics) {
-				const key = item.uri.toString();
+				const key = localFileUriComparisonKey(item.uri);
 				const group = grouped.get(key) ?? { uri: item.uri, diagnostics: [] };
 				group.diagnostics.push(
 					new Diagnostic(

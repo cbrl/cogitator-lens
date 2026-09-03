@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { ArtifactInputState } from '../types/index.js';
+import { localFileComparisonKey } from '../local-file-identity.js';
 
 export interface ArtifactInputMetadata {
 	readonly inputs: readonly ArtifactInputState[];
@@ -104,7 +105,11 @@ export async function validateArtifactInputs(inputs: readonly ArtifactInputState
 }
 
 export function artifactInputComparisonKey(uri: string): string {
-	return process.platform === 'win32' ? uri.toLowerCase() : uri;
+	try {
+		return localFileComparisonKey(fileURLToPath(uri));
+	} catch {
+		return process.platform === 'win32' ? uri.toLowerCase() : uri;
+	}
 }
 
 function normalizeDependencyPaths(values: readonly string[], workingDirectory: string): string[] {
@@ -117,14 +122,14 @@ function normalizeDependencyPaths(values: readonly string[], workingDirectory: s
 		const absolute = path.normalize(
 			isAbsoluteOnAnyPlatform(trimmed) ? trimmed : path.resolve(workingDirectory, trimmed),
 		);
-		const key = process.platform === 'win32' ? absolute.toLowerCase() : absolute;
+		const key = localFileComparisonKey(absolute);
 		if (!byKey.has(key)) {
 			byKey.set(key, absolute);
 		}
 	}
 	return [...byKey.values()].sort((left, right) => {
-		const leftKey = process.platform === 'win32' ? left.toLowerCase() : left;
-		const rightKey = process.platform === 'win32' ? right.toLowerCase() : right;
+		const leftKey = localFileComparisonKey(left);
+		const rightKey = localFileComparisonKey(right);
 		return leftKey.localeCompare(rightKey);
 	});
 }

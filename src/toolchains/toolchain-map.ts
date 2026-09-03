@@ -12,6 +12,7 @@ import { zig } from './zig.js';
 import { nvcc } from './nvcc.js';
 import type { ToolchainDefinition, ToolchainDefinitionShape } from './toolchain-contracts.js';
 import { supportedToolchainKinds } from './toolchain-kinds.js';
+import { localFileComparisonKey } from '../local-file-identity.js';
 
 export type {
 	ArtifactProducer,
@@ -89,7 +90,7 @@ export function createToolchainProfile(
 	const definition = toolchainDefinitions[kind];
 	const normalized = path.normalize(executable);
 	return {
-		id: overrides.id ?? normalizedExecutableLocalId(normalized),
+		id: overrides.id ?? localFileComparisonKey(normalized),
 		displayName,
 		kind,
 		executable: normalized,
@@ -111,10 +112,4 @@ export function normalizeAuxiliaryTools(
 			]),
 		),
 	);
-}
-
-/** Produces the platform-stable local identifier used to deduplicate executable paths. */
-export function normalizedExecutableLocalId(executable: string): string {
-	const normalized = path.resolve(executable);
-	return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
 }

@@ -8,6 +8,7 @@ import type {
 } from '../../types/index.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
+import { sameLocalFile } from '../../local-file-identity.js';
 
 export interface SourceAnalysisEntry {
 	readonly sourceUri?: string;
@@ -51,7 +52,7 @@ export function renderAnalysisSource(
 			entry.sourceLine !== undefined &&
 			entry.sourceLine >= 1 &&
 			entry.sourceLine <= sourceLines.length &&
-			sameSourcePath(entry.sourceUri, sourceFile)
+			sameLocalFile(entry.sourceUri, sourceFile)
 		) {
 			const lineEntries = entriesByLine.get(entry.sourceLine) ?? [];
 			lineEntries.push(entry);
@@ -117,12 +118,4 @@ function clampColumn(column: number | undefined, lineLength: number): number {
 
 function splitSourceLines(text: string): string[] {
 	return text.split(/\r\n|\n|\r/);
-}
-
-export function sameSourcePath(left: string, right: string): boolean {
-	const normalizedLeft = path.resolve(left);
-	const normalizedRight = path.resolve(right);
-	return process.platform === 'win32'
-		? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
-		: normalizedLeft === normalizedRight;
 }

@@ -5,7 +5,11 @@ import path from 'node:path';
 import test from 'node:test';
 import { pathToFileURL } from 'node:url';
 import type { Uri } from 'vscode';
-import { snapshotArtifactInputs, validateArtifactInputs } from '../../src/compilation/artifact-inputs.js';
+import {
+	artifactInputComparisonKey,
+	snapshotArtifactInputs,
+	validateArtifactInputs,
+} from '../../src/compilation/artifact-inputs.js';
 import { RawArtifactCache } from '../../src/compilation/raw-artifact-cache.js';
 import { withTemporaryDirectory } from '../../src/temporary-directory.js';
 import { rawArtifact } from '../support/artifacts.js';
@@ -59,13 +63,13 @@ test('the raw artifact cache keeps its dependency index correct across replaceme
 	// Replacing an entry must drop the inputs only the replaced entry depended on.
 	cache.set('first', cachedArtifact(staleInput), firstSource);
 	cache.set('first', cachedArtifact(liveInput), firstSource);
-	assert.deepEqual(cache.evictInput(fakeUri(staleInput)), []);
+	assert.deepEqual(cache.evictInputKey(artifactInputComparisonKey(pathToFileURL(staleInput).href)), []);
 	assert.ok(cache.get('first'));
 
 	cache.set('second', cachedArtifact(liveInput), secondSource);
 	cache.set('same-source', cachedArtifact(liveInput), firstSource);
 	assert.deepEqual(
-		cache.evictInput(fakeUri(liveInput)).map((uri) => uri.toString()),
+		cache.evictInputKey(artifactInputComparisonKey(pathToFileURL(liveInput).href)).map((uri) => uri.toString()),
 		[firstSource.toString(), secondSource.toString()],
 	);
 	for (const key of ['first', 'second', 'same-source']) {
@@ -81,7 +85,7 @@ test('clearing the raw artifact cache also clears its invalidation index', () =>
 	cache.clear();
 
 	assert.equal(cache.get('artifact'), undefined);
-	assert.deepEqual(cache.evictInput(fakeUri(input)), []);
+	assert.deepEqual(cache.evictInputKey(artifactInputComparisonKey(pathToFileURL(input).href)), []);
 	assert.deepEqual(cache.getInputUris(), []);
 });
 
@@ -106,6 +110,33 @@ test('the raw artifact cache reports each live input once', () => {
 	cache.delete('second');
 	assert.deepEqual(cache.getInputUris(), [pathToFileURL(otherInput).href]);
 });
+
+test(
+	'cache invalidation retains a symlinked input identity after deletion',
+	{ skip: process.platform === 'win32' },
+	() => {
+		const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'coglens-cache-identity-'));
+		try {
+			const physical = path.join(temporary, 'physical');
+			const alias = path.join(temporary, 'alias');
+			fs.mkdirSync(physical);
+			fs.symlinkSync(physical, alias, 'dir');
+			const input = path.join(physical, 'header.h');
+			const aliasedInput = path.join(alias, 'header.h');
+			fs.writeFileSync(input, '#pragma once\n');
+
+			const cache = new RawArtifactCache();
+			cache.set('artifact', cachedArtifact(input), fakeUri(path.join(alias, 'source.cpp')));
+			const watcherKey = artifactInputComparisonKey(pathToFileURL(aliasedInput).href);
+			fs.rmSync(input);
+
+			assert.equal(cache.evictInputKey(watcherKey).length, 1);
+			assert.equal(cache.get('artifact'), undefined);
+		} finally {
+			fs.rmSync(temporary, { recursive: true, force: true });
+		}
+	},
+);
 
 function cachedArtifact(input: string) {
 	return rawArtifact('assembly', '', {

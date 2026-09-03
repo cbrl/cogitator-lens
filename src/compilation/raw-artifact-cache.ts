@@ -1,7 +1,7 @@
-import { pathToFileURL } from 'node:url';
 import type { Uri } from 'vscode';
 import type { RawArtifact } from '../types/index.js';
 import { artifactInputComparisonKey } from './artifact-inputs.js';
+import { localFileUriComparisonKey } from '../local-file-identity.js';
 
 export class RawArtifactCache {
 	private readonly artifacts = new Map<string, RawArtifact>();
@@ -54,13 +54,13 @@ export class RawArtifactCache {
 		}
 	}
 
-	evictInput(uri: Uri): readonly Uri[] {
-		const inputKey = artifactInputComparisonKey(pathToFileURL(uri.fsPath).href);
+	/** Evicts by the identity captured when a watcher was created, including after deletion. */
+	evictInputKey(inputKey: string): readonly Uri[] {
 		const affectedSources = new Map<string, Uri>();
 		for (const key of [...(this.inputToKeys.get(inputKey) ?? [])]) {
 			const source = this.keyToSource.get(key);
 			if (source) {
-				affectedSources.set(source.toString(), source);
+				affectedSources.set(localFileUriComparisonKey(source), source);
 			}
 			this.delete(key);
 		}

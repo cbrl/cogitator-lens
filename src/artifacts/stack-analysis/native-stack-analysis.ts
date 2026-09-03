@@ -4,11 +4,8 @@ import type { ArtifactProducer } from '../../toolchains/toolchain-contracts.js';
 import type { ArtifactOutputSpec } from '../../toolchains/toolchain-backend.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { artifactProducer } from '../core/compiler-output-producer.js';
-import {
-	type AnalysisParserDiagnostic,
-	renderAnalysisSource,
-	sameSourcePath,
-} from '../analysis/analysis-source-renderer.js';
+import { type AnalysisParserDiagnostic, renderAnalysisSource } from '../analysis/analysis-source-renderer.js';
+import { localFileComparisonKey, sameLocalFile } from '../../local-file-identity.js';
 
 export interface StackUsageEntry {
 	readonly sourceUri?: string;
@@ -82,7 +79,10 @@ export function parseStackUsage(text: string, workingDirectory: string): StackUs
 			});
 			continue;
 		}
-		const key = JSON.stringify(parsed);
+		const key = JSON.stringify({
+			...parsed,
+			sourceUri: parsed.sourceUri ? localFileComparisonKey(parsed.sourceUri) : undefined,
+		});
 		if (!seen.has(key)) {
 			seen.add(key);
 			entries.push(parsed);
@@ -259,7 +259,7 @@ export function renderStackUsage(
 			entry.sourceLine === undefined ||
 			entry.sourceLine < 1 ||
 			entry.sourceLine > sourceLineCount ||
-			!sameSourcePath(entry.sourceUri, sourceFile),
+			!sameLocalFile(entry.sourceUri, sourceFile),
 	).length;
 	const unit = entries[0]?.unit ?? defaultUnit;
 	const totalKnownFrame = entries.reduce((total, entry) => total + entry.value, 0);

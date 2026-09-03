@@ -1,7 +1,8 @@
 import path from 'path';
 import type { EnvironmentPath, ResolvedEnvironment } from '@vscode/python-extension';
 import type { ToolchainProfile } from '../types/index.js';
-import { createToolchainProfile, normalizedExecutableLocalId } from '../toolchains/toolchain-map.js';
+import { createToolchainProfile } from '../toolchains/toolchain-map.js';
+import { localFileComparisonKey } from '../local-file-identity.js';
 
 export interface PythonEnvironmentProfile {
 	readonly environment: ResolvedEnvironment;
@@ -21,7 +22,7 @@ export function createPythonEnvironmentProfiles(
 		}
 
 		const executablePath = path.normalize(executable.fsPath);
-		const id = normalizedExecutableLocalId(executablePath);
+		const id = localFileComparisonKey(executablePath);
 		const aliases = pythonEnvironmentAliases(environment, platform);
 		const existing = profiles.get(id);
 		if (existing) {
@@ -50,7 +51,10 @@ export function matchesPythonEnvironment(
 ): boolean {
 	return (
 		environment.aliases.has(normalizeEnvironmentIdentity(selection.id, platform)) ||
-		environment.aliases.has(normalizeEnvironmentIdentity(selection.path, platform))
+		environment.aliases.has(normalizeEnvironmentIdentity(selection.path, platform)) ||
+		(platform === process.platform &&
+			(environment.aliases.has(localFileComparisonKey(selection.id)) ||
+				environment.aliases.has(localFileComparisonKey(selection.path))))
 	);
 }
 
@@ -74,16 +78,18 @@ export function pythonEnvironmentVersion(environment: ResolvedEnvironment): stri
 }
 
 function pythonEnvironmentAliases(environment: ResolvedEnvironment, platform: NodeJS.Platform): ReadonlySet<string> {
+	const values = [
+		environment.id,
+		environment.path,
+		environment.executable.uri?.fsPath,
+		environment.executable.sysPrefix,
+		environment.environment?.folderUri.fsPath,
+	].filter((value): value is string => Boolean(value));
 	return new Set(
-		[
-			environment.id,
-			environment.path,
-			environment.executable.uri?.fsPath,
-			environment.executable.sysPrefix,
-			environment.environment?.folderUri.fsPath,
-		]
-			.filter((value): value is string => Boolean(value))
-			.map((value) => normalizeEnvironmentIdentity(value, platform)),
+		values.flatMap((value) => [
+			normalizeEnvironmentIdentity(value, platform),
+			...(platform === process.platform ? [localFileComparisonKey(value)] : []),
+		]),
 	);
 }
 

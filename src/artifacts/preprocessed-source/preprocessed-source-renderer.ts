@@ -2,6 +2,7 @@ import path from 'node:path';
 import type { DisplayOptions, RawArtifact, RenderedTextArtifact, RenderedArtifactLine } from '../../types/index.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
+import { sameLocalFile } from '../../local-file-identity.js';
 
 const lineMarker = /^\s*#(?:\s*line)?\s+(\d+)\s+"((?:\\.|[^"])*)"(?:\s+.*)?$/;
 
@@ -26,7 +27,7 @@ export function renderPreprocessedSource(
 			continue;
 		}
 
-		const mainSource = sameFile(logicalFile, sourceFile);
+		const mainSource = sameLocalFile(logicalFile, sourceFile);
 		if (options.showIncludedFiles || mainSource) {
 			lines.push({
 				text,
@@ -88,14 +89,6 @@ function decodeMarkerFilename(filename: string): string {
 
 function isLocalFilename(filename: string): boolean {
 	return filename !== '' && !(filename.startsWith('<') && filename.endsWith('>'));
-}
-
-function sameFile(left: string, right: string): boolean {
-	const normalizedLeft = path.normalize(left);
-	const normalizedRight = path.normalize(right);
-	return process.platform === 'win32'
-		? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
-		: normalizedLeft === normalizedRight;
 }
 
 function splitLines(text: string): string[] {

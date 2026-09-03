@@ -2,6 +2,7 @@ import path from 'node:path';
 import type { DisplayOptions, RawArtifact, RenderedTextArtifact, RenderedArtifactLine } from '../../types/index.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
+import { sameLocalFile } from '../../local-file-identity.js';
 
 interface AstNode {
 	readonly kind: string;
@@ -75,7 +76,7 @@ export function renderClangAst(
 						column: span.column,
 						endLine: span.endLine,
 						endColumn: span.endColumn,
-						mainSource: sameFile(span.file, sourceFile),
+						mainSource: sameLocalFile(span.file, sourceFile),
 					}
 				: undefined,
 		});
@@ -269,7 +270,7 @@ function clangPosition(
 function sourceSpan(start: AstSourcePosition, end: AstSourcePosition | undefined): AstSourceSpan {
 	const validEnd =
 		end &&
-		sameFile(start.file, end.file) &&
+		sameLocalFile(start.file, end.file) &&
 		(end.line > start.line || (end.line === start.line && end.column >= start.column))
 			? end
 			: start;
@@ -301,7 +302,7 @@ function isDeclarationNode(kind: string): boolean {
 }
 
 function isSystemDeclarationPath(filename: string, sourceFile: string): boolean {
-	if (sameFile(filename, sourceFile)) {
+	if (sameLocalFile(filename, sourceFile)) {
 		return false;
 	}
 	const normalized = filename.replace(/\\/g, '/').toLowerCase();
@@ -389,14 +390,6 @@ function pythonColumnToUtf16(line: string | undefined, utf8Column: number): numb
 		utf16 += character.length;
 	}
 	return bytes === utf8Column ? utf16 : utf8Column;
-}
-
-function sameFile(left: string, right: string): boolean {
-	const normalizedLeft = path.normalize(left);
-	const normalizedRight = path.normalize(right);
-	return process.platform === 'win32'
-		? normalizedLeft.toLowerCase() === normalizedRight.toLowerCase()
-		: normalizedLeft === normalizedRight;
 }
 
 function splitLines(text: string): string[] {

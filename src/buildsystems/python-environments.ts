@@ -10,6 +10,7 @@ import { Disposable, Uri, workspace } from 'vscode';
 import type { CompilationVariant, ProviderSnapshot } from '../types/index.js';
 import * as logger from '../logger.js';
 import { VariantProvider } from './variant-provider.js';
+import { sourceUriComparisonKey } from '../uri-containers.js';
 import {
 	createPythonEnvironmentProfiles,
 	matchesPythonEnvironment,
@@ -139,7 +140,7 @@ export class PythonEnvironmentVariantProvider extends VariantProvider {
 		const environment = definedEnvironmentVariables(api.environments.getEnvironmentVariables(source));
 
 		return orderedProfiles.map((item) => ({
-			id: `${providerId}:${item.profile.id}|${source.toString()}`,
+			id: `${providerId}:${item.profile.id}|${sourceUriComparisonKey(source)}`,
 			provider: providerId,
 			project: folder?.name,
 			target: 'Bytecode',
