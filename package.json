@@ -1038,16 +1038,6 @@
           "when": "resourceScheme == file && coglens.supportedSource"
         },
         {
-          "command": "coglens.PickCompilationVariant",
-          "group": "navigation@2",
-          "when": "resourceScheme == file && coglens.supportedSource"
-        },
-        {
-          "command": "coglens.CompareArtifacts",
-          "group": "navigation@3",
-          "when": "resourceScheme == file && coglens.supportedSource"
-        },
-        {
           "command": "coglens.RevealArtifactSource",
           "group": "navigation@1",
           "when": "resourceScheme == coglens-artifact"
