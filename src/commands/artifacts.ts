@@ -22,7 +22,7 @@ export interface ArtifactCommandDependencies {
 }
 
 export function register(context: vscode.ExtensionContext, deps: ArtifactCommandDependencies): void {
-	const { compilationService, configuration, artifacts, graphPanels } = deps;
+	const { compilationService, configuration, artifacts } = deps;
 	context.subscriptions.push(
 		vscode.commands.registerTextEditorCommand('coglens.OpenArtifact', (editor) =>
 			openArtifact(editor, undefined, deps),

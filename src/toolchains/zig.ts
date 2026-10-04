@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { outputProducer } from '../artifacts/core/compiler-output-producer.js';
 import { parseLlvmControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/llvm-ir-cfg-parser.js';
 import { ClangAssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/assembly-dialects.js';
@@ -10,10 +9,10 @@ import {
 	subcommandFirst,
 	toolDiscoverer,
 	type ToolchainDefinition,
+	withoutOwnedArguments,
 } from './toolchain-contracts.js';
 import { defaultAsmParser } from './c-family.js';
 import { parseGnuDiagnostics } from './c-family/diagnostics.js';
-import { sameLocalFile } from '../local-file-identity.js';
 
 /** Builds Zig \`build-obj\` arguments that emit assembly or an object file into the workspace. */
 export function zigOutputArguments(target: 'assembly' | 'object', outputFile: string): readonly string[] {
@@ -39,25 +38,13 @@ export function stripZigManagedArguments(
 	sourceFile: string,
 	workingDirectory: string,
 ): string[] {
-	const result: string[] = [];
-	for (let index = 0; index < args.length; index++) {
-		const argument = args[index];
-		if (index === 0 && /^build-(?:obj|exe|lib)$/u.test(argument)) {
-			continue;
-		}
-		if (sameLocalFile(argument, sourceFile, workingDirectory)) {
-			continue;
-		}
-		if (['--cache-dir', '--global-cache-dir', '--name'].includes(argument)) {
-			index++;
-			continue;
-		}
-		if (/^(?:--(?:cache-dir|global-cache-dir|name)=|-f(?:no-)?emit-(?:bin|asm|llvm-ir)(?:=|$))/u.test(argument)) {
-			continue;
-		}
-		result.push(argument);
-	}
-	return result;
+	return withoutOwnedArguments(args, sourceFile, workingDirectory, {
+		withValue: [new Set(['--cache-dir', '--global-cache-dir', '--name'])],
+		standalone: [
+			(argument, index) => index === 0 && /^build-(?:obj|exe|lib)$/u.test(argument),
+			/^(?:--(?:cache-dir|global-cache-dir|name)=|-f(?:no-)?emit-(?:bin|asm|llvm-ir)(?:=|$))/u,
+		],
+	});
 }
 
 export const zig: ToolchainDefinition = {

@@ -25,16 +25,12 @@ import { parsePythonDiagnostics } from '../../src/toolchains/python/diagnostics.
 import { parseRustDiagnostics } from '../../src/toolchains/rust/diagnostics.js';
 import { CompilationService } from '../../src/compilation/compilation-service.js';
 import type { ConfigurationService } from '../../src/services/configuration-service.js';
-import {
-	buildCompilationInfoTree,
-	type CompilationInfoTreeNode,
-	CompilationInfoTreeProvider,
-} from '../../src/tree/compilation-info-tree.js';
+import { buildCompilationInfoTree, CompilationInfoTreeProvider } from '../../src/tree/compilation-info-tree.js';
 import { buildToolchainTreeNode, type ToolchainTreeNode } from '../../src/tree/toolchain-tree.js';
 import { getArtifactUri, parseArtifactUri } from '../../src/artifact-document/artifact-uri.js';
 import { ArtifactGenerator } from '../../src/artifact-document/artifact-generator.js';
-import { buildArtifactOptionsTree, type GlobalOptionsNode } from '../../src/tree/global-options-tree.js';
-import { buildArtifactPresetTreeNode, type ArtifactPresetTreeNode } from '../../src/tree/artifact-presets-tree.js';
+import { buildArtifactOptionsTree } from '../../src/tree/global-options-tree.js';
+import { buildArtifactPresetTreeNode } from '../../src/tree/artifact-presets-tree.js';
 import { ArtifactNavigationProvider } from '../../src/artifact-document/artifact-navigation-provider.js';
 import { ArtifactDetailsTreeProvider } from '../../src/tree/artifact-details-tree.js';
 import type { ArtifactDocumentSnapshot } from '../../src/artifact-document/artifact-identity.js';

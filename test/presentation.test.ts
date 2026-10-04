@@ -1,7 +1,5 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import type { ArtifactStatus } from '../src/artifact-document/artifact-generator.js';
-import type { ArtifactDocumentSnapshot } from '../src/artifact-document/artifact-identity.js';
 import {
 	documentationForInstruction,
 	instructionMnemonic,
@@ -16,22 +14,8 @@ import {
 	sourceScrollAnchor,
 } from '../src/artifact-document/source-bridge.js';
 import { jumpArrows } from '../src/artifact-document/jump-arrows.js';
-import type { ArtifactDetailsItem } from '../src/artifacts/ui/artifact-details.js';
 import { partitionArtifactPickerChoices } from '../src/artifacts/ui/artifact-picker.js';
-import type { InvocationDetails, RawArtifact, RenderedArtifact } from '../src/types/index.js';
 import { textArtifact } from './support/artifacts.js';
-
-/** One invocation, shared so the details rows and command-line quoting describe the same input. */
-const compilerInvocation: InvocationDetails = {
-	executable: '/tool chain/clang++',
-	args: ['-O2', '-DNAME=value with spaces'],
-	environmentVariableNames: ['API_KEY', 'TOKEN'],
-	cwd: '/project',
-};
-
-const generatedAt = 1_700_000_000_000;
-const durationMs = 12.4;
-const largestFrame = 64;
 
 test('the artifact picker hides unsupported choices and separates unavailable ones', () => {
 	const sections = partitionArtifactPickerChoices([
@@ -212,70 +196,3 @@ test('jump arrows classify forward branches and back edges from navigation links
 		],
 	);
 });
-
-function successfulStatus(withDiagnostics = true): ArtifactStatus {
-	const diagnostics: RawArtifact['diagnostics'] = withDiagnostics
-		? [
-				{ uri: {} as never, line: 0, column: 0, severity: 'error', message: 'error' },
-				{ uri: {} as never, line: 0, column: 0, severity: 'warning', message: 'warning' },
-				{ uri: {} as never, line: 0, column: 0, severity: 'information', message: 'note' },
-			]
-		: [];
-	const artifact: RenderedArtifact = {
-		kind: 'stack-analysis',
-		presentation: 'text',
-		diagnostics,
-		durationMs,
-		generatedAt,
-		command: compilerInvocation,
-		lines: [],
-		links: [],
-		folds: [],
-		symbols: [],
-		metrics: { largestFrame, functionCount: 3 },
-		truncated: false,
-	};
-	return { state: 'successful', artifact, truncated: false };
-}
-
-function snapshot(status: ArtifactStatus): ArtifactDocumentSnapshot {
-	return {
-		identity: {
-			documentUri: 'coglens-artifact:/project/source.stack.cpp',
-			sourceUri: 'file:///project/source.cpp',
-			sourceLabel: '/project/source.cpp',
-			artifactKind: 'stack-analysis',
-			artifactLabel: 'Stack analysis',
-			presetId: 'default',
-			variantId: 'cmake:debug',
-			variantLabel: 'Debug',
-			toolchainId: 'cmake:clang',
-			toolchainLabel: 'Clang 20',
-			toolchainKind: 'clang',
-		},
-		status,
-	};
-}
-
-function itemValue(items: readonly ArtifactDetailsItem[], id: string): string | undefined {
-	return findItem(items, id).value;
-}
-
-function findItem(items: readonly ArtifactDetailsItem[], id: string): ArtifactDetailsItem {
-	const found = tryFindItem(items, id);
-	assert.ok(found, `Details item not found: ${id}`);
-	return found;
-}
-
-function tryFindItem(items: readonly ArtifactDetailsItem[], id: string): ArtifactDetailsItem | undefined {
-	for (const item of items) {
-		if (item.id === id) {
-			return item;
-		}
-		const nested = item.children ? tryFindItem(item.children, id) : undefined;
-		if (nested) {
-			return nested;
-		}
-	}
-	return undefined;
-}

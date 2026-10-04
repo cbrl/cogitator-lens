@@ -1,4 +1,3 @@
-import { sameLocalFile } from '../local-file-identity.js';
 import { pythonBytecodeProducer } from '../artifacts/python/python-bytecode-producer.js';
 import { renderPythonBytecode } from '../artifacts/python/python-bytecode-renderer.js';
 import { pythonAstProducer } from '../artifacts/ast/python-ast-producer.js';
@@ -9,7 +8,7 @@ import {
 	renderPythonStackAnalysis,
 } from '../artifacts/stack-analysis/python-stack-analysis.js';
 import { parsePythonControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/python-cfg-parser.js';
-import { controlFlowGraphOutput, type ToolchainDefinition } from './toolchain-contracts.js';
+import { controlFlowGraphOutput, type ToolchainDefinition, withoutOwnedArguments } from './toolchain-contracts.js';
 import { parsePythonDiagnostics } from './python/diagnostics.js';
 
 /** Removes interpreter mode switches and the source path owned by Python artifact production. */
@@ -18,22 +17,10 @@ export function stripPythonManagedArguments(
 	sourceFile: string,
 	workingDirectory: string,
 ): string[] {
-	const result: string[] = [];
-	for (let index = 0; index < args.length; index++) {
-		const argument = args[index];
-		if (sameLocalFile(argument, sourceFile, workingDirectory) || argument === '--') {
-			continue;
-		}
-		if (argument === '-m' || argument === '-c') {
-			index++;
-			continue;
-		}
-		if (/^-[mc].+/.test(argument)) {
-			continue;
-		}
-		result.push(argument);
-	}
-	return result;
+	return withoutOwnedArguments(args, sourceFile, workingDirectory, {
+		withValue: [new Set(['-m', '-c'])],
+		standalone: [new Set(['--']), /^-[mc].+/],
+	});
 }
 
 export const python: ToolchainDefinition = {

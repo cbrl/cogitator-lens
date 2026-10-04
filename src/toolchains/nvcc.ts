@@ -1,4 +1,3 @@
-import path from 'node:path';
 import type { BinaryDisassembler } from '../artifacts/binary-disassembly/binary-disassembly-producer.js';
 import { noopPropertyGetter } from '../vendor/compiler-props.js';
 import { PTXAsmParser } from '../vendor/lib/parsers/asm-parser-ptx.js';
@@ -8,13 +7,13 @@ import {
 	binaryDisassembly,
 	toolDiscoverer,
 	type ToolchainDefinition,
+	withoutOwnedArguments,
 } from './toolchain-contracts.js';
 import { gnuPreprocessedSourceProducer } from './c-family.js';
 import { captureWindowsEnvironment } from './msvc.js';
 import { composeDiagnosticParsers } from '../diagnostics.js';
 import { parseGnuDiagnostics } from './c-family/diagnostics.js';
 import { parseParenthesizedDiagnostics } from './msvc/diagnostics.js';
-import { sameLocalFile } from '../local-file-identity.js';
 
 // Managed arguments that do not have a separate value (i.e. have no value or use the --arg=xyz form).
 const managedArgsUnitary =
@@ -38,22 +37,10 @@ export function stripNvccManagedArguments(
 	sourceFile: string,
 	workingDirectory: string,
 ): string[] {
-	const result: string[] = [];
-	for (let index = 0; index < args.length; index++) {
-		const argument = args[index];
-		if (sameLocalFile(argument, sourceFile, workingDirectory)) {
-			continue;
-		}
-		if (['-o', '--output-file'].includes(argument)) {
-			index++;
-			continue;
-		}
-		if (managedArgsUnitary.test(argument)) {
-			continue;
-		}
-		result.push(argument);
-	}
-	return result;
+	return withoutOwnedArguments(args, sourceFile, workingDirectory, {
+		withValue: [new Set(['-o', '--output-file'])],
+		standalone: [managedArgsUnitary],
+	});
 }
 
 export const nvcc: ToolchainDefinition = {

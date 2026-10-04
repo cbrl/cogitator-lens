@@ -22,6 +22,7 @@ import type { AsmParser } from '../vendor/lib/parsers/asm-parser.js';
 import type { AssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/assembly-cfg-parser.js';
 import type { DependencyCollectionSpec, ToolchainBackend } from './toolchain-backend.js';
 import type { DiagnosticParser } from '../diagnostics.js';
+import { sameLocalFile } from '../local-file-identity.js';
 
 /**
  * Runs a toolchain and returns its raw output. The compilation service sets
@@ -115,6 +116,49 @@ export const subcommandFirst: NonNullable<ToolchainDefinition['assembleArguments
 	...owned.slice(1),
 	sourcePath,
 ];
+
+/** Matches an argument by exact name, by pattern, or by its position in the argument list. */
+export type ArgumentMatcher =
+	ReadonlySet<string> | RegExp | ((argument: string, index: number, args: readonly string[]) => boolean);
+
+/** The provider arguments that a toolchain owns, so it removes them before it adds its own. */
+export interface OwnedArguments {
+	/** Flags that the toolchain removes together with the value argument that follows them. */
+	readonly withValue?: readonly ArgumentMatcher[];
+	/** Arguments that the toolchain removes alone. */
+	readonly standalone?: readonly ArgumentMatcher[];
+}
+
+/** Removes the source path and the owned arguments from provider arguments. */
+export function withoutOwnedArguments(
+	args: readonly string[],
+	sourceFile: string,
+	workingDirectory: string | undefined,
+	owned: OwnedArguments,
+): string[] {
+	const matchesAny = (matchers: readonly ArgumentMatcher[] = [], index: number): boolean =>
+		matchers.some((matcher) =>
+			typeof matcher === 'function'
+				? matcher(args[index], index, args)
+				: matcher instanceof RegExp
+					? matcher.test(args[index])
+					: matcher.has(args[index]),
+		);
+	const result: string[] = [];
+	for (let index = 0; index < args.length; index++) {
+		if (sameLocalFile(args[index], sourceFile, workingDirectory)) {
+			continue;
+		}
+		if (matchesAny(owned.withValue, index)) {
+			index++;
+			continue;
+		}
+		if (!matchesAny(owned.standalone, index)) {
+			result.push(args[index]);
+		}
+	}
+	return result;
+}
 
 /** Produces the compiler's assembly listing with the toolchain's output arguments. */
 export const assemblyProducer: ArtifactProducer = (backend, source, options, cancellationToken) =>

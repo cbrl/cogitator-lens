@@ -24,7 +24,7 @@ import path from 'path';
 import { CompilationService } from '../compilation/index.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
 import { CompilationError, type CompileDiagnostic, type RenderedTextArtifact } from '../types/index.js';
-import { artifactScheme, getArtifactUri } from './artifact-uri.js';
+import { artifactScheme } from './artifact-uri.js';
 import { ArtifactDecorator } from './artifact-decorator.js';
 import {
 	artifactDocumentKey,

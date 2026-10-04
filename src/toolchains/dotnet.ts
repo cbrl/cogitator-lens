@@ -1,12 +1,17 @@
 import fs from 'fs';
 import path from 'path';
 import type { ToolchainProfile } from '../types/index.js';
-import { canonicalLocalPath, sameLocalFile } from '../local-file-identity.js';
+import { canonicalLocalPath } from '../local-file-identity.js';
 import { DotNetPdbParser } from '../vendor/lib/parsers/pdb-parser-dotnet.js';
 import { dotNetSourceMappingData } from '../artifacts/dotnet/dotnet-source-mapping.js';
 import { renderDotNetIl } from '../artifacts/dotnet/dotnet-il-renderer.js';
 import { readBoundedArtifactBuffer } from './toolchain-backend.js';
-import { executableOnPath, type ArtifactProducer, type ToolchainDefinition } from './toolchain-contracts.js';
+import {
+	executableOnPath,
+	type ArtifactProducer,
+	type ToolchainDefinition,
+	withoutOwnedArguments,
+} from './toolchain-contracts.js';
 import { parseParenthesizedDiagnostics } from './msvc/diagnostics.js';
 
 export const dotNetIlProducer: ArtifactProducer = (backend, source, options, cancellationToken) =>
@@ -88,21 +93,10 @@ export function stripDotNetManagedArguments(
 	sourceFile: string,
 	workingDirectory: string,
 ): readonly string[] {
-	const result: string[] = [];
-	const separateValue = /^[-/](?:out|target|debug|pdb|refout|doc)$/i;
-	const managed = /^[-/](?:out|target|debug|pdb|refout|doc)(?::|=)|^[-/]nologo$/i;
-	for (let index = 0; index < args.length; index++) {
-		const argument = args[index];
-		if (sameLocalFile(argument, sourceFile, workingDirectory) || managed.test(argument)) {
-			continue;
-		}
-		if (separateValue.test(argument)) {
-			index++;
-			continue;
-		}
-		result.push(argument);
-	}
-	return result;
+	return withoutOwnedArguments(args, sourceFile, workingDirectory, {
+		withValue: [/^[-/](?:out|target|debug|pdb|refout|doc)$/i],
+		standalone: [/^[-/](?:out|target|debug|pdb|refout|doc)(?::|=)|^[-/]nologo$/i],
+	});
 }
 
 /** Discovers the Roslyn compiler and ILDasm associated with a configured dotnet host. */

@@ -3,7 +3,7 @@ import { noopPropertyGetter } from '../vendor/compiler-props.js';
 import { outputProducer } from '../artifacts/core/compiler-output-producer.js';
 import { parseMakeDepfile } from '../compilation/artifact-inputs.js';
 import type { DependencyCollectionSpec } from './toolchain-backend.js';
-import { sameLocalFile } from '../local-file-identity.js';
+import { withoutOwnedArguments, type OwnedArguments } from './toolchain-contracts.js';
 
 export const cFamilyLanguageIdentifiers = Object.freeze(['c', 'cpp', 'objective-c', 'objective-cpp', 'cuda']);
 
@@ -72,30 +72,19 @@ const compilerManagedFlags = new Set([
 	'/P',
 ]);
 
-/** Removes source, output, dependency, and artifact switches owned by the C-family backend. */
+/** Source, output, dependency, and artifact switches owned by the C-family backend. */
+export const compilerOwnedArguments: OwnedArguments = {
+	withValue: [
+		flagsWithSeparateValues,
+		(argument, index, args) => argument === '-Xclang' && args[index + 1] === '-ast-dump',
+	],
+	standalone: [compilerManagedFlags, flagsWithJoinedValues, artifactOutputFlags],
+};
+
 export function stripCompilerManagedArguments(
 	args: readonly string[],
 	sourceFile: string,
 	workingDirectory?: string,
 ): string[] {
-	const result: string[] = [];
-	for (let index = 0; index < args.length; index++) {
-		const argument = args[index];
-		if (sameLocalFile(argument, sourceFile, workingDirectory) || compilerManagedFlags.has(argument)) {
-			continue;
-		}
-		if (flagsWithSeparateValues.has(argument)) {
-			index++;
-			continue;
-		}
-		if (argument === '-Xclang' && args[index + 1] === '-ast-dump') {
-			index++;
-			continue;
-		}
-		if (flagsWithJoinedValues.test(argument) || artifactOutputFlags.test(argument)) {
-			continue;
-		}
-		result.push(argument);
-	}
-	return result;
+	return withoutOwnedArguments(args, sourceFile, workingDirectory, compilerOwnedArguments);
 }

@@ -12,6 +12,7 @@ import {
 	controlFlowGraphOutput,
 	toolDiscoverer,
 	type ToolchainDefinition,
+	withoutOwnedArguments,
 } from './toolchain-contracts.js';
 import { defaultAsmParser, stripCompilerManagedArguments } from './c-family.js';
 import { parseRustDiagnostics } from './rust/diagnostics.js';
@@ -78,20 +79,12 @@ export function stripRustManagedArguments(
 	sourceFile: string,
 	workingDirectory?: string,
 ): string[] {
-	const stripped = stripCompilerManagedArguments(args, sourceFile, workingDirectory);
-	const result: string[] = [];
-	for (let index = 0; index < stripped.length; index++) {
-		const argument = stripped[index];
-		if (rustManagedFlagsWithValues.has(argument)) {
-			index++;
-			continue;
-		}
-		if (rustManagedFlagAssignments.test(argument)) {
-			continue;
-		}
-		result.push(argument);
-	}
-	return result;
+	return withoutOwnedArguments(
+		stripCompilerManagedArguments(args, sourceFile, workingDirectory),
+		sourceFile,
+		workingDirectory,
+		{ withValue: [rustManagedFlagsWithValues], standalone: [rustManagedFlagAssignments] },
+	);
 }
 
 const rustDependencyCollection: DependencyCollectionSpec = Object.freeze({

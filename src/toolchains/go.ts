@@ -8,9 +8,9 @@ import {
 	subcommandFirst,
 	type ArtifactProducer,
 	type ToolchainDefinition,
+	withoutOwnedArguments,
 } from './toolchain-contracts.js';
 import { parseGoDiagnostics } from './go/diagnostics.js';
-import { sameLocalFile } from '../local-file-identity.js';
 
 const goFunctionPattern =
 	/^\s*func\s+(?:\(\s*(?:[\p{L}_][\p{L}\p{N}_]*\s+)?(\*?\s*[\p{L}_][\p{L}\p{N}_]*)\s*\)\s*)?([\p{L}_][\p{L}\p{N}_]*)\s*\(/gmu;
@@ -39,26 +39,14 @@ export function stripGoManagedArguments(
 	sourceFile: string,
 	workingDirectory: string,
 ): string[] {
-	const result: string[] = [];
-	for (let index = 0; index < args.length; index++) {
-		const argument = args[index];
-		if (
-			(index === 0 && ['build', 'run', 'install'].includes(argument)) ||
-			(index <= 1 && args[0] === 'tool' && ['tool', 'compile'].includes(argument)) ||
-			sameLocalFile(argument, sourceFile, workingDirectory)
-		) {
-			continue;
-		}
-		if (argument === '-o') {
-			index++;
-			continue;
-		}
-		if (argument.startsWith('-o=')) {
-			continue;
-		}
-		result.push(argument);
-	}
-	return result;
+	return withoutOwnedArguments(args, sourceFile, workingDirectory, {
+		withValue: [new Set(['-o'])],
+		standalone: [
+			(argument, index) => index === 0 && ['build', 'run', 'install'].includes(argument),
+			(argument, index, all) => index <= 1 && all[0] === 'tool' && ['tool', 'compile'].includes(argument),
+			/^-o=/,
+		],
+	});
 }
 
 export const goAssemblyProducer: ArtifactProducer = (backend, source, options, cancellationToken) =>
