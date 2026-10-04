@@ -1,10 +1,10 @@
 import fs from 'fs';
 import path from 'path';
 import { Disposable, RelativePattern, Uri, WorkspaceFolder, workspace } from 'vscode';
-import { VariantProvider } from './variant-provider.js';
+import { emptySnapshot, mergeSnapshots, VariantProvider, type VariantSnapshot } from './variant-provider.js';
 import { compilationDatabaseProviderId, parseCompilationDatabase } from './compilation-database-parser.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
-import type { CompilationVariant, ToolchainProfile, ProviderSnapshot } from '../types/index.js';
+import type { CompilationVariant, ToolchainProfile } from '../types/index.js';
 import * as logger from '../logger.js';
 import { canonicalLocalPath, localFileComparisonKey } from '../local-file-identity.js';
 import { sourceUriComparisonKey } from '../uri-containers.js';
@@ -15,14 +15,10 @@ interface DatabaseFile {
 }
 
 export class CompilationDatabaseVariantProvider extends VariantProvider {
-	readonly providerId = compilationDatabaseProviderId;
-	private readonly subscriptions: Disposable[] = [];
 	private readonly watchers: Disposable[] = [];
-	private refreshGeneration = 0;
-	private disposed = false;
 
 	constructor(private readonly configuration: ConfigurationService) {
-		super();
+		super(compilationDatabaseProviderId);
 	}
 
 	async initialize(): Promise<void> {
@@ -37,32 +33,14 @@ export class CompilationDatabaseVariantProvider extends VariantProvider {
 		await this.reconfigure();
 	}
 
-	async refresh(): Promise<void> {
-		const generation = ++this.refreshGeneration;
-		const databaseFiles = this.getDatabaseFiles();
-		const snapshots = await Promise.all(databaseFiles.map((database) => this.readDatabase(database)));
-		if (this.disposed || generation !== this.refreshGeneration) {
-			return;
-		}
-
-		const profiles = new Map<string, ToolchainProfile>();
-		const variants: CompilationVariant[] = [];
-		for (const snapshot of snapshots) {
-			snapshot.toolchainProfiles.forEach((profile) => profiles.set(profile.id, profile));
-			variants.push(...snapshot.variants);
-		}
-		this.publish({
-			provider: this.providerId,
-			toolchainProfiles: [...profiles.values()],
-			variants,
-		});
+	protected async read(): Promise<VariantSnapshot> {
+		return mergeSnapshots(
+			await Promise.all(this.getDatabaseFiles().map((database) => this.readDatabase(database))),
+		);
 	}
 
 	override dispose(): void {
-		this.disposed = true;
-		this.refreshGeneration++;
 		this.watchers.splice(0).forEach((watcher) => watcher.dispose());
-		this.subscriptions.splice(0).forEach((subscription) => subscription.dispose());
 		super.dispose();
 	}
 
@@ -100,7 +78,7 @@ export class CompilationDatabaseVariantProvider extends VariantProvider {
 		return [...files.values()];
 	}
 
-	private async readDatabase(database: DatabaseFile): Promise<ProviderSnapshot> {
+	private async readDatabase(database: DatabaseFile): Promise<VariantSnapshot> {
 		let contents: string;
 		try {
 			contents = await fs.promises.readFile(database.filePath, 'utf8');
@@ -108,7 +86,7 @@ export class CompilationDatabaseVariantProvider extends VariantProvider {
 			if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
 				logger.logChannel.error(`Failed to read compilation database ${database.filePath}: ${String(error)}`);
 			}
-			return this.emptySnapshot();
+			return emptySnapshot;
 		}
 
 		const entries = parseCompilationDatabase(contents, database.filePath, process.platform, (message) =>
@@ -138,15 +116,7 @@ export class CompilationDatabaseVariantProvider extends VariantProvider {
 			});
 		}
 
-		return {
-			provider: this.providerId,
-			toolchainProfiles: [...profiles.values()],
-			variants,
-		};
-	}
-
-	private emptySnapshot(): ProviderSnapshot {
-		return { provider: this.providerId, toolchainProfiles: [], variants: [] };
+		return { toolchainProfiles: [...profiles.values()], variants };
 	}
 }
 

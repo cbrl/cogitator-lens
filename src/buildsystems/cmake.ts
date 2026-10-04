@@ -1,8 +1,8 @@
 import path from 'path';
 import { Disposable, Uri, workspace } from 'vscode';
 import * as cmakeTools from 'vscode-cmake-tools';
-import { VariantProvider } from './variant-provider.js';
-import type { CompilationVariant, ProviderSnapshot, ToolchainProfile } from '../types/index.js';
+import { emptySnapshot, mergeSnapshots, VariantProvider, type VariantSnapshot } from './variant-provider.js';
+import type { CompilationVariant, ToolchainProfile } from '../types/index.js';
 import { createToolchainProfile, detectToolchainDefinition } from '../toolchains/toolchain-map.js';
 import { flattenCmakeArguments } from './cmake-arguments.js';
 import { tokenizeCommandLine } from '../tokenize.js';
@@ -17,13 +17,13 @@ interface ProjectState {
 }
 
 export class CmakeVariantProvider extends VariantProvider {
-	private readonly providerId = 'cmake';
 	private api?: cmakeTools.CMakeToolsApi;
 	private readonly projects = new Map<string, ProjectState>();
-	private readonly subscriptions: Disposable[] = [];
-	private refreshGeneration = 0;
 	private readonly projectGenerations = new Map<string, number>();
-	private disposed = false;
+
+	constructor() {
+		super('cmake');
+	}
 
 	async initialize(): Promise<void> {
 		try {
@@ -34,7 +34,7 @@ export class CmakeVariantProvider extends VariantProvider {
 		}
 		if (!this.api) {
 			logger.logChannel.info('CMake Tools is not installed. CMake discovery is disabled.');
-			this.publish(this.emptySnapshot());
+			this.publish(emptySnapshot);
 			return;
 		}
 
@@ -59,26 +59,11 @@ export class CmakeVariantProvider extends VariantProvider {
 		await this.refresh();
 	}
 
-	async refresh(): Promise<void> {
-		const generation = ++this.refreshGeneration;
-		const snapshots = await Promise.all([...this.projects.values()].map((state) => this.readProject(state)));
-		if (this.disposed || generation !== this.refreshGeneration) {
-			return;
-		}
-
-		const profiles = new Map<string, ToolchainProfile>();
-		const variants: CompilationVariant[] = [];
-		for (const snapshot of snapshots) {
-			snapshot.toolchainProfiles.forEach((profile) => profiles.set(profile.id, profile));
-			variants.push(...snapshot.variants);
-		}
-
-		this.publish({ provider: this.providerId, toolchainProfiles: [...profiles.values()], variants });
+	protected async read(): Promise<VariantSnapshot> {
+		return mergeSnapshots(await Promise.all([...this.projects.values()].map((state) => this.readProject(state))));
 	}
 
 	override dispose(): void {
-		this.disposed = true;
-		this.subscriptions.forEach((subscription) => subscription.dispose());
 		this.projects.forEach((state) => state.codeModelSubscription.dispose());
 		this.projects.clear();
 		this.projectGenerations.clear();
@@ -124,12 +109,12 @@ export class CmakeVariantProvider extends VariantProvider {
 		this.projects.delete(key);
 	}
 
-	private async readProject(state: ProjectState): Promise<ProviderSnapshot> {
+	private async readProject(state: ProjectState): Promise<VariantSnapshot> {
 		const toolchainProfiles = new Map<string, ToolchainProfile>();
 		const variants: CompilationVariant[] = [];
 		const codeModel = state.project.codeModel;
 		if (!codeModel) {
-			return this.emptySnapshot();
+			return emptySnapshot;
 		}
 
 		let activeBuildType: string | undefined;
@@ -141,7 +126,7 @@ export class CmakeVariantProvider extends VariantProvider {
 			]);
 		} catch (error) {
 			logger.logChannel.error(`Failed to read CMake state for ${state.uri.fsPath}: ${String(error)}`);
-			return this.emptySnapshot();
+			return emptySnapshot;
 		}
 
 		const configurations = activeBuildType
@@ -218,15 +203,7 @@ export class CmakeVariantProvider extends VariantProvider {
 			}
 		}
 
-		return {
-			provider: this.providerId,
-			toolchainProfiles: [...toolchainProfiles.values()],
-			variants,
-		};
-	}
-
-	private emptySnapshot(): ProviderSnapshot {
-		return { provider: this.providerId, toolchainProfiles: [], variants: [] };
+		return { toolchainProfiles: [...toolchainProfiles.values()], variants };
 	}
 
 	private projectKey(uri: Uri): string {

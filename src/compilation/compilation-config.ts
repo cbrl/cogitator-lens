@@ -1,10 +1,18 @@
 import { Disposable, Event, EventEmitter, Uri } from 'vscode';
 import type { CompilationVariant } from '../types/index.js';
-import { sourceUriMap, sourceUriSet } from '../uri-containers.js';
+import { sourceUriMap, sourceUriSet, type UriMap } from '../uri-containers.js';
 import { structurallyEqual } from '../utils.js';
 
+/**
+ * The compilation variants of every provider, indexed by source.
+ *
+ * Each provider's last snapshot is the source of truth. The source index is
+ * rebuilt from the snapshots in provider order, so the variants of one source
+ * keep a stable order across refreshes.
+ */
 export class CompilationConfigDatabase implements Disposable {
-	private readonly bySource = sourceUriMap<Map<string, CompilationVariant>>();
+	private readonly byProvider = new Map<string, readonly CompilationVariant[]>();
+	private bySource: UriMap<Map<string, CompilationVariant>> = sourceUriMap();
 	private readonly selectedVariant = sourceUriMap<string>();
 	private readonly changeEmitter = new EventEmitter<readonly Uri[]>();
 	private readonly selectionEmitter = new EventEmitter<Uri>();
@@ -47,112 +55,54 @@ export class CompilationConfigDatabase implements Disposable {
 	}
 
 	reconcile(provider: string, snapshot: readonly CompilationVariant[]): void {
-		const existing = new Map<string, CompilationVariant>();
-		for (const [, variants] of this.bySource) {
-			for (const variant of variants.values()) {
-				if (variant.provider === provider) {
-					existing.set(variant.id, variant);
-				}
-			}
+		if (structurallyEqual(this.byProvider.get(provider) ?? [], snapshot)) {
+			return;
+		}
+		this.byProvider.set(provider, snapshot);
+
+		const previous = this.bySource;
+		this.bySource = sourceUriMap();
+		for (const variant of [...this.byProvider.values()].flat()) {
+			const variants = this.bySource.get(variant.source) ?? new Map<string, CompilationVariant>();
+			variants.set(variant.id, variant);
+			this.bySource.set(variant.source, variants);
 		}
 
-		const incoming = new Map(snapshot.map((variant) => [variant.id, variant]));
-		const affected = sourceUriSet();
-		let changed = false;
-
-		for (const [id, previous] of existing) {
-			const replacement = incoming.get(id);
-
-			if (!replacement) {
-				this.bySource.get(previous.source)?.delete(id);
-				affected.add(previous.source);
-				changed = true;
-			} else {
-				if (!structurallyEqual(previous, replacement)) {
-					this.setVariant(replacement);
-					affected.add(replacement.source);
-					changed = true;
-				}
-
-				incoming.delete(id);
-			}
-		}
-
-		for (const variant of incoming.values()) {
-			this.setVariant(variant);
-			affected.add(variant.source);
-			changed = true;
-		}
-
-		const desiredBySource = sourceUriMap<CompilationVariant[]>();
-		for (const variant of snapshot) {
-			const desired = desiredBySource.get(variant.source) ?? [];
-			desired.push(variant);
-			desiredBySource.set(variant.source, desired);
-		}
-		for (const [source, desired] of desiredBySource) {
-			const current = this.bySource.get(source);
-			if (!current) {
-				continue;
-			}
-			const reordered = new Map<string, CompilationVariant>();
-			let insertedProvider = false;
-			for (const variant of current.values()) {
-				if (variant.provider === provider) {
-					if (!insertedProvider) {
-						desired.forEach((item) => reordered.set(item.id, item));
-						insertedProvider = true;
-					}
-				} else {
-					reordered.set(variant.id, variant);
-				}
-			}
-			if (!insertedProvider) {
-				desired.forEach((item) => reordered.set(item.id, item));
-			}
-			if (!sameKeyOrder(current, reordered)) {
-				this.bySource.set(source, reordered);
-				affected.add(source);
-				changed = true;
-			}
-		}
-
-		for (const [source, variants] of [...this.bySource]) {
-			if (variants.size === 0) {
-				this.bySource.delete(source);
+		for (const [source, selectedId] of [...this.selectedVariant]) {
+			if (!this.bySource.get(source)?.has(selectedId)) {
 				this.selectedVariant.delete(source);
-			} else {
-				const selected = this.selectedVariant.get(source);
-				if (selected && !variants.has(selected)) {
-					this.selectedVariant.delete(source);
-				}
 			}
 		}
 
-		if (changed) {
-			this.changeEmitter.fire([...affected.values()]);
+		const sources = sourceUriSet();
+		[...previous.keys(), ...this.bySource.keys()].forEach((source) => sources.add(source));
+		const changed = [...sources.values()].filter(
+			(source) => !sameVariants(previous.get(source), this.bySource.get(source)),
+		);
+		if (changed.length > 0) {
+			this.changeEmitter.fire(changed);
 		}
 	}
 
 	dispose(): void {
 		this.changeEmitter.dispose();
 		this.selectionEmitter.dispose();
+		this.byProvider.clear();
 		this.bySource.clear();
 		this.selectedVariant.clear();
 	}
-
-	private setVariant(variant: CompilationVariant): void {
-		const variants = this.bySource.get(variant.source) ?? new Map<string, CompilationVariant>();
-		variants.set(variant.id, variant);
-		this.bySource.set(variant.source, variants);
-	}
 }
 
-function sameKeyOrder(
-	left: ReadonlyMap<string, CompilationVariant>,
-	right: ReadonlyMap<string, CompilationVariant>,
+function sameVariants(
+	left: ReadonlyMap<string, CompilationVariant> | undefined,
+	right: ReadonlyMap<string, CompilationVariant> | undefined,
 ): boolean {
-	const leftKeys = [...left.keys()];
-	const rightKeys = [...right.keys()];
-	return leftKeys.length === rightKeys.length && leftKeys.every((key, index) => key === rightKeys[index]);
+	const leftVariants = [...(left?.values() ?? [])];
+	const rightVariants = [...(right?.values() ?? [])];
+	return (
+		leftVariants.length === rightVariants.length &&
+		leftVariants.every(
+			(variant, index) => variant === rightVariants[index] || structurallyEqual(variant, rightVariants[index]),
+		)
+	);
 }

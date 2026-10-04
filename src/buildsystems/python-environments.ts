@@ -6,10 +6,10 @@ import {
 	type PythonExtension as PythonExtensionApi,
 	type ResolvedEnvironment,
 } from '@vscode/python-extension';
-import { Disposable, Uri, workspace } from 'vscode';
-import type { CompilationVariant, ProviderSnapshot } from '../types/index.js';
+import { Uri, workspace } from 'vscode';
+import type { CompilationVariant } from '../types/index.js';
 import * as logger from '../logger.js';
-import { VariantProvider } from './variant-provider.js';
+import { emptySnapshot, VariantProvider, type VariantSnapshot } from './variant-provider.js';
 import { sourceUriComparisonKey } from '../uri-containers.js';
 import {
 	createPythonEnvironmentProfiles,
@@ -26,12 +26,9 @@ type PythonApiFactory = () => Promise<PythonExtensionApi>;
 
 export class PythonEnvironmentVariantProvider extends VariantProvider {
 	private api?: PythonExtensionApi;
-	private readonly subscriptions: Disposable[] = [];
-	private refreshGeneration = 0;
-	private disposed = false;
 
 	constructor(private readonly apiFactory: PythonApiFactory = () => PythonExtension.api()) {
-		super();
+		super(providerId);
 	}
 
 	async initialize(): Promise<void> {
@@ -40,7 +37,7 @@ export class PythonEnvironmentVariantProvider extends VariantProvider {
 			await this.api.ready;
 		} catch (error) {
 			logger.logChannel.info(`Microsoft Python environment discovery is unavailable: ${String(error)}`);
-			this.publish(this.emptySnapshot());
+			this.publish(emptySnapshot);
 			return;
 		}
 
@@ -65,35 +62,20 @@ export class PythonEnvironmentVariantProvider extends VariantProvider {
 		await this.refresh();
 	}
 
-	async refresh(): Promise<void> {
+	protected async read(): Promise<VariantSnapshot> {
 		const api = this.api;
 		if (!api) {
-			this.publish(this.emptySnapshot());
-			return;
+			return emptySnapshot;
 		}
-
-		const generation = ++this.refreshGeneration;
-		const sourcesPromise = workspace.findFiles(pythonSourcePattern, pythonSourceExclusions);
-		const environmentsPromise = this.resolveEnvironments(api);
-		const [sources, environments] = await Promise.all([sourcesPromise, environmentsPromise]);
-		if (this.disposed || generation !== this.refreshGeneration) {
-			return;
-		}
-
+		const [sources, environments] = await Promise.all([
+			workspace.findFiles(pythonSourcePattern, pythonSourceExclusions),
+			this.resolveEnvironments(api),
+		]);
 		const profiles = createPythonEnvironmentProfiles(environments);
-		const variants = sources.flatMap((source) => this.createVariants(api, source, profiles));
-		this.publish({
-			provider: providerId,
+		return {
 			toolchainProfiles: profiles.map((item) => item.profile),
-			variants,
-		});
-	}
-
-	override dispose(): void {
-		this.disposed = true;
-		this.refreshGeneration++;
-		this.subscriptions.splice(0).forEach((subscription) => subscription.dispose());
-		super.dispose();
+			variants: sources.flatMap((source) => this.createVariants(api, source, profiles)),
+		};
 	}
 
 	private async resolveEnvironments(api: PythonExtensionApi): Promise<ResolvedEnvironment[]> {
@@ -151,10 +133,6 @@ export class PythonEnvironmentVariantProvider extends VariantProvider {
 			environment,
 			displayLabel: item.profile.displayName,
 		}));
-	}
-
-	private emptySnapshot(): ProviderSnapshot {
-		return { provider: providerId, toolchainProfiles: [], variants: [] };
 	}
 }
 
