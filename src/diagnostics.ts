@@ -34,24 +34,27 @@ export function diagnosticUri(filename: string, fallbackSource: Uri, workingDire
 
 /** Composes parser families while suppressing identical host/device duplicates. */
 export function composeDiagnosticParsers(...parsers: readonly DiagnosticParser[]): DiagnosticParser {
-	return (output, fallbackSource, workingDirectory) => {
-		const diagnostics = parsers.flatMap((parser) => [...parser(output, fallbackSource, workingDirectory)]);
-		const seen = new Set<string>();
-		return diagnostics.filter((diagnostic) => {
-			const key = [
-				localFileUriComparisonKey(diagnostic.uri),
-				diagnostic.line,
-				diagnostic.column,
-				diagnostic.severity,
-				diagnostic.message,
-			].join('\0');
-			if (seen.has(key)) {
-				return false;
-			}
-			seen.add(key);
-			return true;
-		});
-	};
+	return (output, fallbackSource, workingDirectory) =>
+		uniqueDiagnostics(parsers.flatMap((parser) => [...parser(output, fallbackSource, workingDirectory)]));
+}
+
+/** Removes diagnostics that repeat the file, position, severity, and message of an earlier one. */
+export function uniqueDiagnostics(diagnostics: readonly CompileDiagnostic[]): CompileDiagnostic[] {
+	const seen = new Set<string>();
+	return diagnostics.filter((diagnostic) => {
+		const key = [
+			localFileUriComparisonKey(diagnostic.uri),
+			diagnostic.line,
+			diagnostic.column,
+			diagnostic.severity,
+			diagnostic.message,
+		].join('\0');
+		if (seen.has(key)) {
+			return false;
+		}
+		seen.add(key);
+		return true;
+	});
 }
 
 /** Converts a one-based compiler source position to the zero-based editor representation. */

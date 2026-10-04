@@ -1,9 +1,9 @@
 import type { ControlFlowGraph, RenderedArtifactMetric } from '../types/index.js';
+import { isRecord } from '../common.js';
 import {
 	allowedKeys,
 	boundedString,
 	graphLimits,
-	isRecord,
 	validateControlFlowGraph,
 } from '../artifacts/control-flow-graph/control-flow-graph-model.js';
 

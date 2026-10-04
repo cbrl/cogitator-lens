@@ -81,7 +81,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
 				'coglens.supportedSource',
 				Boolean(
 					window.activeTextEditor &&
-					artifactCommands.isSupportedSourceDocument(window.activeTextEditor.document),
+					variantCommands.isSupportedSourceDocument(window.activeTextEditor.document),
 				),
 			),
 			commands.executeCommand(

@@ -3,7 +3,7 @@ import { Disposable, Event, EventEmitter, RelativePattern, Uri, workspace } from
 import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
 import type { CompilationService } from '../compilation/index.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
-import { getArtifactOutputChoices } from '../toolchains/toolchain-map.js';
+import { getArtifactOutputChoices } from '../toolchains/toolchain-artifacts.js';
 import type { CompilationVariant, ToolchainProfile } from '../types/index.js';
 import { CompilationError } from '../types/index.js';
 import { toComparisonKey } from '../utils.js';

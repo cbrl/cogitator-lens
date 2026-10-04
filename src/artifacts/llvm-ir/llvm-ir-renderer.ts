@@ -1,4 +1,4 @@
-import path from 'path';
+import { resolveCompilerPath } from '../../local-file-identity.js';
 import type { DisplayOptions, RawArtifact, RenderedTextArtifact, RenderedArtifactLine } from '../../types/index.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { LLVMIRDemangler } from '../../vendor/lib/demangler/llvm.js';
@@ -28,7 +28,7 @@ export async function renderLlvmIr(
 		source:
 			line.source?.file && line.source.line
 				? {
-						file: sourcePath(line.source.file, raw.command.workingDirectory),
+						file: resolveCompilerPath(line.source.file, raw.command.workingDirectory),
 						line: line.source.line,
 						column: line.source.column === undefined ? undefined : Math.max(0, line.source.column - 1),
 					}
@@ -50,10 +50,6 @@ export async function renderLlvmIr(
 		symbols,
 		folds,
 	};
-}
-
-function sourcePath(filename: string, workingDirectory: string): string {
-	return path.normalize(path.isAbsolute(filename) ? filename : path.resolve(workingDirectory, filename));
 }
 
 function findFunctionEnd(lines: readonly RenderedArtifactLine[], startLine: number): number {

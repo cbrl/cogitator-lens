@@ -10,7 +10,7 @@ import type {
 	ToolchainKind,
 } from '../../src/types/index.js';
 import { artifactDefinitions } from '../../src/artifacts/core/artifact-definitions.js';
-import type { ToolchainArtifactOutput } from '../../src/toolchains/toolchain-map.js';
+import type { ToolchainArtifactOutput } from '../../src/toolchains/toolchain-contracts.js';
 import { sourceUri, toolchainBackend } from './toolchains.js';
 
 /** Tool output as the compilation layer hands it to a renderer. */

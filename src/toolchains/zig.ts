@@ -9,6 +9,7 @@ import {
 	assemblyControlFlowGraphOutput,
 	controlFlowGraphOutput,
 	outputArtifactCell,
+	subcommandFirst,
 	toolDiscoverer,
 	type ToolchainDefinition,
 } from './toolchain-contracts.js';
@@ -72,12 +73,7 @@ export const zig: ToolchainDefinition = {
 	objectFilename: 'output.o',
 	outputArguments: zigOutputArguments,
 	stripOwnedArguments: stripZigManagedArguments,
-	assembleArguments: (owned, provider, sourcePath) => [
-		...owned.slice(0, 1),
-		...provider,
-		...owned.slice(1),
-		sourcePath,
-	],
+	assembleArguments: subcommandFirst,
 	createParser: defaultAsmParser,
 	createCfgParser: () => new ClangAssemblyCfgParser(new InstructionSetInfo()),
 	discoverTools: toolDiscoverer({ demangler: 'llvm-cxxfilt', disassembler: 'llvm-objdump' }),

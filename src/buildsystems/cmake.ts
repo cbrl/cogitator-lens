@@ -17,7 +17,6 @@ interface ProjectState {
 }
 
 export class CmakeVariantProvider extends VariantProvider {
-	readonly name = 'CMake';
 	private readonly providerId = 'cmake';
 	private api?: cmakeTools.CMakeToolsApi;
 	private readonly projects = new Map<string, ProjectState>();

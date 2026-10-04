@@ -1,7 +1,8 @@
 import { Disposable, Event, EventEmitter } from 'vscode';
 import type { ArtifactKind, ArtifactOptionAvailability, ToolchainProfile } from '../types/index.js';
 import { ToolchainBackend } from '../toolchains/toolchain-backend.js';
-import { getToolchainDefinition, resolveArtifactAvailability } from '../toolchains/toolchain-map.js';
+import { getToolchainDefinition } from '../toolchains/toolchain-map.js';
+import { resolveArtifactAvailability } from '../toolchains/toolchain-artifacts.js';
 import type { ConfigurationOrigin } from '../buildsystems/variant-provider.js';
 import { structurallyEqual } from '../utils.js';
 import { logChannel } from '../logger.js';

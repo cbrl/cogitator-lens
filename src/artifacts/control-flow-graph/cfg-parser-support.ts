@@ -9,14 +9,7 @@ import { pathToFileURL } from 'node:url';
  * reimplemented per dialect.
  */
 
-/** Splits compiler output on any line ending without producing a trailing empty line. */
-export function splitLines(text: string): string[] {
-	const lines = text.split(/\r\n|\n|\r/u);
-	if (lines.at(-1) === '') {
-		lines.pop();
-	}
-	return lines;
-}
+export { splitLines } from '../../common.js';
 
 /**
  * Resolves a compiler-reported path to a `file:` URI without depending on the

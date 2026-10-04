@@ -15,7 +15,6 @@ interface DatabaseFile {
 }
 
 export class CompilationDatabaseVariantProvider extends VariantProvider {
-	readonly name = 'Compilation Database';
 	readonly providerId = compilationDatabaseProviderId;
 	private readonly subscriptions: Disposable[] = [];
 	private readonly watchers: Disposable[] = [];

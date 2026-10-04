@@ -46,7 +46,7 @@ import {
 	nativeStackUsageOutput,
 } from '../../src/artifacts/stack-analysis/native-stack-analysis.js';
 import { ExecError } from '../../src/exec.js';
-import { isSupportedSourceDocument } from '../../src/commands/artifacts.js';
+import { isSupportedSourceDocument } from '../../src/commands/variants.js';
 
 const extensionToolchainHost = {
 	log() {},

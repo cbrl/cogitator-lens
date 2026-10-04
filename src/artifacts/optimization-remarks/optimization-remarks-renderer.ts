@@ -8,7 +8,7 @@ import type {
 import type { OptRemark } from '../../vendor/static/panes/opt-view.interfaces.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderAnalysisSource } from '../analysis/analysis-source-renderer.js';
-import { sameLocalFile } from '../../local-file-identity.js';
+import { resolveCompilerPath, sameLocalFile } from '../../local-file-identity.js';
 
 export interface OptimizationRemark {
 	readonly file?: string;
@@ -76,7 +76,7 @@ export function normalizeOptimizationRemark(remark: OptRemark, workingDirectory:
 	const location =
 		remark.DebugLoc.File && remark.DebugLoc.Line > 0 && remark.DebugLoc.Column >= 0
 			? {
-					file: sourcePath(remark.DebugLoc.File, workingDirectory),
+					file: resolveCompilerPath(remark.DebugLoc.File, workingDirectory),
 					line: remark.DebugLoc.Line,
 					column: remark.DebugLoc.Column,
 				}
@@ -106,8 +106,4 @@ function inferOptimizationPass(message: string): string {
 		return 'omp';
 	}
 	return 'gcc';
-}
-
-function sourcePath(filename: string, workingDirectory: string): string {
-	return path.normalize(path.isAbsolute(filename) ? filename : path.resolve(workingDirectory, filename));
 }

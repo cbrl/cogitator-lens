@@ -1,6 +1,5 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { ArtifactProducer } from './toolchain-contracts.js';
 import { noopPropertyGetter } from '../vendor/compiler-props.js';
 import { GoAsmParser } from '../vendor/lib/parsers/asm-parser-go.js';
 import { parseGoSsaControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/go-ssa-cfg-parser.js';
@@ -8,7 +7,8 @@ import {
 	artifactCells,
 	controlFlowGraphOutput,
 	outputArtifactCell,
-	toolDiscoverer,
+	subcommandFirst,
+	type ArtifactProducer,
 	type ToolchainDefinition,
 } from './toolchain-contracts.js';
 import { parseGoDiagnostics } from './go/diagnostics.js';
@@ -136,14 +136,8 @@ export const go: ToolchainDefinition = {
 	parseDiagnostics: parseGoDiagnostics,
 	languageIdentifiers: Object.freeze(['go']),
 	stripOwnedArguments: stripGoManagedArguments,
-	assembleArguments: (owned, provider, sourcePath) => [
-		...owned.slice(0, 1),
-		...provider,
-		...owned.slice(1),
-		sourcePath,
-	],
+	assembleArguments: subcommandFirst,
 	createParser: () => new GoAsmParser(noopPropertyGetter),
-	discoverTools: toolDiscoverer({}),
 	artifacts: artifactCells({
 		assembly: { status: 'available', producer: goAssemblyProducer },
 		'control-flow-graph': outputArtifactCell([

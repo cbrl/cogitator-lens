@@ -1,10 +1,10 @@
 import path from 'path';
-import { removeSourceArgument } from '../toolchain-arguments.js';
 import { detectToolchainDefinition } from '../toolchains/toolchain-map.js';
 import { createToolchainProfile } from '../toolchains/toolchain-map.js';
 import { tokenizeCommandLine } from '../tokenize.js';
 import type { ToolchainProfile } from '../types/index.js';
-import { localFileComparisonKey } from '../local-file-identity.js';
+import { localFileComparisonKey, sameLocalFile } from '../local-file-identity.js';
+import { isRecord } from '../common.js';
 
 export const compilationDatabaseProviderId = 'compilation-database';
 
@@ -123,13 +123,13 @@ function parseEntry(
 	};
 }
 
+export function removeSourceArgument(args: readonly string[], sourceFile: string, workingDirectory?: string): string[] {
+	return args.filter((argument) => !sameLocalFile(argument, sourceFile, workingDirectory));
+}
+
 function resolveExecutable(executable: string, workingDirectory: string): string {
 	if (path.isAbsolute(executable)) {
 		return path.normalize(executable);
 	}
 	return /[\\/]/.test(executable) ? path.resolve(workingDirectory, executable) : executable;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

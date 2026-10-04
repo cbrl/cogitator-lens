@@ -1,4 +1,5 @@
 import type { DisplayOptions, RawArtifact, RenderedTextArtifact, RenderedArtifactLine } from '../../types/index.js';
+import { splitLines } from '../../common.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
 import { pythonBytecodeInstruction } from './python-bytecode-listing.js';
@@ -52,12 +53,4 @@ export function renderPythonBytecode(
 		codeObjectCount: instructionCount === 0 ? 0 : codeObjectCount,
 		sourceLineCount: mappedSourceLines.size,
 	});
-}
-
-function splitLines(text: string): string[] {
-	const lines = text.split(/\r\n|\n|\r/);
-	if (lines.at(-1) === '') {
-		lines.pop();
-	}
-	return lines;
 }

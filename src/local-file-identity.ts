@@ -18,6 +18,14 @@ export function absoluteLocalPath(filename: string, workingDirectory?: string): 
 }
 
 /**
+ * Resolves a compiler-reported path against the compiler's working directory.
+ * Unlike `absoluteLocalPath`, an absolute path keeps its root, so no drive is added on Windows.
+ */
+export function resolveCompilerPath(filename: string, workingDirectory: string): string {
+	return path.normalize(path.isAbsolute(filename) ? filename : path.resolve(workingDirectory, filename));
+}
+
+/**
  * Produces a physical identity for a local path. Existing paths are resolved
  * through symlinks. For a path that does not exist yet, the closest existing
  * parent is resolved so generated files beneath a symlinked directory still

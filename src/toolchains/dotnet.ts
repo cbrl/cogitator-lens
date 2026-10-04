@@ -1,13 +1,17 @@
 import fs from 'fs';
 import path from 'path';
-import type { ArtifactProducer } from './toolchain-contracts.js';
 import type { ToolchainProfile } from '../types/index.js';
 import { canonicalLocalPath, sameLocalFile } from '../local-file-identity.js';
 import { DotNetPdbParser } from '../vendor/lib/parsers/pdb-parser-dotnet.js';
 import { dotNetSourceMappingData } from '../artifacts/dotnet/dotnet-source-mapping.js';
 import { renderDotNetIl } from '../artifacts/dotnet/dotnet-il-renderer.js';
 import { readBoundedArtifactBuffer } from './toolchain-backend.js';
-import { artifactCells, type ToolchainDefinition } from './toolchain-contracts.js';
+import {
+	artifactCells,
+	executableOnPath,
+	type ArtifactProducer,
+	type ToolchainDefinition,
+} from './toolchain-contracts.js';
 import { parseParenthesizedDiagnostics } from './msvc/diagnostics.js';
 
 export const dotNetIlProducer: ArtifactProducer = (backend, source, options, cancellationToken) =>
@@ -191,19 +195,6 @@ function executableRoots(executable: string): readonly string[] {
 	// also support launchers symlinked from outside the installation root.
 	roots.push(path.dirname(canonicalLocalPath(executable)));
 	return [...new Set(roots)];
-}
-
-function executableOnPath(name: string): string | undefined {
-	for (const directory of (process.env.PATH ?? '').split(path.delimiter)) {
-		if (!directory) {
-			continue;
-		}
-		const candidate = path.join(directory, name);
-		if (fs.existsSync(candidate)) {
-			return candidate;
-		}
-	}
-	return undefined;
 }
 
 function discoverSystemDotNetRoot(): string | undefined {

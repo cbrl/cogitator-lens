@@ -9,7 +9,7 @@ import type {
 } from '../types/index.js';
 import { parseArtifactUri } from '../artifact-document/artifact-uri.js';
 import { TreeNode, TreeProvider } from './treedata.js';
-import { resolveArtifactAvailability, resolveArtifactOptionAvailability } from '../toolchains/toolchain-map.js';
+import { resolveArtifactAvailability, resolveArtifactOptionAvailability } from '../toolchains/toolchain-artifacts.js';
 import { artifactDefinitions, defaultArtifactKind } from '../artifacts/core/artifact-definitions.js';
 import { groupNode, messageNode } from './tree-helpers.js';
 

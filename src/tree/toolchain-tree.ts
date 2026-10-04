@@ -3,7 +3,7 @@ import type { ArtifactOptionId, AuxiliaryTool, IntelSyntaxSupport, ToolchainProf
 import { ToolchainRegistry } from '../compilation/index.js';
 import { TreeNode, TreeProvider } from './treedata.js';
 import { detailNode, groupNode, makeEnvironmentNode, makeListNode, noneNode } from './tree-helpers.js';
-import { resolveArtifactAvailability, resolveArtifactOptionAvailability } from '../toolchains/toolchain-map.js';
+import { resolveArtifactAvailability, resolveArtifactOptionAvailability } from '../toolchains/toolchain-artifacts.js';
 import { artifactDefinitions, supportedArtifactKinds } from '../artifacts/core/artifact-definitions.js';
 import { type ConfigurationOrigin, variantProviderDefinitions } from '../buildsystems/variant-provider.js';
 

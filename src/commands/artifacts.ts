@@ -2,21 +2,17 @@ import path from 'path';
 import * as vscode from 'vscode';
 import { getArtifactUri, type ArtifactDocumentProvider } from '../artifact-document/artifact-document-provider.js';
 import { artifactDefinitions, supportedArtifactKinds } from '../artifacts/core/artifact-definitions.js';
-import {
-	needsArtifactOutputPicker,
-	partitionArtifactPickerChoices,
-	type ArtifactPickerChoice,
-} from '../artifacts/ui/artifact-picker.js';
+import { partitionArtifactPickerChoices, type ArtifactPickerChoice } from '../artifacts/ui/artifact-picker.js';
 import { effectiveArtifactPresets, type ArtifactPreset } from '../artifacts/ui/presets.js';
 import type { CompilationService } from '../compilation/index.js';
 import * as logger from '../logger.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
-import { getArtifactOutputChoices, supportedLanguageIdentifiers } from '../toolchains/toolchain-map.js';
+import { getArtifactOutputChoices } from '../toolchains/toolchain-artifacts.js';
 import type { TreeNode } from '../tree/treedata.js';
 import type { ArtifactKind, CompilationVariant } from '../types/index.js';
 import { pickFrom } from '../ui/quick-input.js';
 import type { GraphPanelManager } from '../webview/graph-panel-manager.js';
-import { pickVariantIfNeeded } from './variants.js';
+import { isSupportedSourceDocument, pickVariantIfNeeded } from './variants.js';
 
 export interface ArtifactCommandDependencies {
 	readonly compilationService: CompilationService;
@@ -156,7 +152,7 @@ async function openArtifact(
 	}
 	const outputChoices = getArtifactOutputChoices(backend.profile, kind);
 	let artifactOutput = outputChoices.length === 1 ? outputChoices[0] : undefined;
-	if (needsArtifactOutputPicker(outputChoices)) {
+	if (outputChoices.length > 1) {
 		artifactOutput = await pickFrom(
 			outputChoices,
 			(output) => ({
@@ -374,10 +370,6 @@ function targetSupportsKind(
 
 function comparisonUri(source: vscode.Uri, target: ComparisonTarget, kind: ArtifactKind): vscode.Uri {
 	return getArtifactUri(source, target.variant, kind, target.preset?.id ?? 'default', undefined);
-}
-
-export function isSupportedSourceDocument(document: vscode.TextDocument): boolean {
-	return document.uri.scheme === 'file' && supportedLanguageIdentifiers.has(document.languageId);
 }
 
 async function showArtifactStatusActions(artifacts: ArtifactDocumentProvider): Promise<void> {

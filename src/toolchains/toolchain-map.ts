@@ -10,27 +10,9 @@ import { dotnet } from './dotnet.js';
 import { go } from './go.js';
 import { zig } from './zig.js';
 import { nvcc } from './nvcc.js';
-import type { ToolchainDefinition, ToolchainDefinitionShape } from './toolchain-contracts.js';
+import type { ToolchainDefinition } from './toolchain-contracts.js';
 import { supportedToolchainKinds } from './toolchain-kinds.js';
 import { localFileComparisonKey } from '../local-file-identity.js';
-
-export type {
-	ArtifactProducer,
-	ResolvedToolchainArtifactCell,
-	ToolchainArtifactCell,
-	ToolchainArtifactImplementation,
-	ToolchainArtifactOutput,
-	ToolchainDefinition,
-	ToolchainDefinitionShape,
-} from './toolchain-contracts.js';
-export {
-	resolveArtifactAvailability,
-	getArtifactOutputChoices,
-	resolveArtifactOutput,
-	resolveArtifactOptionAvailability,
-} from './toolchain-artifacts.js';
-
-export type ToolCapabilityStatus = 'available' | 'unavailable' | 'unsupported';
 
 export const toolchainDefinitions = {
 	gcc,
@@ -44,7 +26,7 @@ export const toolchainDefinitions = {
 	go,
 	zig,
 	nvcc,
-} as const satisfies Record<string, ToolchainDefinitionShape>;
+} as const satisfies Record<string, ToolchainDefinition>;
 
 /** Retrieves the complete definition registered for a persisted toolchain kind. */
 export function getToolchainDefinition(kind: ToolchainKind): ToolchainDefinition {
@@ -96,7 +78,10 @@ export function createToolchainProfile(
 		executable: normalized,
 		defaultArguments: overrides.defaultArguments ?? [],
 		environment: overrides.environment ?? {},
-		tools: Object.freeze({ ...definition.discoverTools(normalized), ...normalizeAuxiliaryTools(overrides.tools) }),
+		tools: Object.freeze({
+			...definition.discoverTools?.(normalized),
+			...normalizeAuxiliaryTools(overrides.tools),
+		}),
 	};
 }
 

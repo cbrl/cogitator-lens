@@ -13,7 +13,6 @@ import {
 	artifactCells,
 	controlFlowGraphOutput,
 	outputArtifactCell,
-	toolDiscoverer,
 	type ToolchainDefinition,
 } from './toolchain-contracts.js';
 import { parsePythonDiagnostics } from './python/diagnostics.js';
@@ -47,7 +46,6 @@ export const python: ToolchainDefinition = {
 	parseDiagnostics: parsePythonDiagnostics,
 	languageIdentifiers: Object.freeze(['python']),
 	stripOwnedArguments: stripPythonManagedArguments,
-	discoverTools: toolDiscoverer({}),
 	artifacts: artifactCells({
 		assembly: {
 			status: 'available',

@@ -1,8 +1,9 @@
 import path from 'node:path';
 import type { DisplayOptions, RawArtifact, RenderedTextArtifact, RenderedArtifactLine } from '../../types/index.js';
+import { splitLines } from '../../common.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
-import { sameLocalFile } from '../../local-file-identity.js';
+import { resolveCompilerPath, sameLocalFile } from '../../local-file-identity.js';
 
 interface AstNode {
 	readonly kind: string;
@@ -244,7 +245,7 @@ function clangPosition(
 			return undefined;
 		}
 		return {
-			file: path.normalize(path.isAbsolute(filename) ? filename : path.resolve(workingDirectory, filename)),
+			file: resolveCompilerPath(filename, workingDirectory),
 			line: Number.parseInt(explicit[2], 10),
 			column: Math.max(0, Number.parseInt(explicit[3], 10) - 1),
 		};
@@ -390,14 +391,6 @@ function pythonColumnToUtf16(line: string | undefined, utf8Column: number): numb
 		utf16 += character.length;
 	}
 	return bytes === utf8Column ? utf16 : utf8Column;
-}
-
-function splitLines(text: string): string[] {
-	const lines = text.split(/\r\n|\n|\r/);
-	if (lines.at(-1) === '') {
-		lines.pop();
-	}
-	return lines;
 }
 
 const pythonNamedDefinitionKinds = new Set(['FunctionDef', 'AsyncFunctionDef', 'ClassDef']);

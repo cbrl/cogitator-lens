@@ -64,18 +64,7 @@ async function configureArtifactPreset(
 			title: existing ? 'Edit Artifact Preset' : 'Add Artifact Preset',
 			prompt: 'Preset name',
 			value: existing?.id,
-			validateInput: (value) => {
-				const normalized = value.trim();
-				if (!normalized) {
-					return 'A name is required';
-				}
-				if (normalized === 'default') {
-					return 'The default preset is built in';
-				}
-				return normalized !== existing?.id && configured.some((preset) => preset.id === normalized)
-					? 'A preset with this name already exists'
-					: undefined;
-			},
+			validateInput: (value) => validatePresetName(value, configured, existing?.id),
 		})
 	)?.trim();
 	if (!id) {
@@ -161,18 +150,7 @@ async function saveActiveArtifactAsPreset(
 		await vscode.window.showInputBox({
 			title: 'Save Current Artifact Options as Preset',
 			prompt: 'Preset name',
-			validateInput: (value) => {
-				const normalized = value.trim();
-				if (!normalized) {
-					return 'A name is required';
-				}
-				if (normalized === 'default') {
-					return 'The default preset is built in';
-				}
-				return configured.some((preset) => preset.id === normalized)
-					? 'A preset with this name already exists'
-					: undefined;
-			},
+			validateInput: (value) => validatePresetName(value, configured),
 		})
 	)?.trim();
 	if (!id) {
@@ -193,6 +171,23 @@ async function saveActiveArtifactAsPreset(
 		},
 	});
 	await vscode.window.showInformationMessage(`Saved artifact preset "${id}".`);
+}
+
+function validatePresetName(
+	value: string,
+	configured: readonly ArtifactPreset[],
+	currentId?: string,
+): string | undefined {
+	const normalized = value.trim();
+	if (!normalized) {
+		return 'A name is required';
+	}
+	if (normalized === 'default') {
+		return 'The default preset is built in';
+	}
+	return normalized !== currentId && configured.some((preset) => preset.id === normalized)
+		? 'A preset with this name already exists'
+		: undefined;
 }
 
 async function upsertArtifactPreset(

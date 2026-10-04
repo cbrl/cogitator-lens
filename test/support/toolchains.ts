@@ -4,14 +4,13 @@ import {
 	type ArtifactOutputSpec,
 	type ToolchainHost,
 } from '../../src/toolchains/toolchain-backend.js';
-import {
-	resolveArtifactAvailability,
-	resolveArtifactOutput,
-	toolchainDefinitions,
-	type ArtifactProducer,
-	type ToolchainArtifactCell,
-	type ToolchainArtifactOutput,
-} from '../../src/toolchains/toolchain-map.js';
+import { toolchainDefinitions } from '../../src/toolchains/toolchain-map.js';
+import { resolveArtifactAvailability, resolveArtifactOutput } from '../../src/toolchains/toolchain-artifacts.js';
+import type {
+	ArtifactProducer,
+	ToolchainArtifactCell,
+	ToolchainArtifactOutput,
+} from '../../src/toolchains/toolchain-contracts.js';
 import {
 	defaultArtifactOptions,
 	type ArtifactKind,

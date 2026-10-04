@@ -6,7 +6,7 @@ import type {
 	RenderedArtifact,
 	RenderedArtifactMetric,
 } from '../../types/index.js';
-import { localFileUriComparisonKey } from '../../local-file-identity.js';
+import { uniqueDiagnostics } from '../../diagnostics.js';
 import { invocationDetails } from '../../types/index.js';
 
 export { invocationDetails } from '../../types/index.js';
@@ -24,7 +24,7 @@ export function buildArtifactDetails(
 	metricLabels: Readonly<Record<string, string>> = {},
 ): readonly ArtifactDetailsItem[] {
 	const { identity, status } = snapshot;
-	const artifact = retainedArtifact(status);
+	const artifact = status.artifact;
 	const diagnostics = currentDiagnostics(status, artifact);
 	const invocation = status.invocation ?? artifact?.command;
 	const counts = countDiagnostics(diagnostics);
@@ -75,10 +75,6 @@ export function buildArtifactDetails(
 	]);
 }
 
-function retainedArtifact(status: ArtifactStatus): RenderedArtifact | undefined {
-	return status.artifact;
-}
-
 function currentDiagnostics(
 	status: ArtifactStatus,
 	artifact: RenderedArtifact | undefined,
@@ -86,22 +82,7 @@ function currentDiagnostics(
 	if (status.state !== 'failed') {
 		return artifact?.diagnostics ?? [];
 	}
-	const diagnostics = [...(artifact?.diagnostics ?? []), ...status.diagnostics];
-	const keys = new Set<string>();
-	return diagnostics.filter((diagnostic) => {
-		const key = [
-			localFileUriComparisonKey(diagnostic.uri),
-			diagnostic.line,
-			diagnostic.column,
-			diagnostic.severity,
-			diagnostic.message,
-		].join('\0');
-		if (keys.has(key)) {
-			return false;
-		}
-		keys.add(key);
-		return true;
-	});
+	return uniqueDiagnostics([...(artifact?.diagnostics ?? []), ...status.diagnostics]);
 }
 
 function statusLabel(status: ArtifactStatus): string {
@@ -157,9 +138,7 @@ function metricItems(
 ): ArtifactDetailsItem[] {
 	const entries = Object.entries(metrics).sort(([left], [right]) => compareText(left, right));
 	return entries.length
-		? entries.map(([key, metric]) =>
-				value(`metric-${key}`, labels[key] ?? humanizeIdentifier(key), formatMetric(metric)),
-			)
+		? entries.map(([key, metric]) => value(`metric-${key}`, labels[key] ?? humanizeIdentifier(key), String(metric)))
 		: [empty('metrics-none', '(none)')];
 }
 
@@ -169,10 +148,6 @@ function formatCommandArgument(argument: string): string {
 
 function formatDuration(durationMs: number): string {
 	return `${Math.max(0, durationMs).toFixed(durationMs < 10 ? 1 : 0)} ms`;
-}
-
-function formatMetric(metric: RenderedArtifactMetric): string {
-	return String(metric);
 }
 
 function humanizeIdentifier(identifier: string): string {

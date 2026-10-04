@@ -2,6 +2,7 @@ import type { DisplayOptions, RawArtifact, RenderedTextArtifact } from '../../ty
 import type { ArtifactProducer } from '../../toolchains/toolchain-contracts.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderStackUsage, type StackUsageEntry } from './native-stack-analysis.js';
+import { isRecord } from '../../common.js';
 
 export interface PythonStackUsageRecord {
 	readonly qualifiedName: string;
@@ -105,10 +106,6 @@ export function renderPythonStackAnalysis(
 		['Python values are interpreter evaluation-stack slots, not native frame bytes.'],
 		'vm-slots',
 	);
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function isNonNegativeSafeInteger(value: unknown): value is number {

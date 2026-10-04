@@ -25,7 +25,6 @@ const pythonSourceExclusions = '**/{.git,.hg,.svn,.nox,.tox,.venv,__pycache__,en
 type PythonApiFactory = () => Promise<PythonExtensionApi>;
 
 export class PythonEnvironmentVariantProvider extends VariantProvider {
-	readonly name = 'Python Environments';
 	private api?: PythonExtensionApi;
 	private readonly subscriptions: Disposable[] = [];
 	private refreshGeneration = 0;

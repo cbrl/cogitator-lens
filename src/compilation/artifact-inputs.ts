@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { ArtifactInputState } from '../types/index.js';
 import { localFileComparisonKey } from '../local-file-identity.js';
+import { isRecord } from '../common.js';
 
 export interface ArtifactInputMetadata {
 	readonly inputs: readonly ArtifactInputState[];
@@ -194,8 +195,4 @@ function isEscaped(value: string, index: number): boolean {
 		slashes++;
 	}
 	return slashes % 2 === 1;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

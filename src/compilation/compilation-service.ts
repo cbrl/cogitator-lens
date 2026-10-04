@@ -26,7 +26,7 @@ import {
 import { ToolExitError } from '../toolchains/toolchain-backend.js';
 import { ExecError } from '../exec.js';
 import { supportedArtifactKinds } from '../artifacts/core/artifact-definitions.js';
-import { resolveArtifactOutput } from '../toolchains/toolchain-map.js';
+import { resolveArtifactOutput } from '../toolchains/toolchain-artifacts.js';
 import type { ToolchainArtifactOutput } from '../toolchains/toolchain-contracts.js';
 import { ToolchainRegistry } from './toolchain-registry.js';
 import { CompilationConfigDatabase } from './compilation-config.js';

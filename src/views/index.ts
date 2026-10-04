@@ -7,6 +7,7 @@ import { ArtifactPresetsTreeProvider } from '../tree/artifact-presets-tree.js';
 import { CompilationInfoTreeProvider } from '../tree/compilation-info-tree.js';
 import { GlobalOptionsTreeProvider } from '../tree/global-options-tree.js';
 import { ToolchainTreeProvider } from '../tree/toolchain-tree.js';
+import { activeFileUri } from '../commands/variants.js';
 import type { GraphPanelManager } from '../webview/graph-panel-manager.js';
 
 export function createToolchainTreeView(
@@ -133,9 +134,4 @@ export function createArtifactDetailsTreeView(
 	);
 	followActiveEditor();
 	return provider;
-}
-
-function activeFileUri(): vscode.Uri | undefined {
-	const uri = vscode.window.activeTextEditor?.document.uri;
-	return uri?.scheme === 'file' ? uri : undefined;
 }

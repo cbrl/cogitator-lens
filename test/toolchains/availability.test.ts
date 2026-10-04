@@ -1,15 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { supportedArtifactKinds } from '../../src/artifacts/core/artifact-definitions.js';
+import { supportedToolchainKinds, toolchainDefinitions } from '../../src/toolchains/toolchain-map.js';
 import {
 	getArtifactOutputChoices,
 	resolveArtifactAvailability,
 	resolveArtifactOptionAvailability,
 	resolveArtifactOutput,
-	supportedToolchainKinds,
-	toolchainDefinitions,
-	type ToolchainDefinition,
-} from '../../src/toolchains/toolchain-map.js';
+} from '../../src/toolchains/toolchain-artifacts.js';
+import type { ToolchainDefinition } from '../../src/toolchains/toolchain-contracts.js';
 import type { ArtifactKind, ToolchainKind } from '../../src/types/index.js';
 import { artifactAvailability, toolchainProfile } from '../support/toolchains.js';
 

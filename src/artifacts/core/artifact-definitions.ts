@@ -40,12 +40,8 @@ export const supportedArtifactKinds = Object.freeze(Object.keys(artifactDefiniti
 /** Artifact kind used when a source-focused UI has no artifact identity. */
 export const defaultArtifactKind = 'assembly' satisfies ArtifactKind;
 
-export function getArtifactDefinition(kind: string): ArtifactDefinition | undefined {
-	return Object.hasOwn(artifactDefinitions, kind) ? artifactDefinitions[kind as ArtifactKind] : undefined;
-}
-
 export function getArtifactKind(value: string): ArtifactKind | undefined {
-	return getArtifactDefinition(value) ? (value as ArtifactKind) : undefined;
+	return Object.hasOwn(artifactDefinitions, value) ? (value as ArtifactKind) : undefined;
 }
 
 export function artifactSupportsOption(kind: ArtifactKind, optionId: ArtifactOptionDescriptor['id']): boolean {

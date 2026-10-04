@@ -1,8 +1,9 @@
 import path from 'node:path';
 import type { DisplayOptions, RawArtifact, RenderedTextArtifact, RenderedArtifactLine } from '../../types/index.js';
+import { splitLines } from '../../common.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
-import { sameLocalFile } from '../../local-file-identity.js';
+import { resolveCompilerPath, sameLocalFile } from '../../local-file-identity.js';
 
 const lineMarker = /^\s*#(?:\s*line)?\s+(\d+)\s+"((?:\\.|[^"])*)"(?:\s+.*)?$/;
 
@@ -62,25 +63,8 @@ export function renderPreprocessedSource(
 	};
 }
 
-export function parsePreprocessorLineMarker(
-	text: string,
-	workingDirectory: string,
-): { line: number; file: string } | undefined {
-	const marker = lineMarker.exec(text);
-	if (!marker) {
-		return undefined;
-	}
-	return {
-		line: Number.parseInt(marker[1], 10),
-		file: resolveMarkerPath(decodeMarkerFilename(marker[2]), workingDirectory),
-	};
-}
-
 function resolveMarkerPath(filename: string, workingDirectory: string): string {
-	if (!isLocalFilename(filename)) {
-		return filename;
-	}
-	return path.normalize(path.isAbsolute(filename) ? filename : path.resolve(workingDirectory, filename));
+	return isLocalFilename(filename) ? resolveCompilerPath(filename, workingDirectory) : filename;
 }
 
 function decodeMarkerFilename(filename: string): string {
@@ -89,12 +73,4 @@ function decodeMarkerFilename(filename: string): string {
 
 function isLocalFilename(filename: string): boolean {
 	return filename !== '' && !(filename.startsWith('<') && filename.endsWith('>'));
-}
-
-function splitLines(text: string): string[] {
-	const lines = text.split(/\r\n|\n|\r/);
-	if (lines.at(-1) === '') {
-		lines.pop();
-	}
-	return lines;
 }

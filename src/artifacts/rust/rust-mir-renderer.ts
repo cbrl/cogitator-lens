@@ -1,5 +1,6 @@
-import path from 'node:path';
+import { resolveCompilerPath } from '../../local-file-identity.js';
 import type { DisplayOptions, RawArtifact, RenderedTextArtifact, RenderedArtifactLine } from '../../types/index.js';
+import { splitLines } from '../../common.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
 
@@ -31,11 +32,8 @@ export function renderRustMir(
 		}
 		const span = spanLocation.exec(text);
 		if (span) {
-			const filename = path.normalize(
-				path.isAbsolute(span[1]) ? span[1] : path.resolve(raw.command.workingDirectory, span[1]),
-			);
 			currentSource = {
-				file: filename,
+				file: resolveCompilerPath(span[1], raw.command.workingDirectory),
 				line: Number.parseInt(span[2], 10),
 				column: Math.max(0, Number.parseInt(span[3], 10) - 1),
 			};
@@ -98,12 +96,4 @@ function findClosingBrace(lines: readonly string[], startLine: number): number {
 		}
 	}
 	return startLine;
-}
-
-function splitLines(text: string): string[] {
-	const lines = text.split(/\r\n|\n|\r/);
-	if (lines.at(-1) === '') {
-		lines.pop();
-	}
-	return lines;
 }

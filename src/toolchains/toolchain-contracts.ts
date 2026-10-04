@@ -83,7 +83,7 @@ export type ToolchainArtifactCell =
 			readonly explanation: string;
 	  };
 
-export interface ToolchainDefinitionShape {
+export interface ToolchainDefinition {
 	readonly executablePattern: RegExp;
 	/** Parses only the diagnostic formats emitted by this toolchain and its host compiler. */
 	readonly parseDiagnostics: DiagnosticParser;
@@ -121,11 +121,18 @@ export interface ToolchainDefinitionShape {
 	) => Promise<NodeJS.ProcessEnv>;
 	/** Omit when the toolchain cannot enumerate inputs beyond the main source. */
 	readonly dependencyCollection?: DependencyCollectionSpec;
-	readonly discoverTools: (executable: string) => Readonly<Record<string, AuxiliaryTool>>;
+	/** Omit when the toolchain has no auxiliary tools. */
+	readonly discoverTools?: (executable: string) => Readonly<Record<string, AuxiliaryTool>>;
 	readonly artifacts: Readonly<Record<ArtifactKind, ToolchainArtifactCell>>;
 }
 
-export type ToolchainDefinition = ToolchainDefinitionShape;
+/** Places the first owned argument (a subcommand) before the provider arguments. */
+export const subcommandFirst: NonNullable<ToolchainDefinition['assembleArguments']> = (owned, provider, sourcePath) => [
+	...owned.slice(0, 1),
+	...provider,
+	...owned.slice(1),
+	sourcePath,
+];
 
 export const assemblyCell: ToolchainArtifactCell = {
 	status: 'available',

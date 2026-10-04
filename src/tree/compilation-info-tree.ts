@@ -8,7 +8,12 @@ import { type ConfigurationOrigin, variantProviderDefinitions } from '../buildsy
 import { canonicalLocalPath } from '../local-file-identity.js';
 import { sourceUriComparisonKey } from '../uri-containers.js';
 
-type GroupKey = 'project' | 'target' | 'configuration';
+/** The nested grouping levels above the source tree, outermost first. */
+const groupLevels: readonly { readonly icon: string; readonly label: (variant: CompilationVariant) => string }[] = [
+	{ icon: 'project', label: (variant) => variant.project?.trim() || `${providerLabel(variant.provider)} project` },
+	{ icon: 'target', label: (variant) => variant.target?.trim() || 'Default target' },
+	{ icon: 'settings-gear', label: (variant) => variant.configuration?.trim() || 'Default configuration' },
+];
 
 interface SourcePathNode {
 	label: string;
@@ -56,19 +61,19 @@ function workspaceNode(group: WorkspaceVariantGroup, compilationService: Compila
 		tooltip: group.folder?.uri.fsPath ?? 'Sources outside the open workspace folders',
 		nodeType: 'subtree',
 		iconPath: new vscode.ThemeIcon(group.folder ? 'repo' : 'globe'),
-		children: groupVariants(group.variants, 'project', group.folder, compilationService),
+		children: groupVariants(group.variants, 0, group.folder, compilationService),
 	};
 }
 
 function groupVariants(
 	variants: readonly CompilationVariant[],
-	key: GroupKey,
+	level: number,
 	folder: vscode.WorkspaceFolder | undefined,
 	compilationService: CompilationService,
 ): CompilationInfoTreeNode[] {
 	const groups = new Map<string, CompilationVariant[]>();
 	for (const variant of variants) {
-		const label = groupLabel(variant, key);
+		const label = groupLevels[level].label(variant);
 		const group = groups.get(label) ?? [];
 		group.push(variant);
 		groups.set(label, group);
@@ -76,16 +81,15 @@ function groupVariants(
 
 	return [...groups.entries()]
 		.sort(([left], [right]) => compareLabels(left, right))
-		.map(([label, groupedVariants]) => {
-			const next = nextGroupKey(key);
-			return groupNode(
+		.map(([label, groupedVariants]) =>
+			groupNode(
 				label,
-				groupIcon(key),
-				next
-					? groupVariants(groupedVariants, next, folder, compilationService)
+				groupLevels[level].icon,
+				level + 1 < groupLevels.length
+					? groupVariants(groupedVariants, level + 1, folder, compilationService)
 					: sourceTree(groupedVariants, folder, compilationService),
-			);
-		});
+			),
+		);
 }
 
 function sourceTree(
@@ -202,39 +206,6 @@ export class CompilationInfoTreeProvider extends TreeProvider<CompilationInfoTre
 	findSource(source: vscode.Uri): CompilationInfoTreeNode | undefined {
 		const roots = (this.roots ??= buildCompilationInfoTree(this.compilationService));
 		return findSourceNode(roots, source);
-	}
-}
-
-function groupLabel(variant: CompilationVariant, key: GroupKey): string {
-	switch (key) {
-		case 'project':
-			return variant.project?.trim() || `${providerLabel(variant.provider)} project`;
-		case 'target':
-			return variant.target?.trim() || 'Default target';
-		case 'configuration':
-			return variant.configuration?.trim() || 'Default configuration';
-	}
-}
-
-function nextGroupKey(key: GroupKey): GroupKey | undefined {
-	switch (key) {
-		case 'project':
-			return 'target';
-		case 'target':
-			return 'configuration';
-		case 'configuration':
-			return undefined;
-	}
-}
-
-function groupIcon(key: GroupKey): string {
-	switch (key) {
-		case 'project':
-			return 'project';
-		case 'target':
-			return 'target';
-		case 'configuration':
-			return 'settings-gear';
 	}
 }
 

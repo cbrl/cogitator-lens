@@ -11,7 +11,6 @@ export const variantProviderDefinitions = {
 export type ConfigurationOrigin = keyof typeof variantProviderDefinitions;
 
 export abstract class VariantProvider {
-	abstract readonly name: string;
 	private readonly snapshotEmitter = new EventEmitter<ProviderSnapshot>();
 
 	readonly onSnapshot: Event<ProviderSnapshot> = this.snapshotEmitter.event;

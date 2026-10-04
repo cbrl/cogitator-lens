@@ -7,6 +7,7 @@ import type {
 	ControlFlowTerminal,
 	RenderedArtifactMetric,
 } from '../../types/index.js';
+import { isRecord } from '../../common.js';
 
 /**
  * The graph model shared by the extension host and the webview bundle.
@@ -197,10 +198,6 @@ export function compareControlFlowGraphs(left: ControlFlowGraph, right: ControlF
 		left.label.localeCompare(right.label, undefined, { numeric: true }) ||
 		left.id.localeCompare(right.id, undefined, { numeric: true })
 	);
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 export function allowedKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {

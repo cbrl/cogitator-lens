@@ -177,11 +177,6 @@ async function pickToolchainProfile(
 	);
 }
 
-function activeFileUri(): vscode.Uri | undefined {
-	const uri = vscode.window.activeTextEditor?.document.uri;
-	return uri?.scheme === 'file' ? uri : undefined;
-}
-
 async function pickSourceFile(): Promise<vscode.Uri | undefined> {
 	const selection = await vscode.window.showOpenDialog({
 		title: 'Select Source File',
@@ -192,6 +187,12 @@ async function pickSourceFile(): Promise<vscode.Uri | undefined> {
 	return selection?.[0];
 }
 
-function isSupportedSourceDocument(document: vscode.TextDocument): boolean {
+/** Returns the active editor's file URI, or nothing for a non-file editor. */
+export function activeFileUri(): vscode.Uri | undefined {
+	const uri = vscode.window.activeTextEditor?.document.uri;
+	return uri?.scheme === 'file' ? uri : undefined;
+}
+
+export function isSupportedSourceDocument(document: vscode.TextDocument): boolean {
 	return document.uri.scheme === 'file' && supportedLanguageIdentifiers.has(document.languageId);
 }
