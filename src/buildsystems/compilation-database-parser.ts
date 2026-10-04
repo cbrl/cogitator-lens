@@ -3,7 +3,7 @@ import { detectToolchainDefinition } from '../toolchains/toolchain-map.js';
 import { createToolchainProfile } from '../toolchains/toolchain-map.js';
 import { tokenizeCommandLine } from '../tokenize.js';
 import type { ToolchainProfile } from '../types/index.js';
-import { localFileComparisonKey, sameLocalFile } from '../local-file-identity.js';
+import { localFileComparisonKey, sameLocalFile } from '../file-identity.js';
 import { isRecord } from '../common.js';
 
 export const compilationDatabaseProviderId = 'compilation-database';

@@ -8,7 +8,7 @@ import type {
 } from '../../types/index.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
-import { sameLocalFile } from '../../local-file-identity.js';
+import { sameLocalFile } from '../../file-identity.js';
 
 export interface SourceAnalysisEntry {
 	readonly sourceUri?: string;

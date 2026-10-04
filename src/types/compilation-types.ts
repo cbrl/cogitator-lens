@@ -6,7 +6,7 @@
 import type { CancellationToken, Uri } from 'vscode';
 import type { ArtifactOptions } from './artifact-options.js';
 import type { ArtifactKind, ArtifactListingSyntax } from '../artifacts/core/artifact-contracts.js';
-import { localFileComparisonKey, localFileUriComparisonKey } from '../local-file-identity.js';
+import { localFileComparisonKey, localFileUriComparisonKey } from '../file-identity.js';
 
 export interface CompilationVariant {
 	id: string;

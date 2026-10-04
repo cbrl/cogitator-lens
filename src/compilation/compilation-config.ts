@@ -1,6 +1,6 @@
 import { Disposable, Event, EventEmitter, Uri } from 'vscode';
 import type { CompilationVariant } from '../types/index.js';
-import { sourceUriMap, sourceUriSet, type UriMap } from '../uri-containers.js';
+import { SourceUriMap, SourceUriSet } from '../file-identity.js';
 import { structurallyEqual } from '../utils.js';
 
 /**
@@ -12,8 +12,8 @@ import { structurallyEqual } from '../utils.js';
  */
 export class CompilationConfigDatabase implements Disposable {
 	private readonly byProvider = new Map<string, readonly CompilationVariant[]>();
-	private bySource: UriMap<Map<string, CompilationVariant>> = sourceUriMap();
-	private readonly selectedVariant = sourceUriMap<string>();
+	private bySource = new SourceUriMap<Map<string, CompilationVariant>>();
+	private readonly selectedVariant = new SourceUriMap<string>();
 	private readonly changeEmitter = new EventEmitter<readonly Uri[]>();
 	private readonly selectionEmitter = new EventEmitter<Uri>();
 
@@ -61,7 +61,7 @@ export class CompilationConfigDatabase implements Disposable {
 		this.byProvider.set(provider, snapshot);
 
 		const previous = this.bySource;
-		this.bySource = sourceUriMap();
+		this.bySource = new SourceUriMap();
 		for (const variant of [...this.byProvider.values()].flat()) {
 			const variants = this.bySource.get(variant.source) ?? new Map<string, CompilationVariant>();
 			variants.set(variant.id, variant);
@@ -74,7 +74,7 @@ export class CompilationConfigDatabase implements Disposable {
 			}
 		}
 
-		const sources = sourceUriSet();
+		const sources = new SourceUriSet();
 		[...previous.keys(), ...this.bySource.keys()].forEach((source) => sources.add(source));
 		const changed = [...sources.values()].filter(
 			(source) => !sameVariants(previous.get(source), this.bySource.get(source)),

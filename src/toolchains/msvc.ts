@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import type { CancellationToken } from 'vscode';
-import { localFileComparisonKey } from '../local-file-identity.js';
+import { localFileComparisonKey } from '../file-identity.js';
 import { VcAsmParser } from '../vendor/lib/parsers/asm-parser-vc.js';
 import { noopPropertyGetter } from '../vendor/compiler-props.js';
 import type { ToolchainProfile } from '../types/index.js';

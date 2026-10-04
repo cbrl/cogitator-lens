@@ -12,7 +12,7 @@ import { zig } from './zig.js';
 import { nvcc } from './nvcc.js';
 import type { ToolchainDefinition } from './toolchain-contracts.js';
 import { supportedToolchainKinds } from './toolchain-kinds.js';
-import { localFileComparisonKey } from '../local-file-identity.js';
+import { localFileComparisonKey } from '../file-identity.js';
 
 export const toolchainDefinitions = {
 	gcc,

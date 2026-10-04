@@ -1,4 +1,4 @@
-import { resolveCompilerPath } from '../../local-file-identity.js';
+import { resolveCompilerPath } from '../../file-identity.js';
 import type { DisplayOptions, RawArtifact, RenderedTextArtifact, RenderedArtifactLine } from '../../types/index.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { LLVMIRDemangler } from '../../vendor/lib/demangler/llvm.js';

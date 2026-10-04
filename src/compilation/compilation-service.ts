@@ -32,7 +32,7 @@ import { resolveArtifactPreset, type ArtifactPreset } from '../artifacts/ui/pres
 import { artifactInputComparisonKey, validateArtifactInputs } from './artifact-inputs.js';
 import { RawArtifactCache } from './raw-artifact-cache.js';
 import { renderArtifact } from './artifact-rendering.js';
-import { sourceUriComparisonKey } from '../uri-containers.js';
+import { sourceUriComparisonKey } from '../file-identity.js';
 
 export class CompilationService {
 	readonly toolchainRegistry: ToolchainRegistry;

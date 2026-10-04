@@ -6,8 +6,8 @@ import { compilationDatabaseProviderId, parseCompilationDatabase } from './compi
 import type { ConfigurationService } from '../services/configuration-service.js';
 import type { CompilationVariant, ToolchainProfile } from '../types/index.js';
 import * as logger from '../logger.js';
-import { canonicalLocalPath, localFileComparisonKey } from '../local-file-identity.js';
-import { sourceUriComparisonKey } from '../uri-containers.js';
+import { canonicalLocalPath, localFileComparisonKey } from '../file-identity.js';
+import { sourceUriComparisonKey } from '../file-identity.js';
 
 interface DatabaseFile {
 	readonly folder: WorkspaceFolder;

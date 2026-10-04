@@ -10,7 +10,7 @@ import { Uri, workspace } from 'vscode';
 import type { CompilationVariant } from '../types/index.js';
 import * as logger from '../logger.js';
 import { emptySnapshot, VariantProvider, type VariantSnapshot } from './variant-provider.js';
-import { sourceUriComparisonKey } from '../uri-containers.js';
+import { sourceUriComparisonKey } from '../file-identity.js';
 import {
 	createPythonEnvironmentProfiles,
 	matchesPythonEnvironment,

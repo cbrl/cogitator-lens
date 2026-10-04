@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { ArtifactInputState } from '../types/index.js';
-import { localFileComparisonKey } from '../local-file-identity.js';
+import { localFileComparisonKey } from '../file-identity.js';
 import { isRecord } from '../common.js';
 
 export interface ArtifactInputMetadata {

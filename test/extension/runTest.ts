@@ -17,7 +17,7 @@ import {
 	type RenderedTextArtifact,
 	type ToolchainProfile,
 } from '../../src/types/index.js';
-import { sourceUriMap } from '../../src/uri-containers.js';
+import { SourceUriMap } from '../../src/file-identity.js';
 import { composeDiagnosticParsers } from '../../src/diagnostics.js';
 import { parseGnuDiagnostics } from '../../src/toolchains/c-family/diagnostics.js';
 import { parseParenthesizedDiagnostics } from '../../src/toolchains/msvc/diagnostics.js';
@@ -758,7 +758,7 @@ function verifyVariantSnapshots(): void {
 }
 
 function verifyUriMapping(): void {
-	const map = sourceUriMap<number>();
+	const map = new SourceUriMap<number>();
 	map.set(vscode.Uri.file('/Project/Source.cpp'), 1);
 	const lookup = map.get(vscode.Uri.file('/project/source.cpp').with({ fragment: 'ignored' }));
 	assert.equal(lookup, process.platform === 'win32' ? 1 : undefined);

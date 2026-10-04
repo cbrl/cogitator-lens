@@ -22,7 +22,7 @@ import type { AsmParser } from '../vendor/lib/parsers/asm-parser.js';
 import type { AssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/assembly-cfg-parser.js';
 import type { DependencyCollectionSpec, ToolchainBackend } from './toolchain-backend.js';
 import type { DiagnosticParser } from '../diagnostics.js';
-import { sameLocalFile } from '../local-file-identity.js';
+import { sameLocalFile } from '../file-identity.js';
 
 /**
  * Runs a toolchain and returns its raw output. The compilation service sets

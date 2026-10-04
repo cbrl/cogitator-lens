@@ -2,7 +2,7 @@ import path from 'path';
 import type { EnvironmentPath, ResolvedEnvironment } from '@vscode/python-extension';
 import type { ToolchainProfile } from '../types/index.js';
 import { createToolchainProfile } from '../toolchains/toolchain-map.js';
-import { localFileComparisonKey } from '../local-file-identity.js';
+import { localFileComparisonKey } from '../file-identity.js';
 
 export interface PythonEnvironmentProfile {
 	readonly environment: ResolvedEnvironment;

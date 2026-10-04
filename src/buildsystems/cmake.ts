@@ -7,8 +7,8 @@ import { createToolchainProfile, detectToolchainDefinition } from '../toolchains
 import { flattenCmakeArguments } from './cmake-arguments.js';
 import { tokenizeCommandLine } from '../tokenize.js';
 import * as logger from '../logger.js';
-import { sourceUriComparisonKey } from '../uri-containers.js';
-import { localFileComparisonKey } from '../local-file-identity.js';
+import { sourceUriComparisonKey } from '../file-identity.js';
+import { localFileComparisonKey } from '../file-identity.js';
 
 interface ProjectState {
 	uri: Uri;

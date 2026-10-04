@@ -16,7 +16,7 @@ import {
 	window,
 	workspace,
 } from 'vscode';
-import { localFileUriComparisonKey } from '../local-file-identity.js';
+import { localFileUriComparisonKey } from '../file-identity.js';
 import type { ControlFlowGraph, ControlFlowSourceLocation, RenderedGraphArtifact } from '../types/index.js';
 import type { ArtifactStatus } from '../artifact-document/artifact-generator.js';
 import type { ArtifactDocumentSnapshot } from '../artifact-document/artifact-identity.js';

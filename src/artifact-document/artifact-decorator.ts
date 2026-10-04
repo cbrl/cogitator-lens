@@ -14,7 +14,7 @@ import {
 } from 'vscode';
 import { buildSourceLineMap, lineHasSource, type SourceLineMap } from './source-line-map.js';
 import path from 'path';
-import { equalUri } from '../utils.js';
+import { equalUri } from '../file-identity.js';
 import {
 	binaryColumnsDecoration,
 	jumpArrowDecorations,

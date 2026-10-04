@@ -31,7 +31,7 @@ import {
 	ArtifactDocumentRegistry,
 	type ArtifactRegistryDocument,
 } from './artifact-document-registry.js';
-import { localFileUriComparisonKey } from '../local-file-identity.js';
+import { localFileUriComparisonKey } from '../file-identity.js';
 import type { ArtifactDocumentSnapshot } from './artifact-identity.js';
 
 interface ArtifactDocument {

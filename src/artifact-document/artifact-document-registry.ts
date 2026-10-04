@@ -6,8 +6,7 @@ import type { ConfigurationService } from '../services/configuration-service.js'
 import { getArtifactOutputChoices } from '../toolchains/toolchain-artifacts.js';
 import type { CompilationVariant, ToolchainProfile } from '../types/index.js';
 import { CompilationError } from '../types/index.js';
-import { toComparisonKey } from '../utils.js';
-import { sourceUriComparisonKey } from '../uri-containers.js';
+import { sourceUriComparisonKey, uriComparisonKey } from '../file-identity.js';
 import { parseArtifactUri, type ArtifactUriIdentity } from './artifact-uri.js';
 import { ArtifactGenerator, type ArtifactStatus } from './artifact-generator.js';
 import type { ArtifactDocumentIdentity, ArtifactDocumentSnapshot } from './artifact-identity.js';
@@ -31,7 +30,7 @@ interface RegisteredArtifactDocument extends ArtifactRegistryDocument {
 }
 
 export function artifactDocumentKey(uri: Uri): string {
-	return toComparisonKey(uri, true, process.platform === 'win32');
+	return uriComparisonKey(uri);
 }
 
 export function buildArtifactIdentity(

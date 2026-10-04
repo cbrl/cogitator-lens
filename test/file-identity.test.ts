@@ -10,7 +10,7 @@ import {
 	localFileComparisonKey,
 	localFileUriComparisonKey,
 	sameLocalFile,
-} from '../src/local-file-identity.js';
+} from '../src/file-identity.js';
 import { artifactInputComparisonKey } from '../src/compilation/artifact-inputs.js';
 import { diagnosticUri } from '../src/diagnostics.js';
 import { stripDotNetManagedArguments } from '../src/toolchains/dotnet.js';

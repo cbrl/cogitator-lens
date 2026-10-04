@@ -5,8 +5,8 @@ import { CompilationService } from '../compilation/index.js';
 import { TreeNode, TreeProvider } from './treedata.js';
 import { compareLabels, detailNode, groupNode, makeEnvironmentNode, makeListNode } from './tree-helpers.js';
 import { type ConfigurationOrigin, variantProviderDefinitions } from '../buildsystems/variant-provider.js';
-import { canonicalLocalPath } from '../local-file-identity.js';
-import { sourceUriComparisonKey } from '../uri-containers.js';
+import { canonicalLocalPath } from '../file-identity.js';
+import { sourceUriComparisonKey } from '../file-identity.js';
 
 /** The nested grouping levels above the source tree, outermost first. */
 const groupLevels: readonly { readonly icon: string; readonly label: (variant: CompilationVariant) => string }[] = [

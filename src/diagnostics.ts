@@ -1,7 +1,7 @@
 import path from 'node:path';
 import type { Uri } from 'vscode';
 import type { CompileDiagnostic } from './types/index.js';
-import { localFileUriComparisonKey, sameLocalFile } from './local-file-identity.js';
+import { localFileUriComparisonKey, sameLocalFile } from './file-identity.js';
 
 /** Converts one toolchain's textual output into source-positioned diagnostics. */
 export type DiagnosticParser = (

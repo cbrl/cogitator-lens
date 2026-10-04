@@ -1,7 +1,7 @@
 import type { Uri } from 'vscode';
 import type { RawArtifact } from '../types/index.js';
 import { artifactInputComparisonKey } from './artifact-inputs.js';
-import { localFileUriComparisonKey } from '../local-file-identity.js';
+import { localFileUriComparisonKey } from '../file-identity.js';
 
 export class RawArtifactCache {
 	private readonly artifacts = new Map<string, RawArtifact>();

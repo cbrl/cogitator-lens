@@ -3,7 +3,7 @@ import type { DisplayOptions, RawArtifact, RenderedTextArtifact, RenderedArtifac
 import { splitLines } from '../../common.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
-import { resolveCompilerPath, sameLocalFile } from '../../local-file-identity.js';
+import { resolveCompilerPath, sameLocalFile } from '../../file-identity.js';
 
 const lineMarker = /^\s*#(?:\s*line)?\s+(\d+)\s+"((?:\\.|[^"])*)"(?:\s+.*)?$/;
 

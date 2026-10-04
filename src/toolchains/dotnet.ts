@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import type { ToolchainProfile } from '../types/index.js';
-import { canonicalLocalPath } from '../local-file-identity.js';
+import { canonicalLocalPath } from '../file-identity.js';
 import { DotNetPdbParser } from '../vendor/lib/parsers/pdb-parser-dotnet.js';
 import { dotNetSourceMappingData } from '../artifacts/dotnet/dotnet-source-mapping.js';
 import { renderDotNetIl } from '../artifacts/dotnet/dotnet-il-renderer.js';

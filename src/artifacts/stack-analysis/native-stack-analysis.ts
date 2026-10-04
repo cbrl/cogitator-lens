@@ -5,7 +5,7 @@ import type { ArtifactOutputSpec } from '../../toolchains/toolchain-backend.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { outputProducer } from '../core/compiler-output-producer.js';
 import { type AnalysisParserDiagnostic, renderAnalysisSource } from '../analysis/analysis-source-renderer.js';
-import { localFileComparisonKey, sameLocalFile } from '../../local-file-identity.js';
+import { localFileComparisonKey, sameLocalFile } from '../../file-identity.js';
 
 export interface StackUsageEntry {
 	readonly sourceUri?: string;

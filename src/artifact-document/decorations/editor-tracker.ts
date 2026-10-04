@@ -3,14 +3,13 @@
  */
 
 import { TextEditor, window, Uri } from 'vscode';
-import { UriSet } from '../../uri-containers.js';
-import { equalUri } from '../../utils.js';
+import { equalUri, type SourceUriSet } from '../../file-identity.js';
 
 export class EditorTracker {
 	/**
 	 * Get all visible editors for the given source URIs
 	 */
-	getSourceEditors(sourceUris: Pick<UriSet, 'has'>): TextEditor[] {
+	getSourceEditors(sourceUris: Pick<SourceUriSet, 'has'>): TextEditor[] {
 		return window.visibleTextEditors.filter((editor) => sourceUris.has(editor.document.uri));
 	}
 

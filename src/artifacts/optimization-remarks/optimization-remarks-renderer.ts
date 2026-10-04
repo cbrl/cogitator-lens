@@ -8,7 +8,7 @@ import type {
 import type { OptRemark } from '../../vendor/static/panes/opt-view.interfaces.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderAnalysisSource } from '../analysis/analysis-source-renderer.js';
-import { resolveCompilerPath, sameLocalFile } from '../../local-file-identity.js';
+import { resolveCompilerPath, sameLocalFile } from '../../file-identity.js';
 
 export interface OptimizationRemark {
 	readonly file?: string;

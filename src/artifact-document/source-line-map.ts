@@ -1,13 +1,13 @@
 import { Uri } from 'vscode';
 import path from 'path';
 import type { RenderedArtifactLine, RenderedTextArtifact } from '../types/index.js';
-import { sourceUriMap, UriMap } from '../uri-containers.js';
+import { SourceUriMap } from '../file-identity.js';
 
 /**
  * Maps each source file that an artifact references to its zero-based source lines,
  * and each source line to the artifact lines generated from it.
  */
-export type SourceLineMap = UriMap<Map<number, number[]>>;
+export type SourceLineMap = SourceUriMap<Map<number, number[]>>;
 
 export function lineHasSource(line: RenderedArtifactLine): boolean {
 	// eslint-disable-next-line eqeqeq
@@ -15,7 +15,7 @@ export function lineHasSource(line: RenderedArtifactLine): boolean {
 }
 
 export function buildSourceLineMap(artifact: RenderedTextArtifact): SourceLineMap {
-	const sourceLines: SourceLineMap = sourceUriMap();
+	const sourceLines: SourceLineMap = new SourceUriMap();
 	artifact.lines.forEach((line, index) => {
 		if (!lineHasSource(line)) {
 			return;

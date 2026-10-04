@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import type { Uri } from 'vscode';
 
 export interface LocalFileUri {
 	readonly scheme: string;
@@ -86,5 +87,79 @@ function canonicalizeExistingPathOrParent(absolute: string): string {
 		} catch {
 			// Continue toward the filesystem root.
 		}
+	}
+}
+
+/** Compares two URIs by their text. */
+export function equalUri(left: Uri | undefined, right: Uri | undefined): boolean {
+	return left === right || (left !== undefined && right !== undefined && left.toString() === right.toString());
+}
+
+/** A comparison key for a URI without its fragment, and without path case on Windows. */
+export function uriComparisonKey(uri: Uri): string {
+	return uri
+		.with({ path: process.platform === 'win32' ? uri.path.toLowerCase() : uri.path, fragment: '' })
+		.toString();
+}
+
+/** A comparison key for a source URI. Local paths are resolved through symlinks. */
+export function sourceUriComparisonKey(uri: Uri): string {
+	return uri.scheme === 'file' ? localFileUriComparisonKey(uri) : uriComparisonKey(uri);
+}
+
+/**
+ * A map keyed by source identity. It keeps each key's original Uri, so iteration
+ * returns the Uri as it was stored rather than one built from a comparison key.
+ */
+export class SourceUriMap<T> {
+	private readonly entries = new Map<string, readonly [Uri, T]>();
+
+	set(uri: Uri, value: T): this {
+		this.entries.set(sourceUriComparisonKey(uri), [uri, value]);
+		return this;
+	}
+
+	get(uri: Uri): T | undefined {
+		return this.entries.get(sourceUriComparisonKey(uri))?.[1];
+	}
+
+	has(uri: Uri): boolean {
+		return this.entries.has(sourceUriComparisonKey(uri));
+	}
+
+	delete(uri: Uri): boolean {
+		return this.entries.delete(sourceUriComparisonKey(uri));
+	}
+
+	clear(): void {
+		this.entries.clear();
+	}
+
+	*[Symbol.iterator](): IterableIterator<readonly [Uri, T]> {
+		yield* this.entries.values();
+	}
+
+	*keys(): IterableIterator<Uri> {
+		for (const [uri] of this.entries.values()) {
+			yield uri;
+		}
+	}
+}
+
+/** A set of source URIs compared by source identity. It keeps each member's original Uri. */
+export class SourceUriSet {
+	private readonly entries = new Map<string, Uri>();
+
+	add(uri: Uri): this {
+		this.entries.set(sourceUriComparisonKey(uri), uri);
+		return this;
+	}
+
+	has(uri: Uri): boolean {
+		return this.entries.has(sourceUriComparisonKey(uri));
+	}
+
+	values(): IterableIterator<Uri> {
+		return this.entries.values();
 	}
 }
