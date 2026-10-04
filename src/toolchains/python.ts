@@ -69,7 +69,7 @@ export const python: ToolchainDefinition = {
 				'Python bytecode CFG',
 				'Build a graph from recursively inspected Python bytecode.',
 				pythonControlFlowGraphProducer,
-				(raw) => parsePythonControlFlowGraphs(raw.text, raw.command.workingDirectory),
+				(raw) => parsePythonControlFlowGraphs(raw.text, raw.command.cwd),
 			),
 		]),
 	}),

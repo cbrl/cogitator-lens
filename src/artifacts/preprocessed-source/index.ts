@@ -9,11 +9,4 @@ export const preprocessedSourceArtifact = {
 	filenameExtension: '.preprocessed',
 	documentLanguage: 'source',
 	renderer: renderPreprocessedSource,
-	navigation: {
-		definitions: true,
-		sourceLocations: true,
-		links: false,
-		folds: true,
-		symbols: false,
-	},
 } as const satisfies ArtifactDefinition;

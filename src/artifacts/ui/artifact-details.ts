@@ -7,9 +7,6 @@ import type {
 	RenderedArtifactMetric,
 } from '../../types/index.js';
 import { uniqueDiagnostics } from '../../diagnostics.js';
-import { invocationDetails } from '../../types/index.js';
-
-export { invocationDetails } from '../../types/index.js';
 
 export interface ArtifactDetailsItem {
 	readonly id: string;
@@ -33,9 +30,7 @@ export function buildArtifactDetails(
 		group('artifact', 'Artifact', [
 			value('artifact-label', 'Artifact', identity.artifactLabel),
 			value('kind', 'Kind', identity.artifactKind),
-			...(identity.artifactOutputId
-				? [value('artifact-output', 'Output', identity.artifactOutputLabel ?? identity.artifactOutputId)]
-				: []),
+			...(identity.artifactOutputId ? [value('artifact-output', 'Output', identity.artifactLabel)] : []),
 			value('source', 'Source', identity.sourceLabel),
 			value('preset', 'Preset', identity.presetId),
 			value('variant', 'Variant', identity.variantLabel),
@@ -43,7 +38,7 @@ export function buildArtifactDetails(
 			value('toolchain', 'Toolchain', identity.toolchainLabel),
 			value('toolchain-kind', 'Toolchain kind', identity.toolchainKind),
 			value('toolchain-id', 'Toolchain ID', identity.toolchainId),
-			value('rendered-identity', 'Rendered identity', identity.renderedIdentity),
+			value('document-uri', 'Document URI', identity.documentUri),
 		]),
 		group('status', 'Status', [
 			value('state', 'State', statusLabel(status)),

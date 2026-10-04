@@ -17,11 +17,4 @@ export const binaryDisassemblyArtifact = {
 	documentLanguage: 'artifact',
 	editorLanguageId: 'coglens-asm',
 	renderer: renderBinaryDisassembly,
-	navigation: {
-		definitions: true,
-		sourceLocations: true,
-		links: true,
-		folds: true,
-		symbols: true,
-	},
 } as const satisfies ArtifactDefinition;

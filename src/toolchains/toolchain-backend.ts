@@ -16,6 +16,7 @@ import type {
 	RenderedArtifact,
 	CompileDiagnostic,
 	AuxiliaryTool,
+	InvocationDetails,
 } from '../types/index.js';
 import * as exec from '../exec.js';
 import { withTemporaryDirectory } from '../temporary-directory.js';
@@ -500,14 +501,8 @@ export class ToolchainBackend {
 			diagnostics: this.parseDiagnostics(diagnosticOutput, source, invocation.workingDirectory),
 			durationMs: performance.now() - invocation.started,
 			generatedAt: Date.now(),
-			truncated: false,
 			...inputMetadata,
-			command: {
-				executable,
-				arguments: args,
-				environmentVariableNames: invocation.environmentVariableNames,
-				workingDirectory: invocation.workingDirectory,
-			},
+			command: invocationDetails(invocation, executable, args),
 		};
 	}
 
@@ -563,14 +558,7 @@ export class ToolchainBackend {
 		executable = this.profile.executable,
 		args: readonly string[] = invocation.argumentsList,
 	): void {
-		options.onInvocation?.(
-			Object.freeze({
-				executable,
-				args: Object.freeze([...args]),
-				cwd: invocation.workingDirectory,
-				environmentVariableNames: Object.freeze([...invocation.environmentVariableNames]),
-			}),
-		);
+		options.onInvocation?.(invocationDetails(invocation, executable, args));
 	}
 
 	private async collectDependencyInputs(
@@ -638,6 +626,19 @@ export class ToolchainBackend {
 			cancellationToken,
 		);
 	}
+}
+
+function invocationDetails(
+	invocation: PreparedInvocation,
+	executable: string,
+	args: readonly string[],
+): InvocationDetails {
+	return Object.freeze({
+		executable,
+		args: Object.freeze([...args]),
+		cwd: invocation.workingDirectory,
+		environmentVariableNames: Object.freeze([...invocation.environmentVariableNames]),
+	});
 }
 
 async function readBoundedArtifactFile(filename: string, optional = false): Promise<string> {

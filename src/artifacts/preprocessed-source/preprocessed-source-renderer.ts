@@ -22,7 +22,7 @@ export function renderPreprocessedSource(
 		const marker = lineMarker.exec(text);
 		if (marker) {
 			logicalLine = Number.parseInt(marker[1], 10);
-			logicalFile = resolveMarkerPath(decodeMarkerFilename(marker[2]), raw.command.workingDirectory);
+			logicalFile = resolveMarkerPath(decodeMarkerFilename(marker[2]), raw.command.cwd);
 			markerLines.push(lines.length);
 			lines.push({ text });
 			continue;

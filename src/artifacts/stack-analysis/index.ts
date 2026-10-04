@@ -9,13 +9,6 @@ export const stackAnalysisArtifact = {
 	filenameExtension: '.stack',
 	documentLanguage: 'source',
 	renderer: renderNativeStackAnalysis,
-	navigation: {
-		definitions: true,
-		sourceLocations: true,
-		links: false,
-		folds: false,
-		symbols: false,
-	},
 	metricLabels: {
 		functionCount: 'Function count',
 		largestFrame: 'Largest known frame',

@@ -10,11 +10,4 @@ export const astArtifact = {
 	documentLanguage: 'artifact',
 	editorLanguageId: 'coglens-ast',
 	renderer: renderToolchainArtifact,
-	navigation: {
-		definitions: true,
-		sourceLocations: true,
-		links: false,
-		folds: true,
-		symbols: true,
-	},
 } as const satisfies ArtifactDefinition;

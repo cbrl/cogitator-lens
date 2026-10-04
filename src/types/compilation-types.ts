@@ -57,29 +57,12 @@ export interface CompileDiagnostic {
 	message: string;
 }
 
-export interface ArtifactCommand {
-	executable: string;
-	arguments: readonly string[];
-	environmentVariableNames: readonly string[];
-	workingDirectory: string;
-}
-
-/** Sanitized invocation metadata suitable for presentation layers. */
+/** The command that produced an artifact. It holds environment variable names, never their values. */
 export interface InvocationDetails {
 	readonly executable: string;
 	readonly args: readonly string[];
 	readonly cwd: string;
 	readonly environmentVariableNames: readonly string[];
-}
-
-/** Remove execution-only values before invocation metadata reaches a view. */
-export function invocationDetails(command: ArtifactCommand): InvocationDetails {
-	return Object.freeze({
-		executable: command.executable,
-		args: Object.freeze([...command.arguments]),
-		cwd: command.workingDirectory,
-		environmentVariableNames: Object.freeze([...command.environmentVariableNames].sort()),
-	});
 }
 
 export interface ArtifactInputState {
@@ -95,18 +78,11 @@ export interface RawArtifact {
 	durationMs: number;
 	/** Unix epoch milliseconds when tool output and dependency discovery completed. */
 	generatedAt: number;
-	command: ArtifactCommand;
-	truncated: boolean;
+	command: InvocationDetails;
 	readonly inputs: readonly ArtifactInputState[];
 	readonly dependencyCoverage: 'complete' | 'source-only';
 	/** Producer-owned metadata interpreted by the artifact's renderer. */
 	readonly producerData?: unknown;
-}
-
-export interface ArtifactSourceLocation {
-	readonly line: number;
-	readonly uri: string;
-	readonly sourceLine: number;
 }
 
 export interface RenderedArtifactLineSource {
@@ -228,23 +204,17 @@ export interface RenderedArtifactBase {
 	readonly generatedAt: number;
 	readonly command: InvocationDetails;
 	readonly metrics: Readonly<Record<string, RenderedArtifactMetric>>;
+	/** Whether the renderer dropped lines past its limit. */
 	readonly truncated: boolean;
-	/** Whether the tool output limit, rather than a renderer limit, was reached. */
-	readonly toolOutputTruncated: boolean;
 }
 
 export interface RenderedTextArtifact extends RenderedArtifactBase {
 	readonly presentation: 'text';
 	readonly listingSyntax?: ArtifactListingSyntax;
 	readonly lines: readonly RenderedArtifactLine[];
-	readonly sourceLocations: readonly ArtifactSourceLocation[];
 	readonly links: readonly ArtifactLink[];
 	readonly folds: readonly ArtifactFold[];
 	readonly symbols: readonly ArtifactSymbol[];
-	/** The bounded compiler output before text rendering or filtering. */
-	readonly raw: string;
-	/** Readable alias for `raw` retained for text-renderer call sites. */
-	readonly text: string;
 }
 
 export interface RenderedGraphArtifact extends RenderedArtifactBase {

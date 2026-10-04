@@ -10,13 +10,6 @@ export const controlFlowGraphArtifact = {
 	filenameExtension: '.cfg',
 	documentLanguage: 'artifact',
 	renderer: renderControlFlowGraphArtifact,
-	navigation: {
-		definitions: false,
-		sourceLocations: false,
-		links: false,
-		folds: false,
-		symbols: false,
-	},
 	metricLabels: {
 		graphCount: 'Function graphs',
 		nodeCount: 'Basic blocks',

@@ -9,11 +9,4 @@ export const optimizationRemarksArtifact = {
 	filenameExtension: '.opt',
 	documentLanguage: 'source',
 	renderer: renderToolchainArtifact,
-	navigation: {
-		definitions: true,
-		sourceLocations: true,
-		links: false,
-		folds: false,
-		symbols: false,
-	},
 } as const satisfies ArtifactDefinition;

@@ -13,7 +13,6 @@ export type {
 	ArtifactDefinition,
 	ArtifactKind,
 	ArtifactListingSyntax,
-	ArtifactNavigationFeatures,
 	ArtifactOptionAvailability,
 	ArtifactOptionDescriptor,
 	ArtifactRenderContext,

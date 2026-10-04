@@ -485,14 +485,12 @@ function verifyArtifactNavigationProviders(): void {
 			cwd: '/project',
 			environmentVariableNames: [],
 		},
-		text: '',
 		lines: [
 			{ text: 'entry:', source: { file: sourcePath, line: 4, column: 2 } },
 			{ text: '  call helper', address: 16, opcodes: ['e8', '00', '00', '00', '00'], disassembly: 'call helper' },
 			{ text: 'helper:' },
 			{ text: '  ret' },
 		],
-		sourceLocations: [{ line: 0, uri: sourcePath, sourceLine: 4 }],
 		links: [{ line: 1, startCharacter: 7, endCharacter: 13, targetLine: 2 }],
 		folds: [
 			{ startLine: 0, endLine: 1 },
@@ -503,9 +501,7 @@ function verifyArtifactNavigationProviders(): void {
 			{ name: 'helper', line: 2 },
 		],
 		metrics: {},
-		raw: '',
 		truncated: false,
-		toolOutputTruncated: false,
 	};
 	const provider = new ArtifactNavigationProvider((uri) =>
 		uri.toString() === documentUri.toString() ? artifact : undefined,
@@ -597,11 +593,8 @@ async function verifyDisplayFilterCaching(workspaceFolder: vscode.WorkspaceFolde
 			kind: 'assembly',
 			text: '.text\nmain:\n  ret',
 			diagnostics: [],
-			stdout: '',
-			stderr: '',
 			durationMs: 1,
 			generatedAt: 0,
-			truncated: toolchainRuns === 2,
 			inputs: [
 				{
 					uri: pathToFileURL(source.fsPath).href,
@@ -617,9 +610,9 @@ async function verifyDisplayFilterCaching(workspaceFolder: vscode.WorkspaceFolde
 			dependencyCoverage: 'complete',
 			command: {
 				executable: profile.executable,
-				arguments: [],
+				args: [],
 				environmentVariableNames: [],
-				workingDirectory: workspaceFolder.uri.fsPath,
+				cwd: workspaceFolder.uri.fsPath,
 			},
 		};
 	};
@@ -652,7 +645,7 @@ async function verifyDisplayFilterCaching(workspaceFolder: vscode.WorkspaceFolde
 		cancellationToken: cancellation.token,
 	});
 	assert.equal(toolchainRuns, 1, 'Display-only option changes should reuse raw toolchain output');
-	const truncatedArtifact = await service.compile({
+	await service.compile({
 		variant,
 		artifactKind: 'assembly',
 		presetId: 'default',
@@ -664,11 +657,6 @@ async function verifyDisplayFilterCaching(workspaceFolder: vscode.WorkspaceFolde
 		cancellationToken: cancellation.token,
 	});
 	assert.equal(toolchainRuns, 2, 'Production option changes should invoke the toolchain');
-	assert.equal(
-		truncatedArtifact.status === 'available' && truncatedArtifact.artifact.truncated,
-		true,
-		'Toolchain truncation should propagate to the artifact',
-	);
 	fs.writeFileSync(dependency.fsPath, 'dependency changed\n');
 	await service.compile({
 		variant,
@@ -865,11 +853,9 @@ async function verifyArtifactDetailsTree(workspaceFolder: vscode.WorkspaceFolder
 			toolchainId: 'details:clang',
 			toolchainLabel: 'Details Clang',
 			toolchainKind: 'clang',
-			renderedIdentity: artifactUri.toString(),
 		},
 		status: {
 			state: 'successful',
-			assembly: {} as never,
 			artifact: {
 				kind: 'stack-analysis',
 				presentation: 'text',
@@ -882,16 +868,12 @@ async function verifyArtifactDetailsTree(workspaceFolder: vscode.WorkspaceFolder
 					cwd: workspaceFolder.uri.fsPath,
 					environmentVariableNames: ['API_KEY', 'TOKEN'],
 				},
-				text: '',
 				lines: [],
-				sourceLocations: [],
 				links: [],
 				folds: [],
 				symbols: [],
 				metrics: { largestFrame: 64 },
-				raw: '',
 				truncated: false,
-				toolOutputTruncated: false,
 			},
 			truncated: false,
 		},
@@ -934,13 +916,13 @@ async function verifyNativeStackProduction(workspaceFolder: vscode.WorkspaceFold
 	assert.equal(raw.inputs.length, 1);
 	assert.ok(raw.command.environmentVariableNames.includes('COGLENS_FAKE_TRACE'));
 	assert.deepEqual(raw.command.environmentVariableNames, [...raw.command.environmentVariableNames].sort());
-	const output = raw.command.arguments[raw.command.arguments.indexOf('-o') + 1];
+	const output = raw.command.args[raw.command.args.indexOf('-o') + 1];
 	assert.equal(fs.existsSync(path.dirname(output)), false);
 
 	const lto = await runFakeNativeStackProducer(root, ['-flto=auto']);
-	assert.ok(lto.command.arguments.includes('-flto=auto'));
+	assert.ok(lto.command.args.includes('-flto=auto'));
 	assert.ok(
-		lto.command.arguments.indexOf('-fno-lto') > lto.command.arguments.indexOf('-flto=auto'),
+		lto.command.args.indexOf('-fno-lto') > lto.command.args.indexOf('-flto=auto'),
 		'stack analysis must disable CMake-provided LTO after provider arguments',
 	);
 	assert.match(lto.text, /fake_function\(\)\s+16\s+static/);
@@ -966,15 +948,15 @@ async function verifyNativeStackProduction(workspaceFolder: vscode.WorkspaceFold
 	assert.equal(dependencyFallback.inputs.length, 1);
 
 	const clangCl = await runFakeClangClStackProducer(root);
-	assert.ok(clangCl.command.arguments.includes('/c'));
-	assert.ok(clangCl.command.arguments.includes('/clang:-fstack-usage'));
-	assert.ok(clangCl.command.arguments.includes('/clang:-gline-tables-only'));
-	assert.ok(clangCl.command.arguments.includes('/DPROJECT_BUILD'));
-	assert.ok(!clangCl.command.arguments.includes('/Foignored.obj'));
+	assert.ok(clangCl.command.args.includes('/c'));
+	assert.ok(clangCl.command.args.includes('/clang:-fstack-usage'));
+	assert.ok(clangCl.command.args.includes('/clang:-gline-tables-only'));
+	assert.ok(clangCl.command.args.includes('/DPROJECT_BUILD'));
+	assert.ok(!clangCl.command.args.includes('/Foignored.obj'));
 	assert.match(clangCl.text, /source\.cpp:1:fake_function\(\)\s+16\s+static/);
-	const clangClOutputIndex = clangCl.command.arguments.indexOf('/clang:-o');
+	const clangClOutputIndex = clangCl.command.args.indexOf('/clang:-o');
 	assert.notEqual(clangClOutputIndex, -1);
-	const clangClOutput = clangCl.command.arguments[clangClOutputIndex + 1];
+	const clangClOutput = clangCl.command.args[clangClOutputIndex + 1];
 	assert.match(clangClOutput, /^\/clang:/);
 	assert.equal(fs.existsSync(path.dirname(clangClOutput.replace(/^\/clang:/, ''))), false);
 
@@ -1108,12 +1090,7 @@ async function runFakeNativeStackProducer(
 				nativeStackUsageOutput,
 				cancellation.token,
 			);
-			assert.deepEqual(observedInvocation, {
-				executable: raw.command.executable,
-				args: raw.command.arguments,
-				cwd: raw.command.workingDirectory,
-				environmentVariableNames: raw.command.environmentVariableNames,
-			});
+			assert.deepEqual(observedInvocation, raw.command);
 			return raw;
 		} catch (error) {
 			if (error instanceof ToolExitError) {

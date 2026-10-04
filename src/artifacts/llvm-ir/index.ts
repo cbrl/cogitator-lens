@@ -11,11 +11,4 @@ export const llvmIrArtifact = {
 	documentLanguage: 'artifact',
 	editorLanguageId: 'coglens-llvm-ir',
 	renderer: renderLlvmIr,
-	navigation: {
-		definitions: true,
-		sourceLocations: true,
-		links: false,
-		folds: true,
-		symbols: true,
-	},
 } as const satisfies ArtifactDefinition;

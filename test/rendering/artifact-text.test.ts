@@ -168,7 +168,7 @@ test('LLVM IR rendering resolves debug metadata into source links and function n
 		line: 4,
 		column: 11,
 	});
-	assert.ok(rendered.sourceLocations.some((location) => location.sourceLine === 4));
+	assert.ok(rendered.lines.some((line) => Boolean(line.source?.file) && line.source?.line === 4));
 	assert.deepEqual(rendered.symbols, [{ name: 'square', line: 3 }]);
 	assert.deepEqual(rendered.folds, [{ startLine: 3, endLine: 7 }]);
 	assert.equal(rendered.metrics.functionCount, 1);
@@ -182,9 +182,9 @@ test('Python bytecode rendering maps both supported disassembly layouts to sourc
 			rawArtifact('assembly', text, {
 				command: {
 					executable: process.execPath,
-					arguments: ['-m', 'dis', source],
+					args: ['-m', 'dis', source],
 					environmentVariableNames: [],
-					workingDirectory: 'C:\\project',
+					cwd: 'C:\\project',
 				},
 			}),
 			display,
@@ -307,12 +307,12 @@ test('.NET IL rendering exposes method-scoped labels, symbols, folds, and code m
 
 /** Restates where the compiler ran, which is what relative debug paths resolve against. */
 function compiledIn(workingDirectory: string, raw: RawArtifact): RawArtifact {
-	return { ...raw, command: { ...raw.command, workingDirectory: path.resolve(workingDirectory) } };
+	return { ...raw, command: { ...raw.command, cwd: path.resolve(workingDirectory) } };
 }
 
 test('malformed tool output still produces a valid rendered artifact', async () => {
 	const ir = await render['llvm-ir'].renderer(rawArtifact('llvm-ir', 'not llvm ir'), display, renderContext('clang'));
 	assert.equal(ir.lines.length, 1);
-	assert.deepEqual(ir.sourceLocations, []);
+	assert.ok(ir.lines.every((line) => !line.source?.file));
 	assert.deepEqual(ir.symbols, []);
 });

@@ -239,7 +239,7 @@ export function renderNativeStackAnalysis(
 	_options: DisplayOptions,
 	context: ArtifactRenderContext,
 ): RenderedTextArtifact {
-	const parsed = parseStackUsage(raw.text, raw.command.workingDirectory);
+	const parsed = parseStackUsage(raw.text, raw.command.cwd);
 	return renderStackUsage(raw, context, parsed.entries, parsed.diagnostics);
 }
 

@@ -21,7 +21,6 @@ import {
 	Uri,
 	type CancellationToken,
 } from 'vscode';
-import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
 import type { RenderedTextArtifact } from '../types/index.js';
 import { documentationForInstruction } from './instruction-documentation.js';
 
@@ -39,23 +38,14 @@ export class ArtifactNavigationProvider
 	): ProviderResult<Definition | DefinitionLink[]> {
 		const artifact = this.artifactLookup(document.uri);
 		const source = artifact?.lines[position.line]?.source;
-		if (
-			!artifact ||
-			!artifactDefinitions[artifact.kind].navigation.definitions ||
-			!source?.file ||
-			source.line === null
-		) {
+		if (!source?.file || source.line === null) {
 			return undefined;
 		}
 		return new Location(Uri.file(path.normalize(source.file)), new Position(source.line - 1, source.column ?? 0));
 	}
 
 	provideDocumentLinks(document: TextDocument, _token: CancellationToken): ProviderResult<DocumentLink[]> {
-		const artifact = this.artifactLookup(document.uri);
-		if (!artifact || !artifactDefinitions[artifact.kind].navigation.links) {
-			return undefined;
-		}
-		return artifact.links.map(
+		return this.artifactLookup(document.uri)?.links.map(
 			(link) =>
 				new DocumentLink(
 					new Range(link.line, link.startCharacter, link.line, link.endCharacter),
@@ -69,11 +59,7 @@ export class ArtifactNavigationProvider
 		_context: unknown,
 		_token: CancellationToken,
 	): ProviderResult<FoldingRange[]> {
-		const artifact = this.artifactLookup(document.uri);
-		if (!artifact || !artifactDefinitions[artifact.kind].navigation.folds) {
-			return undefined;
-		}
-		return artifact.folds.map((fold) => new FoldingRange(fold.startLine, fold.endLine));
+		return this.artifactLookup(document.uri)?.folds.map((fold) => new FoldingRange(fold.startLine, fold.endLine));
 	}
 
 	provideHover(document: TextDocument, position: Position, _token: CancellationToken): ProviderResult<Hover> {
@@ -117,7 +103,7 @@ export class ArtifactNavigationProvider
 			contents.appendText(`Branch target: ${target || `line ${link.targetLine + 1}`}`);
 		}
 		const source = line.source;
-		if (artifactDefinitions[artifact.kind].navigation.sourceLocations && source?.file && source.line !== null) {
+		if (source?.file && source.line !== null) {
 			if (contents.value) {
 				contents.appendMarkdown('\n\n');
 			}
@@ -132,7 +118,7 @@ export class ArtifactNavigationProvider
 
 	provideDocumentSymbols(document: TextDocument, _token: CancellationToken): ProviderResult<DocumentSymbol[]> {
 		const artifact = this.artifactLookup(document.uri);
-		if (!artifact || !artifactDefinitions[artifact.kind].navigation.symbols) {
+		if (!artifact) {
 			return undefined;
 		}
 		return artifact.symbols.flatMap((symbol) => {

@@ -10,7 +10,7 @@ export class EditorTracker {
 	/**
 	 * Get all visible editors for the given source URIs
 	 */
-	getSourceEditors(sourceUris: UriSet): TextEditor[] {
+	getSourceEditors(sourceUris: Pick<UriSet, 'has'>): TextEditor[] {
 		return window.visibleTextEditors.filter((editor) => sourceUris.has(editor.document.uri));
 	}
 

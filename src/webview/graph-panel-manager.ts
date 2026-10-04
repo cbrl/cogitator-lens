@@ -109,7 +109,7 @@ export class GraphPanelManager implements Disposable {
 		}
 		const panel = window.createWebviewPanel(
 			'coglens.controlFlowGraph',
-			`${path.basename(parsed.source.fsPath)} — ${registered.identity.artifactOutputLabel ?? parsed.artifactOutputId}`,
+			`${path.basename(parsed.source.fsPath)} — ${registered.identity.artifactLabel}`,
 			{ viewColumn: ViewColumn.Beside, preserveFocus: true },
 			{
 				enableScripts: true,

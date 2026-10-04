@@ -11,14 +11,6 @@ export interface ArtifactOptionDescriptor {
 	readonly description: string;
 }
 
-export interface ArtifactNavigationFeatures {
-	readonly definitions: boolean;
-	readonly sourceLocations: boolean;
-	readonly links: boolean;
-	readonly folds: boolean;
-	readonly symbols: boolean;
-}
-
 export interface ArtifactRenderContext {
 	readonly backend: ToolchainBackend;
 	/** The resolved compiler output selected for an output-backed artifact. */
@@ -61,7 +53,6 @@ export interface ArtifactDefinition {
 	readonly editorLanguageId?: ArtifactEditorLanguageId;
 	readonly options: readonly ArtifactOptionDescriptor[];
 	readonly renderer: ArtifactRenderer;
-	readonly navigation: ArtifactNavigationFeatures;
 	/** Default listing syntax; a toolchain artifact cell may override it. */
 	readonly listingSyntax?: ArtifactListingSyntax;
 	readonly metricLabels?: Readonly<Record<string, string>>;

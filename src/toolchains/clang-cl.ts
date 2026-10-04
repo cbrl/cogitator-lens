@@ -68,7 +68,7 @@ export const clangCl: ToolchainDefinition = {
 				'LLVM IR CFG',
 				'Build a graph from the compiler LLVM IR output.',
 				artifactProducer('control-flow-graph', clangClLlvmIrOutput),
-				(raw) => parseLlvmControlFlowGraphs(raw.text, raw.command.workingDirectory),
+				(raw) => parseLlvmControlFlowGraphs(raw.text, raw.command.cwd),
 			),
 			assemblyControlFlowGraphOutput,
 		]),

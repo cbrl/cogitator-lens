@@ -26,8 +26,6 @@ import type { ConfigurationService } from '../services/configuration-service.js'
 import { CompilationError, type CompileDiagnostic, type RenderedTextArtifact } from '../types/index.js';
 import { artifactScheme, getArtifactUri } from './artifact-uri.js';
 import { ArtifactDecorator } from './artifact-decorator.js';
-import { getContent, type ArtifactDocumentContent } from './artifact-document-content.js';
-import type { ArtifactStatus } from './artifact-generator.js';
 import {
 	artifactDocumentKey,
 	ArtifactDocumentRegistry,
@@ -39,7 +37,8 @@ import type { ArtifactDocumentSnapshot } from './artifact-identity.js';
 interface ArtifactDocument {
 	readonly registered: ArtifactRegistryDocument;
 	decorator?: ArtifactDecorator;
-	assembly?: ArtifactDocumentContent;
+	/** The text that the editor shows now. A cancelled refresh keeps it. */
+	text?: string;
 	diagnostics: readonly CompileDiagnostic[];
 }
 
@@ -88,21 +87,18 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 		const compilation = handler.update(token);
 
 		return compilation
-			.then(({ assembly, artifact }) => {
-				if (artifact.presentation !== 'text' || !assembly) {
+			.then((artifact) => {
+				if (artifact.presentation !== 'text') {
 					throw new CompilationError('Graph artifacts must be opened in the control-flow graph view.');
 				}
-				document.assembly = assembly;
 				this.setDiagnostics(document, artifact.diagnostics);
-
-				return getContent(assembly);
+				return artifact.lines.map((line) => line.text).join('\n');
 			})
 			.catch((error: unknown) => {
 				if (error instanceof CancellationError || token.isCancellationRequested) {
-					return document.assembly ? getContent(document.assembly) : '';
+					return document.text ?? '';
 				}
 
-				document.assembly = undefined;
 				const diagnostics = error instanceof CompilationError ? error.diagnostics : [];
 				this.setDiagnostics(document, diagnostics);
 
@@ -110,6 +106,10 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 				return error instanceof CompilationError && error.truncated
 					? `[truncated; process output limit exceeded]\n\n${message}`
 					: message;
+			})
+			.then((text) => {
+				document.text = text;
+				return text;
 			});
 	}
 
@@ -119,10 +119,6 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 
 	get onDidChangeArtifactState(): Event<ArtifactDocumentSnapshot> {
 		return this.registry.onDidChangeArtifactState;
-	}
-
-	getArtifactDocumentContent(uri: Uri): ArtifactDocumentContent | undefined {
-		return this.documents.get(artifactDocumentKey(uri))?.assembly;
 	}
 
 	getRenderedArtifact(uri: Uri): RenderedTextArtifact | undefined {
@@ -180,7 +176,7 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 
 		const registered = this.registry.open(assemblyUri, {
 			refresh: (document) => this.changeEmitter.fire(document.uri),
-			onStatus: (document, status) => this.onHandlerStatus(document.uri, status),
+			onStatus: () => this.refreshStatusBar(),
 		});
 		const document: ArtifactDocument = {
 			registered,
@@ -190,19 +186,6 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 		this.refreshStatusBar();
 
 		return document;
-	}
-
-	private onHandlerStatus(assemblyUri: Uri, status: ArtifactStatus): void {
-		const document = this.documents.get(artifactDocumentKey(assemblyUri));
-		if (!document) {
-			return;
-		}
-		if (status.state === 'successful') {
-			document.assembly = status.assembly;
-		} else if (status.state === 'failed') {
-			document.assembly = undefined;
-		}
-		this.refreshStatusBar();
 	}
 
 	private setDiagnostics(document: ArtifactDocument, items: readonly CompileDiagnostic[]): void {

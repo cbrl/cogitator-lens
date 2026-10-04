@@ -10,17 +10,10 @@ import {
 import { CompilationService } from '../compilation/index.js';
 import type { ArtifactKind, CompilationVariant, InvocationDetails, RenderedArtifact } from '../types/index.js';
 import { CompilationError } from '../types/index.js';
-import { buildArtifactDocumentContent, type ArtifactDocumentContent } from './artifact-document-content.js';
 import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
 import * as logger from '../logger.js';
 
-export interface ArtifactHandlerResult {
-	assembly?: ArtifactDocumentContent;
-	artifact: RenderedArtifact;
-}
-
 interface ArtifactStatusBase {
-	readonly assembly?: ArtifactDocumentContent;
 	readonly artifact?: RenderedArtifact;
 	readonly invocation?: InvocationDetails;
 	readonly truncated: boolean;
@@ -64,7 +57,7 @@ export class ArtifactGenerator implements Disposable {
 		this.artifactUri = artifactUri;
 	}
 
-	async update(externalToken: CancellationToken): Promise<ArtifactHandlerResult> {
+	async update(externalToken: CancellationToken): Promise<RenderedArtifact> {
 		this.cancellation?.cancel();
 		this.cancellation?.dispose();
 		const cancellation = new CancellationTokenSource();
@@ -119,26 +112,13 @@ export class ArtifactGenerator implements Disposable {
 					`${this.artifactKind} produced a ${rendered.presentation} artifact; expected ${expectedPresentation}.`,
 				);
 			}
-			const assembly =
-				rendered.presentation === 'text'
-					? buildArtifactDocumentContent(
-							this.sourceUri,
-							this.artifactUri,
-							rendered.kind,
-							rendered.toolOutputTruncated
-								? [...rendered.lines, { text: '[truncated; toolchain output was limited]' }]
-								: rendered.lines,
-							rendered.links,
-						)
-					: undefined;
 			this.transition('successful', {
-				assembly,
 				artifact: rendered,
 				invocation: this.currentStatus.invocation,
 				truncated: rendered.truncated,
 			});
 
-			return { assembly, artifact: rendered };
+			return rendered;
 		} catch (error) {
 			if (isCurrent() && !(error instanceof CancellationError)) {
 				const normalized = error instanceof Error ? error : new Error(String(error));
@@ -196,7 +176,6 @@ export class ArtifactGenerator implements Disposable {
 	private transition<S extends ArtifactState>(state: S, overrides: Partial<ArtifactStatus> = {}): void {
 		const status = {
 			state,
-			assembly: this.currentStatus.assembly,
 			artifact: this.currentStatus.artifact,
 			invocation: this.currentStatus.invocation,
 			truncated: this.currentStatus.truncated,

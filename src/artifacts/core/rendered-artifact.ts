@@ -4,7 +4,6 @@ import type {
 	RenderedArtifactLine,
 	RenderedTextArtifact,
 } from '../../types/index.js';
-import { invocationDetails } from '../../types/index.js';
 
 export function renderedArtifact(
 	raw: RawArtifact,
@@ -17,27 +16,12 @@ export function renderedArtifact(
 		diagnostics: raw.diagnostics,
 		durationMs: raw.durationMs,
 		generatedAt: raw.generatedAt,
-		command: invocationDetails(raw.command),
+		command: raw.command,
 		lines,
-		sourceLocations: lines.flatMap((line, lineIndex) => {
-			const sourceLine = line.source?.line;
-			return line.source?.file && sourceLine !== undefined && sourceLine !== null
-				? [
-						{
-							line: lineIndex,
-							uri: line.source.file,
-							sourceLine,
-						},
-					]
-				: [];
-		}),
 		links: [],
 		folds: [],
 		symbols: [],
 		metrics,
-		raw: raw.text,
-		text: raw.text,
-		toolOutputTruncated: raw.truncated,
-		truncated: raw.truncated || lines.some((line) => line.text.includes('[truncated; too many lines]')),
+		truncated: lines.some((line) => line.text.includes('[truncated; too many lines]')),
 	};
 }

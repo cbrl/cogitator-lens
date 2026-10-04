@@ -23,11 +23,10 @@ export function rawArtifact(kind: ArtifactKind, text: string, overrides: Partial
 		generatedAt: 0,
 		command: {
 			executable: process.execPath,
-			arguments: [],
+			args: [],
 			environmentVariableNames: [],
-			workingDirectory: path.resolve('/project'),
+			cwd: path.resolve('/project'),
 		},
-		truncated: false,
 		inputs: [],
 		dependencyCoverage: 'source-only',
 		...overrides,
@@ -59,7 +58,6 @@ export function textArtifact(
 	lines: readonly RenderedArtifactLine[],
 	listingSyntax: ArtifactListingSyntax | undefined = artifactDefinitions[kind].listingSyntax,
 ): RenderedTextArtifact {
-	const text = lines.map((line) => line.text).join('\n');
 	return {
 		kind,
 		...(listingSyntax ? { listingSyntax } : {}),
@@ -70,13 +68,9 @@ export function textArtifact(
 		command: { executable: '', args: [], environmentVariableNames: [], cwd: '' },
 		metrics: {},
 		truncated: false,
-		toolOutputTruncated: false,
 		lines,
-		sourceLocations: [],
 		links: [],
 		folds: [],
 		symbols: [],
-		raw: text,
-		text,
 	};
 }

@@ -60,7 +60,7 @@ export const gcc: ToolchainDefinition = {
 				'GCC tree CFG',
 				"Build a source-level graph from GCC's tree CFG dump.",
 				artifactProducer('control-flow-graph', gccControlFlowGraphOutput),
-				(raw) => parseGccControlFlowGraphs(raw.text, raw.command.workingDirectory),
+				(raw) => parseGccControlFlowGraphs(raw.text, raw.command.cwd),
 			),
 			assemblyControlFlowGraphOutput,
 		]),

@@ -28,7 +28,7 @@ export async function renderLlvmIr(
 		source:
 			line.source?.file && line.source.line
 				? {
-						file: resolveCompilerPath(line.source.file, raw.command.workingDirectory),
+						file: resolveCompilerPath(line.source.file, raw.command.cwd),
 						line: line.source.line,
 						column: line.source.column === undefined ? undefined : Math.max(0, line.source.column - 1),
 					}

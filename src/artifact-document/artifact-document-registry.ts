@@ -54,19 +54,13 @@ export function buildArtifactIdentity(
 		sourceLabel: parsed.source.fsPath,
 		artifactKind: parsed.artifactKind,
 		artifactLabel,
-		...(parsed.artifactOutputId
-			? {
-					artifactOutputId: parsed.artifactOutputId,
-					artifactOutputLabel: artifactLabel,
-				}
-			: {}),
+		...(parsed.artifactOutputId ? { artifactOutputId: parsed.artifactOutputId } : {}),
 		presetId: parsed.presetId,
 		variantId: variant.id,
 		variantLabel: variant.displayLabel,
 		toolchainId: profile?.id ?? variant.toolchainProfileId,
 		toolchainLabel: profile?.displayName ?? variant.toolchainProfileId,
 		toolchainKind: profile?.kind ?? 'unknown',
-		renderedIdentity: uri.toString(),
 	};
 }
 

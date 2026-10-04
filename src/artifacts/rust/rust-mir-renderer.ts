@@ -33,7 +33,7 @@ export function renderRustMir(
 		const span = spanLocation.exec(text);
 		if (span) {
 			currentSource = {
-				file: resolveCompilerPath(span[1], raw.command.workingDirectory),
+				file: resolveCompilerPath(span[1], raw.command.cwd),
 				line: Number.parseInt(span[2], 10),
 				column: Math.max(0, Number.parseInt(span[3], 10) - 1),
 			};

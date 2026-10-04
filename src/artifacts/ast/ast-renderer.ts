@@ -55,7 +55,7 @@ export function renderClangAst(
 			}
 		}
 		const parentLocation = locations.get(parsed.depth - 1);
-		const span = clangSourceSpan(rawLine, raw.command.workingDirectory, parentLocation, lastFile);
+		const span = clangSourceSpan(rawLine, raw.command.cwd, parentLocation, lastFile);
 		const location: AstSourcePosition | undefined = span;
 		if (location) {
 			locations.set(parsed.depth, location);

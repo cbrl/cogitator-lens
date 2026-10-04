@@ -16,35 +16,22 @@ import {
 	sourceScrollAnchor,
 } from '../src/artifact-document/source-bridge.js';
 import { jumpArrows } from '../src/artifact-document/jump-arrows.js';
-import { invocationDetails, type ArtifactDetailsItem } from '../src/artifacts/ui/artifact-details.js';
+import type { ArtifactDetailsItem } from '../src/artifacts/ui/artifact-details.js';
 import { partitionArtifactPickerChoices } from '../src/artifacts/ui/artifact-picker.js';
-import type { RawArtifact, RenderedArtifact } from '../src/types/index.js';
+import type { InvocationDetails, RawArtifact, RenderedArtifact } from '../src/types/index.js';
 import { textArtifact } from './support/artifacts.js';
 
-/** One invocation, shared so redaction and command-line quoting describe the same input. */
-const compilerInvocation = {
+/** One invocation, shared so the details rows and command-line quoting describe the same input. */
+const compilerInvocation: InvocationDetails = {
 	executable: '/tool chain/clang++',
-	arguments: ['-O2', '-DNAME=value with spaces'],
-	environmentVariableNames: ['TOKEN', 'API_KEY'],
-	workingDirectory: '/project',
-} as const;
+	args: ['-O2', '-DNAME=value with spaces'],
+	environmentVariableNames: ['API_KEY', 'TOKEN'],
+	cwd: '/project',
+};
 
 const generatedAt = 1_700_000_000_000;
 const durationMs = 12.4;
 const largestFrame = 64;
-
-test('invocation details redact environment values at the presentation boundary', () => {
-	const secret = 'do-not-display-this-value';
-	const details = invocationDetails({ ...compilerInvocation, environment: { TOKEN: secret } } as never);
-
-	assert.deepEqual(details, {
-		executable: compilerInvocation.executable,
-		args: [...compilerInvocation.arguments],
-		cwd: compilerInvocation.workingDirectory,
-		environmentVariableNames: ['API_KEY', 'TOKEN'],
-	});
-	assert.doesNotMatch(JSON.stringify(details), new RegExp(secret));
-});
 
 test('the artifact picker hides unsupported choices and separates unavailable ones', () => {
 	const sections = partitionArtifactPickerChoices([
@@ -240,19 +227,15 @@ function successfulStatus(withDiagnostics = true): ArtifactStatus {
 		diagnostics,
 		durationMs,
 		generatedAt,
-		command: invocationDetails({ ...compilerInvocation, arguments: [...compilerInvocation.arguments] }),
-		text: '',
+		command: compilerInvocation,
 		lines: [],
-		sourceLocations: [],
 		links: [],
 		folds: [],
 		symbols: [],
 		metrics: { largestFrame, functionCount: 3 },
-		raw: '',
 		truncated: false,
-		toolOutputTruncated: false,
 	};
-	return { state: 'successful', assembly: {} as never, artifact, truncated: false };
+	return { state: 'successful', artifact, truncated: false };
 }
 
 function snapshot(status: ArtifactStatus): ArtifactDocumentSnapshot {
@@ -269,7 +252,6 @@ function snapshot(status: ArtifactStatus): ArtifactDocumentSnapshot {
 			toolchainId: 'cmake:clang',
 			toolchainLabel: 'Clang 20',
 			toolchainKind: 'clang',
-			renderedIdentity: 'coglens-artifact:/project/source.stack.cpp',
 		},
 		status,
 	};

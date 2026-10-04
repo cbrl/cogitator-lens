@@ -12,7 +12,7 @@ import {
 	window,
 	workspace,
 } from 'vscode';
-import { asmLineHasSource, type ArtifactDocumentContent } from './artifact-document-content.js';
+import { buildSourceLineMap, lineHasSource, type SourceLineMap } from './source-line-map.js';
 import path from 'path';
 import { equalUri } from '../utils.js';
 import {
@@ -29,7 +29,7 @@ import {
 import { EditorTracker } from './decorations/editor-tracker.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
 import type { ArtifactStatus, ArtifactState } from './artifact-generator.js';
-import type { ArtifactKind, ArtifactOptions, RenderedArtifactLine } from '../types/index.js';
+import type { ArtifactKind, ArtifactOptions, RenderedArtifactLine, RenderedTextArtifact } from '../types/index.js';
 import { artifactSupportsOption } from '../artifacts/core/artifact-definitions.js';
 import {
 	artifactScrollAnchor,
@@ -42,7 +42,7 @@ import { jumpArrows, type JumpArrowDirection } from './jump-arrows.js';
 
 /*
 Nice-to-have features:
- - Hover line in ASM/source editor highlights corresponding source/ASM line(s) (only on currently visible files, don't open new ones)
+ - Hover line in artifact/source editor highlights corresponding source/artifact line(s) (only on currently visible files, don't open new ones)
    - VSCode API doesn't appear to expose the line hovered by the mouse
  - Ctrl-click opens corresponding editor (if not open) then highlights lines
    - VSCode has a 10+ year old issue (#3130) for adding mouse shortcut customization
@@ -50,19 +50,25 @@ Nice-to-have features:
      - The UX for this isn't ideal unless the user changes VS Code settings to open definitions in an existing editor (can some ugly hacks work around this?)
 */
 
+/** A text artifact and the source map derived from it. */
+interface MappedArtifact {
+	readonly artifact: RenderedTextArtifact;
+	readonly sources: SourceLineMap;
+}
+
 /**
- * Manages decorations for assembly documents, including dimming unused source lines and highlighting corresponding
- * lines between source and assembly. Each instance of ArtifactDecorator is associated with one assembly document and its
+ * Manages decorations for artifact documents, including dimming unused source lines and highlighting corresponding
+ * lines between source and artifact. Each instance of ArtifactDecorator is associated with one artifact document and its
  * referenced source documents.
  *
- * Decorations are only active when the assembly document is visible along with at least one of its referenced source
+ * Decorations are only active when the artifact document is visible along with at least one of its referenced source
  * documents.
  */
 export class ArtifactDecorator {
 	private readonly sourceUri: Uri;
 	private readonly artifactUri: Uri;
 
-	private content?: ArtifactDocumentContent;
+	private content?: MappedArtifact;
 	private compilationState: ArtifactState = 'stale';
 	private truncated = false;
 
@@ -76,7 +82,7 @@ export class ArtifactDecorator {
 	constructor(
 		sourceUri: Uri,
 		artifactUri: Uri,
-		asmEvent: Event<ArtifactStatus>,
+		statusEvent: Event<ArtifactStatus>,
 		configService: ConfigurationService,
 		private readonly artifactOptions: (kind: ArtifactKind) => ArtifactOptions,
 	) {
@@ -87,14 +93,14 @@ export class ArtifactDecorator {
 
 		this.refreshDecorations();
 
-		// Rebuild mapping and decorations on asm document change
-		const providerEventRegistration = asmEvent((status) => {
+		// Rebuild the source map when the artifact changes. A status keeps the last artifact while it
+		// compiles, goes stale, or fails, so the decorations stay on the text the editor still shows.
+		const providerEventRegistration = statusEvent((status) => {
 			this.compilationState = status.state;
 			this.truncated = status.truncated;
-			if (status.assembly) {
-				this.content = status.assembly;
-			} else if (status.error) {
-				this.content = undefined;
+			const artifact = status.artifact?.presentation === 'text' ? status.artifact : undefined;
+			if (artifact !== this.content?.artifact) {
+				this.content = artifact && { artifact, sources: buildSourceLineMap(artifact) };
 			}
 			this.refreshDecorations();
 		});
@@ -134,7 +140,7 @@ export class ArtifactDecorator {
 	public onEditorSelectionChanged(event: TextEditorSelectionChangeEvent): void {
 		// This event will fire when an editor is opened as well, in which case the kind will be undefined. We don't
 		// want to process that event, since it would act as if the user clicked whichever line happens to be selected
-		// in that new editor when it opens. This would cause problems when the selected ASM line causes a new source
+		// in that new editor when it opens. This would cause problems when the selected artifact line causes a new source
 		// editor to open, since it would override the line that the user selected with the line that was selected when
 		// the new editor opened.
 		if (event.kind === undefined || !this.active) {
@@ -142,10 +148,10 @@ export class ArtifactDecorator {
 		}
 
 		this.withContent((content) => {
-			if (content.allReferencedSrcUris.has(event.textEditor.document.uri)) {
+			if (content.sources.has(event.textEditor.document.uri)) {
 				this.onSrcLineSelected(content, event.textEditor);
 			} else if (equalUri(event.textEditor.document.uri, this.artifactUri)) {
-				this.onAsmLineSelected(content, event.textEditor);
+				this.onArtifactLineSelected(content, event.textEditor);
 			}
 		});
 	}
@@ -163,8 +169,8 @@ export class ArtifactDecorator {
 		}
 
 		this.withContent((content) => {
-			if (content.allReferencedSrcUris.has(event.textEditor.document.uri)) {
-				const mapping = content.sourceLineMappings.get(event.textEditor.document.uri);
+			if (content.sources.has(event.textEditor.document.uri)) {
+				const mapping = content.sources.get(event.textEditor.document.uri);
 				const anchor = mapping
 					? event.visibleRanges
 							.map((range) => sourceScrollAnchor(mapping, range.start.line, range.end.line))
@@ -181,18 +187,18 @@ export class ArtifactDecorator {
 				return;
 			}
 			const anchor = event.visibleRanges
-				.map((range) => artifactScrollAnchor(content.lines, range.start.line, range.end.line))
+				.map((range) => artifactScrollAnchor(content.artifact.lines, range.start.line, range.end.line))
 				.find((candidate) => candidate !== undefined);
 			if (!anchor) {
 				return;
 			}
 			const sourceUri = Uri.file(path.normalize(anchor.file));
-			const targetMapping = content.sourceLineMappings.get(sourceUri);
+			const targetMapping = content.sources.get(sourceUri);
 			const sourceEditor =
 				targetMapping === undefined
 					? undefined
 					: this.getAllSourceEditors(content).find(
-							(editor) => content.sourceLineMappings.get(editor.document.uri) === targetMapping,
+							(editor) => content.sources.get(editor.document.uri) === targetMapping,
 						);
 			if (sourceEditor && anchor.sourceLine < sourceEditor.document.lineCount) {
 				this.revealScrollAnchor(sourceEditor, anchor.sourceLine);
@@ -215,7 +221,7 @@ export class ArtifactDecorator {
 
 			// Treat as if the user selected the current line of the first editor (only highlights the line, doesn't scroll)
 			// TODO: use active editor instead of the first visible source editor?
-			if (content.lines.length > 0) {
+			if (content.artifact.lines.length > 0) {
 				const sourceEditor = this.getAllSourceEditors(content)[0];
 				if (sourceEditor) {
 					this.onSrcLineSelected(content, sourceEditor, true);
@@ -225,8 +231,8 @@ export class ArtifactDecorator {
 
 		const stateText = this.stateDecorationText();
 		if (stateText) {
-			const asmEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
-			asmEditor?.setDecorations(stateDecoration, [
+			const artifactEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
+			artifactEditor?.setDecorations(stateDecoration, [
 				{
 					range: new Range(0, 0, 0, 0),
 					renderOptions: {
@@ -269,17 +275,17 @@ export class ArtifactDecorator {
 			this.clearDecorations(editor);
 		}
 
-		const asmEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
-		if (asmEditor !== undefined) {
-			this.clearDecorations(asmEditor);
+		const artifactEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
+		if (artifactEditor !== undefined) {
+			this.clearDecorations(artifactEditor);
 		}
 	}
 
-	private dimUnusedSourceLines(content: ArtifactDocumentContent) {
+	private dimUnusedSourceLines(content: MappedArtifact) {
 		const getUnusedLines = (document: TextDocument) => {
 			const unusedLines: Range[] = [];
 
-			const map = content.sourceLineMappings.get(document.uri);
+			const map = content.sources.get(document.uri);
 			if (map === undefined) {
 				return unusedLines;
 			}
@@ -302,16 +308,16 @@ export class ArtifactDecorator {
 		}
 	}
 
-	private decorateSourceDensity(content: ArtifactDocumentContent): void {
+	private decorateSourceDensity(content: MappedArtifact): void {
 		if (
-			!artifactSupportsOption(content.kind, 'sourceLineColorBands') ||
-			!this.artifactOptions(content.kind).display.sourceLineColorBands
+			!artifactSupportsOption(content.artifact.kind, 'sourceLineColorBands') ||
+			!this.artifactOptions(content.artifact.kind).display.sourceLineColorBands
 		) {
 			return;
 		}
 
 		for (const editor of this.getAllSourceEditors(content)) {
-			const mapping = content.sourceLineMappings.get(editor.document.uri);
+			const mapping = content.sources.get(editor.document.uri);
 			if (!mapping) {
 				continue;
 			}
@@ -347,22 +353,24 @@ export class ArtifactDecorator {
 		}
 	}
 
-	private decorateListingColumns(content: ArtifactDocumentContent): void {
+	private decorateListingColumns(content: MappedArtifact): void {
 		const editor = this.editorTracker.getArtifactEditor(this.artifactUri);
 		if (
 			!editor ||
-			!artifactSupportsOption(content.kind, 'binaryColumns') ||
-			!this.artifactOptions(content.kind).display.binaryColumns
+			!artifactSupportsOption(content.artifact.kind, 'binaryColumns') ||
+			!this.artifactOptions(content.artifact.kind).display.binaryColumns
 		) {
 			return;
 		}
 
 		const addressWidth = Math.max(
 			4,
-			...content.lines.map((line) => (line.address === undefined ? 0 : line.address.toString(16).length)),
+			...content.artifact.lines.map((line) =>
+				line.address === undefined ? 0 : line.address.toString(16).length,
+			),
 		);
-		const opcodeWidth = Math.max(0, ...content.lines.map((line) => line.opcodes?.join(' ').length ?? 0));
-		const options = content.lines.flatMap((line, index) => {
+		const opcodeWidth = Math.max(0, ...content.artifact.lines.map((line) => line.opcodes?.join(' ').length ?? 0));
+		const options = content.artifact.lines.flatMap((line, index) => {
 			if (index >= editor.document.lineCount || (line.address === undefined && !line.opcodes?.length)) {
 				return [];
 			}
@@ -381,7 +389,7 @@ export class ArtifactDecorator {
 		editor.setDecorations(binaryColumnsDecoration, options);
 	}
 
-	private decorateJumpArrows(content: ArtifactDocumentContent): void {
+	private decorateJumpArrows(content: MappedArtifact): void {
 		const editor = this.editorTracker.getArtifactEditor(this.artifactUri);
 		if (!editor) {
 			return;
@@ -391,7 +399,7 @@ export class ArtifactDecorator {
 			forward: { source: [], target: [] },
 			backward: { source: [], target: [] },
 		} as Record<JumpArrowDirection, Record<'source' | 'target', Array<{ range: Range; hoverMessage: string }>>>;
-		for (const arrow of jumpArrows(content.links, editor.document.lineCount)) {
+		for (const arrow of jumpArrows(content.artifact.links, editor.document.lineCount)) {
 			const source = arrow.sourceLine + 1;
 			const target = arrow.targetLine + 1;
 			const backward = arrow.direction === 'backward';
@@ -410,30 +418,30 @@ export class ArtifactDecorator {
 		}
 	}
 
-	private decorateSourceLineBands(content: ArtifactDocumentContent): void {
+	private decorateSourceLineBands(content: MappedArtifact): void {
 		if (
-			!artifactSupportsOption(content.kind, 'sourceLineColorBands') ||
-			!this.artifactOptions(content.kind).display.sourceLineColorBands
+			!artifactSupportsOption(content.artifact.kind, 'sourceLineColorBands') ||
+			!this.artifactOptions(content.artifact.kind).display.sourceLineColorBands
 		) {
 			return;
 		}
 
-		const asmEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
-		if (!asmEditor) {
+		const artifactEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
+		if (!artifactEditor) {
 			return;
 		}
 
-		const asmRanges = sourceLineBandDecorations.map(() => [] as Range[]);
+		const artifactRanges = sourceLineBandDecorations.map(() => [] as Range[]);
 		for (const editor of this.getAllSourceEditors()) {
 			const sourceRanges = sourceLineBandDecorations.map(() => [] as Range[]);
-			for (const [sourceLine, artifactLines] of content.sourceLineMappings.get(editor.document.uri) ?? []) {
+			for (const [sourceLine, artifactLines] of content.sources.get(editor.document.uri) ?? []) {
 				const band = sourceLineBandIndex(sourceLine, sourceLineBandDecorations.length);
 				if (sourceLine >= 0 && sourceLine < editor.document.lineCount) {
 					sourceRanges[band].push(editor.document.lineAt(sourceLine).range);
 				}
 				for (const artifactLine of artifactLines) {
-					if (artifactLine >= 0 && artifactLine < asmEditor.document.lineCount) {
-						asmRanges[band].push(asmEditor.document.lineAt(artifactLine).range);
+					if (artifactLine >= 0 && artifactLine < artifactEditor.document.lineCount) {
+						artifactRanges[band].push(artifactEditor.document.lineAt(artifactLine).range);
 					}
 				}
 			}
@@ -442,35 +450,35 @@ export class ArtifactDecorator {
 			);
 		}
 		sourceLineBandDecorations.forEach((decoration, index) =>
-			asmEditor.setDecorations(decoration, asmRanges[index]),
+			artifactEditor.setDecorations(decoration, artifactRanges[index]),
 		);
 	}
 
 	private onSrcLineSelected(
-		content: ArtifactDocumentContent,
+		content: MappedArtifact,
 		selectedEditor: TextEditor,
 		highlightOnly: boolean = false,
 	): void {
-		const asmEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
+		const artifactEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
 
-		if (asmEditor === undefined) {
+		if (artifactEditor === undefined) {
 			return;
 		}
 
 		const getSelectedLines = (srcFile: Uri, line: number) => {
-			const asmLinesRanges: Range[] = [];
-			const mapped = content.sourceLineMappings.get(srcFile)?.get(line);
+			const artifactLineRanges: Range[] = [];
+			const mapped = content.sources.get(srcFile)?.get(line);
 
 			if (mapped !== undefined) {
 				for (let line of mapped) {
-					if (line >= asmEditor.document.lineCount) {
+					if (line >= artifactEditor.document.lineCount) {
 						continue;
 					}
-					asmLinesRanges.push(asmEditor.document.lineAt(line).range);
+					artifactLineRanges.push(artifactEditor.document.lineAt(line).range);
 				}
 			}
 
-			return asmLinesRanges;
+			return artifactLineRanges;
 		};
 
 		// Highlight selected line in source editor
@@ -478,56 +486,59 @@ export class ArtifactDecorator {
 		selectedEditor.setDecorations(selectedSourceRangeDecoration, []);
 		selectedEditor.setDecorations(selectedLineDecoration, [srcLineRange]);
 
-		// Highlight associated lines in ASM editor
-		const asmLines: Range[] = getSelectedLines(selectedEditor.document.uri, selectedEditor.selection.start.line);
+		// Highlight associated lines in artifact editor
+		const artifactLines: Range[] = getSelectedLines(
+			selectedEditor.document.uri,
+			selectedEditor.selection.start.line,
+		);
 
 		for (let editor of this.getAllSourceEditors()) {
 			if (editor !== selectedEditor) {
-				asmLines.push(...getSelectedLines(editor.document.uri, editor.selection.start.line));
+				artifactLines.push(...getSelectedLines(editor.document.uri, editor.selection.start.line));
 			}
 		}
 
-		asmEditor.setDecorations(selectedLineDecoration, asmLines);
+		artifactEditor.setDecorations(selectedLineDecoration, artifactLines);
 
-		if (asmLines.length > 0 && !highlightOnly) {
+		if (artifactLines.length > 0 && !highlightOnly) {
 			// First line will be from the editor that actually had its selection changed (the editor passed to this function)
-			this.revealNavigationTarget(asmEditor, asmLines[0]);
+			this.revealNavigationTarget(artifactEditor, artifactLines[0]);
 		}
 	}
 
-	private onAsmLineSelected(
-		content: ArtifactDocumentContent,
-		asmEditor: TextEditor,
+	private onArtifactLineSelected(
+		content: MappedArtifact,
+		artifactEditor: TextEditor,
 		highlightOnly: boolean = false,
 	): void {
-		const line = asmEditor.selection.start.line;
-		if (line < 0 || line >= content.lines.length || line >= asmEditor.document.lineCount) {
+		const line = artifactEditor.selection.start.line;
+		if (line < 0 || line >= content.artifact.lines.length || line >= artifactEditor.document.lineCount) {
 			return;
 		}
-		const asmLine = content.lines[line];
+		const artifactLine = content.artifact.lines[line];
 
-		// Highlight selected line in ASM editor
-		const asmLineRange = asmEditor.document.lineAt(line).range;
-		asmEditor.setDecorations(selectedLineDecoration, [asmLineRange]);
-		asmEditor.setDecorations(selectedSourceRangeDecoration, []);
+		// Highlight selected line in artifact editor
+		const artifactLineRange = artifactEditor.document.lineAt(line).range;
+		artifactEditor.setDecorations(selectedLineDecoration, [artifactLineRange]);
+		artifactEditor.setDecorations(selectedSourceRangeDecoration, []);
 
 		// Highlight associated lines only in source editors the user already has visible.
-		if (asmLineHasSource(asmLine)) {
-			const sourceUri = Uri.file(path.normalize(asmLine.source!.file!));
-			const targetMapping = content.sourceLineMappings.get(sourceUri);
+		if (lineHasSource(artifactLine)) {
+			const sourceUri = Uri.file(path.normalize(artifactLine.source!.file!));
+			const targetMapping = content.sources.get(sourceUri);
 			const targetEditor =
 				targetMapping === undefined
 					? undefined
 					: this.getAllSourceEditors(content).find(
-							(editor) => content.sourceLineMappings.get(editor.document.uri) === targetMapping,
+							(editor) => content.sources.get(editor.document.uri) === targetMapping,
 						);
 			if (targetEditor) {
-				const srcLineIndex = asmLine.source!.line! - 1;
+				const srcLineIndex = artifactLine.source!.line! - 1;
 				if (srcLineIndex < 0 || srcLineIndex >= targetEditor.document.lineCount) {
 					return;
 				}
 
-				const preciseRange = sourceSelectionRange(targetEditor.document, asmLine);
+				const preciseRange = sourceSelectionRange(targetEditor.document, artifactLine);
 				const srcLineRange = preciseRange ?? targetEditor.document.lineAt(srcLineIndex).range;
 				for (const editor of this.getAllSourceEditors()) {
 					editor.setDecorations(selectedLineDecoration, []);
@@ -544,7 +555,7 @@ export class ArtifactDecorator {
 				this.clearSourceSelectionDecorations();
 			}
 		} else {
-			// Clear selected line decoration when the assembly editor line doesn't correspond to a source location
+			// Clear selected line decoration when the artifact editor line doesn't correspond to a source location
 			this.clearSourceSelectionDecorations();
 		}
 	}
@@ -579,37 +590,33 @@ export class ArtifactDecorator {
 		editor.revealRange(range, TextEditorRevealType.InCenterIfOutsideViewport);
 	}
 
-	private updateActiveState(content?: ArtifactDocumentContent): void {
-		const sourceUris = content?.allReferencedSrcUris;
+	private updateActiveState(content?: MappedArtifact): void {
+		const sourceUris = content?.sources;
 		if (!sourceUris) {
 			this.active = false;
 			return;
 		}
 		const editors = window.visibleTextEditors;
 
-		// Active if the assembly editor is visible and one of the associated source editors is visible
-		const hasAsmEditor = editors.some((editor) => equalUri(editor.document.uri, this.artifactUri));
+		// Active if the artifact editor is visible and one of the associated source editors is visible
+		const hasArtifactEditor = editors.some((editor) => equalUri(editor.document.uri, this.artifactUri));
 		const hasAnySourceEditor = editors.some((e) => sourceUris.has(e.document.uri));
 
-		this.active = hasAsmEditor && hasAnySourceEditor;
+		this.active = hasArtifactEditor && hasAnySourceEditor;
 	}
 
-	private decorateAnalysisAnnotations(content: ArtifactDocumentContent): void {
+	private decorateAnalysisAnnotations(content: MappedArtifact): void {
 		for (const [style, decoration] of Object.entries(annotationStyleDecorations)) {
 			this.annotationDecorations(content, style, decoration);
 		}
 	}
 
-	private annotationDecorations(
-		content: ArtifactDocumentContent,
-		style: string,
-		decoration: TextEditorDecorationType,
-	): void {
+	private annotationDecorations(content: MappedArtifact, style: string, decoration: TextEditorDecorationType): void {
 		const editor = this.editorTracker.getArtifactEditor(this.artifactUri);
 		if (!editor) {
 			return;
 		}
-		const options = content.lines.flatMap((line, index) => {
+		const options = content.artifact.lines.flatMap((line, index) => {
 			if (index >= editor.document.lineCount) {
 				return [];
 			}
@@ -645,18 +652,18 @@ export class ArtifactDecorator {
 			for (const editor of this.getAllSourceEditors()) {
 				this.clearDecorations(editor);
 			}
-			const asmEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
-			if (asmEditor) {
-				this.clearMappingDecorations(asmEditor);
+			const artifactEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
+			if (artifactEditor) {
+				this.clearMappingDecorations(artifactEditor);
 			}
 		}
 	}
 
 	private getAllSourceEditors(content = this.content): TextEditor[] {
-		return content ? this.editorTracker.getSourceEditors(content.allReferencedSrcUris) : [];
+		return content ? this.editorTracker.getSourceEditors(content.sources) : [];
 	}
 
-	private withContent<T>(action: (content: ArtifactDocumentContent) => T): T | undefined {
+	private withContent<T>(action: (content: MappedArtifact) => T): T | undefined {
 		return this.content ? action(this.content) : undefined;
 	}
 
@@ -665,7 +672,7 @@ export class ArtifactDecorator {
 			case 'compiling':
 				return 'Compiling…';
 			case 'stale':
-				return 'Assembly is stale. Refresh pending.';
+				return 'Artifact is stale. Refresh pending.';
 			case 'cancelled':
 				return 'Artifact generation was cancelled.';
 			case 'failed':
@@ -673,7 +680,7 @@ export class ArtifactDecorator {
 					? 'Compilation failed because process output was truncated.'
 					: 'Compilation failed.';
 			case 'successful':
-				return this.truncated ? 'Assembly output was truncated.' : undefined;
+				return this.truncated ? 'Artifact output was truncated.' : undefined;
 		}
 	}
 }

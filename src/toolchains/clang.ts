@@ -49,7 +49,7 @@ const artifacts = artifactCells({
 			'LLVM IR CFG',
 			'Build a graph from the compiler LLVM IR output.',
 			artifactProducer('control-flow-graph', llvmIrOutput),
-			(raw) => parseLlvmControlFlowGraphs(raw.text, raw.command.workingDirectory),
+			(raw) => parseLlvmControlFlowGraphs(raw.text, raw.command.cwd),
 		),
 		assemblyControlFlowGraphOutput,
 	]),

@@ -19,7 +19,6 @@ import {
 	artifactOptionsEqual,
 	CompilationError,
 	immutableArtifactOptions,
-	invocationDetails,
 	productionKey,
 	UnsupportedToolVersionError,
 } from '../types/index.js';
@@ -183,7 +182,7 @@ export class CompilationService {
 		};
 		const cached = this.rawArtifactCache.get(key);
 		if (cached && (await validateArtifactInputs(cached.inputs))) {
-			request.onInvocation?.(invocationDetails(cached.command));
+			request.onInvocation?.(cached.command);
 			return {
 				status: 'available',
 				artifact: await renderArtifact(cached, options, renderContext, cell.renderer, cell.listingSyntax),

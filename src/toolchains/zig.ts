@@ -86,7 +86,7 @@ export const zig: ToolchainDefinition = {
 				'LLVM IR CFG',
 				'Build a graph from Zig LLVM IR output.',
 				artifactProducer('control-flow-graph', zigLlvmIrOutput),
-				(raw) => parseLlvmControlFlowGraphs(raw.text, raw.command.workingDirectory),
+				(raw) => parseLlvmControlFlowGraphs(raw.text, raw.command.cwd),
 			),
 			assemblyControlFlowGraphOutput,
 		]),

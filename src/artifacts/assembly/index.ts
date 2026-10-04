@@ -47,13 +47,6 @@ export const assemblyArtifact = {
 	documentLanguage: 'artifact',
 	editorLanguageId: 'coglens-asm',
 	renderer: renderAssembly,
-	navigation: {
-		definitions: true,
-		sourceLocations: true,
-		links: true,
-		folds: true,
-		symbols: true,
-	},
 	metricLabels: {
 		methodCount: 'Method count',
 		codeObjectCount: 'Code object count',

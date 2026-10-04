@@ -32,7 +32,7 @@ function renderOptimizationRemarks(
 	context: ArtifactRenderContext,
 	parser: OptimizationRemarksParser,
 ): RenderedTextArtifact {
-	const remarks = parser(raw.text, raw.command.workingDirectory);
+	const remarks = parser(raw.text, raw.command.cwd);
 	const sourceFile = path.normalize(context.source.uri.fsPath);
 	const sourceLineCount = context.source.text.split(/\r\n|\n|\r/).length;
 	const mappedRemarks = remarks.filter(

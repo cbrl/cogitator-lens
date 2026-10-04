@@ -20,9 +20,9 @@ function renderDisassembly(kind: ToolchainKind, text: string) {
 		rawArtifact('binary-disassembly', text, {
 			command: {
 				executable: process.execPath,
-				arguments: [],
+				args: [],
 				environmentVariableNames: [],
-				workingDirectory: process.cwd(),
+				cwd: process.cwd(),
 			},
 		}),
 		display,
@@ -38,7 +38,7 @@ test('GNU disassembly renders addresses, bytes, links, source mappings, symbols,
 			(line) => line.address === 1 && line.opcodes?.length === 5 && line.disassembly?.includes('call'),
 		),
 	);
-	assert.ok(rendered.sourceLocations.some((location) => location.sourceLine === 7));
+	assert.ok(rendered.lines.some((line) => Boolean(line.source?.file) && line.source?.line === 7));
 	assert.ok(rendered.links.some((link) => link.targetLine >= 0));
 	assert.ok(
 		rendered.links.every((link) => link.edgeKind === undefined),
@@ -59,7 +59,7 @@ test('dumpbin output is adapted before reusing the common raw-assembly parser', 
 
 	const rendered = renderDisassembly('msvc', normalized);
 	assert.ok(rendered.lines.some((line) => line.address === 9 && line.opcodes?.length === 3));
-	assert.ok(rendered.sourceLocations.some((location) => location.sourceLine === 3));
+	assert.ok(rendered.lines.some((line) => Boolean(line.source?.file) && line.source?.line === 3));
 	assert.ok(rendered.links.some((link) => link.targetLine >= 0));
 });
 

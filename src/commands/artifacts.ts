@@ -55,7 +55,7 @@ export function register(context: vscode.ExtensionContext, deps: ArtifactCommand
 			if (snapshot) {
 				const activeEditor = vscode.window.activeTextEditor;
 				const mappedSource = activeEditor
-					? artifacts.getArtifactDocumentContent(activeEditor.document.uri)?.lines[
+					? artifacts.getRenderedArtifact(activeEditor.document.uri)?.lines[
 							activeEditor.selection.active.line
 						]?.source
 					: undefined;

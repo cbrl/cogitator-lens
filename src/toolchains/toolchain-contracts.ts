@@ -176,7 +176,7 @@ export const assemblyControlFlowGraphOutput = controlFlowGraphOutput(
 	assemblyControlFlowGraphProducer,
 	(raw, options, context) => {
 		const parsedAssembly = context.backend.parseAssembly(raw.text, options);
-		const lines = toAssemblyLines(parsedAssembly.asm, context.source.uri.toString(), raw.command.workingDirectory);
+		const lines = toAssemblyLines(parsedAssembly.asm, context.source.uri.toString(), raw.command.cwd);
 		return context.backend.parseAssemblyControlFlowGraph(lines);
 	},
 );

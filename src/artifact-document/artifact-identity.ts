@@ -8,14 +8,12 @@ export interface ArtifactDocumentIdentity {
 	readonly artifactKind: ArtifactKind;
 	readonly artifactLabel: string;
 	readonly artifactOutputId?: string;
-	readonly artifactOutputLabel?: string;
 	readonly presetId: string;
 	readonly variantId: string;
 	readonly variantLabel: string;
 	readonly toolchainId: string;
 	readonly toolchainLabel: string;
 	readonly toolchainKind: string;
-	readonly renderedIdentity: string;
 }
 
 export interface ArtifactDocumentSnapshot {

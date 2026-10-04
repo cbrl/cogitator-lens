@@ -10,7 +10,6 @@ export type {
 	ArtifactListingSyntax,
 	ArtifactDefinition,
 	ArtifactOptionDescriptor,
-	ArtifactNavigationFeatures,
 	ArtifactOptionAvailability,
 	ArtifactRenderContext,
 	ArtifactRenderer,

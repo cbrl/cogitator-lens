@@ -6,7 +6,6 @@ import type {
 	RawArtifact,
 	RenderedGraphArtifact,
 } from '../../types/index.js';
-import { invocationDetails } from '../../types/index.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import {
 	controlFlowGraphMetrics,
@@ -39,10 +38,9 @@ export function renderControlFlowGraphArtifact(
 		diagnostics,
 		durationMs: raw.durationMs,
 		generatedAt: raw.generatedAt,
-		command: invocationDetails(raw.command),
+		command: raw.command,
 		metrics: controlFlowGraphMetrics(validated.graphs),
-		truncated: raw.truncated,
-		toolOutputTruncated: raw.truncated,
+		truncated: false,
 	};
 }
 

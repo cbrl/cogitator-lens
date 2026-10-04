@@ -42,6 +42,10 @@ export class UriMap<T> {
 		return this.map.get(this.getKey(uri));
 	}
 
+	public has(uri: vscode.Uri): boolean {
+		return this.map.has(this.getKey(uri));
+	}
+
 	public delete(uri: vscode.Uri): boolean {
 		const key = this.getKey(uri);
 		this.originalUris.delete(key);
