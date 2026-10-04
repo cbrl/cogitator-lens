@@ -105,7 +105,11 @@ export function renderClangAst(
 	return { ...artifact, folds: foldedLines, symbols };
 }
 
-export function renderPythonAst(raw: RawArtifact, context: ArtifactRenderContext): RenderedTextArtifact {
+export function renderPythonAst(
+	raw: RawArtifact,
+	_options: DisplayOptions,
+	context: ArtifactRenderContext,
+): RenderedTextArtifact {
 	const textLines = splitLines(raw.text);
 	const sourceLines = context.source.text.split(/\r\n|\n|\r/);
 	const output: RenderedArtifactLine[] = textLines.map((text) => ({ text }));

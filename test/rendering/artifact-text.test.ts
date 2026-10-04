@@ -5,6 +5,7 @@ import { artifactDefinitions } from '../../src/artifacts/core/artifact-definitio
 import { defaultArtifactOptions, type RawArtifact } from '../../src/types/index.js';
 import { renderPythonBytecode } from '../../src/artifacts/python/python-bytecode-renderer.js';
 import { renderDotNetIl } from '../../src/artifacts/dotnet/dotnet-il-renderer.js';
+import { renderClangAst, renderPythonAst } from '../../src/artifacts/ast/ast-renderer.js';
 import { rawArtifact, renderContext } from '../support/artifacts.js';
 import { readFixture } from '../support/environment.js';
 
@@ -38,7 +39,7 @@ test('preprocessed source follows line markers and drops included files on reque
 
 test('Clang AST rendering removes addresses, filters system subtrees, and adds symbols', () => {
 	const source = path.resolve('/project/source.cpp');
-	const rendered = render.ast.renderer(
+	const rendered = renderClangAst(
 		rawArtifact(
 			'ast',
 			[
@@ -68,7 +69,7 @@ test('Clang AST rendering removes addresses, filters system subtrees, and adds s
 
 test('Python AST rendering maps folds, symbols, and UTF-8 offsets to editor columns', () => {
 	const source = path.resolve('/project/source.py');
-	const rendered = render.ast.renderer(
+	const rendered = renderPythonAst(
 		rawArtifact(
 			'ast',
 			[
@@ -101,7 +102,7 @@ test('Python AST rendering maps folds, symbols, and UTF-8 offsets to editor colu
 
 	// A multi-byte character before the node shifts the UTF-8 offset the compiler
 	// reports away from the editor column.
-	const unicode = render.ast.renderer(
+	const unicode = renderPythonAst(
 		rawArtifact(
 			'ast',
 			[

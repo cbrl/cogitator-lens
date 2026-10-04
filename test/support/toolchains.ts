@@ -5,18 +5,17 @@ import {
 	type ToolchainHost,
 } from '../../src/toolchains/toolchain-backend.js';
 import { toolchainDefinitions } from '../../src/toolchains/toolchain-map.js';
-import { resolveArtifactAvailability, resolveArtifactOutput } from '../../src/toolchains/toolchain-artifacts.js';
+import { resolveArtifactAvailability } from '../../src/toolchains/toolchain-artifacts.js';
 import type {
+	ArtifactImplementation,
+	ArtifactOutput,
 	ArtifactProducer,
-	ToolchainArtifactCell,
-	ToolchainArtifactOutput,
 } from '../../src/toolchains/toolchain-contracts.js';
 import {
 	defaultArtifactOptions,
 	type ArtifactKind,
 	type AuxiliaryTool,
 	type ProductionOptions,
-	type RawArtifact,
 	type ToolchainKind,
 	type ToolchainProfile,
 } from '../../src/types/index.js';
@@ -75,33 +74,27 @@ export function artifactAvailability(toolchain: ToolchainKind, artifact: Artifac
 	return resolveArtifactAvailability(toolchainProfile(toolchain), artifact).status;
 }
 
-/** The artifact cell a toolchain declares, asserted to own a producer of its own. */
-export function availableCell(
-	toolchain: ToolchainKind,
-	artifact: ArtifactKind,
-): { readonly producer: ArtifactProducer } {
-	const cell: ToolchainArtifactCell = toolchainDefinitions[toolchain].artifacts[artifact];
-	if (cell.status !== 'available' || !('producer' in cell)) {
-		throw new Error(`${toolchain} declares no ${artifact} producer.`);
+/** The single implementation that a toolchain declares for an artifact kind. */
+export function declaredImplementation(toolchain: ToolchainKind, artifact: ArtifactKind): ArtifactImplementation {
+	const support = toolchainDefinitions[toolchain].artifacts[artifact];
+	if (!support || support.outputs) {
+		throw new Error(`${toolchain} declares no single ${artifact} implementation.`);
 	}
-	return cell;
+	return support;
 }
 
-/** One named compiler output of an artifact, asserted to be selectable. */
-export function availableOutput(
-	toolchain: ToolchainKind,
-	artifact: ArtifactKind,
-	outputId: string,
-): ToolchainArtifactOutput {
-	const output = resolveArtifactOutput(toolchainProfile(toolchain), artifact, outputId);
-	if (output.status !== 'available' || output.id === undefined) {
+/** One named output that a toolchain declares for an artifact kind. */
+export function declaredOutput(toolchain: ToolchainKind, artifact: ArtifactKind, outputId: string): ArtifactOutput {
+	const output = toolchainDefinitions[toolchain].artifacts[artifact]?.outputs?.find(
+		(candidate) => candidate.id === outputId,
+	);
+	if (!output) {
 		throw new Error(`${toolchain} declares no ${outputId} output for ${artifact}.`);
 	}
-	return output as ToolchainArtifactOutput;
+	return output;
 }
 
 export interface RecordedProduction {
-	readonly kind: ArtifactKind;
 	readonly spec: ArtifactOutputSpec;
 	readonly output: ArtifactOutputSpec['output'];
 	readonly outputFilename: string | undefined;
@@ -131,9 +124,8 @@ export async function recordProduction(
 	let viaAssembly = false;
 	const backend = {
 		profile: options.profileKind ? toolchainProfile(options.profileKind) : undefined,
-		produceArtifact: async (kind: ArtifactKind, _source: unknown, _options: unknown, spec: ArtifactOutputSpec) => {
+		produceArtifact: async (_source: unknown, _options: unknown, spec: ArtifactOutputSpec) => {
 			recorded = {
-				kind,
 				spec,
 				output: spec.output,
 				outputFilename: spec.output === 'stdout' || spec.output === 'stderr' ? undefined : spec.output.filename,
@@ -143,7 +135,7 @@ export async function recordProduction(
 					options.providerArguments ?? [],
 				),
 			};
-			return rawArtifact(kind, '');
+			return rawArtifact('assembly', '');
 		},
 		produceAssembly: async () => {
 			viaAssembly = true;
@@ -151,7 +143,7 @@ export async function recordProduction(
 		},
 	};
 
-	const raw = await producer(
+	await producer(
 		backend as never,
 		{} as never,
 		{ productionOptions: options.productionOptions ?? defaultArtifactOptions.production },
@@ -162,7 +154,6 @@ export async function recordProduction(
 			throw new Error('The producer requested neither an artifact nor assembly.');
 		}
 		return {
-			kind: raw.kind,
 			spec: { output: 'stdout', arguments: () => [] },
 			output: 'stdout',
 			outputFilename: undefined,

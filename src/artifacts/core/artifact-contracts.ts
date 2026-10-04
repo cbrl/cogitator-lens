@@ -1,6 +1,5 @@
 import type { Uri } from 'vscode';
 import type { ToolchainBackend } from '../../toolchains/toolchain-backend.js';
-import type { ToolchainArtifactOutput } from '../../toolchains/toolchain-contracts.js';
 import type { ArtifactOptions, DisplayOptions, RawArtifact, RenderedArtifact } from '../../types/index.js';
 import type { ArtifactEditorLanguageId } from './editor-languages.js';
 
@@ -13,8 +12,6 @@ export interface ArtifactOptionDescriptor {
 
 export interface ArtifactRenderContext {
 	readonly backend: ToolchainBackend;
-	/** The resolved compiler output selected for an output-backed artifact. */
-	readonly artifactOutput?: ToolchainArtifactOutput;
 	readonly source: {
 		readonly uri: Uri;
 		readonly text: string;
@@ -52,8 +49,9 @@ export interface ArtifactDefinition {
 	/** Language contribution used for artifact-owned text document extensions. */
 	readonly editorLanguageId?: ArtifactEditorLanguageId;
 	readonly options: readonly ArtifactOptionDescriptor[];
-	readonly renderer: ArtifactRenderer;
-	/** Default listing syntax; a toolchain artifact cell may override it. */
+	/** Default renderer. Omit it when each toolchain implementation must declare its own. */
+	readonly renderer?: ArtifactRenderer;
+	/** Default listing syntax; a toolchain implementation may override it. */
 	readonly listingSyntax?: ArtifactListingSyntax;
 	readonly metricLabels?: Readonly<Record<string, string>>;
 }

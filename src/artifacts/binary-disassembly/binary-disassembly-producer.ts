@@ -1,17 +1,33 @@
-import type { CancellationToken, Uri } from 'vscode';
-import type { CompileOptions, RawArtifact } from '../../types/index.js';
-import type { BinaryDisassembler, ToolchainBackend } from '../../toolchains/toolchain-backend.js';
+import type { ArtifactProducer } from '../../toolchains/toolchain-contracts.js';
 
-export function binaryDisassemblyProducer(
-	disassembler: BinaryDisassembler,
-): (
-	backend: ToolchainBackend,
-	source: Uri,
-	options: CompileOptions,
-	cancellationToken: CancellationToken,
-) => Promise<RawArtifact> {
-	return (backend, source, options, cancellationToken) =>
-		backend.produceBinaryDisassembly(source, options, disassembler, cancellationToken);
+export interface BinaryDisassembler {
+	/** The key of the auxiliary tool in the toolchain profile. */
+	readonly tool: string;
+	readonly arguments: (objectFile: string) => readonly string[];
+	readonly normalizeOutput?: (output: string) => string;
+}
+
+/** Compiles the source to an object file, then disassembles it with the auxiliary tool. */
+export function binaryDisassemblyProducer(disassembler: BinaryDisassembler): ArtifactProducer {
+	return (backend, source, options, cancellationToken) => {
+		const { outputArguments, objectFilename } = backend.definition;
+		if (!outputArguments || !objectFilename) {
+			throw new Error(`${backend.profile.displayName} has no object-file production capability.`);
+		}
+		return backend.produceWithTool(
+			source,
+			options,
+			{
+				workspaceFiles: { object: objectFilename },
+				compilerArguments: (files, providerArguments) =>
+					outputArguments('object', files.object, providerArguments),
+				tool: disassembler.tool,
+				toolArguments: (files) => disassembler.arguments(files.object),
+				normalizeOutput: disassembler.normalizeOutput,
+			},
+			cancellationToken,
+		);
+	};
 }
 
 export const gnuObjdump: BinaryDisassembler = Object.freeze({

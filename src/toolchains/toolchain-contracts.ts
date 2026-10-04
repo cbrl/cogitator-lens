@@ -1,22 +1,21 @@
 import fs from 'fs';
 import path from 'path';
 import type { CancellationToken, Uri } from 'vscode';
-import type {
-	ArtifactKind,
-	ArtifactListingSyntax,
-	ArtifactRenderContext,
-} from '../artifacts/core/artifact-contracts.js';
-import { artifactDefinitions, supportedArtifactKinds } from '../artifacts/core/artifact-definitions.js';
-import { assemblyControlFlowGraphProducer } from '../artifacts/core/compiler-output-producer.js';
-import type { GraphParseResult } from '../artifacts/control-flow-graph/control-flow-graph-model.js';
+import type { ArtifactKind, ArtifactListingSyntax, ArtifactRenderer } from '../artifacts/core/artifact-contracts.js';
+import {
+	binaryDisassemblyProducer,
+	type BinaryDisassembler,
+} from '../artifacts/binary-disassembly/binary-disassembly-producer.js';
+import {
+	controlFlowGraphRenderer,
+	type GraphParser,
+} from '../artifacts/control-flow-graph/control-flow-graph-renderer.js';
 import { toAssemblyLines } from '../artifacts/control-flow-graph/parsers/assembly-line.js';
 import type {
 	CompileOptions,
 	AuxiliaryTool,
-	DisplayOptions,
 	IntelSyntaxSupport,
-	RawArtifact,
-	RenderedArtifact,
+	ProducedArtifact,
 	ToolchainProfile,
 } from '../types/index.js';
 import type { AsmParser } from '../vendor/lib/parsers/asm-parser.js';
@@ -24,64 +23,46 @@ import type { AssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/
 import type { DependencyCollectionSpec, ToolchainBackend } from './toolchain-backend.js';
 import type { DiagnosticParser } from '../diagnostics.js';
 
-export const disassemblerToolName = 'disassembler';
-
+/**
+ * Runs a toolchain and returns its raw output. The compilation service sets
+ * the artifact kind on the result, so one producer can serve several kinds.
+ */
 export type ArtifactProducer = (
 	backend: ToolchainBackend,
 	source: Uri,
 	options: CompileOptions,
 	cancellationToken: CancellationToken,
-) => Promise<RawArtifact>;
+) => Promise<ProducedArtifact>;
 
-export interface ToolchainArtifactImplementation {
-	readonly producer: ArtifactProducer;
-	/** Overrides the artifact kind's default listing syntax for this toolchain's output. */
-	readonly listingSyntax?: ArtifactListingSyntax;
-	/** Optional toolchain-specific rendering action; otherwise the artifact default is used. */
-	readonly renderer?: (raw: RawArtifact, options: DisplayOptions, context: ArtifactRenderContext) => RenderedArtifact;
-	readonly requiredTool?: {
-		readonly name: string;
-		readonly label: string;
-	};
-	readonly requiredTools?: readonly {
-		readonly name: string;
-		readonly label: string;
-	}[];
+/** An auxiliary tool that must be detected or configured before an artifact can be produced. */
+export interface RequiredTool {
+	/** The key of the tool in the toolchain profile. */
+	readonly name: string;
+	readonly label: string;
 }
 
-export interface ToolchainArtifactOutput extends ToolchainArtifactImplementation {
+/** How a toolchain produces and renders one artifact kind, or one selectable output of it. */
+export interface ArtifactImplementation {
+	readonly producer: ArtifactProducer;
+	/** Overrides the default renderer of the artifact kind. */
+	readonly renderer?: ArtifactRenderer;
+	/** Overrides the default listing syntax of the artifact kind. */
+	readonly listingSyntax?: ArtifactListingSyntax;
+	readonly requiredTools?: readonly RequiredTool[];
+}
+
+/** One selectable output of an artifact kind, such as the LLVM IR or assembly source of a graph. */
+export interface ArtifactOutput extends ArtifactImplementation {
 	/** Stable identifier persisted in artifact document URIs and production cache keys. */
 	readonly id: string;
 	readonly label: string;
 	readonly description: string;
-	readonly parseGraphs?: (
-		raw: RawArtifact,
-		options: DisplayOptions,
-		context: ArtifactRenderContext,
-	) => GraphParseResult;
 }
 
-export type ResolvedToolchainArtifactCell =
-	| (ToolchainArtifactImplementation & { readonly status: 'available'; readonly id?: never })
-	| (ToolchainArtifactOutput & { readonly status: 'available' })
-	| {
-			readonly status: 'unavailable' | 'unsupported';
-			readonly explanation: string;
-	  };
-
-export type ToolchainArtifactCell =
-	| (ToolchainArtifactImplementation & {
-			readonly status: 'available';
-			readonly outputs?: never;
-	  })
-	| {
-			readonly status: 'available';
-			readonly outputs: readonly [ToolchainArtifactOutput, ...ToolchainArtifactOutput[]];
-	  }
-	| {
-			readonly status: 'unavailable' | 'unsupported';
-			readonly explanation: string;
-	  };
+/** A toolchain supports an artifact kind with one implementation, or with a list of selectable outputs. */
+export type ArtifactSupport =
+	| (ArtifactImplementation & { readonly outputs?: never })
+	| { readonly outputs: readonly [ArtifactOutput, ...ArtifactOutput[]] };
 
 export interface ToolchainDefinition {
 	readonly executablePattern: RegExp;
@@ -123,7 +104,8 @@ export interface ToolchainDefinition {
 	readonly dependencyCollection?: DependencyCollectionSpec;
 	/** Omit when the toolchain has no auxiliary tools. */
 	readonly discoverTools?: (executable: string) => Readonly<Record<string, AuxiliaryTool>>;
-	readonly artifacts: Readonly<Record<ArtifactKind, ToolchainArtifactCell>>;
+	/** The artifact kinds this toolchain supports. A missing kind is unsupported. */
+	readonly artifacts: Readonly<Partial<Record<ArtifactKind, ArtifactSupport>>>;
 }
 
 /** Places the first owned argument (a subcommand) before the provider arguments. */
@@ -134,31 +116,17 @@ export const subcommandFirst: NonNullable<ToolchainDefinition['assembleArguments
 	sourcePath,
 ];
 
-export const assemblyCell: ToolchainArtifactCell = {
-	status: 'available',
-	producer: (backend, source, options, cancellationToken) =>
-		backend.produceAssembly(source, options, cancellationToken),
-};
+/** Produces the compiler's assembly listing with the toolchain's output arguments. */
+export const assemblyProducer: ArtifactProducer = (backend, source, options, cancellationToken) =>
+	backend.produceAssembly(source, options, cancellationToken);
 
-/** Creates a binary-disassembly cell that requires the named disassembler. */
-export const binaryCell = (label: string, producer: ArtifactProducer): ToolchainArtifactCell => ({
-	status: 'available',
-	producer,
-	requiredTool: {
-		name: disassemblerToolName,
-		label,
-	},
+export const compilerAssembly: ArtifactImplementation = { producer: assemblyProducer };
+
+/** Disassembles a compiled object file with the named auxiliary disassembler. */
+export const binaryDisassembly = (label: string, disassembler: BinaryDisassembler): ArtifactImplementation => ({
+	producer: binaryDisassemblyProducer(disassembler),
+	requiredTools: [{ name: disassembler.tool, label }],
 });
-
-/** Creates a cell whose artifact flavor must be selected from a non-empty output list. */
-export function outputArtifactCell(
-	outputs: readonly [ToolchainArtifactOutput, ...ToolchainArtifactOutput[]],
-): ToolchainArtifactCell {
-	return Object.freeze({
-		status: 'available',
-		outputs: Object.freeze([...outputs]) as readonly [ToolchainArtifactOutput, ...ToolchainArtifactOutput[]],
-	});
-}
 
 /** Describes one selectable CFG source and the parser that turns it into graphs. */
 export const controlFlowGraphOutput = (
@@ -166,37 +134,20 @@ export const controlFlowGraphOutput = (
 	label: string,
 	description: string,
 	producer: ArtifactProducer,
-	parseGraphs: NonNullable<ToolchainArtifactOutput['parseGraphs']>,
-): ToolchainArtifactOutput => Object.freeze({ id, label, description, producer, parseGraphs });
+	parseGraphs: GraphParser,
+): ArtifactOutput => ({ id, label, description, producer, renderer: controlFlowGraphRenderer(parseGraphs) });
 
 export const assemblyControlFlowGraphOutput = controlFlowGraphOutput(
 	'assembly',
 	'Assembly CFG',
 	'Build a machine-level graph from the compiler assembly listing.',
-	assemblyControlFlowGraphProducer,
+	assemblyProducer,
 	(raw, options, context) => {
 		const parsedAssembly = context.backend.parseAssembly(raw.text, options);
 		const lines = toAssemblyLines(parsedAssembly.asm, context.source.uri.toString(), raw.command.cwd);
 		return context.backend.parseAssemblyControlFlowGraph(lines);
 	},
 );
-
-/** Creates the standard unsupported cell for a toolchain with no producer for a kind. */
-export function unsupportedCell(kind: ArtifactKind): ToolchainArtifactCell {
-	return {
-		status: 'unsupported',
-		explanation: `This toolchain has no ${artifactDefinitions[kind].label.toLowerCase()} producer.`,
-	};
-}
-
-/** Completes a toolchain's cell table by marking every unoverridden artifact kind unsupported. */
-export function artifactCells(
-	overrides: Partial<Record<ArtifactKind, ToolchainArtifactCell>>,
-): Readonly<Record<ArtifactKind, ToolchainArtifactCell>> {
-	return Object.freeze(
-		Object.fromEntries(supportedArtifactKinds.map((kind) => [kind, overrides[kind] ?? unsupportedCell(kind)])),
-	) as Readonly<Record<ArtifactKind, ToolchainArtifactCell>>;
-}
 
 /** Returns a path only when it currently exists on disk. */
 export const existingFile = (candidate: string): string | undefined =>

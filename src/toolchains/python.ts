@@ -9,12 +9,7 @@ import {
 	renderPythonStackAnalysis,
 } from '../artifacts/stack-analysis/python-stack-analysis.js';
 import { parsePythonControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/python-cfg-parser.js';
-import {
-	artifactCells,
-	controlFlowGraphOutput,
-	outputArtifactCell,
-	type ToolchainDefinition,
-} from './toolchain-contracts.js';
+import { controlFlowGraphOutput, type ToolchainDefinition } from './toolchain-contracts.js';
 import { parsePythonDiagnostics } from './python/diagnostics.js';
 
 /** Removes interpreter mode switches and the source path owned by Python artifact production. */
@@ -46,31 +41,30 @@ export const python: ToolchainDefinition = {
 	parseDiagnostics: parsePythonDiagnostics,
 	languageIdentifiers: Object.freeze(['python']),
 	stripOwnedArguments: stripPythonManagedArguments,
-	artifacts: artifactCells({
+	artifacts: {
 		assembly: {
-			status: 'available',
 			producer: pythonBytecodeProducer,
 			renderer: renderPythonBytecode,
 			listingSyntax: 'python-bytecode',
 		},
 		ast: {
-			status: 'available',
 			producer: pythonAstProducer,
-			renderer: (raw, _options, context) => renderPythonAst(raw, context),
+			renderer: renderPythonAst,
 		},
 		'stack-analysis': {
-			status: 'available',
 			producer: pythonStackAnalysisProducer,
 			renderer: renderPythonStackAnalysis,
 		},
-		'control-flow-graph': outputArtifactCell([
-			controlFlowGraphOutput(
-				'python-bytecode',
-				'Python bytecode CFG',
-				'Build a graph from recursively inspected Python bytecode.',
-				pythonControlFlowGraphProducer,
-				(raw) => parsePythonControlFlowGraphs(raw.text, raw.command.cwd),
-			),
-		]),
-	}),
+		'control-flow-graph': {
+			outputs: [
+				controlFlowGraphOutput(
+					'python-bytecode',
+					'Python bytecode CFG',
+					'Build a graph from recursively inspected Python bytecode.',
+					pythonControlFlowGraphProducer,
+					(raw) => parsePythonControlFlowGraphs(raw.text, raw.command.cwd),
+				),
+			],
+		},
+	},
 };

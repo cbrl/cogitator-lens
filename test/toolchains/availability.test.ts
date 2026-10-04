@@ -6,7 +6,7 @@ import {
 	getArtifactOutputChoices,
 	resolveArtifactAvailability,
 	resolveArtifactOptionAvailability,
-	resolveArtifactOutput,
+	resolveArtifactImplementation,
 } from '../../src/toolchains/toolchain-artifacts.js';
 import type { ToolchainDefinition } from '../../src/toolchains/toolchain-contracts.js';
 import type { ArtifactKind, ToolchainKind } from '../../src/types/index.js';
@@ -57,17 +57,18 @@ const controlFlowOutputs: Readonly<Partial<Record<ToolchainKind, readonly string
 	nvcc: [],
 };
 
-test('every toolchain declares a cell for every artifact kind and implements at least one', () => {
+test('every toolchain implements at least one known artifact kind', () => {
 	assert.ok(supportedArtifactKinds.length > 0);
 	assert.deepEqual([...supportedArtifactKinds].sort(), Object.keys(matrix).sort());
 	for (const kind of supportedToolchainKinds) {
 		const definition = toolchainDefinitions[kind];
-		assert.deepEqual(Object.keys(definition.artifacts), supportedArtifactKinds);
-		assert.ok(definition.languageIdentifiers.length > 0, `${kind} claims no language`);
+		const declared = Object.keys(definition.artifacts);
+		assert.ok(declared.length > 0, `${kind} implements no artifact`);
 		assert.ok(
-			Object.values(definition.artifacts).some((cell) => cell.status === 'available'),
-			`${kind} implements no artifact`,
+			declared.every((artifact) => supportedArtifactKinds.includes(artifact as never)),
+			`${kind} declares an unknown artifact kind`,
 		);
+		assert.ok(definition.languageIdentifiers.length > 0, `${kind} claims no language`);
 	}
 });
 
@@ -122,21 +123,21 @@ test('control-flow graph outputs are ordered per toolchain and own compatible pa
 		);
 	}
 	// A graph artifact must be asked for by output; an unknown output is refused.
-	assert.equal(resolveArtifactOutput(toolchainProfile('rust'), 'control-flow-graph').status, 'unsupported');
+	assert.equal(resolveArtifactImplementation(toolchainProfile('rust'), 'control-flow-graph').status, 'unsupported');
 	assert.equal(
-		resolveArtifactOutput(toolchainProfile('rust'), 'control-flow-graph', 'unknown').status,
+		resolveArtifactImplementation(toolchainProfile('rust'), 'control-flow-graph', 'unknown').status,
 		'unsupported',
 	);
 
 	for (const kind of supportedToolchainKinds) {
 		const definition: ToolchainDefinition = toolchainDefinitions[kind];
-		const cell = definition.artifacts['control-flow-graph'];
-		if (cell.status !== 'available') {
+		const support = definition.artifacts['control-flow-graph'];
+		if (!support) {
 			continue;
 		}
-		assert.ok(cell.outputs, `${kind} exposes no control-flow outputs`);
-		for (const output of cell.outputs) {
-			assert.equal(typeof output.parseGraphs, 'function', `${kind}/${output.id} owns no parser`);
+		assert.ok(support.outputs, `${kind} exposes no control-flow outputs`);
+		for (const output of support.outputs) {
+			assert.equal(typeof output.renderer, 'function', `${kind}/${output.id} owns no graph renderer`);
 			if (output.id === 'assembly') {
 				assert.equal(typeof definition.createCfgParser, 'function', `${kind} owns no assembly CFG parser`);
 			}

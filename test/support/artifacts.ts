@@ -6,11 +6,13 @@ import type {
 	ArtifactRenderContext,
 	RawArtifact,
 	RenderedArtifactLine,
+	RenderedGraphArtifact,
 	RenderedTextArtifact,
 	ToolchainKind,
 } from '../../src/types/index.js';
+import { defaultArtifactOptions } from '../../src/types/index.js';
+import type { ArtifactImplementation } from '../../src/toolchains/toolchain-contracts.js';
 import { artifactDefinitions } from '../../src/artifacts/core/artifact-definitions.js';
-import type { ToolchainArtifactOutput } from '../../src/toolchains/toolchain-contracts.js';
 import { sourceUri, toolchainBackend } from './toolchains.js';
 
 /** Tool output as the compilation layer hands it to a renderer. */
@@ -34,17 +36,15 @@ export function rawArtifact(kind: ArtifactKind, text: string, overrides: Partial
 }
 
 /**
- * The context a renderer reads: the toolchain that produced the artifact, the
- * selected compiler output, and the source the artifact is mapped back onto.
+ * The context a renderer reads: the toolchain that produced the artifact and
+ * the source the artifact is mapped back onto.
  */
 export function renderContext(
 	toolchain: ToolchainKind | ToolchainBackend,
 	source: { readonly file?: string; readonly text?: string } = {},
-	artifactOutput?: ToolchainArtifactOutput,
 ): ArtifactRenderContext {
 	return {
 		backend: typeof toolchain === 'string' ? toolchainBackend(toolchain) : toolchain,
-		...(artifactOutput ? { artifactOutput } : {}),
 		source: {
 			uri: sourceUri(source.file ?? path.resolve('/project/source.cpp')),
 			text: source.text ?? '',
@@ -73,4 +73,17 @@ export function textArtifact(
 		folds: [],
 		symbols: [],
 	};
+}
+
+/** Renders raw output with the renderer of a control-flow-graph output and expects graphs. */
+export async function renderGraphs(
+	output: ArtifactImplementation,
+	raw: RawArtifact,
+	context: ArtifactRenderContext,
+): Promise<RenderedGraphArtifact> {
+	const rendered = await output.renderer?.(raw, defaultArtifactOptions.display, context);
+	if (rendered?.presentation !== 'graph') {
+		throw new Error('The output did not render a graph.');
+	}
+	return rendered;
 }

@@ -9,32 +9,39 @@ function renderer(marker: string): ArtifactRenderer {
 	return (raw) => textArtifact(raw.kind, [{ text: marker } as RenderedArtifactLine]);
 }
 
-test('artifact rendering prefers the selected output, then the backend, then the kind default', async () => {
+function firstLine(rendered: Awaited<ReturnType<typeof renderArtifact>>): string | undefined {
+	return rendered.presentation === 'text' ? rendered.lines[0]?.text : undefined;
+}
+
+test('artifact rendering prefers the implementation renderer over the kind default', async () => {
 	const raw = rawArtifact('preprocessed-source', 'int value;');
 	const context = renderContext('gcc');
-	const backendRenderer = renderer('backend');
-	const backend = {
-		...context.backend,
-		getArtifactRenderer: () => backendRenderer,
-	} as unknown as typeof context.backend;
-	const overriddenContext = { ...context, backend };
 
-	const selected = await renderArtifact(raw, defaultArtifactOptions, overriddenContext, renderer('output'));
-	assert.equal(selected.presentation === 'text' ? selected.lines[0].text : undefined, 'output');
-	const toolchain = await renderArtifact(raw, defaultArtifactOptions, overriddenContext);
-	assert.equal(toolchain.presentation === 'text' ? toolchain.lines[0].text : undefined, 'backend');
-	const fallback = await renderArtifact(raw, defaultArtifactOptions, context);
-	assert.equal(fallback.presentation, 'text');
+	const overridden = await renderArtifact(
+		raw,
+		{ renderer: renderer('implementation') },
+		defaultArtifactOptions,
+		context,
+	);
+	assert.equal(firstLine(overridden), 'implementation');
+	const fallback = await renderArtifact(raw, {}, defaultArtifactOptions, context);
+	assert.equal(firstLine(fallback), 'int value;');
 });
 
-test('artifact rendering prefers a cell listing syntax over the kind default', async () => {
+test('artifact rendering requires a renderer when the kind has no default', async () => {
+	await assert.rejects(renderArtifact(rawArtifact('ast', ''), {}, defaultArtifactOptions, renderContext('gcc')));
+});
+
+test('artifact rendering prefers an implementation listing syntax over the kind default', async () => {
 	const raw = rawArtifact('assembly', 'nop');
-	const rendered = await renderArtifact(
+	const context = renderContext('gcc');
+	const overridden = await renderArtifact(
 		raw,
+		{ renderer: renderer('nop'), listingSyntax: 'python-bytecode' },
 		defaultArtifactOptions,
-		renderContext('gcc'),
-		renderer('nop'),
-		'python-bytecode',
+		context,
 	);
-	assert.equal(rendered.presentation === 'text' ? rendered.listingSyntax : undefined, 'python-bytecode');
+	assert.equal(overridden.presentation === 'text' ? overridden.listingSyntax : undefined, 'python-bytecode');
+	const fallback = await renderArtifact(raw, { renderer: renderer('nop') }, defaultArtifactOptions, context);
+	assert.equal(fallback.presentation === 'text' ? fallback.listingSyntax : undefined, 'native-assembly');
 });

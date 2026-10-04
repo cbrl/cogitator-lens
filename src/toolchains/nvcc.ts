@@ -1,13 +1,11 @@
 import path from 'node:path';
-import type { BinaryDisassembler } from './toolchain-backend.js';
+import type { BinaryDisassembler } from '../artifacts/binary-disassembly/binary-disassembly-producer.js';
 import { noopPropertyGetter } from '../vendor/compiler-props.js';
 import { PTXAsmParser } from '../vendor/lib/parsers/asm-parser-ptx.js';
 import { SassAsmParser } from '../vendor/lib/parsers/asm-parser-sass.js';
-import { binaryDisassemblyProducer } from '../artifacts/binary-disassembly/binary-disassembly-producer.js';
 import {
-	artifactCells,
-	assemblyCell,
-	binaryCell,
+	compilerAssembly,
+	binaryDisassembly,
 	toolDiscoverer,
 	type ToolchainDefinition,
 } from './toolchain-contracts.js';
@@ -71,9 +69,9 @@ export const nvcc: ToolchainDefinition = {
 	createBinaryParser: () => new SassAsmParser(noopPropertyGetter),
 	...(process.platform === 'win32' ? { prepareEnvironment: captureWindowsEnvironment } : {}),
 	discoverTools: toolDiscoverer({ disassembler: 'nvdisasm' }),
-	artifacts: artifactCells({
-		assembly: assemblyCell,
-		'binary-disassembly': binaryCell('nvdisasm', binaryDisassemblyProducer(nvdisasm)),
-		'preprocessed-source': { status: 'available', producer: gnuPreprocessedSourceProducer },
-	}),
+	artifacts: {
+		assembly: compilerAssembly,
+		'binary-disassembly': binaryDisassembly('nvdisasm', nvdisasm),
+		'preprocessed-source': { producer: gnuPreprocessedSourceProducer },
+	},
 };

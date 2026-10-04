@@ -4,9 +4,7 @@ import { noopPropertyGetter } from '../vendor/compiler-props.js';
 import { GoAsmParser } from '../vendor/lib/parsers/asm-parser-go.js';
 import { parseGoSsaControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/go-ssa-cfg-parser.js';
 import {
-	artifactCells,
 	controlFlowGraphOutput,
-	outputArtifactCell,
 	subcommandFirst,
 	type ArtifactProducer,
 	type ToolchainDefinition,
@@ -65,7 +63,6 @@ export function stripGoManagedArguments(
 
 export const goAssemblyProducer: ArtifactProducer = (backend, source, options, cancellationToken) =>
 	backend.produceArtifact(
-		'assembly',
 		source,
 		options,
 		{
@@ -85,7 +82,6 @@ export const goSsaControlFlowGraphProducer: ArtifactProducer = async (backend, s
 		);
 	}
 	return backend.produceArtifact(
-		'control-flow-graph',
 		source,
 		{
 			...options,
@@ -138,16 +134,18 @@ export const go: ToolchainDefinition = {
 	stripOwnedArguments: stripGoManagedArguments,
 	assembleArguments: subcommandFirst,
 	createParser: () => new GoAsmParser(noopPropertyGetter),
-	artifacts: artifactCells({
-		assembly: { status: 'available', producer: goAssemblyProducer },
-		'control-flow-graph': outputArtifactCell([
-			controlFlowGraphOutput(
-				'go-ssa',
-				'Go SSA CFG',
-				'Build a source-level graph from the final GOSSAFUNC SSA snapshot.',
-				goSsaControlFlowGraphProducer,
-				(raw, _options, context) => parseGoSsaControlFlowGraphs(raw.text, context.source.uri.toString()),
-			),
-		]),
-	}),
+	artifacts: {
+		assembly: { producer: goAssemblyProducer },
+		'control-flow-graph': {
+			outputs: [
+				controlFlowGraphOutput(
+					'go-ssa',
+					'Go SSA CFG',
+					'Build a source-level graph from the final GOSSAFUNC SSA snapshot.',
+					goSsaControlFlowGraphProducer,
+					(raw, _options, context) => parseGoSsaControlFlowGraphs(raw.text, context.source.uri.toString()),
+				),
+			],
+		},
+	},
 };

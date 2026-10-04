@@ -1,14 +1,12 @@
 import path from 'node:path';
-import { artifactProducer } from '../artifacts/core/compiler-output-producer.js';
+import { outputProducer } from '../artifacts/core/compiler-output-producer.js';
 import { parseLlvmControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/llvm-ir-cfg-parser.js';
 import { ClangAssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/assembly-dialects.js';
 import { InstructionSetInfo } from '../artifacts/control-flow-graph/parsers/instruction-sets.js';
 import {
-	artifactCells,
-	assemblyCell,
+	compilerAssembly,
 	assemblyControlFlowGraphOutput,
 	controlFlowGraphOutput,
-	outputArtifactCell,
 	subcommandFirst,
 	toolDiscoverer,
 	type ToolchainDefinition,
@@ -77,18 +75,20 @@ export const zig: ToolchainDefinition = {
 	createParser: defaultAsmParser,
 	createCfgParser: () => new ClangAssemblyCfgParser(new InstructionSetInfo()),
 	discoverTools: toolDiscoverer({ demangler: 'llvm-cxxfilt', disassembler: 'llvm-objdump' }),
-	artifacts: artifactCells({
-		assembly: assemblyCell,
-		'llvm-ir': { status: 'available', producer: artifactProducer('llvm-ir', zigLlvmIrOutput) },
-		'control-flow-graph': outputArtifactCell([
-			controlFlowGraphOutput(
-				'llvm-ir',
-				'LLVM IR CFG',
-				'Build a graph from Zig LLVM IR output.',
-				artifactProducer('control-flow-graph', zigLlvmIrOutput),
-				(raw) => parseLlvmControlFlowGraphs(raw.text, raw.command.cwd),
-			),
-			assemblyControlFlowGraphOutput,
-		]),
-	}),
+	artifacts: {
+		assembly: compilerAssembly,
+		'llvm-ir': { producer: outputProducer(zigLlvmIrOutput) },
+		'control-flow-graph': {
+			outputs: [
+				controlFlowGraphOutput(
+					'llvm-ir',
+					'LLVM IR CFG',
+					'Build a graph from Zig LLVM IR output.',
+					outputProducer(zigLlvmIrOutput),
+					(raw) => parseLlvmControlFlowGraphs(raw.text, raw.command.cwd),
+				),
+				assemblyControlFlowGraphOutput,
+			],
+		},
+	},
 };

@@ -1,5 +1,5 @@
 import { parseMakeDepfile } from '../compilation/artifact-inputs.js';
-import { artifactProducer } from '../artifacts/core/compiler-output-producer.js';
+import { outputProducer } from '../artifacts/core/compiler-output-producer.js';
 import { parseRustMirControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/rust-mir-cfg-parser.js';
 import { parseLlvmControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/llvm-ir-cfg-parser.js';
 import { ClangAssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/assembly-dialects.js';
@@ -7,11 +7,9 @@ import { InstructionSetInfo } from '../artifacts/control-flow-graph/parsers/inst
 import { hasOption } from '../utils.js';
 import type { ArtifactOutputSpec, DependencyCollectionSpec } from './toolchain-backend.js';
 import {
-	artifactCells,
-	assemblyCell,
+	compilerAssembly,
 	assemblyControlFlowGraphOutput,
 	controlFlowGraphOutput,
-	outputArtifactCell,
 	toolDiscoverer,
 	type ToolchainDefinition,
 } from './toolchain-contracts.js';
@@ -121,26 +119,28 @@ export const rust: ToolchainDefinition = {
 	createParser: defaultAsmParser,
 	createCfgParser: () => new ClangAssemblyCfgParser(new InstructionSetInfo()),
 	discoverTools: toolDiscoverer({ demangler: 'rustfilt' }),
-	artifacts: artifactCells({
-		assembly: assemblyCell,
-		'llvm-ir': { status: 'available', producer: artifactProducer('llvm-ir', rustLlvmIrOutput) },
-		'rust-mir': { status: 'available', producer: artifactProducer('rust-mir', rustMirOutput) },
-		'control-flow-graph': outputArtifactCell([
-			controlFlowGraphOutput(
-				'rust-mir',
-				'Rust MIR CFG',
-				'Build a source-level graph from rustc MIR output.',
-				artifactProducer('control-flow-graph', rustMirOutput),
-				(raw) => parseRustMirControlFlowGraphs(raw.text, raw.command.cwd),
-			),
-			controlFlowGraphOutput(
-				'llvm-ir',
-				'LLVM IR CFG',
-				'Build a graph from rustc LLVM IR output.',
-				artifactProducer('control-flow-graph', rustLlvmIrOutput),
-				(raw) => parseLlvmControlFlowGraphs(raw.text, raw.command.cwd),
-			),
-			assemblyControlFlowGraphOutput,
-		]),
-	}),
+	artifacts: {
+		assembly: compilerAssembly,
+		'llvm-ir': { producer: outputProducer(rustLlvmIrOutput) },
+		'rust-mir': { producer: outputProducer(rustMirOutput) },
+		'control-flow-graph': {
+			outputs: [
+				controlFlowGraphOutput(
+					'rust-mir',
+					'Rust MIR CFG',
+					'Build a source-level graph from rustc MIR output.',
+					outputProducer(rustMirOutput),
+					(raw) => parseRustMirControlFlowGraphs(raw.text, raw.command.cwd),
+				),
+				controlFlowGraphOutput(
+					'llvm-ir',
+					'LLVM IR CFG',
+					'Build a graph from rustc LLVM IR output.',
+					outputProducer(rustLlvmIrOutput),
+					(raw) => parseLlvmControlFlowGraphs(raw.text, raw.command.cwd),
+				),
+				assemblyControlFlowGraphOutput,
+			],
+		},
+	},
 };

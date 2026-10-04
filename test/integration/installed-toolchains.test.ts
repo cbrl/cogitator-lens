@@ -13,8 +13,8 @@ import path from 'node:path';
 import test from 'node:test';
 import { artifactDefinitions } from '../../src/artifacts/core/artifact-definitions.js';
 import { pythonAstHelper } from '../../src/artifacts/ast/python-ast-producer.js';
+import { renderPythonAst } from '../../src/artifacts/ast/ast-renderer.js';
 import { rustArtifactArguments } from '../../src/toolchains/rust.js';
-import { renderControlFlowGraphArtifact } from '../../src/artifacts/control-flow-graph/control-flow-graph-renderer.js';
 import { controlFlowGraphMetrics } from '../../src/artifacts/control-flow-graph/control-flow-graph-model.js';
 import { parsePythonControlFlowGraphs } from '../../src/artifacts/control-flow-graph/parsers/python-cfg-parser.js';
 import { pythonCfgHelper } from '../../src/artifacts/python/python-cfg-producer.js';
@@ -24,9 +24,15 @@ import {
 } from '../../src/artifacts/stack-analysis/python-stack-analysis.js';
 import { inferGoSsaFunction } from '../../src/toolchains/go.js';
 import { defaultArtifactOptions } from '../../src/types/index.js';
-import { rawArtifact, renderContext } from '../support/artifacts.js';
+import { rawArtifact, renderContext, renderGraphs } from '../support/artifacts.js';
 import { fixturePath, requireCommand, run } from '../support/environment.js';
-import { availableCell, availableOutput, neverCancelled, sourceUri, toolchainBackend } from '../support/toolchains.js';
+import {
+	declaredImplementation,
+	declaredOutput,
+	neverCancelled,
+	sourceUri,
+	toolchainBackend,
+} from '../support/toolchains.js';
 
 const display = defaultArtifactOptions.display;
 
@@ -60,7 +66,7 @@ test('rustc emits MIR and LLVM IR through the extension arguments', async (t) =>
 	}
 });
 
-test('rustc assembly output produces a machine-level control-flow graph', (t) => {
+test('rustc assembly output produces a machine-level control-flow graph', async (t) => {
 	if (!requireCommand(t, 'rustc')) {
 		return;
 	}
@@ -75,14 +81,10 @@ test('rustc assembly output produces a machine-level control-flow graph', (t) =>
 	]);
 	assert.equal(result.status, 0, result.stderr);
 
-	const rendered = renderControlFlowGraphArtifact(
+	const rendered = await renderGraphs(
+		declaredOutput('rust', 'control-flow-graph', 'assembly'),
 		rawArtifact('control-flow-graph', result.stdout),
-		display,
-		renderContext(
-			toolchainBackend('rust'),
-			{ file: source },
-			availableOutput('rust', 'control-flow-graph', 'assembly'),
-		),
+		renderContext(toolchainBackend('rust'), { file: source }),
 	);
 	assert.ok(rendered.graphs.some((graph) => graph.label.includes('choose')));
 	assert.ok(rendered.graphs.some((graph) => graph.edges.length >= 2));
@@ -99,7 +101,7 @@ test('the Python AST helper reports definitions without importing the module', (
 	// The fixture raises at import time; the helper never reaches that code.
 	assert.match(result.stdout, /RuntimeError/u);
 
-	const rendered = artifactDefinitions.ast.renderer(
+	const rendered = renderPythonAst(
 		rawArtifact('ast', result.stdout),
 		display,
 		renderContext('python', { file: source }),
@@ -205,7 +207,7 @@ test('the Go compiler produces normalized assembly and a GOSSAFUNC graph', async
 	const backend = toolchainBackend('go', { executable: 'go' });
 	assert.equal(await inferGoSsaFunction(source), 'command-line-arguments.classify');
 
-	const assembly = await availableCell('go', 'assembly').producer(
+	const assembly = await declaredImplementation('go', 'assembly').producer(
 		backend,
 		sourceUri(source),
 		options,
@@ -215,15 +217,16 @@ test('the Go compiler produces normalized assembly and a GOSSAFUNC graph', async
 		backend.parseAssembly(assembly.text, display).asm.some((line) => /TEXT|CMPQ|JLE|NEGQ|RET/u.test(line.text)),
 	);
 
-	const output = availableOutput('go', 'control-flow-graph', 'go-ssa');
+	const output = declaredOutput('go', 'control-flow-graph', 'go-ssa');
 	const rawGraph = await output.producer(backend, sourceUri(source), options, neverCancelled);
 	// The SSA dump is captured in a temporary directory, never beside the source.
 	assert.equal(fs.existsSync(path.join(path.dirname(source), 'ssa.html')), false);
-	const graphs = output.parseGraphs?.(rawGraph, display, {
-		backend,
-		source: { uri: sourceUri(source), text: fs.readFileSync(source, 'utf8') },
-	});
-	assert.ok(graphs?.graphs.some((graph) => graph.label === 'classify'));
+	const rendered = await renderGraphs(
+		output,
+		{ ...rawGraph, kind: 'control-flow-graph' },
+		{ backend, source: { uri: sourceUri(source), text: fs.readFileSync(source, 'utf8') } },
+	);
+	assert.ok(rendered.graphs.some((graph) => graph.label === 'classify'));
 });
 
 test('nvcc produces line-mapped PTX and nvdisasm produces SASS', async (t) => {
@@ -234,7 +237,12 @@ test('nvcc produces line-mapped PTX and nvdisasm produces SASS', async (t) => {
 	const options = { workingDirectory: path.dirname(source), productionOptions: defaultArtifactOptions.production };
 	const backend = toolchainBackend('nvcc', { executable: 'nvcc' });
 
-	const raw = await availableCell('nvcc', 'assembly').producer(backend, sourceUri(source), options, neverCancelled);
+	const raw = await declaredImplementation('nvcc', 'assembly').producer(
+		backend,
+		sourceUri(source),
+		options,
+		neverCancelled,
+	);
 	assert.match(raw.text, /\.visible\s+\.entry\s+saxpy/u);
 	const parsed = backend.parseAssembly(raw.text, display);
 	assert.ok(parsed.asm.some((line) => /fma\.rn\.f32|mul\.wide|st\.global/u.test(line.text)));
@@ -244,7 +252,7 @@ test('nvcc produces line-mapped PTX and nvdisasm produces SASS', async (t) => {
 		executable: 'nvcc',
 		tools: { disassembler: { executable: 'nvdisasm', inputMode: 'stdin' } },
 	});
-	const sass = await availableCell('nvcc', 'binary-disassembly').producer(
+	const sass = await declaredImplementation('nvcc', 'binary-disassembly').producer(
 		sassBackend,
 		sourceUri(source),
 		options,

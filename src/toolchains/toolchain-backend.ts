@@ -6,15 +6,11 @@ import { noopPropertyGetter } from '../vendor/compiler-props.js';
 import type { ParseFiltersAndOutputOptions } from '../vendor/types/features/filters.interfaces.js';
 import type { ParsedAsmResult } from '../vendor/types/asmresult/asmresult.interfaces.js';
 import type {
-	ArtifactKind,
 	ToolchainProfile,
 	CompileOptions,
 	DisplayOptions,
 	ProductionOptions,
-	RawArtifact,
-	ArtifactRenderContext,
-	RenderedArtifact,
-	CompileDiagnostic,
+	ProducedArtifact,
 	AuxiliaryTool,
 	InvocationDetails,
 } from '../types/index.js';
@@ -50,12 +46,6 @@ export class MissingToolOutputError extends Error {
 		super(`Toolchain did not produce the expected output file: ${filename}`, options);
 		this.name = 'MissingToolOutputError';
 	}
-}
-
-export interface BinaryDisassembler {
-	readonly tool: string;
-	readonly arguments: (objectFile: string) => readonly string[];
-	readonly normalizeOutput?: (output: string) => string;
 }
 
 export interface SecondaryToolSpec {
@@ -166,21 +156,33 @@ async function executeTextToolInvocation(
 	workingDirectory: string,
 	cancellationToken: CancellationToken,
 ): Promise<string> {
-	const result = await exec.execute(executable, args, {
+	const result = await executeChecked('Auxiliary tool', executable, args, {
 		cwd: workingDirectory,
 		env: environment,
 		cancellationToken,
 		...(stdin === undefined ? {} : { stdin }),
 	});
-	if (result.returnCode !== 0) {
+	return result.stdout;
+}
+
+/** Runs a tool and throws a ToolExitError when it exits with a non-zero code. */
+async function executeChecked(
+	description: string,
+	executable: string,
+	args: readonly string[],
+	options: exec.ExecOptions,
+	acceptOutputOnError = false,
+): Promise<exec.ExecResult> {
+	const result = await exec.execute(executable, args, options);
+	if (result.returnCode !== 0 && !(acceptOutputOnError && result.stdout)) {
 		throw new ToolExitError(
-			`Auxiliary tool exited with code ${result.returnCode}`,
+			`${description} exited with code ${result.returnCode}`,
 			result.returnCode,
 			result.stdout,
 			result.stderr,
 		);
 	}
-	return result.stdout;
+	return result;
 }
 
 interface PreparedInvocation {
@@ -200,7 +202,7 @@ interface ToolchainRun {
 
 export class ToolchainBackend {
 	readonly profile: ToolchainProfile;
-	private readonly definition: ToolchainDefinition;
+	readonly definition: ToolchainDefinition;
 	private readonly host: ToolchainHost;
 	private readonly asmParser?: AsmParser;
 	// Binary disassembly is always GNU objdump-style text (GNU/LLVM objdump, or dumpbin
@@ -224,13 +226,12 @@ export class ToolchainBackend {
 		source: Uri,
 		options: CompileOptions,
 		cancellationToken: CancellationToken,
-	): Promise<RawArtifact> {
+	): Promise<ProducedArtifact> {
 		if (!this.definition.outputArguments || !this.asmParser) {
 			throw new Error(`${this.profile.displayName} has no assembly production capability.`);
 		}
 		const outputArguments = this.definition.outputArguments;
 		return this.produceArtifactWithTransform(
-			'assembly',
 			source,
 			options,
 			{
@@ -252,44 +253,16 @@ export class ToolchainBackend {
 		);
 	}
 
-	async produceBinaryDisassembly(
-		source: Uri,
-		options: CompileOptions,
-		disassembler: BinaryDisassembler,
-		cancellationToken: CancellationToken,
-	): Promise<RawArtifact> {
-		if (!this.definition.outputArguments || !this.definition.objectFilename) {
-			throw new Error(`${this.profile.displayName} has no object-file production capability.`);
-		}
-		const outputArguments = this.definition.outputArguments;
-		const objectFilename = this.definition.objectFilename;
-		return this.produceWithTool(
-			'binary-disassembly',
-			source,
-			options,
-			{
-				workspaceFiles: { object: objectFilename },
-				compilerArguments: (files, providerArguments) =>
-					outputArguments('object', files.object, providerArguments),
-				tool: disassembler.tool,
-				toolArguments: (files) => disassembler.arguments(files.object),
-				normalizeOutput: disassembler.normalizeOutput,
-			},
-			cancellationToken,
-		);
-	}
-
 	/**
 	 * Produces a compiler artifact, then feeds its temporary workspace files to an auxiliary tool.
 	 * The optional producer-data hook runs between those two steps and is retained on the result.
 	 */
 	async produceWithTool(
-		kind: ArtifactKind,
 		source: Uri,
 		options: CompileOptions,
 		spec: SecondaryToolSpec,
 		cancellationToken: CancellationToken,
-	): Promise<RawArtifact> {
+	): Promise<ProducedArtifact> {
 		return withTemporaryDirectory('coglens-', async (temporaryDirectory) => {
 			const files = Object.freeze(
 				Object.fromEntries(
@@ -314,19 +287,11 @@ export class ToolchainBackend {
 			const toolArguments = spec.toolArguments(files);
 			this.reportInvocation(options, invocation, tool.executable, toolArguments);
 			this.host.log(`Command: ${tool.executable} ${toolArguments.join(' ')}`);
-			const toolResult = await exec.execute(tool.executable, toolArguments, {
+			const toolResult = await executeChecked('Auxiliary tool', tool.executable, toolArguments, {
 				cwd: invocation.workingDirectory,
 				env: invocation.preparedEnvironment,
 				cancellationToken,
 			});
-			if (toolResult.returnCode !== 0) {
-				throw new ToolExitError(
-					`Auxiliary tool exited with code ${toolResult.returnCode}`,
-					toolResult.returnCode,
-					toolResult.stdout,
-					toolResult.stderr,
-				);
-			}
 
 			const inputMetadata = await this.collectDependencyInputs(
 				source,
@@ -335,7 +300,6 @@ export class ToolchainBackend {
 				cancellationToken,
 			);
 			const artifact = this.buildRawArtifact(
-				kind,
 				spec.normalizeOutput ? spec.normalizeOutput(toolResult.stdout) : toolResult.stdout,
 				[compilerResult.stderr, compilerResult.stdout, toolResult.stderr].join('\n'),
 				source,
@@ -352,28 +316,24 @@ export class ToolchainBackend {
 	}
 
 	async produceArtifact(
-		kind: ArtifactKind,
 		source: Uri,
 		options: CompileOptions,
 		spec: ArtifactOutputSpec,
 		cancellationToken: CancellationToken,
-	): Promise<RawArtifact> {
-		return this.produceArtifactWithTransform(kind, source, options, spec, cancellationToken, (text) => text);
+	): Promise<ProducedArtifact> {
+		return this.produceArtifactWithTransform(source, options, spec, cancellationToken, (text) => text);
 	}
 
 	private async produceArtifactWithTransform(
-		kind: ArtifactKind,
 		source: Uri,
 		options: CompileOptions,
 		spec: ArtifactOutputSpec,
 		cancellationToken: CancellationToken,
 		transform: (text: string, invocation: PreparedInvocation) => Promise<string> | string,
-	): Promise<RawArtifact> {
+	): Promise<ProducedArtifact> {
 		return withTemporaryDirectory('coglens-', async (temporaryDirectory) => {
 			const outputFile =
-				spec.output === 'stdout' || spec.output === 'stderr'
-					? ''
-					: path.join(temporaryDirectory, spec.output.filename);
+				typeof spec.output === 'object' ? path.join(temporaryDirectory, spec.output.filename) : '';
 			const { invocation, result } = await this.run(
 				source,
 				options,
@@ -382,12 +342,16 @@ export class ToolchainBackend {
 				spec.acceptOutputOnError,
 				spec.environment?.(temporaryDirectory),
 			);
-			const rawText =
+			// The selected output holds the artifact text. The other streams hold diagnostics.
+			const [rawText, diagnosticOutput] =
 				spec.output === 'stdout'
-					? result.stdout
+					? [result.stdout, result.stderr]
 					: spec.output === 'stderr'
-						? result.stderr
-						: await readBoundedArtifactFile(outputFile, spec.output.optional);
+						? [result.stderr, result.stdout]
+						: [
+								await readBoundedArtifactFile(outputFile, spec.output.optional),
+								`${result.stderr}\n${result.stdout}`,
+							];
 			const text = await transform(rawText, invocation);
 			const inputMetadata = await this.collectDependencyInputs(
 				source,
@@ -395,13 +359,7 @@ export class ToolchainBackend {
 				temporaryDirectory,
 				cancellationToken,
 			);
-			const diagnosticOutput =
-				spec.output === 'stdout'
-					? result.stderr
-					: spec.output === 'stderr'
-						? result.stdout
-						: `${result.stderr}\n${result.stdout}`;
-			return this.buildRawArtifact(kind, text, diagnosticOutput, source, invocation, inputMetadata);
+			return this.buildRawArtifact(text, diagnosticOutput, source, invocation, inputMetadata);
 		});
 	}
 
@@ -411,11 +369,6 @@ export class ToolchainBackend {
 		}
 		const filters: ParseFiltersAndOutputOptions = { ...options };
 		return this.asmParser.process(rawAssembly, filters);
-	}
-
-	/** Parses output using the diagnostic grammar selected by this toolchain definition. */
-	parseDiagnostics(output: string, source: Uri, workingDirectory: string): readonly CompileDiagnostic[] {
-		return this.definition.parseDiagnostics(output, source, workingDirectory);
 	}
 
 	parseBinaryDisassembly(rawDisassembly: string, options: DisplayOptions): ParsedAsmResult {
@@ -433,21 +386,6 @@ export class ToolchainBackend {
 			throw new Error(`${this.profile.displayName} has no assembly CFG parser.`);
 		}
 		return this.cfgParser.parse(lines);
-	}
-
-	renderArtifact(raw: RawArtifact, options: DisplayOptions, context: ArtifactRenderContext): RenderedArtifact {
-		const renderer = this.getArtifactRenderer(raw.kind);
-		if (!renderer) {
-			throw new Error(`${this.profile.displayName} has no ${raw.kind} rendering capability.`);
-		}
-		return renderer(raw, options, context);
-	}
-
-	getArtifactRenderer(
-		kind: ArtifactKind,
-	): ((raw: RawArtifact, options: DisplayOptions, context: ArtifactRenderContext) => RenderedArtifact) | undefined {
-		const cell = this.definition.artifacts[kind];
-		return cell.status === 'available' && cell.outputs === undefined ? cell.renderer : undefined;
 	}
 
 	private async run(
@@ -469,24 +407,17 @@ export class ToolchainBackend {
 		this.host.log(`Command: ${this.profile.executable} ${invocation.argumentsList.join(' ')}`);
 		this.host.log(`Environment overrides: ${invocation.overriddenNames.join(', ') || '(none)'}`, 'debug');
 
-		const result = await exec.execute(this.profile.executable, invocation.argumentsList, {
-			cwd: invocation.workingDirectory,
-			env: invocation.preparedEnvironment,
-			cancellationToken,
-		});
-		if (result.returnCode !== 0 && !(acceptOutputOnError && result.stdout)) {
-			throw new ToolExitError(
-				`Toolchain exited with code ${result.returnCode}`,
-				result.returnCode,
-				result.stdout,
-				result.stderr,
-			);
-		}
+		const result = await executeChecked(
+			'Toolchain',
+			this.profile.executable,
+			invocation.argumentsList,
+			{ cwd: invocation.workingDirectory, env: invocation.preparedEnvironment, cancellationToken },
+			acceptOutputOnError,
+		);
 		return { invocation, result };
 	}
 
 	private buildRawArtifact(
-		kind: ArtifactKind,
 		text: string,
 		diagnosticOutput: string,
 		source: Uri,
@@ -494,11 +425,10 @@ export class ToolchainBackend {
 		inputMetadata: ArtifactInputMetadata,
 		executable = this.profile.executable,
 		args: readonly string[] = invocation.argumentsList,
-	): RawArtifact {
+	): ProducedArtifact {
 		return {
-			kind,
 			text,
-			diagnostics: this.parseDiagnostics(diagnosticOutput, source, invocation.workingDirectory),
+			diagnostics: this.definition.parseDiagnostics(diagnosticOutput, source, invocation.workingDirectory),
 			durationMs: performance.now() - invocation.started,
 			generatedAt: Date.now(),
 			...inputMetadata,

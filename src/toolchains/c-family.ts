@@ -1,6 +1,6 @@
 import { AsmParser } from '../vendor/lib/parsers/asm-parser.js';
 import { noopPropertyGetter } from '../vendor/compiler-props.js';
-import { artifactProducer } from '../artifacts/core/compiler-output-producer.js';
+import { outputProducer } from '../artifacts/core/compiler-output-producer.js';
 import { parseMakeDepfile } from '../compilation/artifact-inputs.js';
 import type { DependencyCollectionSpec } from './toolchain-backend.js';
 import { sameLocalFile } from '../local-file-identity.js';
@@ -21,12 +21,12 @@ export const gnuDependencyCollection: DependencyCollectionSpec = Object.freeze({
 	parse: parseMakeDepfile,
 });
 
-export const gnuPreprocessedSourceProducer = artifactProducer('preprocessed-source', {
+export const gnuPreprocessedSourceProducer = outputProducer({
 	output: 'stdout',
 	arguments: () => ['-E'],
 });
 
-export const clangAstProducer = artifactProducer('ast', {
+export const clangAstProducer = outputProducer({
 	output: 'stdout',
 	arguments: () => ['-Xclang', '-ast-dump', '-fsyntax-only'],
 	acceptOutputOnError: true,

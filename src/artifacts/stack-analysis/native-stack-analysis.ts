@@ -3,7 +3,7 @@ import type { DisplayOptions, RawArtifact, RenderedTextArtifact, StackUsageQuali
 import type { ArtifactProducer } from '../../toolchains/toolchain-contracts.js';
 import type { ArtifactOutputSpec } from '../../toolchains/toolchain-backend.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
-import { artifactProducer } from '../core/compiler-output-producer.js';
+import { outputProducer } from '../core/compiler-output-producer.js';
 import { type AnalysisParserDiagnostic, renderAnalysisSource } from '../analysis/analysis-source-renderer.js';
 import { localFileComparisonKey, sameLocalFile } from '../../local-file-identity.js';
 
@@ -51,12 +51,9 @@ export const clangClStackUsageOutput: ArtifactOutputSpec = Object.freeze({
 	],
 });
 
-export const nativeStackAnalysisProducer: ArtifactProducer = artifactProducer('stack-analysis', nativeStackUsageOutput);
+export const nativeStackAnalysisProducer: ArtifactProducer = outputProducer(nativeStackUsageOutput);
 
-export const clangClStackAnalysisProducer: ArtifactProducer = artifactProducer(
-	'stack-analysis',
-	clangClStackUsageOutput,
-);
+export const clangClStackAnalysisProducer: ArtifactProducer = outputProducer(clangClStackUsageOutput);
 
 /** Parse GCC/Clang's documented .su records without assuming POSIX paths. */
 export function parseStackUsage(text: string, workingDirectory: string): StackUsageParseResult {

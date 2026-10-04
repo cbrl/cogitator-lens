@@ -71,8 +71,8 @@ export interface ArtifactInputState {
 	readonly mtimeMs: number;
 }
 
-export interface RawArtifact {
-	kind: ArtifactKind;
+/** Tool output before the compilation service assigns its artifact kind. */
+export interface ProducedArtifact {
 	text: string;
 	diagnostics: readonly CompileDiagnostic[];
 	durationMs: number;
@@ -83,6 +83,10 @@ export interface RawArtifact {
 	readonly dependencyCoverage: 'complete' | 'source-only';
 	/** Producer-owned metadata interpreted by the artifact's renderer. */
 	readonly producerData?: unknown;
+}
+
+export interface RawArtifact extends ProducedArtifact {
+	kind: ArtifactKind;
 }
 
 export interface RenderedArtifactLineSource {

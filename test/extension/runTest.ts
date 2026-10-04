@@ -983,8 +983,7 @@ async function runFakeClangClStackProducer(
 	} = toolchainDefinitions['clang-cl'];
 	const backend = new ToolchainBackend(profile, definition, extensionToolchainHost);
 	try {
-		return await backend.produceArtifact(
-			'stack-analysis',
+		const produced = await backend.produceArtifact(
 			vscode.Uri.file(path.join(repositoryRoot, 'test/fixtures/binary/source.cpp')),
 			{
 				args: ['/DPROJECT_BUILD', '/Foignored.obj', '/clang:-fno-stack-usage'],
@@ -995,6 +994,7 @@ async function runFakeClangClStackProducer(
 			clangClStackUsageOutput,
 			cancellation.token,
 		);
+		return { ...produced, kind: 'stack-analysis' };
 	} finally {
 		cancellation.dispose();
 	}
@@ -1019,7 +1019,6 @@ async function verifyFakeNativeStackCancellation(repositoryRoot: string): Promis
 	const backend = new ToolchainBackend(profile, toolchainDefinitions.gcc, extensionToolchainHost);
 	try {
 		const pending = backend.produceArtifact(
-			'stack-analysis',
 			vscode.Uri.file(path.join(repositoryRoot, 'test/fixtures/binary/source.cpp')),
 			{
 				args: [],
@@ -1076,7 +1075,6 @@ async function runFakeNativeStackProducer(
 		try {
 			let observedInvocation: import('../../src/types/index.js').InvocationDetails | undefined;
 			const raw = await backend.produceArtifact(
-				'stack-analysis',
 				vscode.Uri.file(path.join(repositoryRoot, 'test/fixtures/binary/source.cpp')),
 				{
 					args: [],
@@ -1091,7 +1089,7 @@ async function runFakeNativeStackProducer(
 				cancellation.token,
 			);
 			assert.deepEqual(observedInvocation, raw.command);
-			return raw;
+			return { ...raw, kind: 'stack-analysis' };
 		} catch (error) {
 			if (error instanceof ToolExitError) {
 				throw new Error(`${error.message}\nstdout: ${error.stdout}\nstderr: ${error.stderr}`, { cause: error });
@@ -1128,7 +1126,6 @@ async function assertFakeNativeStackFailure(
 		const backend = new ToolchainBackend(profile, toolchainDefinitions.gcc, extensionToolchainHost);
 		await assert.rejects(
 			backend.produceArtifact(
-				'stack-analysis',
 				vscode.Uri.file(path.join(repositoryRoot, 'test/fixtures/binary/source.cpp')),
 				{
 					args: [],

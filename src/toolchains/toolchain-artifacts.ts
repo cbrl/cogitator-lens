@@ -1,79 +1,80 @@
 import type { ArtifactKind, ArtifactOptionAvailability, ArtifactOptionId, ToolchainProfile } from '../types/index.js';
 import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
-import type {
-	ResolvedToolchainArtifactCell,
-	ToolchainArtifactCell,
-	ToolchainArtifactOutput,
-} from './toolchain-contracts.js';
+import type { ArtifactImplementation, ArtifactOutput } from './toolchain-contracts.js';
 import { getToolchainDefinition } from './toolchain-map.js';
 
-/** Resolves a kind-level cell, including availability of its required auxiliary tools. */
-export function resolveArtifactAvailability(profile: ToolchainProfile, kind: ArtifactKind): ToolchainArtifactCell {
-	const cell = getToolchainDefinition(profile.kind).artifacts[kind];
-	return cell.status === 'available' && cell.outputs ? cell : resolveImplementationAvailability(profile, cell);
+type Unavailable = Exclude<ArtifactOptionAvailability, { readonly status: 'available' }>;
+
+/** The implementation that produces a requested artifact, or the reason that none can. */
+export type ResolvedArtifactImplementation =
+	{ readonly status: 'available'; readonly implementation: ArtifactImplementation } | Unavailable;
+
+/** Resolves whether a toolchain profile can produce an artifact kind, including its required tools. */
+export function resolveArtifactAvailability(profile: ToolchainProfile, kind: ArtifactKind): ArtifactOptionAvailability {
+	const support = getToolchainDefinition(profile.kind).artifacts[kind];
+	if (!support) {
+		return unsupported(kind);
+	}
+	const resolved = support.outputs ? undefined : withRequiredTools(profile, support);
+	return resolved?.status === 'unavailable' ? resolved : { status: 'available' };
 }
 
-/** Lists selectable outputs after accounting for the active toolchain profile. */
+/** Lists the selectable outputs of an artifact kind. */
 export function getArtifactOutputChoices(
 	profile: ToolchainProfile,
 	kind: ArtifactKind,
-): readonly Pick<ToolchainArtifactOutput, 'id' | 'label' | 'description'>[] {
-	const cell = resolveArtifactAvailability(profile, kind);
-	return cell.status === 'available' && cell.outputs !== undefined
-		? cell.outputs.map(({ id, label, description }) => ({ id, label, description }))
-		: [];
+): readonly Pick<ArtifactOutput, 'id' | 'label' | 'description'>[] {
+	const support = getToolchainDefinition(profile.kind).artifacts[kind];
+	return support?.outputs?.map(({ id, label, description }) => ({ id, label, description })) ?? [];
 }
 
-/** Resolves a requested output ID to a producible cell or an explanatory unavailable cell. */
-export function resolveArtifactOutput(
+/** Resolves an artifact kind and optional output ID to the implementation that produces it. */
+export function resolveArtifactImplementation(
 	profile: ToolchainProfile,
 	kind: ArtifactKind,
 	outputId?: string,
-): ResolvedToolchainArtifactCell {
-	const cell = getToolchainDefinition(profile.kind).artifacts[kind];
-	if (cell.status !== 'available') {
-		return resolveImplementationAvailability(profile, cell);
+): ResolvedArtifactImplementation {
+	const support = getToolchainDefinition(profile.kind).artifacts[kind];
+	const label = artifactDefinitions[kind].label;
+	if (!support) {
+		return unsupported(kind);
 	}
-	if (cell.outputs === undefined) {
+	if (!support.outputs) {
 		return outputId === undefined
-			? resolveImplementationAvailability(profile, cell)
-			: {
-					status: 'unsupported',
-					explanation: `${artifactDefinitions[kind].label} does not accept an output selection.`,
-				};
+			? withRequiredTools(profile, support)
+			: { status: 'unsupported', explanation: `${label} does not accept an output selection.` };
 	}
 	if (outputId === undefined) {
-		return {
-			status: 'unsupported',
-			explanation: `Select an output for ${artifactDefinitions[kind].label.toLowerCase()}.`,
-		};
+		return { status: 'unsupported', explanation: `Select an output for ${label.toLowerCase()}.` };
 	}
-	const output = cell.outputs.find((candidate) => candidate.id === outputId);
-	if (!output) {
-		return {
-			status: 'unsupported',
-			explanation: `${profile.displayName} does not support the ${outputId} output for ${artifactDefinitions[kind].label.toLowerCase()}.`,
-		};
-	}
-	return resolveImplementationAvailability(profile, { status: 'available', ...output });
+	const output = support.outputs.find((candidate) => candidate.id === outputId);
+	return output
+		? withRequiredTools(profile, output)
+		: {
+				status: 'unsupported',
+				explanation: `${profile.displayName} does not support the ${outputId} output for ${label.toLowerCase()}.`,
+			};
 }
 
-/** Downgrades an otherwise available cell when any of its declared auxiliary tools is absent. */
-function resolveImplementationAvailability(
+function unsupported(kind: ArtifactKind): Unavailable {
+	return {
+		status: 'unsupported',
+		explanation: `This toolchain has no ${artifactDefinitions[kind].label.toLowerCase()} producer.`,
+	};
+}
+
+/** Makes an implementation unavailable when one of its required auxiliary tools is absent. */
+function withRequiredTools(
 	profile: ToolchainProfile,
-	cell: ResolvedToolchainArtifactCell,
-): ResolvedToolchainArtifactCell {
-	const requiredTools =
-		cell.status === 'available'
-			? [...(cell.requiredTool ? [cell.requiredTool] : []), ...(cell.requiredTools ?? [])]
-			: [];
-	const missingTool = requiredTools.find((tool) => !profile.tools[tool.name]);
-	return cell.status === 'available' && missingTool
+	implementation: ArtifactImplementation,
+): ResolvedArtifactImplementation {
+	const missingTool = implementation.requiredTools?.find((tool) => !profile.tools[tool.name]);
+	return missingTool
 		? {
 				status: 'unavailable',
 				explanation: `${missingTool.label} was not detected or configured as the ${missingTool.name} auxiliary tool for ${profile.displayName}.`,
 			}
-		: cell;
+		: { status: 'available', implementation };
 }
 
 /** Determines whether an artifact display option is valid for this toolchain output. */
@@ -83,14 +84,14 @@ export function resolveArtifactOptionAvailability(
 	id: ArtifactOptionId,
 ): ArtifactOptionAvailability {
 	const toolchain = getToolchainDefinition(profile.kind);
-	const cell = toolchain.artifacts[kind];
+	const support = toolchain.artifacts[kind];
 	const definition = artifactDefinitions[kind];
 	if (
-		cell.status === 'available' &&
-		cell.outputs === undefined &&
-		(cell.listingSyntax ?? definition.listingSyntax) !== definition.listingSyntax
+		support &&
+		!support.outputs &&
+		(support.listingSyntax ?? definition.listingSyntax) !== definition.listingSyntax
 	) {
-		const listingSyntax = cell.listingSyntax?.replaceAll('-', ' ') ?? 'toolchain-specific output';
+		const listingSyntax = support.listingSyntax?.replaceAll('-', ' ') ?? 'toolchain-specific output';
 		const defaultListingSyntax = definition.listingSyntax?.replaceAll('-', ' ') ?? 'the default listing syntax';
 		return {
 			status: 'unsupported',

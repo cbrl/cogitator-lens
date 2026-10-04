@@ -1,5 +1,4 @@
 import type { ArtifactDefinition } from '../core/artifact-contracts.js';
-import { renderControlFlowGraphArtifact } from './control-flow-graph-renderer.js';
 
 export const controlFlowGraphArtifact = {
 	label: 'Control-flow graph',
@@ -9,7 +8,6 @@ export const controlFlowGraphArtifact = {
 	icon: 'type-hierarchy',
 	filenameExtension: '.cfg',
 	documentLanguage: 'artifact',
-	renderer: renderControlFlowGraphArtifact,
 	metricLabels: {
 		graphCount: 'Function graphs',
 		nodeCount: 'Basic blocks',

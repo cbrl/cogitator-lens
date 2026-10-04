@@ -25,8 +25,7 @@ import {
 import { ToolExitError } from '../toolchains/toolchain-backend.js';
 import { ExecError } from '../exec.js';
 import { supportedArtifactKinds } from '../artifacts/core/artifact-definitions.js';
-import { resolveArtifactOutput } from '../toolchains/toolchain-artifacts.js';
-import type { ToolchainArtifactOutput } from '../toolchains/toolchain-contracts.js';
+import { resolveArtifactImplementation } from '../toolchains/toolchain-artifacts.js';
 import { ToolchainRegistry } from './toolchain-registry.js';
 import { CompilationConfigDatabase } from './compilation-config.js';
 import { resolveArtifactPreset, type ArtifactPreset } from '../artifacts/ui/presets.js';
@@ -166,15 +165,15 @@ export class CompilationService {
 				explanation: `Toolchain profile not found: ${variant.toolchainProfileId}`,
 			};
 		}
-		const cell = resolveArtifactOutput(backend.profile, artifactKind, request.artifactOutputId);
-		if (cell.status !== 'available') {
-			return cell;
+		const resolved = resolveArtifactImplementation(backend.profile, artifactKind, request.artifactOutputId);
+		if (resolved.status !== 'available') {
+			return resolved;
 		}
+		const { implementation } = resolved;
 
 		const key = productionKey(request, source.value.state);
 		const renderContext: ArtifactRenderContext = {
 			backend,
-			...(request.artifactOutputId ? { artifactOutput: cell as ToolchainArtifactOutput } : {}),
 			source: {
 				uri: variant.source,
 				text: source.value.text,
@@ -185,7 +184,7 @@ export class CompilationService {
 			request.onInvocation?.(cached.command);
 			return {
 				status: 'available',
-				artifact: await renderArtifact(cached, options, renderContext, cell.renderer, cell.listingSyntax),
+				artifact: await renderArtifact(cached, implementation, options, renderContext),
 			};
 		} else if (cached) {
 			this.rawArtifactCache.delete(key);
@@ -193,7 +192,7 @@ export class CompilationService {
 		}
 
 		try {
-			const raw = await cell.producer(
+			const produced = await implementation.producer(
 				backend,
 				variant.source,
 				{
@@ -205,11 +204,12 @@ export class CompilationService {
 				},
 				cancellationToken,
 			);
+			const raw: RawArtifact = { ...produced, kind: artifactKind };
 			this.rawArtifactCache.set(key, raw, variant.source);
 			this.syncInputWatchers();
 			return {
 				status: 'available',
-				artifact: await renderArtifact(raw, options, renderContext, cell.renderer, cell.listingSyntax),
+				artifact: await renderArtifact(raw, implementation, options, renderContext),
 			};
 		} catch (error: unknown) {
 			if (error instanceof CancellationError || cancellationToken.isCancellationRequested) {
@@ -225,7 +225,7 @@ export class CompilationService {
 				};
 			}
 			const output = toolErrorOutput(error);
-			const diagnostics = backend.parseDiagnostics(
+			const diagnostics = backend.definition.parseDiagnostics(
 				`${output.stderr}\n${output.stdout}`,
 				variant.source,
 				variant.workingDirectory,

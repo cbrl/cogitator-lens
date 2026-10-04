@@ -1,5 +1,5 @@
 import type { ArtifactProducer } from '../../toolchains/toolchain-contracts.js';
-import { artifactProducer } from '../core/compiler-output-producer.js';
+import { outputProducer } from '../core/compiler-output-producer.js';
 
 /** Python inspects compiled code objects but never imports or executes the source module. */
 export const pythonCfgHelper = String.raw`
@@ -78,7 +78,7 @@ def code_record(code,qualified_name):
 print(json.dumps({"codeObjects":code_record(root,"<module>")},separators=(",",":")))
 `.trim();
 
-export const pythonControlFlowGraphProducer: ArtifactProducer = artifactProducer('control-flow-graph', {
+export const pythonControlFlowGraphProducer: ArtifactProducer = outputProducer({
 	output: 'stdout',
 	arguments: () => ['-I', '-c', pythonCfgHelper],
 });

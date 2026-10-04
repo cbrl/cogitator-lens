@@ -1,5 +1,5 @@
-import { binaryDisassemblyProducer, gnuObjdump } from '../artifacts/binary-disassembly/binary-disassembly-producer.js';
-import { artifactProducer, gccControlFlowGraphOutput } from '../artifacts/core/compiler-output-producer.js';
+import { gnuObjdump } from '../artifacts/binary-disassembly/binary-disassembly-producer.js';
+import { outputProducer, gccControlFlowGraphOutput } from '../artifacts/core/compiler-output-producer.js';
 import { nativeStackAnalysisProducer } from '../artifacts/stack-analysis/native-stack-analysis.js';
 import {
 	gccOptimizationRemarksOutput,
@@ -9,12 +9,10 @@ import { parseGccControlFlowGraphs } from '../artifacts/control-flow-graph/parse
 import { GccAssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/assembly-dialects.js';
 import { InstructionSetInfo } from '../artifacts/control-flow-graph/parsers/instruction-sets.js';
 import {
-	artifactCells,
-	assemblyCell,
+	compilerAssembly,
 	assemblyControlFlowGraphOutput,
-	binaryCell,
+	binaryDisassembly,
 	controlFlowGraphOutput,
-	outputArtifactCell,
 	toolDiscoverer,
 	type ToolchainDefinition,
 } from './toolchain-contracts.js';
@@ -44,25 +42,26 @@ export const gcc: ToolchainDefinition = {
 	createParser: defaultAsmParser,
 	createCfgParser: () => new GccAssemblyCfgParser(new InstructionSetInfo()),
 	discoverTools: toolDiscoverer({ demangler: 'c++filt', disassembler: 'objdump' }),
-	artifacts: artifactCells({
-		assembly: assemblyCell,
-		'binary-disassembly': binaryCell('GNU objdump', binaryDisassemblyProducer(gnuObjdump)),
-		'preprocessed-source': { status: 'available', producer: gnuPreprocessedSourceProducer },
+	artifacts: {
+		assembly: compilerAssembly,
+		'binary-disassembly': binaryDisassembly('GNU objdump', gnuObjdump),
+		'preprocessed-source': { producer: gnuPreprocessedSourceProducer },
 		'optimization-remarks': {
-			status: 'available',
-			producer: artifactProducer('optimization-remarks', gccOptimizationRemarksOutput),
+			producer: outputProducer(gccOptimizationRemarksOutput),
 			renderer: renderGccOptimizationRemarks,
 		},
-		'stack-analysis': { status: 'available', producer: nativeStackAnalysisProducer },
-		'control-flow-graph': outputArtifactCell([
-			controlFlowGraphOutput(
-				'gcc-tree',
-				'GCC tree CFG',
-				"Build a source-level graph from GCC's tree CFG dump.",
-				artifactProducer('control-flow-graph', gccControlFlowGraphOutput),
-				(raw) => parseGccControlFlowGraphs(raw.text, raw.command.cwd),
-			),
-			assemblyControlFlowGraphOutput,
-		]),
-	}),
+		'stack-analysis': { producer: nativeStackAnalysisProducer },
+		'control-flow-graph': {
+			outputs: [
+				controlFlowGraphOutput(
+					'gcc-tree',
+					'GCC tree CFG',
+					"Build a source-level graph from GCC's tree CFG dump.",
+					outputProducer(gccControlFlowGraphOutput),
+					(raw) => parseGccControlFlowGraphs(raw.text, raw.command.cwd),
+				),
+				assemblyControlFlowGraphOutput,
+			],
+		},
+	},
 };

@@ -6,17 +6,11 @@ import { DotNetPdbParser } from '../vendor/lib/parsers/pdb-parser-dotnet.js';
 import { dotNetSourceMappingData } from '../artifacts/dotnet/dotnet-source-mapping.js';
 import { renderDotNetIl } from '../artifacts/dotnet/dotnet-il-renderer.js';
 import { readBoundedArtifactBuffer } from './toolchain-backend.js';
-import {
-	artifactCells,
-	executableOnPath,
-	type ArtifactProducer,
-	type ToolchainDefinition,
-} from './toolchain-contracts.js';
+import { executableOnPath, type ArtifactProducer, type ToolchainDefinition } from './toolchain-contracts.js';
 import { parseParenthesizedDiagnostics } from './msvc/diagnostics.js';
 
 export const dotNetIlProducer: ArtifactProducer = (backend, source, options, cancellationToken) =>
 	backend.produceWithTool(
-		'assembly',
 		source,
 		options,
 		{
@@ -272,9 +266,8 @@ export const dotnet: ToolchainDefinition = {
 	languageIdentifiers: Object.freeze(['csharp']),
 	stripOwnedArguments: stripDotNetManagedArguments,
 	discoverTools: discoverDotNetTools,
-	artifacts: artifactCells({
+	artifacts: {
 		assembly: {
-			status: 'available',
 			producer: dotNetIlProducer,
 			renderer: renderDotNetIl,
 			listingSyntax: 'dotnet-il',
@@ -283,5 +276,5 @@ export const dotnet: ToolchainDefinition = {
 				{ name: 'ildasm', label: '.NET IL disassembler (ildasm)' },
 			],
 		},
-	}),
+	},
 };

@@ -41,8 +41,7 @@ export class ToolchainRegistry implements Disposable {
 				explanation: `Toolchain profile not found: ${id}`,
 			};
 		}
-		const cell = resolveArtifactAvailability(backend.profile, kind);
-		return cell.status === 'available' ? { status: 'available' } : cell;
+		return resolveArtifactAvailability(backend.profile, kind);
 	}
 
 	getOrigin(id: string): ConfigurationOrigin | undefined {

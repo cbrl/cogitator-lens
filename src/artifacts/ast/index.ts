@@ -1,5 +1,4 @@
 import { displayOptionDescriptors, type ArtifactDefinition } from '../core/artifact-contracts.js';
-import { renderToolchainArtifact } from '../core/toolchain-rendered-artifact.js';
 
 export const astArtifact = {
 	label: 'Abstract syntax tree',
@@ -9,5 +8,4 @@ export const astArtifact = {
 	filenameExtension: '.ast',
 	documentLanguage: 'artifact',
 	editorLanguageId: 'coglens-ast',
-	renderer: renderToolchainArtifact,
 } as const satisfies ArtifactDefinition;

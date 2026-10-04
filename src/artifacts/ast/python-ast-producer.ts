@@ -18,7 +18,6 @@ const pythonAstHelper = [
 export const pythonAstProducer: ArtifactProducer = async (backend, source, options, cancellationToken) => {
 	try {
 		return await backend.produceArtifact(
-			'ast',
 			source,
 			options,
 			{

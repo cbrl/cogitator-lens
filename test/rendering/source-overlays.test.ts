@@ -3,14 +3,15 @@ import path from 'node:path';
 import test from 'node:test';
 import { artifactDefinitions } from '../../src/artifacts/core/artifact-definitions.js';
 import { optimizationRemarksRenderer } from '../../src/artifacts/optimization-remarks/optimization-remarks-renderer.js';
+import { renderClangOptimizationRemarks } from '../../src/artifacts/optimization-remarks/clang-optimization-remarks.js';
+import { renderGccOptimizationRemarks } from '../../src/artifacts/optimization-remarks/gcc-optimization-remarks.js';
+import { renderPythonStackAnalysis } from '../../src/artifacts/stack-analysis/python-stack-analysis.js';
 import { defaultArtifactOptions } from '../../src/types/index.js';
 import { rawArtifact, renderContext } from '../support/artifacts.js';
 import { readFixture } from '../support/environment.js';
-import { toolchainBackend } from '../support/toolchains.js';
 
 const display = defaultArtifactOptions.display;
 const stack = artifactDefinitions['stack-analysis'].renderer;
-const remarks = artifactDefinitions['optimization-remarks'].renderer;
 
 test('stack usage becomes per-function annotations, an unmapped section, and frame metrics', () => {
 	const source = path.resolve('/project/source.cpp');
@@ -83,7 +84,7 @@ test('Windows stack paths map to source annotations without losing the drive pre
 
 test('Python stack usage keeps VM-slot units explicit through the toolchain renderer', () => {
 	const source = path.resolve('/project/source.py');
-	const rendered = toolchainBackend('python').renderArtifact(
+	const rendered = renderPythonStackAnalysis(
 		rawArtifact(
 			'stack-analysis',
 			JSON.stringify({
@@ -97,10 +98,6 @@ test('Python stack usage keeps VM-slot units explicit through the toolchain rend
 		renderContext('python', { file: source, text: 'value = 1\ndef answer():\n    return value' }),
 	);
 
-	assert.equal(rendered.presentation, 'text');
-	if (rendered.presentation !== 'text') {
-		return;
-	}
 	// Python frames are counted in interpreter stack slots, and the unit travels
 	// with every annotation and metric rather than only with the heading text.
 	assert.deepEqual(
@@ -122,7 +119,7 @@ test('Python stack usage keeps VM-slot units explicit through the toolchain rend
 });
 
 test('clang optimization records land on empty anchor rows above their source lines', () => {
-	const rendered = remarks(
+	const rendered = renderClangOptimizationRemarks(
 		rawArtifact('optimization-remarks', readFixture('optimization-remarks', 'clang.opt.yaml')),
 		display,
 		renderContext('clang', {
@@ -186,7 +183,7 @@ test('optimization remarks outside the rendered source are counted but not shown
 		file: path.normalize('/project/source.cpp'),
 		text: 'first line\nsecond line\nthird line',
 	});
-	const rendered = remarks(
+	const rendered = renderGccOptimizationRemarks(
 		rawArtifact(
 			'optimization-remarks',
 			[
@@ -218,7 +215,7 @@ test('optimization remarks outside the rendered source are counted but not shown
 		[1, 3, 0],
 	);
 
-	const unparsed = remarks(
+	const unparsed = renderGccOptimizationRemarks(
 		rawArtifact('optimization-remarks', 'not optimization output'),
 		display,
 		renderContext('gcc', { file: path.normalize('/project/source.cpp'), text: 'int main() {}\n' }),
@@ -231,7 +228,7 @@ test('optimization remarks outside the rendered source are counted but not shown
 });
 
 test('two remarks on one source line each get their own anchor row', () => {
-	const rendered = remarks(
+	const rendered = renderGccOptimizationRemarks(
 		rawArtifact(
 			'optimization-remarks',
 			[

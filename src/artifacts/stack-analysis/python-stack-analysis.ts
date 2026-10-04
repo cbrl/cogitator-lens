@@ -35,7 +35,6 @@ export const pythonStackAnalysisHelper = [
 
 export const pythonStackAnalysisProducer: ArtifactProducer = async (backend, source, options, cancellationToken) => {
 	const raw = await backend.produceArtifact(
-		'stack-analysis',
 		source,
 		options,
 		{ output: 'stdout', arguments: () => ['-I', '-c', pythonStackAnalysisHelper] },

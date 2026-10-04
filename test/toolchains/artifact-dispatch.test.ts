@@ -1,24 +1,37 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { renderControlFlowGraphArtifact } from '../../src/artifacts/control-flow-graph/control-flow-graph-renderer.js';
+import { artifactDefinitions, supportedArtifactKinds } from '../../src/artifacts/core/artifact-definitions.js';
 import { clangClLlvmIrOutput, llvmIrOutput } from '../../src/artifacts/core/compiler-output-producer.js';
 import { rustLlvmIrOutput, rustMirOutput } from '../../src/toolchains/rust.js';
 import { clangClOptimizationRemarksOutput } from '../../src/artifacts/optimization-remarks/clang-cl-optimization-remarks.js';
 import { pythonCfgHelper, pythonControlFlowGraphProducer } from '../../src/artifacts/python/python-cfg-producer.js';
 import { pythonAstHelper } from '../../src/artifacts/ast/python-ast-producer.js';
 import { pythonStackAnalysisHelper } from '../../src/artifacts/stack-analysis/python-stack-analysis.js';
-import { defaultArtifactOptions } from '../../src/types/index.js';
-import { rawArtifact, renderContext } from '../support/artifacts.js';
-import { availableCell, availableOutput, recordProduction, toolchainBackend } from '../support/toolchains.js';
+import { supportedToolchainKinds, toolchainDefinitions } from '../../src/toolchains/toolchain-map.js';
+import { rawArtifact, renderContext, renderGraphs } from '../support/artifacts.js';
+import { declaredImplementation, declaredOutput, recordProduction, toolchainBackend } from '../support/toolchains.js';
 
-test('an artifact cell routes to the output specification its toolchain owns', async () => {
+test('every supported artifact implementation resolves to a renderer', () => {
+	for (const toolchain of supportedToolchainKinds) {
+		for (const kind of supportedArtifactKinds) {
+			const support = toolchainDefinitions[toolchain].artifacts[kind];
+			for (const implementation of support?.outputs ?? (support ? [support] : [])) {
+				assert.ok(
+					implementation.renderer ?? artifactDefinitions[kind].renderer,
+					`${toolchain}/${kind} has no renderer`,
+				);
+			}
+		}
+	}
+});
+
+test('an artifact implementation routes to the output specification its toolchain owns', async () => {
 	for (const [toolchain, artifact, expected] of [
 		['clang', 'llvm-ir', llvmIrOutput],
 		['clang-cl', 'llvm-ir', clangClLlvmIrOutput],
 		['clang-cl', 'optimization-remarks', clangClOptimizationRemarksOutput],
 	] as const) {
-		const recorded = await recordProduction(availableCell(toolchain, artifact).producer);
-		assert.equal(recorded.kind, artifact);
+		const recorded = await recordProduction(declaredImplementation(toolchain, artifact).producer);
 		assert.equal(recorded.spec, expected, `${toolchain}/${artifact} used the wrong specification`);
 	}
 });
@@ -60,11 +73,10 @@ test('a control-flow output routes to the compiler output it names', async () =>
 			],
 		],
 	] as const) {
-		const output = availableOutput(toolchain, artifactKind, outputId);
+		const output = declaredOutput(toolchain, artifactKind, outputId);
 		const recorded = await recordProduction(output.producer, {
 			outputFile: outputId === 'rust-mir' ? 'cfg.mir' : 'cfg.ll',
 		});
-		assert.equal(recorded.kind, artifactKind);
 		assert.equal(recorded.outputFilename, outputFilename);
 		assert.deepEqual(recorded.arguments, expectedArguments, `${toolchain}/${outputId}`);
 	}
@@ -74,14 +86,13 @@ test('a control-flow output routes to the compiler output it names', async () =>
 		['rust-mir', rustMirOutput],
 		['llvm-ir', rustLlvmIrOutput],
 	] as const) {
-		const recorded = await recordProduction(availableOutput('rust', 'control-flow-graph', outputId).producer);
+		const recorded = await recordProduction(declaredOutput('rust', 'control-flow-graph', outputId).producer);
 		assert.equal(recorded.spec, expected);
 	}
 
 	// The assembly output has no specification of its own; it reuses the shared path.
-	const assembly = await recordProduction(availableOutput('rust', 'control-flow-graph', 'assembly').producer);
+	const assembly = await recordProduction(declaredOutput('rust', 'control-flow-graph', 'assembly').producer);
 	assert.equal(assembly.viaAssembly, true);
-	assert.equal(assembly.kind, 'control-flow-graph');
 });
 
 test('stdout-backed producers pass execution modes rather than an output file', async () => {
@@ -90,16 +101,14 @@ test('stdout-backed producers pass execution modes rather than an output file', 
 		['msvc', 'preprocessed-source', ['/E']],
 		['python', 'assembly', ['-m', 'dis']],
 	] as const) {
-		const recorded = await recordProduction(availableCell(toolchain, artifact).producer, {
+		const recorded = await recordProduction(declaredImplementation(toolchain, artifact).producer, {
 			profileKind: toolchain,
 		});
-		assert.equal(recorded.kind, artifact);
 		assert.equal(recorded.output, 'stdout');
 		assert.deepEqual(recorded.arguments, expected, `${toolchain}/${artifact}`);
 	}
 
 	const cfg = await recordProduction(pythonControlFlowGraphProducer);
-	assert.equal(cfg.kind, 'control-flow-graph');
 	assert.equal(cfg.output, 'stdout');
 	assert.deepEqual(cfg.arguments, ['-I', '-c', pythonCfgHelper]);
 });
@@ -114,12 +123,12 @@ test('the Python helpers compile the source instead of importing or executing it
 	}
 });
 
-test('a selected control-flow output is rendered by the parser that output declares', () => {
+test('a selected control-flow output is rendered by the parser that output declares', async () => {
 	const source = { file: '/project/source.rs' };
-	const llvm = renderControlFlowGraphArtifact(
+	const llvm = await renderGraphs(
+		declaredOutput('rust', 'control-flow-graph', 'llvm-ir'),
 		rawArtifact('control-flow-graph', ['define void @selected() {', 'entry:', '  ret void', '}'].join('\n')),
-		defaultArtifactOptions.display,
-		renderContext('rust', source, availableOutput('rust', 'control-flow-graph', 'llvm-ir')),
+		renderContext('rust', source),
 	);
 	assert.deepEqual(
 		llvm.graphs.map((graph) => graph.id),
@@ -142,10 +151,10 @@ test('a selected control-flow output is rendered by the parser that output decla
 		}),
 		parseAssemblyControlFlowGraph: rustBackend.parseAssemblyControlFlowGraph.bind(rustBackend),
 	} as never;
-	const assembly = renderControlFlowGraphArtifact(
+	const assembly = await renderGraphs(
+		declaredOutput('rust', 'control-flow-graph', 'assembly'),
 		rawArtifact('control-flow-graph', ''),
-		defaultArtifactOptions.display,
-		renderContext(backend, source, availableOutput('rust', 'control-flow-graph', 'assembly')),
+		renderContext(backend, source),
 	);
 	assert.deepEqual(
 		assembly.graphs.map((graph) => graph.id),

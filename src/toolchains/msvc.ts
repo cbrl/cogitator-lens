@@ -7,23 +7,21 @@ import { noopPropertyGetter } from '../vendor/compiler-props.js';
 import type { ToolchainProfile } from '../types/index.js';
 import * as exec from '../exec.js';
 import { ExecError } from '../exec.js';
-import { artifactProducer } from '../artifacts/core/compiler-output-producer.js';
+import { outputProducer } from '../artifacts/core/compiler-output-producer.js';
 import {
-	binaryDisassemblyProducer,
 	normalizeDisassemblySourcePaths,
+	type BinaryDisassembler,
 } from '../artifacts/binary-disassembly/binary-disassembly-producer.js';
 import { parseMsvcSourceDependencies } from '../compilation/artifact-inputs.js';
 import { MsvcAssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/assembly-dialects.js';
 import {
-	artifactCells,
-	assemblyCell,
+	compilerAssembly,
 	assemblyControlFlowGraphOutput,
-	binaryCell,
-	outputArtifactCell,
+	binaryDisassembly,
 	toolDiscoverer,
 	type ToolchainDefinition,
 } from './toolchain-contracts.js';
-import type { BinaryDisassembler, DependencyCollectionSpec } from './toolchain-backend.js';
+import type { DependencyCollectionSpec } from './toolchain-backend.js';
 import { cFamilyLanguageIdentifiers, stripCompilerManagedArguments } from './c-family.js';
 import { parseParenthesizedDiagnostics } from './msvc/diagnostics.js';
 
@@ -303,7 +301,7 @@ export const msvcDependencyCollection: DependencyCollectionSpec = Object.freeze(
 	],
 	parse: parseMsvcSourceDependencies,
 });
-export const msvcPreprocessedSourceProducer = artifactProducer('preprocessed-source', {
+export const msvcPreprocessedSourceProducer = outputProducer({
 	output: 'stdout',
 	arguments: () => ['/E'],
 });
@@ -331,10 +329,10 @@ export const msvc: ToolchainDefinition = {
 				: {}),
 		});
 	},
-	artifacts: artifactCells({
-		assembly: assemblyCell,
-		'binary-disassembly': binaryCell('dumpbin', binaryDisassemblyProducer(dumpbin)),
-		'preprocessed-source': { status: 'available', producer: msvcPreprocessedSourceProducer },
-		'control-flow-graph': outputArtifactCell([assemblyControlFlowGraphOutput]),
-	}),
+	artifacts: {
+		assembly: compilerAssembly,
+		'binary-disassembly': binaryDisassembly('dumpbin', dumpbin),
+		'preprocessed-source': { producer: msvcPreprocessedSourceProducer },
+		'control-flow-graph': { outputs: [assemblyControlFlowGraphOutput] },
+	},
 };

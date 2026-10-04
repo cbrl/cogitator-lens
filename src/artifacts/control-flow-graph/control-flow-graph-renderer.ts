@@ -6,19 +6,31 @@ import type {
 	RawArtifact,
 	RenderedGraphArtifact,
 } from '../../types/index.js';
-import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
+import type { ArtifactRenderContext, ArtifactRenderer } from '../core/artifact-contracts.js';
 import {
 	controlFlowGraphMetrics,
 	validateControlFlowGraphs,
 	type GraphParseResult,
 } from './control-flow-graph-model.js';
 
-export function renderControlFlowGraphArtifact(
+/** Turns the raw output of one control-flow-graph source into graphs. */
+export type GraphParser = (
 	raw: RawArtifact,
 	options: DisplayOptions,
 	context: ArtifactRenderContext,
+) => GraphParseResult;
+
+/** Creates the renderer for a control-flow-graph output from the parser that reads its raw output. */
+export function controlFlowGraphRenderer(parseGraphs: GraphParser): ArtifactRenderer {
+	return (raw, options, context) => renderControlFlowGraph(raw, parseGraphs(raw, options, context), context);
+}
+
+function renderControlFlowGraph(
+	raw: RawArtifact,
+	graphs: GraphParseResult,
+	context: ArtifactRenderContext,
 ): RenderedGraphArtifact {
-	const parsed = remapRemoteSources(context.artifactOutput!.parseGraphs!(raw, options, context), context.source.uri);
+	const parsed = remapRemoteSources(graphs, context.source.uri);
 	const validated = validateControlFlowGraphs(parsed.graphs);
 	const messages = [...parsed.diagnostics, ...validated.diagnostics];
 	const diagnostics: CompileDiagnostic[] = [
