@@ -16,21 +16,24 @@ export interface ArtifactRegistryDocument {
 	readonly parsed: ArtifactUriIdentity;
 	readonly identity: ArtifactDocumentIdentity;
 	readonly handler: ArtifactGenerator;
+	/** The identity and the current status, as the details view shows them. */
+	readonly snapshot: ArtifactDocumentSnapshot;
 }
 
-export interface ArtifactDocumentRegistration {
-	readonly refresh: (document: ArtifactRegistryDocument) => void;
-	readonly onStatus?: (document: ArtifactRegistryDocument, status: ArtifactStatus) => void;
+/** The consumer of one artifact document, such as a text editor or a graph panel. */
+export interface ArtifactView {
+	/** Regenerates the artifact after the registry marks it stale. */
+	refresh(): void;
+	onStatus(status: ArtifactStatus): void;
+	dispose(): void;
 }
+
+type ViewClass<V extends ArtifactView> = abstract new (...args: never[]) => V;
 
 interface RegisteredArtifactDocument extends ArtifactRegistryDocument {
-	readonly registration: ArtifactDocumentRegistration;
+	view?: ArtifactView;
 	subscriptions: Disposable;
 	pendingRefresh?: ReturnType<typeof setTimeout>;
-}
-
-export function artifactDocumentKey(uri: Uri): string {
-	return uriComparisonKey(uri);
 }
 
 export function buildArtifactIdentity(
@@ -100,15 +103,24 @@ export class ArtifactDocumentRegistry implements Disposable {
 		);
 	}
 
-	get(uri: Uri): ArtifactRegistryDocument | undefined {
-		return this.documents.get(artifactDocumentKey(uri));
+	/** Returns the view of an open document when the view has the given class. */
+	view<V extends ArtifactView>(uri: Uri, type: ViewClass<V>): V | undefined {
+		const view = this.documents.get(uriComparisonKey(uri))?.view;
+		return view instanceof type ? view : undefined;
 	}
 
-	open(uri: Uri, registration: ArtifactDocumentRegistration): ArtifactRegistryDocument {
-		const key = artifactDocumentKey(uri);
-		const existing = this.documents.get(key);
-		if (existing) {
-			return existing;
+	/** Returns the views of the given class for every open document. */
+	views<V extends ArtifactView>(type: ViewClass<V>): V[] {
+		return [...this.documents.values()].flatMap((document) =>
+			document.view instanceof type ? [document.view] : [],
+		);
+	}
+
+	/** Opens a document and attaches the view that consumes it. Each document has one view. */
+	open<V extends ArtifactView>(uri: Uri, createView: (document: ArtifactRegistryDocument) => V): V {
+		const key = uriComparisonKey(uri);
+		if (this.documents.has(key)) {
+			throw new Error(`An artifact document is already open: ${uri.toString()}`);
 		}
 
 		const parsed = parseArtifactUri(uri);
@@ -139,24 +151,28 @@ export class ArtifactDocumentRegistry implements Disposable {
 			parsed,
 			identity: buildArtifactIdentity(uri, parsed, variant, profile),
 			handler,
-			registration,
+			get snapshot() {
+				return { identity: this.identity, status: this.handler.status };
+			},
 			subscriptions: Disposable.from(),
 		};
+		const view = createView(document);
+		document.view = view;
 		document.subscriptions = Disposable.from(
 			watcher,
 			watcher.onDidChange(() => this.requestRefresh(uri)),
 			handler.onDidChange((status) => {
-				registration.onStatus?.(document, status);
-				this.stateEmitter.fire({ identity: document.identity, status });
+				view.onStatus(status);
+				this.stateEmitter.fire(document.snapshot);
 			}),
 		);
 		this.documents.set(key, document);
-		this.stateEmitter.fire(this.snapshot(document));
-		return document;
+		this.stateEmitter.fire(document.snapshot);
+		return view;
 	}
 
 	requestRefresh(uri: Uri): void {
-		const document = this.documents.get(artifactDocumentKey(uri));
+		const document = this.documents.get(uriComparisonKey(uri));
 		if (!document) {
 			return;
 		}
@@ -166,12 +182,12 @@ export class ArtifactDocumentRegistry implements Disposable {
 		}
 		document.pendingRefresh = setTimeout(() => {
 			document.pendingRefresh = undefined;
-			document.registration.refresh(document);
+			document.view?.refresh();
 		}, 50);
 	}
 
 	unregister(uri: Uri): void {
-		const key = artifactDocumentKey(uri);
+		const key = uriComparisonKey(uri);
 		const document = this.documents.get(key);
 		if (!document) {
 			return;
@@ -181,6 +197,7 @@ export class ArtifactDocumentRegistry implements Disposable {
 			clearTimeout(document.pendingRefresh);
 		}
 		document.subscriptions.dispose();
+		document.view?.dispose();
 		document.handler.dispose();
 	}
 
@@ -189,9 +206,5 @@ export class ArtifactDocumentRegistry implements Disposable {
 		for (const document of [...this.documents.values()]) {
 			this.unregister(document.uri);
 		}
-	}
-
-	private snapshot(document: ArtifactRegistryDocument): ArtifactDocumentSnapshot {
-		return { identity: document.identity, status: document.handler.status };
 	}
 }

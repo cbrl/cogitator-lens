@@ -16,9 +16,11 @@ import { buildSourceLineMap, lineHasSource, type SourceLineMap } from './source-
 import path from 'path';
 import { equalUri } from '../file-identity.js';
 import {
+	allDecorations,
 	binaryColumnsDecoration,
 	jumpArrowDecorations,
 	annotationStyleDecorations,
+	mappingDecorations,
 	selectedLineDecoration,
 	selectedSourceRangeDecoration,
 	stateDecoration,
@@ -26,7 +28,6 @@ import {
 	sourceLineBandDecorations,
 	unusedLineDecoration,
 } from './decorations/decoration-styles.js';
-import { EditorTracker } from './decorations/editor-tracker.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
 import type { ArtifactStatus, ArtifactState } from './artifact-generator.js';
 import type { ArtifactKind, ArtifactOptions, RenderedArtifactLine, RenderedTextArtifact } from '../types/index.js';
@@ -72,7 +73,6 @@ export class ArtifactDecorator {
 	private compilationState: ArtifactState = 'stale';
 	private truncated = false;
 
-	private readonly editorTracker: EditorTracker;
 	private readonly configService: ConfigurationService;
 	private readonly registrations: Disposable;
 
@@ -88,7 +88,6 @@ export class ArtifactDecorator {
 	) {
 		this.artifactUri = artifactUri;
 		this.sourceUri = sourceUri;
-		this.editorTracker = new EditorTracker();
 		this.configService = configService;
 
 		this.refreshDecorations();
@@ -176,7 +175,7 @@ export class ArtifactDecorator {
 							.map((range) => sourceScrollAnchor(mapping, range.start.line, range.end.line))
 							.find((candidate) => candidate !== undefined)
 					: undefined;
-				const artifactEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
+				const artifactEditor = this.artifactEditor();
 				if (anchor && artifactEditor && anchor.artifactLine < artifactEditor.document.lineCount) {
 					this.revealScrollAnchor(artifactEditor, anchor.artifactLine);
 				}
@@ -213,10 +212,16 @@ export class ArtifactDecorator {
 			// Recalculate active state now that content may have changed
 			this.updateActiveState(content);
 			this.dimUnusedSourceLines(content);
-			this.decorateSourceDensity(content);
+			const { kind } = content.artifact;
+			if (
+				artifactSupportsOption(kind, 'sourceLineColorBands') &&
+				this.artifactOptions(kind).display.sourceLineColorBands
+			) {
+				this.decorateSourceDensity(content);
+				this.decorateSourceLineBands(content);
+			}
 			this.decorateListingColumns(content);
 			this.decorateJumpArrows(content);
-			this.decorateSourceLineBands(content);
 			this.decorateAnalysisAnnotations(content);
 
 			// Treat as if the user selected the current line of the first editor (only highlights the line, doesn't scroll)
@@ -231,7 +236,7 @@ export class ArtifactDecorator {
 
 		const stateText = this.stateDecorationText();
 		if (stateText) {
-			const artifactEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
+			const artifactEditor = this.artifactEditor();
 			artifactEditor?.setDecorations(stateDecoration, [
 				{
 					range: new Range(0, 0, 0, 0),
@@ -243,41 +248,11 @@ export class ArtifactDecorator {
 		}
 	}
 
-	private clearDecorations(editor: TextEditor) {
-		this.clearMappingDecorations(editor);
-		editor.setDecorations(stateDecoration, []);
-		editor.setDecorations(binaryColumnsDecoration, []);
-		for (const decorations of Object.values(jumpArrowDecorations)) {
-			editor.setDecorations(decorations.source, []);
-			editor.setDecorations(decorations.target, []);
-		}
-		for (const decoration of Object.values(annotationStyleDecorations)) {
-			editor.setDecorations(decoration, []);
-		}
-	}
-
-	private clearMappingDecorations(editor: TextEditor): void {
-		editor.setDecorations(selectedLineDecoration, []);
-		editor.setDecorations(selectedSourceRangeDecoration, []);
-		editor.setDecorations(unusedLineDecoration, []);
-		for (const decoration of sourceLineBandDecorations) {
-			editor.setDecorations(decoration, []);
-		}
-		for (const bandDecorations of sourceDensityDecorations) {
-			for (const decoration of bandDecorations) {
-				editor.setDecorations(decoration, []);
-			}
-		}
-	}
-
 	private clearAllDecorations() {
-		for (let editor of this.getAllSourceEditors()) {
-			this.clearDecorations(editor);
-		}
-
-		const artifactEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
-		if (artifactEditor !== undefined) {
-			this.clearDecorations(artifactEditor);
+		const artifactEditor = this.artifactEditor();
+		const editors = this.getAllSourceEditors();
+		for (const editor of artifactEditor ? [...editors, artifactEditor] : editors) {
+			clearDecorations(editor, allDecorations);
 		}
 	}
 
@@ -309,13 +284,6 @@ export class ArtifactDecorator {
 	}
 
 	private decorateSourceDensity(content: MappedArtifact): void {
-		if (
-			!artifactSupportsOption(content.artifact.kind, 'sourceLineColorBands') ||
-			!this.artifactOptions(content.artifact.kind).display.sourceLineColorBands
-		) {
-			return;
-		}
-
 		for (const editor of this.getAllSourceEditors(content)) {
 			const mapping = content.sources.get(editor.document.uri);
 			if (!mapping) {
@@ -354,7 +322,7 @@ export class ArtifactDecorator {
 	}
 
 	private decorateListingColumns(content: MappedArtifact): void {
-		const editor = this.editorTracker.getArtifactEditor(this.artifactUri);
+		const editor = this.artifactEditor();
 		if (
 			!editor ||
 			!artifactSupportsOption(content.artifact.kind, 'binaryColumns') ||
@@ -390,7 +358,7 @@ export class ArtifactDecorator {
 	}
 
 	private decorateJumpArrows(content: MappedArtifact): void {
-		const editor = this.editorTracker.getArtifactEditor(this.artifactUri);
+		const editor = this.artifactEditor();
 		if (!editor) {
 			return;
 		}
@@ -419,14 +387,7 @@ export class ArtifactDecorator {
 	}
 
 	private decorateSourceLineBands(content: MappedArtifact): void {
-		if (
-			!artifactSupportsOption(content.artifact.kind, 'sourceLineColorBands') ||
-			!this.artifactOptions(content.artifact.kind).display.sourceLineColorBands
-		) {
-			return;
-		}
-
-		const artifactEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
+		const artifactEditor = this.artifactEditor();
 		if (!artifactEditor) {
 			return;
 		}
@@ -459,7 +420,7 @@ export class ArtifactDecorator {
 		selectedEditor: TextEditor,
 		highlightOnly: boolean = false,
 	): void {
-		const artifactEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
+		const artifactEditor = this.artifactEditor();
 
 		if (artifactEditor === undefined) {
 			return;
@@ -612,7 +573,7 @@ export class ArtifactDecorator {
 	}
 
 	private annotationDecorations(content: MappedArtifact, style: string, decoration: TextEditorDecorationType): void {
-		const editor = this.editorTracker.getArtifactEditor(this.artifactUri);
+		const editor = this.artifactEditor();
 		if (!editor) {
 			return;
 		}
@@ -641,26 +602,25 @@ export class ArtifactDecorator {
 
 	private onChangeVisibleEditors(): void {
 		this.refreshDecorations();
-		this.updateActiveState(this.content);
-
-		if (this.active) {
-			// Update dimmed lines when the editors change
-			this.withContent((content) => this.dimUnusedSourceLines(content));
-		} else {
+		if (!this.active) {
 			// Clear cross-editor mapping decorations if the pair is no longer visible. Listing-local columns,
 			// analysis annotations, and state remain useful when the artifact is open by itself.
 			for (const editor of this.getAllSourceEditors()) {
-				this.clearDecorations(editor);
+				clearDecorations(editor, allDecorations);
 			}
-			const artifactEditor = this.editorTracker.getArtifactEditor(this.artifactUri);
+			const artifactEditor = this.artifactEditor();
 			if (artifactEditor) {
-				this.clearMappingDecorations(artifactEditor);
+				clearDecorations(artifactEditor, mappingDecorations);
 			}
 		}
 	}
 
 	private getAllSourceEditors(content = this.content): TextEditor[] {
-		return content ? this.editorTracker.getSourceEditors(content.sources) : [];
+		return content ? window.visibleTextEditors.filter((editor) => content.sources.has(editor.document.uri)) : [];
+	}
+
+	private artifactEditor(): TextEditor | undefined {
+		return window.visibleTextEditors.find((editor) => equalUri(editor.document.uri, this.artifactUri));
 	}
 
 	private withContent<T>(action: (content: MappedArtifact) => T): T | undefined {
@@ -682,6 +642,12 @@ export class ArtifactDecorator {
 			case 'successful':
 				return this.truncated ? 'Artifact output was truncated.' : undefined;
 		}
+	}
+}
+
+function clearDecorations(editor: TextEditor, decorations: readonly TextEditorDecorationType[]): void {
+	for (const decoration of decorations) {
+		editor.setDecorations(decoration, []);
 	}
 }
 

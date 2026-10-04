@@ -132,3 +132,21 @@ export const annotationStyleDecorations = {
 	'optimization-analysis': optimizationRemarkDecoration('analysis'),
 	'stack-usage': stackUsageDecoration,
 } as const satisfies Record<ArtifactLineAnnotationStyle, ReturnType<typeof window.createTextEditorDecorationType>>;
+
+/** The decorations that connect source lines with artifact lines. */
+export const mappingDecorations = [
+	selectedLineDecoration,
+	selectedSourceRangeDecoration,
+	unusedLineDecoration,
+	...sourceLineBandDecorations,
+	...sourceDensityDecorations.flat(),
+];
+
+/** Every decoration that the artifact decorator sets. */
+export const allDecorations = [
+	...mappingDecorations,
+	stateDecoration,
+	binaryColumnsDecoration,
+	...Object.values(jumpArrowDecorations).flatMap((decorations) => [decorations.source, decorations.target]),
+	...Object.values(annotationStyleDecorations),
+];

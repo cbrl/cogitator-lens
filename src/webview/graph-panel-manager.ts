@@ -21,10 +21,11 @@ import type { ControlFlowGraph, ControlFlowSourceLocation, RenderedGraphArtifact
 import type { ArtifactStatus } from '../artifact-document/artifact-generator.js';
 import type { ArtifactDocumentSnapshot } from '../artifact-document/artifact-identity.js';
 import {
-	artifactDocumentKey,
 	ArtifactDocumentRegistry,
 	type ArtifactRegistryDocument,
+	type ArtifactView,
 } from '../artifact-document/artifact-document-registry.js';
+import { parseArtifactUri } from '../artifact-document/artifact-uri.js';
 import { logChannel } from '../logger.js';
 import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
 import {
@@ -34,20 +35,29 @@ import {
 	type SerializedGraphArtifact,
 } from './graph-protocol.js';
 
-interface GraphPanelDocument {
-	readonly registered: ArtifactRegistryDocument;
-	readonly panel: WebviewPanel;
-	subscriptions: Disposable;
+/** The state of one open control-flow graph panel. */
+class GraphPanelView implements ArtifactView {
 	artifact?: RenderedGraphArtifact;
 	selectedGraphId?: string;
-	ready: boolean;
+	ready = false;
+	subscriptions: Disposable = Disposable.from();
+
+	constructor(
+		readonly document: ArtifactRegistryDocument,
+		readonly panel: WebviewPanel,
+		readonly refresh: () => void,
+		readonly onStatus: (status: ArtifactStatus) => void,
+	) {}
+
+	dispose(): void {
+		this.subscriptions.dispose();
+	}
 }
 
 export class GraphPanelManager implements Disposable {
-	private readonly documents = new Map<string, GraphPanelDocument>();
 	private readonly activeEmitter = new EventEmitter<ArtifactDocumentSnapshot | undefined>();
 	private readonly subscriptions: Disposable;
-	private activeDocument?: GraphPanelDocument;
+	private activeView?: GraphPanelView;
 
 	readonly onDidChangeActiveGraph: Event<ArtifactDocumentSnapshot | undefined> = this.activeEmitter.event;
 
@@ -57,14 +67,14 @@ export class GraphPanelManager implements Disposable {
 	) {
 		this.subscriptions = Disposable.from(
 			window.onDidChangeActiveColorTheme(() => {
-				this.documents.forEach((document) => this.postTheme(document));
+				this.registry.views(GraphPanelView).forEach((view) => this.postTheme(view));
 			}),
 			this.activeEmitter,
 		);
 	}
 
 	get activeSnapshot(): ArtifactDocumentSnapshot | undefined {
-		return this.activeDocument ? this.snapshot(this.activeDocument) : undefined;
+		return this.activeView?.document.snapshot;
 	}
 
 	get onDidChangeArtifactState(): Event<ArtifactDocumentSnapshot> {
@@ -72,93 +82,72 @@ export class GraphPanelManager implements Disposable {
 	}
 
 	async open(uri: Uri): Promise<void> {
-		const key = artifactDocumentKey(uri);
-		const existing = this.documents.get(key);
+		const existing = this.registry.view(uri, GraphPanelView);
 		if (existing) {
 			existing.panel.reveal(ViewColumn.Beside, true);
 			this.setActive(existing);
-			if (existing.registered.handler.status.state === 'stale') {
-				this.requestRefresh(existing);
+			if (existing.document.handler.status.state === 'stale') {
+				this.registry.requestRefresh(uri);
 			}
 			return;
 		}
 
-		const registered = this.registry.open(uri, {
-			refresh: (registryDocument) => {
-				const current = this.documents.get(artifactDocumentKey(registryDocument.uri));
-				if (current) {
-					void this.refresh(current);
-				}
-			},
-			onStatus: (registryDocument, status) => {
-				const current = this.documents.get(artifactDocumentKey(registryDocument.uri));
-				if (current) {
-					this.acceptStatus(current, status);
-				}
-			},
-		});
-		const parsed = registered.parsed;
-		const definition = artifactDefinitions[parsed.artifactKind];
+		const parsed = parseArtifactUri(uri);
+		const definition = parsed ? artifactDefinitions[parsed.artifactKind] : undefined;
 		if (
-			definition.presentation !== 'graph' ||
+			definition?.presentation !== 'graph' ||
 			definition.requiresOutputSelection !== true ||
-			!parsed.artifactOutputId
+			!parsed?.artifactOutputId
 		) {
-			this.registry.unregister(uri);
 			throw new Error(`Invalid control-flow graph URI: ${uri.toString()}`);
 		}
-		const panel = window.createWebviewPanel(
-			'coglens.controlFlowGraph',
-			`${path.basename(parsed.source.fsPath)} — ${registered.identity.artifactLabel}`,
-			{ viewColumn: ViewColumn.Beside, preserveFocus: true },
-			{
-				enableScripts: true,
-				retainContextWhenHidden: true,
-				localResourceRoots: [Uri.joinPath(this.context.extensionUri, 'dist', 'webview')],
-			},
-		);
-		const document: GraphPanelDocument = {
-			registered,
-			panel,
-			ready: false,
-			subscriptions: Disposable.from(),
-		};
-		panel.webview.html = this.html(panel);
-		const subscriptions = Disposable.from(
-			panel.webview.onDidReceiveMessage((message) => this.acceptMessage(document, message)),
-			panel.onDidChangeViewState((event) => {
+		const view: GraphPanelView = this.registry.open(uri, (document) => {
+			const panel = window.createWebviewPanel(
+				'coglens.controlFlowGraph',
+				`${path.basename(document.parsed.source.fsPath)} — ${document.identity.artifactLabel}`,
+				{ viewColumn: ViewColumn.Beside, preserveFocus: true },
+				{
+					enableScripts: true,
+					retainContextWhenHidden: true,
+					localResourceRoots: [Uri.joinPath(this.context.extensionUri, 'dist', 'webview')],
+				},
+			);
+			return new GraphPanelView(
+				document,
+				panel,
+				() => void this.refresh(view),
+				(status) => this.acceptStatus(view, status),
+			);
+		});
+		view.panel.webview.html = this.html(view.panel);
+		view.subscriptions = Disposable.from(
+			view.panel.webview.onDidReceiveMessage((message) => this.acceptMessage(view, message)),
+			view.panel.onDidChangeViewState((event) => {
 				if (event.webviewPanel.active) {
-					this.setActive(document);
-				} else if (this.activeDocument === document) {
+					this.setActive(view);
+				} else if (this.activeView === view) {
 					this.setActive(undefined);
 				}
 			}),
-			panel.onDidDispose(() => this.remove(document)),
+			view.panel.onDidDispose(() => this.remove(view)),
 		);
-		document.subscriptions = subscriptions;
-		this.documents.set(key, document);
-		if (panel.active) {
-			this.setActive(document);
+		if (view.panel.active) {
+			this.setActive(view);
 		}
-		await this.refresh(document);
+		await this.refresh(view);
 	}
 
 	dispose(): void {
 		this.subscriptions.dispose();
-		for (const document of [...this.documents.values()]) {
-			document.panel.dispose();
+		for (const view of this.registry.views(GraphPanelView)) {
+			view.panel.dispose();
 		}
-		this.documents.clear();
 	}
 
-	private requestRefresh(document: GraphPanelDocument): void {
-		this.registry.requestRefresh(document.registered.uri);
-	}
-
-	private async refresh(document: GraphPanelDocument): Promise<void> {
+	private async refresh(view: GraphPanelView): Promise<void> {
 		const cancellation = new CancellationTokenSource();
 		try {
-			await document.registered.handler.update(cancellation.token);
+			await view.document.handler.update(cancellation.token);
 		} catch {
 			// ArtifactGenerator publishes the retained/failure state used by the panel and details view.
 		} finally {
@@ -166,20 +155,20 @@ export class GraphPanelManager implements Disposable {
 		}
 	}
 
-	private acceptStatus(document: GraphPanelDocument, status: ArtifactStatus): void {
+	private acceptStatus(view: GraphPanelView, status: ArtifactStatus): void {
 		if (status.artifact?.presentation === 'graph') {
-			document.artifact = status.artifact;
-			if (!status.artifact.graphs.some((graph) => graph.id === document.selectedGraphId)) {
-				document.selectedGraphId = status.artifact.graphs[0]?.id;
+			view.artifact = status.artifact;
+			if (!status.artifact.graphs.some((graph) => graph.id === view.selectedGraphId)) {
+				view.selectedGraphId = status.artifact.graphs[0]?.id;
 			}
 		}
-		if (this.activeDocument === document) {
-			this.activeEmitter.fire(this.snapshot(document));
+		if (this.activeView === view) {
+			this.activeEmitter.fire(view.document.snapshot);
 		}
-		this.postRender(document, status);
+		this.postRender(view, status);
 	}
 
-	private acceptMessage(document: GraphPanelDocument, value: unknown): void {
+	private acceptMessage(view: GraphPanelView, value: unknown): void {
 		const message = parseWebviewMessage(value);
 		if (!message) {
 			logChannel.debug('Ignored invalid control-flow graph webview message.');
@@ -187,36 +176,36 @@ export class GraphPanelManager implements Disposable {
 		}
 		switch (message.type) {
 			case 'ready':
-				document.ready = true;
-				this.postTheme(document);
-				this.postRender(document, document.registered.handler.status);
+				view.ready = true;
+				this.postTheme(view);
+				this.postRender(view, view.document.handler.status);
 				break;
 			case 'selectionChanged':
-				if (!document.artifact?.graphs.some((graph) => graph.id === message.graphId)) {
+				if (!view.artifact?.graphs.some((graph) => graph.id === message.graphId)) {
 					logChannel.debug('Ignored stale control-flow graph selection.');
 					return;
 				}
-				document.selectedGraphId = message.graphId;
+				view.selectedGraphId = message.graphId;
 				break;
 			case 'refresh':
-				this.requestRefresh(document);
+				this.registry.requestRefresh(view.document.uri);
 				break;
 			case 'exportDot': {
-				const graph = document.artifact?.graphs.find((candidate) => candidate.id === message.graphId);
+				const graph = view.artifact?.graphs.find((candidate) => candidate.id === message.graphId);
 				if (graph) {
-					void this.saveExport(document, graph.label, 'dot', toDot(graph));
+					void this.saveExport(view, graph.label, 'dot', toDot(graph));
 				}
 				break;
 			}
 			case 'exportSvg': {
-				const graph = document.artifact?.graphs.find((candidate) => candidate.id === message.graphId);
+				const graph = view.artifact?.graphs.find((candidate) => candidate.id === message.graphId);
 				if (graph) {
-					void this.saveExport(document, graph.label, 'svg', message.svg);
+					void this.saveExport(view, graph.label, 'svg', message.svg);
 				}
 				break;
 			}
 			case 'openSource': {
-				const graph = document.artifact?.graphs.find((candidate) => candidate.id === message.graphId);
+				const graph = view.artifact?.graphs.find((candidate) => candidate.id === message.graphId);
 				const node = graph?.nodes.find((candidate) => candidate.id === message.nodeId);
 				const source = node?.source;
 				if (!source) {
@@ -229,7 +218,7 @@ export class GraphPanelManager implements Disposable {
 				break;
 			}
 			case 'highlightSource': {
-				const graph = document.artifact?.graphs.find((candidate) => candidate.id === message.graphId);
+				const graph = view.artifact?.graphs.find((candidate) => candidate.id === message.graphId);
 				const source = graph?.nodes.find((candidate) => candidate.id === message.nodeId)?.source;
 				if (source) {
 					highlightVisibleSource(source);
@@ -240,14 +229,14 @@ export class GraphPanelManager implements Disposable {
 	}
 
 	private async saveExport(
-		document: GraphPanelDocument,
+		view: GraphPanelView,
 		label: string,
 		extension: 'dot' | 'svg',
 		contents: string,
 	): Promise<void> {
 		const uri = await window.showSaveDialog({
 			title: `Export ${label} control-flow graph`,
-			defaultUri: exportUri(document.registered.identity.sourceUri, `${safeFilename(label)}.${extension}`),
+			defaultUri: exportUri(view.document.identity.sourceUri, `${safeFilename(label)}.${extension}`),
 			filters: extension === 'svg' ? { SVG: ['svg'] } : { Graphviz: ['dot'] },
 		});
 		if (!uri) {
@@ -260,11 +249,11 @@ export class GraphPanelManager implements Disposable {
 		}
 	}
 
-	private postRender(document: GraphPanelDocument, status: ArtifactStatus): void {
-		if (!document.ready) {
+	private postRender(view: GraphPanelView, status: ArtifactStatus): void {
+		if (!view.ready) {
 			return;
 		}
-		const retained = document.artifact;
+		const retained = view.artifact;
 		const artifact: SerializedGraphArtifact = {
 			graphs: retained?.graphs ?? [],
 			metrics: retained?.metrics ?? {},
@@ -272,48 +261,41 @@ export class GraphPanelManager implements Disposable {
 			stale: status.state !== 'successful',
 			...(status.state === 'failed' ? { failure: status.error.message } : {}),
 		};
-		this.postMessage(document, {
+		this.postMessage(view, {
 			type: 'render',
 			artifact,
-			...(document.selectedGraphId === undefined ? {} : { selectedGraphId: document.selectedGraphId }),
+			...(view.selectedGraphId === undefined ? {} : { selectedGraphId: view.selectedGraphId }),
 		});
 	}
 
-	private postTheme(document: GraphPanelDocument): void {
-		if (!document.ready) {
+	private postTheme(view: GraphPanelView): void {
+		if (!view.ready) {
 			return;
 		}
 		const message: HostMessage = { type: 'theme', theme: currentTheme() };
-		this.postMessage(document, message);
+		this.postMessage(view, message);
 	}
 
-	private postMessage(document: GraphPanelDocument, message: HostMessage): void {
-		void document.panel.webview.postMessage(message).then(undefined, (error) => {
+	private postMessage(view: GraphPanelView, message: HostMessage): void {
+		void view.panel.webview.postMessage(message).then(undefined, (error) => {
 			logChannel.debug(`Control-flow graph panel message was not delivered: ${String(error)}`);
 		});
 	}
 
-	private setActive(document: GraphPanelDocument | undefined): void {
-		if (this.activeDocument === document) {
+	private setActive(view: GraphPanelView | undefined): void {
+		if (this.activeView === view) {
 			return;
 		}
-		this.activeDocument = document;
-		this.activeEmitter.fire(document ? this.snapshot(document) : undefined);
+		this.activeView = view;
+		this.activeEmitter.fire(view?.document.snapshot);
 	}
 
-	private snapshot(document: GraphPanelDocument): ArtifactDocumentSnapshot {
-		return { identity: document.registered.identity, status: document.registered.handler.status };
-	}
-
-	private remove(document: GraphPanelDocument): void {
-		const key = artifactDocumentKey(document.registered.uri);
-		if (this.documents.get(key) !== document) {
+	private remove(view: GraphPanelView): void {
+		if (this.registry.view(view.document.uri, GraphPanelView) !== view) {
 			return;
 		}
-		this.documents.delete(key);
-		document.subscriptions.dispose();
-		this.registry.unregister(document.registered.uri);
-		if (this.activeDocument === document) {
+		this.registry.unregister(view.document.uri);
+		if (this.activeView === view) {
 			this.setActive(undefined);
 		}
 	}
