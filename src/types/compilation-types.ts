@@ -239,22 +239,22 @@ export interface SourceState {
 
 export type ProductionKey = string & { readonly brand: unique symbol };
 
-export function productionKey(request: ArtifactRequest, source: SourceState): ProductionKey {
-	const {
-		cancellationToken: _cancellationToken,
-		onInvocation: _onInvocation,
-		options,
-		...productionInputs
-	} = request;
+/**
+ * Identifies raw tool output by what produces it: the producer, the compiled source and its
+ * state, and the invocation. Artifact kinds, outputs, and presets that run the same producer
+ * with the same invocation share one output.
+ */
+export function productionKey(request: ArtifactRequest, source: SourceState, producer: number): ProductionKey {
+	const { variant, extraArguments, options } = request;
 	return JSON.stringify({
-		...productionInputs,
-		variant: {
-			...productionInputs.variant,
-			source: localFileUriComparisonKey(productionInputs.variant.source),
-			workingDirectory: localFileComparisonKey(productionInputs.variant.workingDirectory),
-		},
-		options: { production: options.production },
-		source,
+		producer,
+		source: localFileUriComparisonKey(variant.source),
+		state: source,
+		toolchain: variant.toolchainProfileId,
+		workingDirectory: localFileComparisonKey(variant.workingDirectory),
+		arguments: [...variant.arguments, ...extraArguments],
+		environment: variant.environment,
+		production: options.production,
 	}) as ProductionKey;
 }
 

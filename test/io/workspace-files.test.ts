@@ -138,8 +138,47 @@ test(
 	},
 );
 
-function cachedArtifact(input: string) {
-	return rawArtifact('assembly', '', {
+test('the raw artifact cache evicts the least recently used output over its budget', () => {
+	const source = fakeUri(path.resolve('source.cpp'));
+	const byCharacters = new RawArtifactCache(10, 100);
+	byCharacters.set('a', cachedArtifact(path.resolve('a.h'), 'aaaa'), source);
+	byCharacters.set('b', cachedArtifact(path.resolve('b.h'), 'bbbb'), source);
+	assert.ok(byCharacters.get('a'), 'Reading an output makes it the most recent');
+	byCharacters.set('c', cachedArtifact(path.resolve('c.h'), 'cccc'), source);
+	assert.deepEqual(
+		['a', 'b', 'c'].map((key) => Boolean(byCharacters.get(key))),
+		[true, false, true],
+	);
+	assert.deepEqual(
+		byCharacters.evictInputKey(artifactInputComparisonKey(pathToFileURL(path.resolve('b.h')).href)),
+		[],
+	);
+
+	const byEntries = new RawArtifactCache(1_000, 2);
+	for (const key of ['a', 'b', 'c']) {
+		byEntries.set(key, cachedArtifact(path.resolve(`${key}.h`)), source);
+	}
+	assert.equal(byEntries.size, 2);
+	assert.equal(byEntries.get('a'), undefined);
+
+	const oversized = new RawArtifactCache(2, 10);
+	oversized.set('large', cachedArtifact(path.resolve('large.h'), 'too large'), source);
+	assert.ok(oversized.get('large'), 'The newest output stays even when it alone exceeds the budget');
+});
+
+test('the raw artifact cache reports only the inputs a watcher filter accepts', () => {
+	const cache = new RawArtifactCache();
+	const project = path.resolve('project');
+	cache.set('first', cachedArtifact(path.join(project, 'header.h')), fakeUri(path.join(project, 'main.cpp')));
+	cache.set('second', cachedArtifact(path.resolve('/usr/include/stdio.h')), fakeUri(path.join(project, 'main.cpp')));
+	assert.deepEqual(
+		cache.getInputUris((input) => input.startsWith(project)),
+		[pathToFileURL(path.join(project, 'header.h')).href],
+	);
+});
+
+function cachedArtifact(input: string, text = '') {
+	return rawArtifact('assembly', text, {
 		inputs: [{ uri: pathToFileURL(input).href, size: 0, mtimeMs: 0 }],
 		dependencyCoverage: 'complete',
 	});

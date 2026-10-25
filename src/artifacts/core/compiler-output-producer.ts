@@ -2,10 +2,20 @@ import path from 'path';
 import type { ArtifactOutputSpec } from '../../toolchains/toolchain-backend.js';
 import type { ArtifactProducer } from '../../toolchains/toolchain-contracts.js';
 
-/** Runs the compiler with the arguments of an output specification and reads that output. */
+const producers = new WeakMap<ArtifactOutputSpec, ArtifactProducer>();
+
+/**
+ * Runs the compiler with the arguments of an output specification and reads that output. One
+ * specification has one producer, so artifact kinds that read the same output share it.
+ */
 export function outputProducer(spec: ArtifactOutputSpec): ArtifactProducer {
-	return (backend, source, options, cancellationToken) =>
-		backend.produceArtifact(source, options, spec, cancellationToken);
+	let producer = producers.get(spec);
+	if (!producer) {
+		producer = (backend, source, options, cancellationToken) =>
+			backend.produceArtifact(source, options, spec, cancellationToken);
+		producers.set(spec, producer);
+	}
+	return producer;
 }
 
 export const llvmIrOutput: ArtifactOutputSpec = Object.freeze({

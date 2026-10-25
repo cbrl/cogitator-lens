@@ -888,6 +888,17 @@ async function verifyDisplayFilterCaching(workspaceFolder: vscode.WorkspaceFolde
 		cancellationToken: cancellation.token,
 	});
 	assert.equal(toolchainRuns, 1, 'Display-only option changes should reuse raw toolchain output');
+	const graph = await service.compile({
+		variant,
+		artifactKind: 'control-flow-graph',
+		artifactOutputId: 'assembly',
+		presetId: 'default',
+		extraArguments: [],
+		options: defaultArtifactOptions,
+		cancellationToken: cancellation.token,
+	});
+	assert.equal(toolchainRuns, 1, 'The assembly CFG should reuse the assembly listing');
+	assert.equal(graph.status === 'available' && graph.artifact.kind, 'control-flow-graph');
 	await service.compile({
 		variant,
 		artifactKind: 'assembly',

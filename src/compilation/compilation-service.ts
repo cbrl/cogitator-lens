@@ -49,6 +49,25 @@ import { localFileComparisonKey, sourceUriComparisonKey, uriComparisonKey } from
 import { getToolchainDefinition } from '../toolchains/toolchain-map.js';
 import type { ConfigurationOrigin } from '../buildsystems/variant-provider.js';
 
+const producerIdentities = new WeakMap<object, number>();
+let nextProducerIdentity = 1;
+
+/** A number per producer function, so a production key names the producer that made the output. */
+function producerIdentity(producer: object): number {
+	let identity = producerIdentities.get(producer);
+	if (identity === undefined) {
+		identity = nextProducerIdentity++;
+		producerIdentities.set(producer, identity);
+	}
+	return identity;
+}
+
+/** Whether a path is inside a directory, without resolving symlinks. */
+function isInside(filePath: string, directory: string): boolean {
+	const relative = path.relative(directory, filePath);
+	return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+}
+
 /** Toolchains that can compile any file of their languages, so they stand in for missing variants. */
 const fallbackToolchainOrigins: readonly ConfigurationOrigin[] = ['user', 'path'];
 
@@ -248,7 +267,7 @@ export class CompilationService {
 		}
 		const { implementation } = resolved;
 
-		const key = productionKey(request, source.value.state);
+		const key = productionKey(request, source.value.state, producerIdentity(implementation.producer));
 		const renderContext: ArtifactRenderContext = {
 			backend,
 			source: {
@@ -261,7 +280,13 @@ export class CompilationService {
 			request.onInvocation?.(cached.command);
 			return {
 				status: 'available',
-				artifact: await renderArtifact(cached, implementation, options, renderContext),
+				// Another artifact kind may have produced the shared output.
+				artifact: await renderArtifact(
+					{ ...cached, kind: artifactKind },
+					implementation,
+					options,
+					renderContext,
+				),
 			};
 		} else if (cached) {
 			this.rawArtifactCache.delete(key);
@@ -480,9 +505,23 @@ export class CompilationService {
 		}
 	}
 
+	/**
+	 * Watches the inputs of cached outputs that are inside a workspace folder or beside a source,
+	 * so editing them refreshes open artifacts. System headers and other outside inputs are only
+	 * checked when their output is reused, which keeps the watcher count small.
+	 */
+	private isWatchedInput(inputPath: string, source: Uri): boolean {
+		const folders = (workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === 'file');
+		return [path.dirname(source.fsPath), ...folders.map((folder) => folder.uri.fsPath)].some((root) =>
+			isInside(inputPath, root),
+		);
+	}
+
 	private syncInputWatchers(): void {
 		const inputs = new Map(
-			this.rawArtifactCache.getInputUris().map((uri) => [artifactInputComparisonKey(uri), uri] as const),
+			this.rawArtifactCache
+				.getInputUris((inputPath, source) => this.isWatchedInput(inputPath, source))
+				.map((uri) => [artifactInputComparisonKey(uri), uri] as const),
 		);
 		for (const [key, watcher] of this.inputWatchers) {
 			if (!inputs.has(key)) {

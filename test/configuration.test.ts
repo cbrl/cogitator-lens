@@ -205,7 +205,8 @@ test('the production cache key covers every production input and ignores display
 		cancellationToken: {} as never,
 	};
 	const source = { size: 10, mtimeMs: 20 };
-	const baseline = productionKey(request, source);
+	const producer = 1;
+	const baseline = productionKey(request, source, producer);
 
 	for (const equivalent of [
 		{ ...request, onInvocation: () => {} },
@@ -216,9 +217,14 @@ test('the production cache key covers every production input and ignores display
 				display: { ...defaultArtifactOptions.display, showUnusedLabels: true },
 			},
 		},
+		// Kinds, outputs, and presets that run the same producer the same way share its output.
+		{ ...request, artifactKind: 'control-flow-graph', artifactOutputId: 'assembly' } as const,
+		{ ...request, presetId: 'optimized' },
+		{ ...request, variant: { ...request.variant, id: 'renamed', displayLabel: 'Renamed' } },
 	]) {
-		assert.equal(productionKey(equivalent, source), baseline);
+		assert.equal(productionKey(equivalent, source, producer), baseline);
 	}
+	assert.notEqual(productionKey(request, source, producer + 1), baseline, 'Another producer has its own output');
 	for (const different of [
 		{
 			...request,
@@ -228,10 +234,9 @@ test('the production cache key covers every production input and ignores display
 			},
 		},
 		{ ...request, extraArguments: ['--preset'] },
-		{ ...request, presetId: 'optimized' },
-		{ ...request, artifactOutputId: 'assembly' },
+		{ ...request, variant: { ...request.variant, environment: { DEBUG: '1' } } },
 	]) {
-		assert.notEqual(productionKey(different, source), baseline);
+		assert.notEqual(productionKey(different, source, producer), baseline);
 	}
 });
 
