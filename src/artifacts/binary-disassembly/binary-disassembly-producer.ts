@@ -39,8 +39,16 @@ export const gnuObjdump: BinaryDisassembler = Object.freeze({
 export const llvmObjdump: BinaryDisassembler = Object.freeze({
 	tool: 'disassembler',
 	arguments: (objectFile: string) => ['--disassemble', '--line-numbers', objectFile],
-	normalizeOutput: normalizeDisassemblySourcePaths,
+	normalizeOutput: (output: string) => normalizeDisassemblySourcePaths(withoutLineMarkerComments(output)),
 });
+
+/**
+ * llvm-objdump prints line markers as "; /path/file.cpp:12". The parser reads only GNU objdump's
+ * unprefixed form, so it would map no line to its source.
+ */
+export function withoutLineMarkerComments(output: string): string {
+	return output.replace(/^; (?=(?:[A-Za-z]:)?[\\/].*:\d+\s*$)/gm, '');
+}
 
 export function normalizeDisassemblySourcePaths(output: string): string {
 	return output

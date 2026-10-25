@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { artifactDefinitions } from '../../src/artifacts/core/artifact-definitions.js';
-import { normalizeDisassemblySourcePaths } from '../../src/artifacts/binary-disassembly/binary-disassembly-producer.js';
+import {
+	normalizeDisassemblySourcePaths,
+	withoutLineMarkerComments,
+} from '../../src/artifacts/binary-disassembly/binary-disassembly-producer.js';
 import { normalizeDumpbinOutput } from '../../src/toolchains/msvc.js';
 import { defaultArtifactOptions, type DisplayOptions, type ToolchainKind } from '../../src/types/index.js';
 import { rawArtifact, renderContext } from '../support/artifacts.js';
@@ -116,4 +119,11 @@ test('hiding library code removes functions whose lines all come from headers', 
 	assert.deepEqual(labels({ showLibraryCode: false }), ['_Z5counti']);
 	const filtered = renderDisassembly('gcc', listing, { showLibraryCode: false });
 	assert.equal(filtered.lines.filter((line) => line.opcodes?.length).length, 3);
+});
+
+test('llvm-objdump line markers lose their comment prefix so lines map to source', () => {
+	assert.equal(
+		withoutLineMarkerComments('; /project/a.cpp:3\n; _Z1fv():\n       0: c3   ret\n; C:\\project\\a.cpp:4'),
+		'/project/a.cpp:3\n; _Z1fv():\n       0: c3   ret\nC:\\project\\a.cpp:4',
+	);
 });
