@@ -109,10 +109,39 @@ test('compilation settings and manual variants keep documented fields and drop i
 });
 
 test('artifact options are split into frozen production and display groups', () => {
-	const result = parseArtifactOptions({ assembly: { intel: true, labels: false, notAnOption: true } }, 'assembly');
+	const result = parseArtifactOptions(
+		{ assembly: { intel: true, showUnusedLabels: true, notAnOption: true } },
+		'assembly',
+	);
 	assert.equal(result.production.intel, true);
-	assert.equal(result.display.labels, false);
+	assert.equal(result.display.showUnusedLabels, true);
 	assert.ok(Object.isFrozen(result) && Object.isFrozen(result.production) && Object.isFrozen(result.display));
+});
+
+test('options that hid output when true still apply, inverted, until their replacement is set', () => {
+	const earlier = parseArtifactOptions(
+		{
+			assembly: {
+				labels: false,
+				libraryCode: true,
+				directives: false,
+				commentOnly: true,
+				dontMaskFilenames: false,
+			},
+		},
+		'assembly',
+	);
+	assert.deepEqual(
+		[
+			earlier.display.showUnusedLabels,
+			earlier.display.showLibraryCode,
+			earlier.display.showDirectives,
+			earlier.display.showCommentOnlyLines,
+		],
+		[true, false, true, false],
+	);
+	const replaced = parseArtifactOptions({ assembly: { labels: false, showUnusedLabels: false } }, 'assembly');
+	assert.equal(replaced.display.showUnusedLabels, false, 'The new option wins over the one it replaced');
 });
 
 test('presets keep kind-specific production inputs and drop unknown artifact kinds', () => {
@@ -182,7 +211,10 @@ test('the production cache key covers every production input and ignores display
 		{ ...request, onInvocation: () => {} },
 		{
 			...request,
-			options: { ...defaultArtifactOptions, display: { ...defaultArtifactOptions.display, labels: false } },
+			options: {
+				...defaultArtifactOptions,
+				display: { ...defaultArtifactOptions.display, showUnusedLabels: true },
+			},
 		},
 	]) {
 		assert.equal(productionKey(equivalent, source), baseline);
@@ -207,7 +239,7 @@ test('artifact option equality distinguishes display changes from an unchanged c
 	const copy = immutableArtifactOptions(defaultArtifactOptions);
 	assert.equal(artifactOptionsEqual(defaultArtifactOptions, copy), true);
 	assert.equal(
-		artifactOptionsEqual(defaultArtifactOptions, { ...copy, display: { ...copy.display, labels: false } }),
+		artifactOptionsEqual(defaultArtifactOptions, { ...copy, display: { ...copy.display, showUnusedLabels: true } }),
 		false,
 	);
 });

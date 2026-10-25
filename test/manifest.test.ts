@@ -64,7 +64,11 @@ test('the manifest settings schema stays synchronized with the code tables', () 
 	for (const kind of supportedArtifactKinds) {
 		assert.deepEqual(
 			Object.keys(configuration['coglens.artifactOptions'].properties[kind].properties).sort(),
-			artifactDefinitions[kind].options.map((option) => option.id).sort(),
+			[
+				...artifactDefinitions[kind].options.map((option) => option.id),
+				// Earlier option IDs stay valid in settings files, marked deprecated.
+				...Object.keys(artifactDefinitions[kind].formerOptions ?? {}),
+			].sort(),
 			`option schema drift for ${kind}`,
 		);
 	}

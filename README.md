@@ -65,7 +65,12 @@ active file. Variants specify a source file, toolchain, working directory, argum
 environment. Editing a discovered variant creates a workspace copy.
 
 `coglens.artifactOptions` stores options by artifact kind, for example `assembly.intel` and
-`assembly.labels`. `coglens.artifactPresets` defines reusable artifact configurations:
+`assembly.showDirectives`. Options that leave out part of a listing are named for what they show,
+so `"showDirectives": true` shows directives. The earlier names, such as `assembly.labels`, hid
+output when `true`; they still apply with the opposite meaning, and settings editors mark them as
+deprecated.
+
+`coglens.artifactPresets` defines reusable artifact configurations:
 
 ```json
 {

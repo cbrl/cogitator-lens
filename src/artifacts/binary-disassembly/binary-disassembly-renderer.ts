@@ -9,7 +9,10 @@ export function renderBinaryDisassembly(
 	options: DisplayOptions,
 	context: ArtifactRenderContext,
 ): RenderedTextArtifact {
-	const parsed = context.backend.parseBinaryDisassembly(raw.text, options);
+	const parsed = context.backend.parseBinaryDisassembly(raw.text, options, {
+		path: context.source.uri.fsPath,
+		workingDirectory: raw.command.cwd,
+	});
 	const lines = parsed.asm.map(parsedLine);
 	return withLabelNavigation(
 		renderedArtifact(raw, lines, {

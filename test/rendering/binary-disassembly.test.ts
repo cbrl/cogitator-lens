@@ -3,7 +3,7 @@ import test from 'node:test';
 import { artifactDefinitions } from '../../src/artifacts/core/artifact-definitions.js';
 import { normalizeDisassemblySourcePaths } from '../../src/artifacts/binary-disassembly/binary-disassembly-producer.js';
 import { normalizeDumpbinOutput } from '../../src/toolchains/msvc.js';
-import { defaultArtifactOptions, type ToolchainKind } from '../../src/types/index.js';
+import { defaultArtifactOptions, type DisplayOptions, type ToolchainKind } from '../../src/types/index.js';
 import { rawArtifact, renderContext } from '../support/artifacts.js';
 import { readFixture } from '../support/environment.js';
 
@@ -15,7 +15,7 @@ function platformFixture(...segments: readonly string[]): string {
 	return process.platform === 'win32' ? text : text.replaceAll('C:/project', '/project');
 }
 
-function renderDisassembly(kind: ToolchainKind, text: string) {
+function renderDisassembly(kind: ToolchainKind, text: string, options: Partial<DisplayOptions> = {}) {
 	return artifactDefinitions['binary-disassembly'].renderer(
 		rawArtifact('binary-disassembly', text, {
 			command: {
@@ -25,10 +25,12 @@ function renderDisassembly(kind: ToolchainKind, text: string) {
 				cwd: process.cwd(),
 			},
 		}),
-		display,
-		renderContext(kind, { file: '/project/source.cpp' }),
+		{ ...display, ...options },
+		renderContext(kind, { file: `${projectRoot}/source.cpp` }),
 	);
 }
+
+const projectRoot = process.platform === 'win32' ? 'C:/project' : '/project';
 
 test('GNU disassembly renders addresses, bytes, links, source mappings, symbols, and size', () => {
 	const rendered = renderDisassembly('gcc', platformFixture('binary', 'gnu-objdump.txt'));
@@ -90,4 +92,28 @@ test('malformed disassembler output produces a valid empty normalized artifact',
 	const rendered = renderDisassembly('gcc', 'not disassembly');
 	assert.deepEqual(rendered.lines, []);
 	assert.deepEqual([rendered.metrics.codeSizeBytes, rendered.metrics.instructionCount], [0, 0]);
+});
+
+test('hiding library code removes functions whose lines all come from headers', () => {
+	const listing = [
+		'0000000000000000 <_Z6helperi>:',
+		'_Z6helperi():',
+		`${projectRoot}/helper.h:1`,
+		'   0:\t8d 04 3f             \tlea    (%rdi,%rdi,1),%eax',
+		'   3:\tc3                   \tret',
+		'0000000000000010 <_Z5counti>:',
+		'_Z5counti():',
+		`${projectRoot}/source.cpp:2`,
+		'  10:\t31 c0                \txor    %eax,%eax',
+		// An inlined header line inside a function of the compiled file keeps the function.
+		`${projectRoot}/helper.h:1 (discriminator 1)`,
+		'  12:\t01 c0                \tadd    %eax,%eax',
+		'  14:\tc3                   \tret',
+	].join('\n');
+	const labels = (options: Partial<DisplayOptions>) =>
+		renderDisassembly('gcc', listing, options).symbols.map((symbol) => symbol.name);
+	assert.deepEqual(labels({ showLibraryCode: true }), ['_Z6helperi', '_Z5counti']);
+	assert.deepEqual(labels({ showLibraryCode: false }), ['_Z5counti']);
+	const filtered = renderDisassembly('gcc', listing, { showLibraryCode: false });
+	assert.equal(filtered.lines.filter((line) => line.opcodes?.length).length, 3);
 });

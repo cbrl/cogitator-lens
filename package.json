@@ -811,19 +811,16 @@
               "assembly": {
                 "intel": false,
                 "demangle": false,
-                "labels": true,
-                "libraryCode": false,
-                "directives": true,
-                "commentOnly": true,
+                "showUnusedLabels": false,
+                "showLibraryCode": true,
+                "showDirectives": false,
+                "showCommentOnlyLines": false,
                 "trim": false,
-                "dontMaskFilenames": true,
                 "binaryColumns": true,
                 "sourceLineColorBands": true
               },
               "binary-disassembly": {
-                "labels": true,
-                "libraryCode": false,
-                "dontMaskFilenames": true,
+                "showLibraryCode": true,
                 "binaryColumns": true,
                 "sourceLineColorBands": true
               },
@@ -857,41 +854,35 @@
                     "default": false,
                     "description": "Run the configured demangler before rendering assembly"
                   },
-                  "labels": {
+                  "showUnusedLabels": {
                     "type": "boolean",
-                    "title": "Hide unused labels",
-                    "default": true,
-                    "description": "Remove labels that are not referenced"
-                  },
-                  "libraryCode": {
-                    "type": "boolean",
-                    "title": "Hide library code",
+                    "title": "Show unused labels",
                     "default": false,
-                    "description": "Hide code from system libraries"
+                    "description": "Keep labels that no instruction references"
                   },
-                  "directives": {
+                  "showLibraryCode": {
                     "type": "boolean",
-                    "title": "Hide directives",
+                    "title": "Show library code",
                     "default": true,
-                    "description": "Hide assembler directives"
+                    "description": "Show functions whose code comes only from headers and libraries"
                   },
-                  "commentOnly": {
+                  "showDirectives": {
                     "type": "boolean",
-                    "title": "Hide comment-only lines",
-                    "default": true,
-                    "description": "Remove comment-only lines"
+                    "title": "Show directives",
+                    "default": false,
+                    "description": "Show assembler directives"
+                  },
+                  "showCommentOnlyLines": {
+                    "type": "boolean",
+                    "title": "Show comment-only lines",
+                    "default": false,
+                    "description": "Keep lines that contain only a comment"
                   },
                   "trim": {
                     "type": "boolean",
                     "title": "Trim horizontal whitespace",
                     "default": false,
                     "description": "Remove excessive horizontal whitespace"
-                  },
-                  "dontMaskFilenames": {
-                    "type": "boolean",
-                    "title": "Show full filenames",
-                    "default": true,
-                    "description": "Keep source filenames visible in rendered output"
                   },
                   "binaryColumns": {
                     "type": "boolean",
@@ -904,6 +895,26 @@
                     "title": "Show source-line color bands",
                     "default": true,
                     "description": "Use stable color bands to connect source lines with generated output"
+                  },
+                  "labels": {
+                    "type": "boolean",
+                    "deprecationMessage": "Replaced by \"showUnusedLabels\", which has the opposite meaning: \"labels\": true is \"showUnusedLabels\": false."
+                  },
+                  "libraryCode": {
+                    "type": "boolean",
+                    "deprecationMessage": "Replaced by \"showLibraryCode\", which has the opposite meaning: \"libraryCode\": true is \"showLibraryCode\": false."
+                  },
+                  "directives": {
+                    "type": "boolean",
+                    "deprecationMessage": "Replaced by \"showDirectives\", which has the opposite meaning: \"directives\": true is \"showDirectives\": false."
+                  },
+                  "commentOnly": {
+                    "type": "boolean",
+                    "deprecationMessage": "Replaced by \"showCommentOnlyLines\", which has the opposite meaning: \"commentOnly\": true is \"showCommentOnlyLines\": false."
+                  },
+                  "dontMaskFilenames": {
+                    "type": "boolean",
+                    "deprecationMessage": "\"dontMaskFilenames\" no longer has an effect and can be removed."
                   }
                 }
               },
@@ -913,23 +924,11 @@
                 "description": "Binary disassembly options",
                 "additionalProperties": false,
                 "properties": {
-                  "labels": {
+                  "showLibraryCode": {
                     "type": "boolean",
-                    "title": "Hide unused labels",
+                    "title": "Show library code",
                     "default": true,
-                    "description": "Remove labels that are not referenced"
-                  },
-                  "libraryCode": {
-                    "type": "boolean",
-                    "title": "Hide library code",
-                    "default": false,
-                    "description": "Hide code from system libraries"
-                  },
-                  "dontMaskFilenames": {
-                    "type": "boolean",
-                    "title": "Show full filenames",
-                    "default": true,
-                    "description": "Keep source filenames visible in rendered output"
+                    "description": "Show functions whose code comes only from headers and libraries"
                   },
                   "binaryColumns": {
                     "type": "boolean",
@@ -942,6 +941,18 @@
                     "title": "Show source-line color bands",
                     "default": true,
                     "description": "Use stable color bands to connect source lines with generated output"
+                  },
+                  "labels": {
+                    "type": "boolean",
+                    "deprecationMessage": "\"labels\" no longer has an effect and can be removed."
+                  },
+                  "libraryCode": {
+                    "type": "boolean",
+                    "deprecationMessage": "Replaced by \"showLibraryCode\", which has the opposite meaning: \"libraryCode\": true is \"showLibraryCode\": false."
+                  },
+                  "dontMaskFilenames": {
+                    "type": "boolean",
+                    "deprecationMessage": "\"dontMaskFilenames\" no longer has an effect and can be removed."
                   }
                 }
               },

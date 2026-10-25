@@ -6,12 +6,11 @@ export interface ProductionOptions {
 }
 
 export interface DisplayOptions {
-	readonly labels: boolean;
-	readonly libraryCode: boolean;
-	readonly directives: boolean;
-	readonly commentOnly: boolean;
+	readonly showUnusedLabels: boolean;
+	readonly showLibraryCode: boolean;
+	readonly showDirectives: boolean;
+	readonly showCommentOnlyLines: boolean;
 	readonly trim: boolean;
-	readonly dontMaskFilenames: boolean;
 	readonly showIncludedFiles: boolean;
 	readonly showSystemDeclarations: boolean;
 	readonly binaryColumns: boolean;
@@ -33,12 +32,11 @@ export const defaultArtifactOptions: ArtifactOptions = Object.freeze({
 		demangle: false,
 	}),
 	display: Object.freeze({
-		labels: true,
-		libraryCode: false,
-		directives: true,
-		commentOnly: true,
+		showUnusedLabels: false,
+		showLibraryCode: true,
+		showDirectives: false,
+		showCommentOnlyLines: false,
 		trim: false,
-		dontMaskFilenames: true,
 		showIncludedFiles: true,
 		showSystemDeclarations: false,
 		binaryColumns: true,

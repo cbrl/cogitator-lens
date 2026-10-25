@@ -4,12 +4,15 @@ import { renderBinaryDisassembly } from './binary-disassembly-renderer.js';
 export const binaryDisassemblyArtifact = {
 	label: 'Binary disassembly',
 	options: [
-		displayOptionDescriptors.labels,
-		displayOptionDescriptors.libraryCode,
-		displayOptionDescriptors.dontMaskFilenames,
+		displayOptionDescriptors.showLibraryCode,
 		displayOptionDescriptors.binaryColumns,
 		displayOptionDescriptors.sourceLineColorBands,
 	],
+	formerOptions: {
+		labels: null,
+		libraryCode: 'showLibraryCode',
+		dontMaskFilenames: null,
+	},
 	presentation: 'text',
 	listingSyntax: 'native-assembly',
 	icon: 'package',

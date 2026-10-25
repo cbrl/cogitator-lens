@@ -72,7 +72,7 @@ export async function run(): Promise<void> {
 	const configuration = vscode.workspace.getConfiguration('coglens', workspaceFolder.uri);
 	const previousFilters = configuration.inspect('artifactOptions')?.workspaceFolderValue;
 	try {
-		const filters = { assembly: { labels: false, directives: true } };
+		const filters = { assembly: { showUnusedLabels: true, showDirectives: false } };
 		await configuration.update('artifactOptions', filters, vscode.ConfigurationTarget.WorkspaceFolder);
 		assert.deepEqual(configuration.inspect('artifactOptions')?.workspaceFolderValue, filters);
 	} finally {
@@ -786,7 +786,7 @@ async function verifyDisplayFilterCaching(workspaceFolder: vscode.WorkspaceFolde
 		extraArguments: [],
 		options: {
 			...defaultArtifactOptions,
-			display: { ...defaultArtifactOptions.display, directives: false },
+			display: { ...defaultArtifactOptions.display, showDirectives: true },
 		},
 		cancellationToken: cancellation.token,
 	});
@@ -798,7 +798,7 @@ async function verifyDisplayFilterCaching(workspaceFolder: vscode.WorkspaceFolde
 		extraArguments: [],
 		options: {
 			production: { ...defaultArtifactOptions.production, intel: true },
-			display: { ...defaultArtifactOptions.display, directives: false },
+			display: { ...defaultArtifactOptions.display, showDirectives: true },
 		},
 		cancellationToken: cancellation.token,
 	});
@@ -1312,17 +1312,17 @@ async function verifyFilterChangeSignal(): Promise<void> {
 	let changes = 0;
 	const subscription = service.onArtifactOptionsChanged(() => changes++);
 
-	service.setArtifactOption('assembly', 'labels', false);
+	service.setArtifactOption('assembly', 'showUnusedLabels', true);
 	assert.equal(changes, 1);
-	assert.equal(service.getArtifactOptions('assembly').display.labels, false);
+	assert.equal(service.getArtifactOptions('assembly').display.showUnusedLabels, true);
 	await new Promise((resolve) => setTimeout(resolve, 0));
 	assert.equal(updateFolder, undefined, 'Global artifact options must use workspace scope');
 	assert.equal(
-		service.getArtifactOptions('assembly').display.labels,
-		false,
+		service.getArtifactOptions('assembly').display.showUnusedLabels,
+		true,
 		'The persisted configuration event must not revert the first toggle',
 	);
-	service.setArtifactOption('assembly', 'labels', false);
+	service.setArtifactOption('assembly', 'showUnusedLabels', true);
 	assert.equal(changes, 1, 'An unchanged option should not trigger another refresh');
 
 	subscription.dispose();

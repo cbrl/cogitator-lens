@@ -34,9 +34,13 @@ export function generateManifest(manifest: JsonObject): JsonObject {
 					title: `${definition.label} options`,
 					description: `${definition.label} options`,
 					additionalProperties: false,
-					properties: Object.fromEntries(
-						definition.options.map((descriptor) => [descriptor.id, optionSchema(descriptor)]),
-					),
+					properties: Object.fromEntries([
+						...definition.options.map((descriptor) => [descriptor.id, optionSchema(descriptor)]),
+						...Object.entries(definition.formerOptions ?? {}).map(([id, replacement]) => [
+							id,
+							formerOptionSchema(id, replacement),
+						]),
+					]),
 				},
 			];
 		}),
@@ -155,6 +159,15 @@ function optionSchema(descriptor: ArtifactOptionDescriptor): JsonObject {
 		default: defaultArtifactOptions[descriptor.group][descriptor.id as never],
 		description: descriptor.description,
 	};
+}
+
+/** Keeps an earlier option valid in settings files and explains what replaced it. */
+function formerOptionSchema(id: string, replacement: string | null): JsonObject {
+	const message =
+		replacement === null
+			? `"${id}" no longer has an effect and can be removed.`
+			: `Replaced by "${replacement}", which has the opposite meaning: "${id}": true is "${replacement}": false.`;
+	return { type: 'boolean', deprecationMessage: message };
 }
 
 function configurationProperties(manifest: JsonObject): JsonObject {

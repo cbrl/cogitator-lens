@@ -260,7 +260,10 @@ test('nvcc produces line-mapped PTX and nvdisasm produces SASS', async (t) => {
 		options,
 		neverCancelled,
 	);
-	const parsedSass = sassBackend.parseBinaryDisassembly(sass.text, display);
+	const parsedSass = sassBackend.parseBinaryDisassembly(sass.text, display, {
+		path: source,
+		workingDirectory: sass.command.cwd,
+	});
 	assert.ok(parsedSass.asm.some((line) => /FMA|STG|EXIT/u.test(line.disassembly ?? line.text)));
 	assert.ok(parsedSass.asm.some((line) => line.address !== undefined && line.opcodes?.length));
 });

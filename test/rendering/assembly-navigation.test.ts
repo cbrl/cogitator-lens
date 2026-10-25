@@ -26,7 +26,7 @@ function lineOf(artifact: RenderedTextArtifact, text: string): number {
 }
 
 test('assembly links, outline entries, and folds start on their label lines', () => {
-	const artifact = render({ libraryCode: false });
+	const artifact = render({ showLibraryCode: true });
 	const jump = artifact.lines.findIndex((line) => /^\s*jmp\s+\.L4\b/.test(line.text));
 	const branch = artifact.lines.findIndex((line) => /^\s*jle\s+\.L5\b/.test(line.text));
 	assert.equal(artifact.links.find((link) => link.line === jump)?.targetLine, lineOf(artifact, '.L4:'));
@@ -49,11 +49,11 @@ test('assembly links, outline entries, and folds start on their label lines', ()
 });
 
 test('Hide library code keeps the compiled file and removes header functions', () => {
-	const all = render({ libraryCode: false });
+	const all = render({ showLibraryCode: true });
 	assert.ok(all.lines.some((line) => line.text.trim() === '_Z6helperi:'));
 	assert.ok(all.lines.some((line) => line.source?.file?.endsWith('helper.h')));
 
-	const filtered = render({ libraryCode: true });
+	const filtered = render({ showLibraryCode: false });
 	assert.equal(
 		filtered.lines.some((line) => line.text.trim() === '_Z6helperi:'),
 		false,
@@ -66,16 +66,10 @@ test('Hide library code keeps the compiled file and removes header functions', (
 	);
 });
 
-test('the compiled file keeps its path when filenames are masked', () => {
-	for (const dontMaskFilenames of [true, false]) {
-		const artifact = render({ dontMaskFilenames });
-		const mapped = artifact.lines.filter((line) => line.source?.line === 3);
-		assert.ok(mapped.length > 0);
-		assert.ok(
-			mapped.every((line) => line.source?.file === source),
-			`dontMaskFilenames=${dontMaskFilenames}`,
-		);
-	}
+test('lines of the compiled file carry its path', () => {
+	const mapped = render().lines.filter((line) => line.source?.line === 3);
+	assert.ok(mapped.length > 0);
+	assert.ok(mapped.every((line) => line.source?.file === source));
 });
 
 test('demangled function labels stay in the outline', () => {

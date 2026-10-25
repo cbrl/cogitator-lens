@@ -18,12 +18,12 @@ const mainSourcePlaceholder = '<source>';
 /** The same file directive forms that the vendored parser reads: `.file N "name"` and `.file N "dir" "name"`. */
 const fileDirective = /^([ \t]*\.(cv_)?file[ \t]+\d+[ \t]+)"([^"]+)"(?:[ \t]+"([^"]+)")?.*$/gm;
 
-/** Renames the main source in the file directives of an assembly listing to the parser's placeholder. */
-export function markMainSource(rawAssembly: string, mainSource: MainSource): string {
+/** Returns a test for compiler-reported filenames that name the main source. Results are cached per name. */
+export function mainSourceTest(mainSource: MainSource): (filename: string) => boolean {
 	const mainPath = absoluteLocalPath(mainSource.path);
 	const mainKey = localFileComparisonKey(mainPath);
 	const verdicts = new Map<string, boolean>();
-	const isMainSource = (filename: string): boolean => {
+	return (filename) => {
 		let verdict = verdicts.get(filename);
 		if (verdict === undefined) {
 			const candidate = resolveCompilerPath(filename, mainSource.workingDirectory);
@@ -32,6 +32,11 @@ export function markMainSource(rawAssembly: string, mainSource: MainSource): str
 		}
 		return verdict;
 	};
+}
+
+/** Renames the main source in the file directives of an assembly listing to the parser's placeholder. */
+export function markMainSource(rawAssembly: string, mainSource: MainSource): string {
+	const isMainSource = mainSourceTest(mainSource);
 	return rawAssembly.replace(
 		fileDirective,
 		(line, prefix: string, codeView: string | undefined, first: string, second: string | undefined) => {

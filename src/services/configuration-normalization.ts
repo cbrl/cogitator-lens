@@ -126,13 +126,33 @@ export function parseArtifactOptions(raw: unknown, kind: ArtifactKind): Artifact
 	const production: Record<string, boolean> = { ...defaultArtifactOptions.production };
 	const display: Record<string, boolean> = { ...defaultArtifactOptions.display };
 	for (const descriptor of artifactDefinitions[kind].options) {
-		const value = selected[descriptor.id];
-		if (typeof value !== 'boolean') {
+		const value = artifactOptionValue(selected, kind, descriptor.id);
+		if (value === undefined) {
 			continue;
 		}
 		(descriptor.group === 'production' ? production : display)[descriptor.id] = value;
 	}
 	return immutableArtifactOptions({ production, display } as unknown as ArtifactOptions);
+}
+
+/** Reads an option, or the inverse of the earlier option it replaced when only that one is set. */
+export function artifactOptionValue(
+	options: Readonly<Record<string, unknown>>,
+	kind: ArtifactKind,
+	id: string,
+): boolean | undefined {
+	const value = options[id];
+	if (typeof value === 'boolean') {
+		return value;
+	}
+	const former = formerOptionId(kind, id);
+	const earlier = former === undefined ? undefined : options[former];
+	return typeof earlier === 'boolean' ? !earlier : undefined;
+}
+
+/** The earlier option ID that an option of an artifact kind replaced, if any. */
+export function formerOptionId(kind: ArtifactKind, id: string): string | undefined {
+	return Object.entries(artifactDefinitions[kind].formerOptions ?? {}).find(([, current]) => current === id)?.[0];
 }
 
 export function parseArtifactPresets(raw: unknown): ArtifactPreset[] {

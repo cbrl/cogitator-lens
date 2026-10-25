@@ -19,6 +19,7 @@ import { withTemporaryDirectory } from '../temporary-directory.js';
 import type { ToolchainDefinition } from './toolchain-contracts.js';
 import { snapshotArtifactInputs, type ArtifactInputMetadata } from '../compilation/artifact-inputs.js';
 import { markMainSource, withMainSourcePath, type MainSource } from '../artifacts/assembly/main-source.js';
+import { withoutLibraryFunctions } from '../artifacts/binary-disassembly/library-functions.js';
 import { withoutTerminalEscapes } from '../diagnostics.js';
 import type { InstructionType } from '../artifacts/control-flow-graph/parsers/instruction-sets.js';
 import type { AssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/assembly-cfg-parser.js';
@@ -185,6 +186,21 @@ async function executeChecked(
 		);
 	}
 	return result;
+}
+
+/**
+ * Translates display options into the vendored parser's filters, which name what to remove.
+ * Filenames are never masked, because source mapping needs them.
+ */
+function parseFilters(options: DisplayOptions): ParseFiltersAndOutputOptions {
+	return {
+		labels: !options.showUnusedLabels,
+		libraryCode: !options.showLibraryCode,
+		directives: !options.showDirectives,
+		commentOnly: !options.showCommentOnlyLines,
+		trim: options.trim,
+		dontMaskFilenames: true,
+	};
 }
 
 interface PreparedInvocation {
@@ -365,18 +381,21 @@ export class ToolchainBackend {
 		});
 	}
 
-	/** Parses an assembly listing. The main source decides what "Hide library code" keeps. */
+	/** Parses an assembly listing. The main source decides what hiding library code keeps. */
 	parseAssembly(rawAssembly: string, options: DisplayOptions, mainSource: MainSource): ParsedAsmResult {
 		if (!this.asmParser) {
 			throw new Error(`${this.profile.displayName} has no assembly parser.`);
 		}
-		const filters: ParseFiltersAndOutputOptions = { ...options };
-		return withMainSourcePath(this.asmParser.process(markMainSource(rawAssembly, mainSource), filters), mainSource);
+		return withMainSourcePath(
+			this.asmParser.process(markMainSource(rawAssembly, mainSource), parseFilters(options)),
+			mainSource,
+		);
 	}
 
-	parseBinaryDisassembly(rawDisassembly: string, options: DisplayOptions): ParsedAsmResult {
-		const filters: ParseFiltersAndOutputOptions = { ...options, binary: true };
-		return this.binaryAsmParser.process(rawDisassembly, filters);
+	/** Parses disassembler output. The main source decides what hiding library code keeps. */
+	parseBinaryDisassembly(rawDisassembly: string, options: DisplayOptions, mainSource: MainSource): ParsedAsmResult {
+		const text = options.showLibraryCode ? rawDisassembly : withoutLibraryFunctions(rawDisassembly, mainSource);
+		return this.binaryAsmParser.process(text, { ...parseFilters(options), binary: true });
 	}
 
 	classifyAssemblyInstruction(instruction: string): InstructionType | undefined {

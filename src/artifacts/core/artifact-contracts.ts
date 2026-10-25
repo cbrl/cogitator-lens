@@ -49,6 +49,12 @@ export interface ArtifactDefinition {
 	/** Language contribution used for artifact-owned text document extensions. */
 	readonly editorLanguageId?: ArtifactEditorLanguageId;
 	readonly options: readonly ArtifactOptionDescriptor[];
+	/**
+	 * Option IDs that earlier versions used. Each one meant the opposite of the option it names, or
+	 * `null` when it no longer has an effect: `"labels": true` hid unused labels, so it reads as
+	 * `"showUnusedLabels": false`.
+	 */
+	readonly formerOptions?: Readonly<Record<string, ArtifactOptionDescriptor['id'] | null>>;
 	/** Default renderer. Omit it when each toolchain implementation must declare its own. */
 	readonly renderer?: ArtifactRenderer;
 	/** Default listing syntax; a toolchain implementation may override it. */
@@ -69,23 +75,17 @@ export const displayOptionDescriptors = {
 		label: 'Show source-line color bands',
 		description: 'Use stable color bands to connect source lines with generated output',
 	},
-	labels: {
-		id: 'labels',
+	showUnusedLabels: {
+		id: 'showUnusedLabels',
 		group: 'display',
-		label: 'Hide unused labels',
-		description: 'Remove labels that are not referenced',
+		label: 'Show unused labels',
+		description: 'Keep labels that no instruction references',
 	},
-	libraryCode: {
-		id: 'libraryCode',
+	showLibraryCode: {
+		id: 'showLibraryCode',
 		group: 'display',
-		label: 'Hide library code',
-		description: 'Hide code from system libraries',
-	},
-	dontMaskFilenames: {
-		id: 'dontMaskFilenames',
-		group: 'display',
-		label: 'Show full filenames',
-		description: 'Keep source filenames visible in rendered output',
+		label: 'Show library code',
+		description: 'Show functions whose code comes only from headers and libraries',
 	},
 	showIncludedFiles: {
 		id: 'showIncludedFiles',
