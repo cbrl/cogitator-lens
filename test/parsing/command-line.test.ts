@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { CommandLineSyntaxError, tokenizePosix, tokenizeWindows } from '../../src/tokenize.js';
@@ -183,5 +185,37 @@ test('a relative source argument is removed using the compilation working direct
 	assert.deepEqual(
 		removeSourceArgument(['-O2', path.join('..', 'src', 'main.cpp'), '-Wall'], source, workingDirectory),
 		['-O2', '-Wall'],
+	);
+});
+
+test(
+	'a source argument spelled through a symlinked directory is removed',
+	{ skip: process.platform === 'win32' },
+	() => {
+		const root = fs.mkdtempSync(path.join(os.tmpdir(), 'coglens-source-'));
+		try {
+			fs.mkdirSync(path.join(root, 'real'));
+			fs.writeFileSync(path.join(root, 'real', 'main.cpp'), '');
+			fs.symlinkSync(path.join(root, 'real'), path.join(root, 'link'));
+			assert.deepEqual(
+				removeSourceArgument(
+					['-I', path.join(root, 'link'), path.join(root, 'link', 'main.cpp'), '-o', 'main.o'],
+					path.join(root, 'real', 'main.cpp'),
+					root,
+				),
+				['-I', path.join(root, 'link'), '-o', 'main.o'],
+			);
+		} finally {
+			fs.rmSync(root, { recursive: true, force: true });
+		}
+	},
+);
+
+test('option arguments are never taken for the source file, including MSVC switches on Windows', () => {
+	assert.deepEqual(
+		removeSourceArgument(['/Fomain.obj', '/c', 'C:\\project\\main.cpp'], 'C:\\project\\main.cpp', undefined, {
+			platform: 'win32',
+		}).filter((argument) => argument.startsWith('/')),
+		['/Fomain.obj', '/c'],
 	);
 });
