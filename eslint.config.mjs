@@ -14,6 +14,7 @@ export default [
 			'src/vendor/lib/llvm-ir.ts',
 			'src/vendor/lib/asm-docs/**/*',
 			'src/vendor/lib/parsers/**/*',
+			'src/vendor/lib/properties.interfaces.ts',
 			'src/vendor/static/**/*',
 			'src/vendor/types/**/*',
 			'scripts/compiler-explorer-docenizers/',

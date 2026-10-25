@@ -24,6 +24,9 @@ jobs:
       - run: npm run lint
       - name: Formatting
         run: npm run format:check
+      - name: Vendored sources
+        if: runner.os == 'Linux'
+        run: npm run vendor:check
       - run: npm run test:unit
       - run: npm run compile
       - name: Extension host tests (Linux)
