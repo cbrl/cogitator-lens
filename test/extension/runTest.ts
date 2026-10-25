@@ -24,7 +24,7 @@ import { parseParenthesizedDiagnostics } from '../../src/toolchains/msvc/diagnos
 import { parsePythonDiagnostics } from '../../src/toolchains/python/diagnostics.js';
 import { parseRustDiagnostics } from '../../src/toolchains/rust/diagnostics.js';
 import { CompilationService } from '../../src/compilation/compilation-service.js';
-import { ConfigurationService } from '../../src/services/configuration-service.js';
+import { ConfigurationService, type SettingsChange } from '../../src/services/configuration-service.js';
 import { buildCompilationInfoTree, CompilationInfoTreeProvider } from '../../src/tree/compilation-info-tree.js';
 import { buildToolchainTreeNode, type ToolchainTreeNode } from '../../src/tree/toolchain-tree.js';
 import { getArtifactUri, parseArtifactUri } from '../../src/artifact-document/artifact-uri.js';
@@ -1395,7 +1395,12 @@ async function verifyFilterChangeSignal(): Promise<void> {
 	const configurationChange = new vscode.EventEmitter<void>();
 	let persistedOptions = defaultArtifactOptions;
 	const writes: string[] = [];
+	let toolchainReads = 0;
 	const configuration = testConfiguration(configurationChange, {
+		getToolchains: () => {
+			toolchainReads++;
+			return [];
+		},
 		getArtifactOptions: (kind) => (kind === 'assembly' ? persistedOptions : defaultArtifactOptions),
 		updateArtifactOption: async (kind, id, value) => {
 			writes.push(`${kind}.${id}=${value}`);
@@ -1425,6 +1430,19 @@ async function verifyFilterChangeSignal(): Promise<void> {
 	service.setArtifactOption('assembly', 'showUnusedLabels', true);
 	assert.equal(changes, 1, 'An unchanged option should not trigger another refresh');
 
+	let decorationChanges = 0;
+	const decorationSubscription = service.onArtifactDecorationsChanged(() => decorationChanges++);
+	service.setArtifactOption('assembly', 'binaryColumns', false);
+	assert.equal(changes, 1, 'A decoration-only option does not render artifacts again');
+	assert.equal(decorationChanges, 1);
+
+	toolchainReads = 0;
+	(configurationChange as unknown as vscode.EventEmitter<SettingsChange>).fire({
+		affects: (key) => key === 'dimUnusedSourceLines',
+	});
+	assert.equal(toolchainReads, 0, 'A change to another setting does not read toolchains again');
+
+	decorationSubscription.dispose();
 	subscription.dispose();
 	service.dispose();
 	configurationChange.dispose();

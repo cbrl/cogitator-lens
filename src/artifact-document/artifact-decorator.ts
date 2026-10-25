@@ -88,6 +88,7 @@ export class ArtifactDecorator {
 		statusEvent: Event<ArtifactStatus>,
 		configService: ConfigurationService,
 		private readonly artifactOptions: (kind: ArtifactKind) => ArtifactOptions,
+		decorationOptionsEvent: Event<ArtifactKind>,
 	) {
 		this.artifactUri = artifactUri;
 		this.sourceUri = sourceUri;
@@ -125,8 +126,23 @@ export class ArtifactDecorator {
 			}
 		});
 
+		// Options that change only decorations do not render the artifact again, so redraw here.
+		const decorationOptionsRegistration = Disposable.from(
+			decorationOptionsEvent((kind) => {
+				if (this.content?.artifact.kind === kind) {
+					this.refreshDecorations();
+				}
+			}),
+			configService.onDidChange((change) => {
+				if (change.affects('dimUnusedSourceLines')) {
+					this.refreshDecorations();
+				}
+			}),
+		);
+
 		this.registrations = Disposable.from(
 			providerEventRegistration,
+			decorationOptionsRegistration,
 			visibilityChangeRegistration,
 			selectionChangeRegistration,
 			visibleRangesRegistration,

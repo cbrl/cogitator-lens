@@ -65,6 +65,7 @@ export function createGlobalOptionsTreeView(
 		compilationService.onVariantsChanged(() => provider.refresh()),
 		compilationService.onVariantSelectionChanged(() => provider.refresh()),
 		compilationService.onArtifactOptionsChanged(() => provider.refresh()),
+		compilationService.onArtifactDecorationsChanged(() => provider.refresh()),
 		compilationService.toolchainRegistry.onDidChange(() => provider.refresh()),
 		view.onDidChangeCheckboxState((event) => {
 			const [node, state] = event.items[0] ?? [];

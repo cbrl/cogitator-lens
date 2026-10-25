@@ -8,6 +8,8 @@ export interface ArtifactOptionDescriptor {
 	readonly group: 'production' | 'display';
 	readonly label: string;
 	readonly description: string;
+	/** Changes only editor decorations, so the artifact is redrawn rather than rendered again. */
+	readonly decorationOnly?: true;
 }
 
 export interface ArtifactRenderContext {
@@ -68,12 +70,14 @@ export const displayOptionDescriptors = {
 		group: 'display',
 		label: 'Show address and opcode columns',
 		description: 'Show parsed instruction addresses and encoded bytes beside the listing',
+		decorationOnly: true,
 	},
 	sourceLineColorBands: {
 		id: 'sourceLineColorBands',
 		group: 'display',
 		label: 'Show source-line color bands',
 		description: 'Use stable color bands to connect source lines with generated output',
+		decorationOnly: true,
 	},
 	showUnusedLabels: {
 		id: 'showUnusedLabels',

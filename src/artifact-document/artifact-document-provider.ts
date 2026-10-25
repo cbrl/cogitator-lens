@@ -174,6 +174,7 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 						document.handler.onDidChange,
 						this.configuration,
 						(kind) => this.compilationService.getArtifactOptions(kind),
+						this.compilationService.onArtifactDecorationsChanged,
 					),
 					() => this.changeEmitter.fire(document.uri),
 					() => this.refreshStatusBar(),

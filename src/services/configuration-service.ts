@@ -34,16 +34,22 @@ import {
 } from './settings-scopes.js';
 import { portablePath, type PathContext } from './path-variables.js';
 
+/** A change to Cogitator Lens settings. */
+export interface SettingsChange {
+	/** Whether the change affects `coglens.<key>`. */
+	affects(key: string): boolean;
+}
+
 export class ConfigurationService implements Disposable {
-	private readonly changeEmitter = new EventEmitter<void>();
+	private readonly changeEmitter = new EventEmitter<SettingsChange>();
 	private readonly configurationSubscription: Disposable;
 
-	readonly onDidChange: Event<void> = this.changeEmitter.event;
+	readonly onDidChange: Event<SettingsChange> = this.changeEmitter.event;
 
 	constructor() {
 		this.configurationSubscription = workspace.onDidChangeConfiguration((event) => {
 			if (event.affectsConfiguration('coglens')) {
-				this.changeEmitter.fire();
+				this.changeEmitter.fire({ affects: (key) => event.affectsConfiguration(`coglens.${key}`) });
 			}
 		});
 	}

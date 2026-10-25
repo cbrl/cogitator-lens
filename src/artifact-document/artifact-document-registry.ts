@@ -95,7 +95,12 @@ export class ArtifactDocumentRegistry implements Disposable {
 					}
 				}
 			}),
-			configuration.onDidChange(() => this.refreshAll()),
+			// Other settings reach open artifacts through variant, toolchain, and option events.
+			configuration.onDidChange((change) => {
+				if (change.affects('defaultInvocation') || change.affects('artifactPresets')) {
+					this.refreshAll();
+				}
+			}),
 			// Fallback variants are not indexed by source, so a toolchain change refreshes everything.
 			compilationService.toolchainRegistry.onDidChange(() => this.refreshAll()),
 			this.stateEmitter,

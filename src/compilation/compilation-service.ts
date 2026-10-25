@@ -12,7 +12,7 @@ import {
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
-import type { ConfigurationService } from '../services/configuration-service.js';
+import type { ConfigurationService, SettingsChange } from '../services/configuration-service.js';
 import type {
 	ArtifactKind,
 	ArtifactOptionId,
@@ -35,7 +35,7 @@ import {
 } from '../types/index.js';
 import { ToolExitError } from '../toolchains/toolchain-backend.js';
 import { ExecError } from '../exec.js';
-import { supportedArtifactKinds } from '../artifacts/core/artifact-definitions.js';
+import { artifactDefinitions, supportedArtifactKinds } from '../artifacts/core/artifact-definitions.js';
 import { resolveArtifactImplementation } from '../toolchains/toolchain-artifacts.js';
 import { ToolchainRegistry } from './toolchain-registry.js';
 import { CompilationConfigDatabase } from './compilation-config.js';
@@ -60,6 +60,7 @@ export class CompilationService {
 	private readonly variants = new CompilationConfigDatabase();
 	private readonly changeEmitter = new EventEmitter<readonly Uri[]>();
 	private readonly artifactOptionsChangeEmitter = new EventEmitter<ArtifactKind>();
+	private readonly artifactDecorationsChangeEmitter = new EventEmitter<ArtifactKind>();
 	private readonly variantSelectionEmitter = new EventEmitter<Uri>();
 	private readonly subscriptions: Disposable[] = [];
 	private readonly rawArtifactCache = new RawArtifactCache();
@@ -69,7 +70,10 @@ export class CompilationService {
 	private providersSettled = true;
 
 	readonly onVariantsChanged: Event<readonly Uri[]> = this.changeEmitter.event;
+	/** Options of a kind changed in a way that changes its rendered artifacts. */
 	readonly onArtifactOptionsChanged: Event<ArtifactKind> = this.artifactOptionsChangeEmitter.event;
+	/** Only decoration-only options of a kind changed, so its artifacts need new decorations. */
+	readonly onArtifactDecorationsChanged: Event<ArtifactKind> = this.artifactDecorationsChangeEmitter.event;
 	readonly onVariantSelectionChanged: Event<Uri> = this.variantSelectionEmitter.event;
 
 	constructor(
@@ -82,7 +86,9 @@ export class CompilationService {
 		}
 		this.reloadUserConfiguration();
 		this.subscriptions.push(
-			configuration.onDidChange(() => this.reloadUserConfiguration()),
+			configuration.onDidChange((change) => this.reloadUserConfiguration(change)),
+			// Settings can name workspace folders through ${workspaceFolder}.
+			workspace.onDidChangeWorkspaceFolders(() => this.reloadUserConfiguration()),
 			this.variants.onDidChange((sources) => this.changeEmitter.fire(sources)),
 			this.variants.onDidSelect((source) => this.variantSelectionEmitter.fire(source)),
 			this.toolchainRegistry.onDidChange(() => {
@@ -112,8 +118,7 @@ export class CompilationService {
 		if (artifactOptionsEqual(current, options)) {
 			return;
 		}
-		this.currentArtifactOptions.set(kind, options);
-		this.artifactOptionsChangeEmitter.fire(kind);
+		this.acceptArtifactOptions(kind, options);
 		// Artifact options are currently global per kind, not scoped to a workspace folder.
 		this.configuration.updateArtifactOption(kind, id, value).catch((error: unknown) => {
 			logChannel.error(`Could not save the ${kind} option ${id}: ${String(error)}`);
@@ -318,28 +323,53 @@ export class CompilationService {
 		this.inputWatchers.clear();
 		this.changeEmitter.dispose();
 		this.artifactOptionsChangeEmitter.dispose();
+		this.artifactDecorationsChangeEmitter.dispose();
 		this.variantSelectionEmitter.dispose();
 		this.variants.dispose();
 		this.toolchainRegistry.dispose();
 		this.rawArtifactCache.clear();
 	}
 
-	private reloadUserConfiguration(): void {
-		this.toolchainRegistry.reconcile('user', this.configuration.getToolchains());
-		this.variants.reconcile(
-			'manual',
-			this.configuration.getManualCompilationVariants().map((variant) => ({
-				...variant,
-				provider: 'manual',
-				source: Uri.file(variant.source),
-			})),
-		);
-		for (const kind of supportedArtifactKinds) {
-			const options = this.configuration.getArtifactOptions(kind);
-			if (!artifactOptionsEqual(this.getArtifactOptions(kind), options)) {
-				this.currentArtifactOptions.set(kind, options);
-				this.artifactOptionsChangeEmitter.fire(kind);
+	/** Reads the settings a change affects, or every setting without a change. */
+	private reloadUserConfiguration(change?: SettingsChange): void {
+		const affects = (key: string): boolean => change?.affects(key) ?? true;
+		if (affects('toolchains')) {
+			this.toolchainRegistry.reconcile('user', this.configuration.getToolchains());
+		}
+		if (affects('compileVariants')) {
+			this.variants.reconcile(
+				'manual',
+				this.configuration.getManualCompilationVariants().map((variant) => ({
+					...variant,
+					provider: 'manual',
+					source: Uri.file(variant.source),
+				})),
+			);
+		}
+		if (affects('artifactOptions')) {
+			for (const kind of supportedArtifactKinds) {
+				const options = this.configuration.getArtifactOptions(kind);
+				if (!artifactOptionsEqual(this.getArtifactOptions(kind), options)) {
+					this.acceptArtifactOptions(kind, options);
+				}
 			}
+		}
+	}
+
+	/**
+	 * Stores the options of a kind and announces them. A change to decoration-only options
+	 * redraws decorations; any other change renders the artifacts of the kind again.
+	 */
+	private acceptArtifactOptions(kind: ArtifactKind, options: ArtifactOptions): void {
+		const previous = this.getArtifactOptions(kind);
+		this.currentArtifactOptions.set(kind, options);
+		const changed = artifactDefinitions[kind].options.filter(
+			(descriptor) => optionValue(previous, descriptor.id) !== optionValue(options, descriptor.id),
+		);
+		if (changed.every((descriptor) => descriptor.decorationOnly)) {
+			this.artifactDecorationsChangeEmitter.fire(kind);
+		} else {
+			this.artifactOptionsChangeEmitter.fire(kind);
 		}
 	}
 
@@ -484,6 +514,12 @@ export class CompilationService {
 			);
 		}
 	}
+}
+
+function optionValue(options: ArtifactOptions, id: ArtifactOptionId): boolean {
+	return Object.hasOwn(options.production, id)
+		? options.production[id as keyof ArtifactOptions['production']]
+		: options.display[id as keyof ArtifactOptions['display']];
 }
 
 /** The language of the open document for a file, which decides the toolchains that can compile it. */
