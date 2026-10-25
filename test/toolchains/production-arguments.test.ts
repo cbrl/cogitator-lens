@@ -20,7 +20,11 @@ import { rustArtifactArguments, rustOutputArguments } from '../../src/toolchains
 import { nvccOutputArguments, nvdisasm } from '../../src/toolchains/nvcc.js';
 import { zigLlvmIrOutput, zigOutputArguments } from '../../src/toolchains/zig.js';
 import { intelOutputArguments } from '../../src/toolchains/toolchain-backend.js';
-import { dotNetIlDasmArguments, stripDotNetManagedArguments } from '../../src/toolchains/dotnet.js';
+import {
+	dotNetCompilerCommandLine,
+	dotNetIlDasmArguments,
+	stripDotNetManagedArguments,
+} from '../../src/toolchains/dotnet.js';
 import {
 	getToolchainDefinition,
 	supportedToolchainKinds,
@@ -86,6 +90,14 @@ test('.NET argument stripping preserves Roslyn options but removes extension-own
 		),
 		['-optimize-', '-langversion:preview'],
 	);
+});
+
+test('.NET compiler options follow csc.dll and the defaults, so the dotnet host does not receive them', () => {
+	assert.deepEqual(
+		dotNetCompilerCommandLine(['csc.dll', '-nologo', '-optimize+'], ['-optimize-', '-langversion:preview'], 'a.cs'),
+		['csc.dll', '-nologo', '-optimize+', '-optimize-', '-langversion:preview', 'a.cs'],
+	);
+	assert.equal(toolchainDefinitions.dotnet.assembleArguments, dotNetCompilerCommandLine);
 });
 
 test('LLVM IR specifications request line tables and own their output file', () => {

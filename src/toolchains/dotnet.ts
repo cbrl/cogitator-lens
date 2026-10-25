@@ -82,6 +82,18 @@ export function dotNetCsharpArguments(
 	];
 }
 
+/**
+ * The dotnet host runs csc.dll, so every compiler option follows it. Provider options follow the
+ * defaults, so an option such as -optimize- overrides them.
+ */
+export function dotNetCompilerCommandLine(
+	ownedArguments: readonly string[],
+	providerArguments: readonly string[],
+	sourcePath: string,
+): readonly string[] {
+	return [...ownedArguments, ...providerArguments, sourcePath];
+}
+
 /** Compiler Explorer consumes ILDasm's UTF-8 stdout; text mode also avoids the Windows GUI. */
 export function dotNetIlDasmArguments(assemblyFile: string): readonly string[] {
 	return [assemblyFile, '-utf8', '-text', '-nobar', '-linenum'];
@@ -259,6 +271,7 @@ export const dotnet: ToolchainDefinition = {
 	parseDiagnostics: parseParenthesizedDiagnostics,
 	languageIdentifiers: Object.freeze(['csharp']),
 	stripOwnedArguments: stripDotNetManagedArguments,
+	assembleArguments: dotNetCompilerCommandLine,
 	discoverTools: discoverDotNetTools,
 	artifacts: {
 		assembly: {
