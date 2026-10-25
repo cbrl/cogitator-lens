@@ -64,6 +64,15 @@ Use the add action in **Project Compile Info** to create a `coglens.compileVaria
 active file. Variants specify a source file, toolchain, working directory, arguments, and
 environment. Editing a discovered variant creates a workspace copy.
 
+Paths, arguments, and environment values in toolchains, variants, presets, and the default
+invocation may use `${workspaceFolder}`, `${workspaceFolder:name}`, `${userHome}`, and
+`${env:NAME}`. Relative variant paths resolve against the first workspace folder. The sidebar
+writes paths inside a workspace folder in this form, so the settings can be shared.
+
+Sidebar changes are saved where the setting is already defined. Otherwise, artifact options go to
+user settings, and toolchains, variants, and presets go to the workspace, or to user settings when
+no folder is open.
+
 `coglens.artifactOptions` stores options by artifact kind, for example `assembly.intel` and
 `assembly.showDirectives`. Options that leave out part of a listing are named for what they show,
 so `"showDirectives": true` shows directives. The earlier names, such as `assembly.labels`, hid

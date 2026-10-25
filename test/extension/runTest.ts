@@ -388,7 +388,7 @@ async function verifyArtifactGeneratorStates(workspaceFolder: vscode.WorkspaceFo
 
 async function verifySettingsWrites(workspaceFolder: vscode.WorkspaceFolder): Promise<void> {
 	const settings = (): vscode.WorkspaceConfiguration => vscode.workspace.getConfiguration('coglens');
-	const keys = ['artifactOptions', 'toolchains', 'artifactPresets'] as const;
+	const keys = ['artifactOptions', 'toolchains', 'artifactPresets', 'compileVariants'] as const;
 	const previous = Object.fromEntries(keys.map((key) => [key, settings().inspect(key)]));
 	const configuration = new ConfigurationService();
 	try {
@@ -451,6 +451,28 @@ async function verifySettingsWrites(workspaceFolder: vscode.WorkspaceFolder): Pr
 		assert.deepEqual(Object.keys(settings().inspect<object>('artifactPresets')?.globalValue ?? {}), ['renamed']);
 		await configuration.removeArtifactPreset('fast', workspaceFolder.uri);
 		assert.deepEqual(settings().inspect('artifactPresets')?.workspaceValue, {});
+
+		// Variant paths use workspace variables, and the sidebar writes them that way.
+		const root = workspaceFolder.uri.fsPath;
+		await configuration.upsertManualCompilationVariant({
+			id: 'manual:portable',
+			source: configuration.portablePath(path.join(root, 'src', 'main.cpp')),
+			displayLabel: 'Portable',
+			toolchainProfileId: 'user:Copy',
+			workingDirectory: 'build',
+			arguments: ['-I${workspaceFolder}/include'],
+			environment: {},
+		});
+		assert.deepEqual(
+			settings()
+				.inspect<{ source: string }[]>('compileVariants')
+				?.workspaceValue?.map((entry) => entry.source),
+			['${workspaceFolder}/src/main.cpp'],
+		);
+		const [variant] = configuration.getManualCompilationVariants();
+		assert.equal(variant.source, path.join(root, 'src', 'main.cpp'));
+		assert.equal(variant.workingDirectory, path.join(root, 'build'));
+		assert.deepEqual(variant.arguments, [`-I${root}/include`]);
 	} finally {
 		configuration.dispose();
 		for (const key of keys) {

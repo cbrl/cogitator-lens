@@ -193,10 +193,10 @@ async function configureManualVariant(
 	}
 	const setting: ManualCompilationVariantSettings = {
 		id: existing?.provider === 'manual' ? existing.id : `manual:${randomUUID()}`,
-		source: source.fsPath,
+		source: configuration.portablePath(source.fsPath),
 		displayLabel,
 		toolchainProfileId: profile.id,
-		workingDirectory,
+		workingDirectory: configuration.portablePath(workingDirectory),
 		arguments: args,
 		environment,
 		...(existing?.project ? { project: existing.project } : {}),

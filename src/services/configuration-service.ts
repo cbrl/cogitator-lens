@@ -1,3 +1,4 @@
+import os from 'node:os';
 import { ConfigurationTarget, Disposable, Event, EventEmitter, Uri, workspace } from 'vscode';
 import type {
 	ArtifactOptionId,
@@ -31,6 +32,7 @@ import {
 	type SettingScope,
 	type SettingScopes,
 } from './settings-scopes.js';
+import { portablePath, type PathContext } from './path-variables.js';
 
 export class ConfigurationService implements Disposable {
 	private readonly changeEmitter = new EventEmitter<void>();
@@ -51,7 +53,7 @@ export class ConfigurationService implements Disposable {
 		const entries = Array.isArray(raw) ? raw : [];
 		const profiles: ToolchainProfile[] = [];
 		entries.forEach((entry, index) => {
-			const profile = parseToolchainSettings(entry);
+			const profile = parseToolchainSettings(entry, this.pathContext(scope));
 			if (profile) {
 				profiles.push(profile);
 			} else {
@@ -66,12 +68,12 @@ export class ConfigurationService implements Disposable {
 		if (!raw || typeof raw !== 'object' || Object.keys(raw).length === 0) {
 			return undefined;
 		}
-		return parseDefaultCompilationSettings(raw);
+		return parseDefaultCompilationSettings(raw, this.pathContext(scope));
 	}
 
 	getManualCompilationVariants(): ManualCompilationVariantSettings[] {
 		const raw = workspace.getConfiguration('coglens').get<unknown>('compileVariants', []);
-		return parseManualCompilationVariants(raw);
+		return parseManualCompilationVariants(raw, this.pathContext());
 	}
 
 	getArtifactOptions(kind: ArtifactKind, scope?: Uri): ArtifactOptions {
@@ -81,7 +83,29 @@ export class ConfigurationService implements Disposable {
 
 	getArtifactPresets(scope?: Uri): readonly ArtifactPreset[] {
 		const raw = workspace.getConfiguration('coglens', scope).get<unknown>('artifactPresets', {});
-		return parseArtifactPresets(raw);
+		return parseArtifactPresets(raw, this.pathContext(scope));
+	}
+
+	/**
+	 * What variables in settings refer to. `${workspaceFolder}` is the folder of the scope, or the
+	 * first workspace folder for settings that apply to the whole window.
+	 */
+	pathContext(scope?: Uri): PathContext {
+		const folders = (workspace.workspaceFolders ?? [])
+			.filter((folder) => folder.uri.scheme === 'file')
+			.map((folder) => ({ name: folder.name, path: folder.uri.fsPath }));
+		const scoped = scope ? workspace.getWorkspaceFolder(scope) : undefined;
+		return {
+			folders,
+			defaultFolder: scoped?.uri.scheme === 'file' ? scoped.uri.fsPath : folders[0]?.path,
+			userHome: os.homedir(),
+			environment: process.env,
+		};
+	}
+
+	/** Spells a path for settings relative to a workspace folder when it is inside one. */
+	portablePath(absolutePath: string): string {
+		return portablePath(absolutePath, this.pathContext());
 	}
 
 	getDimUnusedSourceLines(uri: Uri): boolean {

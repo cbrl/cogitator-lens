@@ -652,11 +652,11 @@
                 },
                 "executable": {
                   "type": "string",
-                  "description": "The path to the toolchain executable"
+                  "description": "The toolchain executable: a name found on PATH, or a path. It may use ${workspaceFolder}, ${workspaceFolder:name}, ${userHome}, and ${env:NAME}."
                 },
                 "defaultArguments": {
                   "type": "array",
-                  "description": "Arguments provided to the toolchain",
+                  "description": "Arguments provided to the toolchain. It may use ${workspaceFolder}, ${workspaceFolder:name}, ${userHome}, and ${env:NAME}.",
                   "items": {
                     "type": "string"
                   },
@@ -716,7 +716,7 @@
               },
               "args": {
                 "type": "array",
-                "description": "Arguments provided to the selected toolchain",
+                "description": "Arguments provided to the selected toolchain. It may use ${workspaceFolder}, ${workspaceFolder:name}, ${userHome}, and ${env:NAME}.",
                 "items": {
                   "type": "string"
                 },
@@ -732,7 +732,7 @@
               },
               "workingDirectory": {
                 "type": "string",
-                "description": "Working directory used for artifact production"
+                "description": "Working directory used for artifact production, absolute or relative to the file's workspace folder. It may use ${workspaceFolder}, ${workspaceFolder:name}, ${userHome}, and ${env:NAME}."
               }
             }
           },
@@ -761,7 +761,7 @@
                 },
                 "source": {
                   "type": "string",
-                  "description": "Absolute path to the source file"
+                  "description": "The source file, absolute or relative to the first workspace folder. It may use ${workspaceFolder}, ${workspaceFolder:name}, ${userHome}, and ${env:NAME}."
                 },
                 "displayLabel": {
                   "type": "string",
@@ -773,11 +773,11 @@
                 },
                 "workingDirectory": {
                   "type": "string",
-                  "description": "Working directory used to invoke the toolchain"
+                  "description": "Working directory used to invoke the toolchain, absolute or relative to the first workspace folder. It may use ${workspaceFolder}, ${workspaceFolder:name}, ${userHome}, and ${env:NAME}."
                 },
                 "arguments": {
                   "type": "array",
-                  "description": "Arguments appended to the selected toolchain's default arguments",
+                  "description": "Arguments appended to the selected toolchain's default arguments. It may use ${workspaceFolder}, ${workspaceFolder:name}, ${userHome}, and ${env:NAME}.",
                   "items": {
                     "type": "string"
                   }

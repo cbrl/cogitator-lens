@@ -13,6 +13,7 @@ import { defaultArtifactOptions, immutableArtifactOptions } from '../types/index
 import { artifactDefinitions, getArtifactKind } from '../artifacts/core/artifact-definitions.js';
 import type { ArtifactPreset } from '../artifacts/ui/presets.js';
 import { createToolchainProfile, supportedToolchainKinds } from '../toolchains/toolchain-map.js';
+import { expandVariables, noWorkspaceContext, resolvePathSetting, type PathContext } from './path-variables.js';
 
 const toolchainKinds = new Set<string>(supportedToolchainKinds);
 
@@ -38,11 +39,14 @@ function asStringRecord(value: unknown): Record<string, string> {
 }
 
 /** Parses complete auxiliary-tool invocation metadata from configuration. */
-export function parseAuxiliaryTools(value: unknown): Record<string, AuxiliaryTool> {
+export function parseAuxiliaryTools(
+	value: unknown,
+	context: PathContext = noWorkspaceContext,
+): Record<string, AuxiliaryTool> {
 	return Object.fromEntries(
 		Object.entries(asRecord(value)).flatMap(([name, raw]) => {
 			const tool = asRecord(raw);
-			const executable = asString(tool.executable);
+			const executable = expandVariables(asString(tool.executable), context);
 			const inputMode = tool.inputMode;
 			if (!executable || (inputMode !== 'stdin' && inputMode !== 'file-argument')) {
 				return [];
@@ -65,42 +69,57 @@ function asRecord(value: unknown): Record<string, unknown> {
  * every other malformed field does. Returns `undefined` silently for the
  * caller to log with whatever context (e.g. array index) it has.
  */
-export function parseToolchainSettings(raw: unknown): ToolchainProfile | undefined {
+export function parseToolchainSettings(
+	raw: unknown,
+	context: PathContext = noWorkspaceContext,
+): ToolchainProfile | undefined {
 	const value = asRecord(raw) as Partial<ToolchainSettings>;
 	const kind = asString(value.kind);
 	if (!isToolchainKind(kind)) {
 		return undefined;
 	}
 	const displayName = asString(value.displayName);
-	return createToolchainProfile(kind, displayName, path.normalize(asString(value.executable)), {
+	// A bare executable name is found on PATH, so a relative executable is not resolved here.
+	const executable = path.normalize(expandVariables(asString(value.executable), context));
+	return createToolchainProfile(kind, displayName, executable, {
 		id: displayName,
-		defaultArguments: asStringArray(value.defaultArguments),
-		environment: asStringRecord(value.environment),
-		tools: parseAuxiliaryTools(value.tools),
+		defaultArguments: expandedStrings(value.defaultArguments, context),
+		environment: expandedRecord(value.environment, context),
+		tools: parseAuxiliaryTools(value.tools, context),
 	});
 }
 
-export function parseDefaultCompilationSettings(raw: unknown): DefaultCompilationSettings {
+export function parseDefaultCompilationSettings(
+	raw: unknown,
+	context: PathContext = noWorkspaceContext,
+): DefaultCompilationSettings {
 	const value = asRecord(raw) as Partial<DefaultCompilationSettings>;
 	return {
 		toolchain: asString(value.toolchain),
-		args: asStringArray(value.args),
-		env: asStringRecord(value.env),
-		workingDirectory: typeof value.workingDirectory === 'string' ? value.workingDirectory : undefined,
+		args: expandedStrings(value.args, context),
+		env: expandedRecord(value.env, context),
+		workingDirectory:
+			typeof value.workingDirectory === 'string'
+				? resolvePathSetting(value.workingDirectory, context)
+				: undefined,
 	};
 }
 
-export function parseManualCompilationVariants(raw: unknown): ManualCompilationVariantSettings[] {
+/** Parses workspace variants; their paths may use variables or be relative to the workspace folder. */
+export function parseManualCompilationVariants(
+	raw: unknown,
+	context: PathContext = noWorkspaceContext,
+): ManualCompilationVariantSettings[] {
 	if (!Array.isArray(raw)) {
 		return [];
 	}
 	return raw.flatMap((entry) => {
 		const value = asRecord(entry) as Partial<ManualCompilationVariantSettings>;
 		const id = asString(value.id);
-		const source = asString(value.source);
+		const source = resolvePathSetting(asString(value.source), context);
 		const displayLabel = asString(value.displayLabel);
 		const toolchainProfileId = asString(value.toolchainProfileId);
-		const workingDirectory = asString(value.workingDirectory);
+		const workingDirectory = resolvePathSetting(asString(value.workingDirectory), context);
 		if (!id || !source || !displayLabel || !toolchainProfileId || !workingDirectory) {
 			return [];
 		}
@@ -111,8 +130,8 @@ export function parseManualCompilationVariants(raw: unknown): ManualCompilationV
 				displayLabel,
 				toolchainProfileId,
 				workingDirectory,
-				arguments: asStringArray(value.arguments),
-				environment: asStringRecord(value.environment),
+				arguments: expandedStrings(value.arguments, context),
+				environment: expandedRecord(value.environment, context),
 				project: optionalString(value.project),
 				target: optionalString(value.target),
 				configuration: optionalString(value.configuration),
@@ -162,7 +181,7 @@ export function formerOptionIds(kind: ArtifactKind, id: string): string[] {
 	);
 }
 
-export function parseArtifactPresets(raw: unknown): ArtifactPreset[] {
+export function parseArtifactPresets(raw: unknown, context: PathContext = noWorkspaceContext): ArtifactPreset[] {
 	return Object.entries(asRecord(raw)).flatMap(([id, rawPreset]) => {
 		const preset = asRecord(rawPreset);
 		const configuredKind = asString(preset.artifactKind);
@@ -180,11 +199,21 @@ export function parseArtifactPresets(raw: unknown): ArtifactPreset[] {
 			{
 				id,
 				artifactKind,
-				extraArguments: asStringArray(preset.extraArguments),
+				extraArguments: expandedStrings(preset.extraArguments, context),
 				productionOptions,
 			},
 		];
 	});
+}
+
+function expandedStrings(value: unknown, context: PathContext): string[] {
+	return asStringArray(value).map((item) => expandVariables(item, context));
+}
+
+function expandedRecord(value: unknown, context: PathContext): Record<string, string> {
+	return Object.fromEntries(
+		Object.entries(asStringRecord(value)).map(([key, item]) => [key, expandVariables(item, context)]),
+	);
 }
 
 function optionalString(value: unknown): string | undefined {

@@ -79,7 +79,7 @@ export function register(context: vscode.ExtensionContext, deps: ToolchainComman
 			await configuration.upsertToolchain({
 				displayName: name,
 				kind: detected.kind,
-				executable: selection[0].fsPath,
+				executable: configuration.portablePath(selection[0].fsPath),
 			});
 		}),
 		vscode.commands.registerCommand('coglens.DeleteToolchain', async (node?: ToolchainTreeNode) => {
