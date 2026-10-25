@@ -5,6 +5,8 @@ import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
 
 const functionHeader = /^\s*fn\s+(.+?)\s*\(.*\).*\{\s*$/;
+/** Each body starts at column 0: a function, a promoted constant, or a const or static item. */
+const bodyHeader = /^\S.*\{\s*$/;
 const basicBlock = /^\s*(bb\d+):\s*\{\s*$/;
 const blockReference = /\bbb\d+\b/g;
 const spanLocation = /\/\/.*?\bat\s+(.+?):(\d+):(\d+)(?::|\s|$)/;
@@ -18,9 +20,16 @@ export function renderRustMir(
 	const lines: RenderedArtifactLine[] = [];
 	const functions: Array<{ name: string; line: number }> = [];
 	const blocks: Array<{ name: string; line: number }> = [];
+	// Every body numbers its blocks from bb0, so a block name is resolved within its body.
+	const bodyOfLine: number[] = [];
+	const definitions = new Map<string, number>();
+	let body = -1;
 	let currentSource: RenderedArtifactLine['source'];
 
 	for (const text of textLines) {
+		if (bodyHeader.test(text)) {
+			body++;
+		}
 		const functionMatch = functionHeader.exec(text);
 		if (functionMatch) {
 			currentSource = undefined;
@@ -29,7 +38,9 @@ export function renderRustMir(
 		const blockMatch = basicBlock.exec(text);
 		if (blockMatch) {
 			blocks.push({ name: blockMatch[1], line: lines.length });
+			definitions.set(`${body}:${blockMatch[1]}`, lines.length);
 		}
+		bodyOfLine.push(body);
 		const span = spanLocation.exec(text);
 		if (span) {
 			currentSource = {
@@ -41,12 +52,11 @@ export function renderRustMir(
 		lines.push({ text, source: currentSource });
 	}
 
-	const definitions = new Map(blocks.map((block) => [block.name, block.line]));
 	const links = lines.flatMap((line, lineIndex) => {
 		const ownDefinition = basicBlock.exec(line.text)?.[1];
 		return [...line.text.matchAll(blockReference)].flatMap((match) => {
 			const name = match[0];
-			const targetLine = definitions.get(name);
+			const targetLine = definitions.get(`${bodyOfLine[lineIndex]}:${name}`);
 			return name !== ownDefinition && targetLine !== undefined
 				? [
 						{

@@ -156,6 +156,53 @@ test('Rust MIR rendering exposes symbols, block metrics, goto links, and functio
 	assert.ok(rendered.folds.some((fold) => fold.startLine === 0 && fold.endLine === 10));
 });
 
+test('Rust MIR block links stay within their own function or promoted body', () => {
+	const rendered = render['rust-mir'].renderer(
+		rawArtifact(
+			'rust-mir',
+			[
+				'fn first() -> () {',
+				'    bb0: {',
+				'        goto -> bb1;',
+				'    }',
+				'    bb1: {',
+				'        return;',
+				'    }',
+				'}',
+				'',
+				'promoted[0] in first: &i32 = {',
+				'    bb0: {',
+				'        return;',
+				'    }',
+				'}',
+				'',
+				'fn second() -> () {',
+				'    bb0: {',
+				'        goto -> bb1;',
+				'    }',
+				'    bb1: {',
+				'        return;',
+				'    }',
+				'}',
+			].join('\n'),
+		),
+		display,
+		renderContext('rust', { file: path.resolve('/project/source.rs') }),
+	);
+
+	assert.deepEqual(
+		rendered.links.map((link) => [link.line, link.targetLine]),
+		[
+			[2, 4],
+			[17, 19],
+		],
+	);
+	assert.deepEqual(
+		rendered.symbols.map((symbol) => symbol.name),
+		['first', 'second'],
+	);
+});
+
 test('LLVM IR rendering resolves debug metadata into source links and function navigation', async () => {
 	// Debug metadata names a relative file, resolved against the compilation directory.
 	const rendered = await render['llvm-ir'].renderer(
