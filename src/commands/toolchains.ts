@@ -3,17 +3,44 @@ import * as vscode from 'vscode';
 import type { CompilationService } from '../compilation/index.js';
 import * as logger from '../logger.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
+import type { PathToolchainProvider } from '../buildsystems/path-toolchains.js';
 import { createToolchainProfile, detectToolchainDefinition } from '../toolchains/toolchain-map.js';
 import type { ToolchainTreeNode } from '../tree/toolchain-tree.js';
 
 export interface ToolchainCommandDependencies {
 	readonly compilationService: CompilationService;
 	readonly configuration: ConfigurationService;
+	readonly pathToolchains: PathToolchainProvider;
 }
 
 export function register(context: vscode.ExtensionContext, deps: ToolchainCommandDependencies): void {
-	const { compilationService, configuration } = deps;
+	const { compilationService, configuration, pathToolchains } = deps;
 	context.subscriptions.push(
+		vscode.commands.registerCommand('coglens.DetectToolchains', async () => {
+			if (!configuration.getDetectToolchainsOnPath()) {
+				const choice = await vscode.window.showInformationMessage(
+					'Detection on PATH is turned off.',
+					'Open Setting',
+				);
+				if (choice) {
+					await vscode.commands.executeCommand(
+						'workbench.action.openSettings',
+						'coglens.detectToolchainsOnPath',
+					);
+				}
+				return;
+			}
+			await vscode.window.withProgress(
+				{ location: vscode.ProgressLocation.Window, title: 'Looking for toolchains on PATH' },
+				() => pathToolchains.refresh(),
+			);
+			const found = compilationService.toolchainRegistry.getProfiles('path');
+			await vscode.window.showInformationMessage(
+				found.length > 0
+					? `Found on PATH: ${found.map((profile) => profile.displayName).join(', ')}.`
+					: 'No supported compilers or interpreters were found on PATH.',
+			);
+		}),
 		vscode.commands.registerCommand('coglens.AddToolchain', async () => {
 			const selection = await vscode.window.showOpenDialog({
 				title: 'Select Toolchain Executable',

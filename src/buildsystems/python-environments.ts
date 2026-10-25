@@ -6,7 +6,7 @@ import {
 	type PythonExtension as PythonExtensionApi,
 	type ResolvedEnvironment,
 } from '@vscode/python-extension';
-import { Uri, workspace } from 'vscode';
+import { Disposable, Uri, workspace } from 'vscode';
 import type { CompilationVariant } from '../types/index.js';
 import * as logger from '../logger.js';
 import { emptySnapshot, VariantProvider, type VariantSnapshot } from './variant-provider.js';
@@ -32,6 +32,37 @@ export class PythonEnvironmentVariantProvider extends VariantProvider {
 	}
 
 	async initialize(): Promise<void> {
+		// The Python API activates the Python extension, which a workspace without Python does not need.
+		if (await hasPythonSources()) {
+			await this.connect();
+			return;
+		}
+		this.publish(emptySnapshot);
+		const sourceWatcher = workspace.createFileSystemWatcher(pythonSourcePattern);
+		let started = false;
+		const start = (): void => {
+			if (!started) {
+				started = true;
+				trigger.dispose();
+				void this.connect();
+			}
+		};
+		const trigger = Disposable.from(
+			sourceWatcher,
+			sourceWatcher.onDidCreate(start),
+			workspace.onDidOpenTextDocument((document) => {
+				if (document.languageId === 'python') {
+					start();
+				}
+			}),
+		);
+		this.subscriptions.push(trigger);
+	}
+
+	private async connect(): Promise<void> {
+		if (this.disposed) {
+			return;
+		}
 		try {
 			this.api = await this.apiFactory();
 			await this.api.ready;
@@ -134,6 +165,13 @@ export class PythonEnvironmentVariantProvider extends VariantProvider {
 			displayLabel: item.profile.displayName,
 		}));
 	}
+}
+
+async function hasPythonSources(): Promise<boolean> {
+	return (
+		workspace.textDocuments.some((document) => document.languageId === 'python') ||
+		(await workspace.findFiles(pythonSourcePattern, pythonSourceExclusions, 1)).length > 0
+	);
 }
 
 function definedEnvironmentVariables(

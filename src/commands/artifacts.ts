@@ -12,7 +12,7 @@ import type { TreeNode } from '../tree/treedata.js';
 import type { ArtifactKind, CompilationVariant } from '../types/index.js';
 import { pickFrom } from '../ui/quick-input.js';
 import type { GraphPanelManager } from '../webview/graph-panel-manager.js';
-import { isSupportedSourceDocument, pickVariantIfNeeded } from './variants.js';
+import { isSupportedSourceDocument, resolveSourceVariant } from './variants.js';
 
 export interface ArtifactCommandDependencies {
 	readonly compilationService: CompilationService;
@@ -94,12 +94,8 @@ async function openArtifact(
 		);
 		return;
 	}
-	if (!(await pickVariantIfNeeded(editor.document.uri, compilationService))) {
-		return;
-	}
-	const variant = compilationService.getSelectedVariant(editor.document.uri);
+	const variant = await resolveSourceVariant(editor.document, deps);
 	if (!variant) {
-		await vscode.window.showErrorMessage('No compilation variant is available for this file.');
 		return;
 	}
 	const backend = compilationService.toolchainRegistry.getToolchainById(variant.toolchainProfileId);
@@ -230,15 +226,11 @@ async function compareArtifacts(
 		);
 		return;
 	}
-	if (!(await pickVariantIfNeeded(editor.document.uri, compilationService))) {
+	const selectedVariant = await resolveSourceVariant(editor.document, { compilationService, configuration });
+	if (!selectedVariant) {
 		return;
 	}
 	const variants = compilationService.getVariants(editor.document.uri);
-	const selectedVariant = compilationService.getSelectedVariant(editor.document.uri);
-	if (!selectedVariant) {
-		await vscode.window.showErrorMessage('No compilation variant is available for this file.');
-		return;
-	}
 	const targets: ComparisonTarget[] = [
 		...variants.map((variant) => ({
 			id: `variant:${variant.id}`,

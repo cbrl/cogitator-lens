@@ -4,6 +4,7 @@ import { artifactDefinitions, supportedArtifactKinds } from '../src/artifacts/co
 import type { ArtifactOptionDescriptor } from '../src/artifacts/core/artifact-contracts.js';
 import { artifactEditorLanguages } from '../src/artifacts/core/editor-languages.js';
 import { supportedToolchainKinds } from '../src/toolchains/toolchain-kinds.js';
+import { supportedLanguageIdentifiers } from '../src/toolchains/toolchain-map.js';
 import { defaultArtifactOptions } from '../src/types/artifact-options.js';
 
 type JsonObject = Record<string, unknown>;
@@ -11,6 +12,7 @@ type JsonObject = Record<string, unknown>;
 /** Replaces only manifest fragments whose source of truth is a code registry. */
 export function generateManifest(manifest: JsonObject): JsonObject {
 	const generated = structuredClone(manifest);
+	generated.activationEvents = activationEvents(generated);
 	generateEditorContributions(generated);
 	const properties = configurationProperties(generated);
 	const toolchains = properties['coglens.toolchains'] as JsonObject;
@@ -59,6 +61,18 @@ export function generateManifest(manifest: JsonObject): JsonObject {
 			]),
 	);
 	return generated;
+}
+
+/**
+ * Activates on every source language a toolchain compiles. Without these, the source-only commands
+ * stay disabled until something else activates the extension, because their context key is unset.
+ */
+function activationEvents(manifest: JsonObject): string[] {
+	const existing = (manifest.activationEvents as string[] | undefined) ?? [];
+	return [
+		...existing.filter((event) => !event.startsWith('onLanguage:')),
+		...[...supportedLanguageIdentifiers].sort().map((language) => `onLanguage:${language}`),
+	];
 }
 
 /** Rebuilds artifact-owned language and grammar contributions while preserving third-party entries. */

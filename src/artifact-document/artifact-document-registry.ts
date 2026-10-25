@@ -36,10 +36,11 @@ interface RegisteredArtifactDocument extends ArtifactRegistryDocument {
 	pendingRefresh?: ReturnType<typeof setTimeout>;
 }
 
+/** Describes an artifact document. The variant is missing when it is no longer available. */
 export function buildArtifactIdentity(
 	uri: Uri,
 	parsed: ArtifactUriIdentity,
-	variant: CompilationVariant,
+	variant: CompilationVariant | undefined,
 	profile: ToolchainProfile | undefined,
 ): ArtifactDocumentIdentity {
 	const artifactOutput =
@@ -58,10 +59,10 @@ export function buildArtifactIdentity(
 		artifactLabel,
 		...(parsed.artifactOutputId ? { artifactOutputId: parsed.artifactOutputId } : {}),
 		presetId: parsed.presetId,
-		variantId: variant.id,
-		variantLabel: variant.displayLabel,
-		toolchainId: profile?.id ?? variant.toolchainProfileId,
-		toolchainLabel: profile?.displayName ?? variant.toolchainProfileId,
+		variantId: parsed.variantId,
+		variantLabel: variant?.displayLabel ?? 'Unavailable variant',
+		toolchainId: profile?.id ?? variant?.toolchainProfileId ?? 'unknown',
+		toolchainLabel: profile?.displayName ?? variant?.toolchainProfileId ?? 'Unknown toolchain',
 		toolchainKind: profile?.kind ?? 'unknown',
 	};
 }
@@ -94,11 +95,9 @@ export class ArtifactDocumentRegistry implements Disposable {
 					}
 				}
 			}),
-			configuration.onDidChange(() => {
-				for (const document of this.documents.values()) {
-					this.requestRefresh(document.uri);
-				}
-			}),
+			configuration.onDidChange(() => this.refreshAll()),
+			// Fallback variants are not indexed by source, so a toolchain change refreshes everything.
+			compilationService.toolchainRegistry.onDidChange(() => this.refreshAll()),
 			this.stateEmitter,
 		);
 	}
@@ -127,17 +126,12 @@ export class ArtifactDocumentRegistry implements Disposable {
 		if (!parsed) {
 			throw new CompilationError(`Invalid artifact document URI: ${uri.toString()}`);
 		}
-		const variant = this.compilationService
-			.getVariants(parsed.source)
-			.find((candidate) => candidate.id === parsed.variantId);
-		if (!variant) {
-			throw new CompilationError(`Compilation variant is no longer available: ${parsed.variantId}`);
-		}
-		const profile = this.compilationService.toolchainRegistry.getToolchainById(variant.toolchainProfileId)?.profile;
+		// The generator resolves the variant for each update, so a document whose variant is not
+		// known yet, such as a restored tab, opens and recovers when its provider reports it.
 		const handler = new ArtifactGenerator(
 			parsed.source,
 			uri,
-			variant,
+			parsed.variantId,
 			parsed.artifactKind,
 			parsed.presetId,
 			this.compilationService,
@@ -146,10 +140,17 @@ export class ArtifactDocumentRegistry implements Disposable {
 		const watcher = workspace.createFileSystemWatcher(
 			new RelativePattern(Uri.file(path.dirname(parsed.source.fsPath)), path.basename(parsed.source.fsPath)),
 		);
+		const compilationService = this.compilationService;
 		const document: RegisteredArtifactDocument = {
 			uri,
 			parsed,
-			identity: buildArtifactIdentity(uri, parsed, variant, profile),
+			get identity() {
+				const variant = compilationService.findVariant(parsed.source, parsed.variantId);
+				const profile = variant
+					? compilationService.toolchainRegistry.getToolchainById(variant.toolchainProfileId)?.profile
+					: undefined;
+				return buildArtifactIdentity(uri, parsed, variant, profile);
+			},
 			handler,
 			get snapshot() {
 				return { identity: this.identity, status: this.handler.status };
@@ -169,6 +170,12 @@ export class ArtifactDocumentRegistry implements Disposable {
 		this.documents.set(key, document);
 		this.stateEmitter.fire(document.snapshot);
 		return view;
+	}
+
+	private refreshAll(): void {
+		for (const document of this.documents.values()) {
+			this.requestRefresh(document.uri);
+		}
 	}
 
 	requestRefresh(uri: Uri): void {

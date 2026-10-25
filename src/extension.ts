@@ -8,6 +8,7 @@ import {
 } from './artifact-document/artifact-semantic-tokens-provider.js';
 import { CmakeVariantProvider } from './buildsystems/cmake.js';
 import { CompilationDatabaseVariantProvider } from './buildsystems/compilation-database.js';
+import { PathToolchainProvider } from './buildsystems/path-toolchains.js';
 import { PythonEnvironmentVariantProvider } from './buildsystems/python-environments.js';
 import type { VariantProvider } from './buildsystems/variant-provider.js';
 import * as artifactCommands from './commands/artifacts.js';
@@ -23,6 +24,7 @@ import {
 	createGlobalOptionsTreeView,
 	createToolchainTreeView,
 } from './views/index.js';
+import * as logger from './logger.js';
 import { GraphPanelManager } from './webview/graph-panel-manager.js';
 
 export async function activate(context: ExtensionContext): Promise<void> {
@@ -39,12 +41,13 @@ export async function activate(context: ExtensionContext): Promise<void> {
 	createArtifactPresetsTreeView(context, configuration);
 	createArtifactDetailsTreeView(context, artifactProvider, graphPanels);
 
+	const pathToolchains = new PathToolchainProvider(configuration);
 	const sharedCommandDependencies = {
 		compilationService,
 		configuration,
 		artifacts: artifactProvider,
 	};
-	toolchainCommands.register(context, sharedCommandDependencies);
+	toolchainCommands.register(context, { ...sharedCommandDependencies, pathToolchains });
 	variantCommands.register(context, sharedCommandDependencies);
 	presetCommands.register(context, sharedCommandDependencies);
 	artifactCommands.register(context, { ...sharedCommandDependencies, graphPanels });
@@ -53,6 +56,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		new CmakeVariantProvider(),
 		new CompilationDatabaseVariantProvider(configuration),
 		new PythonEnvironmentVariantProvider(),
+		pathToolchains,
 	];
 	const providerSubscriptions = variantProviders.map((provider) =>
 		provider.onSnapshot((snapshot) => compilationService.reconcileProviderSnapshot(snapshot)),
@@ -121,5 +125,14 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		closedDocumentSubscription,
 	);
 
-	await Promise.all(variantProviders.map((provider) => provider.initialize()));
+	// Activation does not wait for discovery. Requests that need variants wait for it instead.
+	compilationService.trackProviderInitialization(
+		Promise.allSettled(variantProviders.map((provider) => provider.initialize())).then((results) => {
+			for (const result of results) {
+				if (result.status === 'rejected') {
+					logger.logChannel.error(`Variant discovery failed to start: ${String(result.reason)}`);
+				}
+			}
+		}),
+	);
 }

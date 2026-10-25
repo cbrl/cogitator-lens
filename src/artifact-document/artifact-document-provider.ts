@@ -22,6 +22,7 @@ import {
 } from 'vscode';
 import path from 'path';
 import { CompilationService } from '../compilation/index.js';
+import { failureDetails } from '../compilation/compilation-service.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
 import { CompilationError, type CompileDiagnostic, type RenderedTextArtifact } from '../types/index.js';
 import { artifactScheme } from './artifact-uri.js';
@@ -88,7 +89,7 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 					throw new CompilationError('Graph artifacts must be opened in the control-flow graph view.');
 				}
 				this.setDiagnostics(view, artifact.diagnostics);
-				return artifact.lines.map((line) => line.text).join('\n');
+				return artifactText(artifact);
 			})
 			.catch((error: unknown) => {
 				if (error instanceof CancellationError || token.isCancellationRequested) {
@@ -98,10 +99,16 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 				const diagnostics = error instanceof CompilationError ? error.diagnostics : [];
 				this.setDiagnostics(view, diagnostics);
 
-				const message = error instanceof Error ? error.message : String(error);
+				// Keep the listing of the last successful compile. Its decorations and navigation still
+				// describe it, and the decorator reports the failure on the first line.
+				const retained = view.document.handler.status.artifact;
+				if (retained?.presentation === 'text') {
+					return artifactText(retained);
+				}
+				const details = failureDetails(error);
 				return error instanceof CompilationError && error.truncated
-					? `[truncated; process output limit exceeded]\n\n${message}`
-					: message;
+					? `[truncated; process output limit exceeded]\n\n${details}`
+					: details;
 			})
 			.then((text) => {
 				view.text = text;
@@ -269,6 +276,10 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 }
 
 export { getArtifactUri, parseArtifactUri } from './artifact-uri.js';
+
+function artifactText(artifact: RenderedTextArtifact): string {
+	return artifact.lines.map((line) => line.text).join('\n');
+}
 
 function toDiagnosticSeverity(severity: CompileDiagnostic['severity']): DiagnosticSeverity {
 	switch (severity) {

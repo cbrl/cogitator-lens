@@ -25,7 +25,19 @@
     "Visualization",
     "Debuggers"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onLanguage:c",
+    "onLanguage:cpp",
+    "onLanguage:csharp",
+    "onLanguage:cuda",
+    "onLanguage:cuda-cpp",
+    "onLanguage:go",
+    "onLanguage:objective-c",
+    "onLanguage:objective-cpp",
+    "onLanguage:python",
+    "onLanguage:rust",
+    "onLanguage:zig"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "languages": [
@@ -379,6 +391,27 @@
         }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "coglens.toolchains",
+        "contents": "Looking for compilers and interpreters on PATH…",
+        "when": "coglens.toolchainDetection == running"
+      },
+      {
+        "view": "coglens.toolchains",
+        "contents": "No toolchains were found on PATH or in settings. Cogitator Lens looks for gcc, clang, rustc, python, go, zig, dotnet, and nvcc on PATH.\n[Detect Toolchains](command:coglens.DetectToolchains)\n[Add Toolchain](command:coglens.AddToolchain)",
+        "when": "config.coglens.detectToolchainsOnPath && coglens.toolchainDetection != running"
+      },
+      {
+        "view": "coglens.toolchains",
+        "contents": "No toolchains are configured, and detection on PATH is turned off.\n[Add Toolchain](command:coglens.AddToolchain)\n[Turn On Detection](command:workbench.action.openSettings?%5B%22coglens.detectToolchainsOnPath%22%5D)",
+        "when": "!config.coglens.detectToolchainsOnPath"
+      },
+      {
+        "view": "coglens.compileInfo",
+        "contents": "No compilation databases or CMake projects were found. Files without a variant use a toolchain from the Toolchains view.\n[Add Variant](command:coglens.AddCompilationVariant)\nCompilation databases are read from the paths in [coglens.compilationDatabases](command:workbench.action.openSettings?%5B%22coglens.compilationDatabases%22%5D)."
+      }
+    ],
     "commands": [
       {
         "command": "coglens.OpenArtifact",
@@ -418,6 +451,12 @@
         "title": "Add Toolchain",
         "category": "Cogitator Lens",
         "icon": "$(add)"
+      },
+      {
+        "command": "coglens.DetectToolchains",
+        "title": "Detect Toolchains on PATH",
+        "category": "Cogitator Lens",
+        "icon": "$(search)"
       },
       {
         "command": "coglens.PickCompilationVariant",
@@ -555,6 +594,12 @@
               "type": "string"
             },
             "uniqueItems": true
+          },
+          "coglens.detectToolchainsOnPath": {
+            "type": "boolean",
+            "scope": "window",
+            "default": true,
+            "description": "Look for gcc, clang, rustc, python, go, zig, dotnet, and nvcc on PATH, and use them for files that have no other compilation variant."
           },
           "coglens.dimUnusedSourceLines": {
             "type": "boolean",
@@ -1048,6 +1093,11 @@
           "command": "coglens.AddToolchain",
           "when": "view == coglens.toolchains",
           "group": "navigation@1"
+        },
+        {
+          "command": "coglens.DetectToolchains",
+          "when": "view == coglens.toolchains",
+          "group": "navigation@2"
         },
         {
           "command": "coglens.OpenToolchainSettingsJson",

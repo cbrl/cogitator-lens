@@ -1,6 +1,7 @@
 import {
 	Disposable,
 	Event,
+	MarkdownString,
 	Range,
 	TextDocument,
 	TextEditor,
@@ -29,6 +30,7 @@ import {
 	unusedLineDecoration,
 } from './decorations/decoration-styles.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
+import { failureDetails } from '../compilation/compilation-service.js';
 import type { ArtifactStatus, ArtifactState } from './artifact-generator.js';
 import type { ArtifactKind, ArtifactOptions, RenderedArtifactLine, RenderedTextArtifact } from '../types/index.js';
 import { artifactSupportsOption } from '../artifacts/core/artifact-definitions.js';
@@ -72,6 +74,7 @@ export class ArtifactDecorator {
 	private content?: MappedArtifact;
 	private compilationState: ArtifactState = 'stale';
 	private truncated = false;
+	private failure?: Error;
 
 	private readonly configService: ConfigurationService;
 	private readonly registrations: Disposable;
@@ -97,6 +100,7 @@ export class ArtifactDecorator {
 		const providerEventRegistration = statusEvent((status) => {
 			this.compilationState = status.state;
 			this.truncated = status.truncated;
+			this.failure = status.state === 'failed' ? status.error : undefined;
 			const artifact = status.artifact?.presentation === 'text' ? status.artifact : undefined;
 			if (artifact !== this.content?.artifact) {
 				this.content = artifact && { artifact, sources: buildSourceLineMap(artifact) };
@@ -235,11 +239,13 @@ export class ArtifactDecorator {
 		});
 
 		const stateText = this.stateDecorationText();
-		if (stateText) {
-			const artifactEditor = this.artifactEditor();
-			artifactEditor?.setDecorations(stateDecoration, [
+		const artifactEditor = stateText ? this.artifactEditor() : undefined;
+		if (stateText && artifactEditor) {
+			// The whole first line carries the hover, so the failure details are reachable.
+			artifactEditor.setDecorations(stateDecoration, [
 				{
-					range: new Range(0, 0, 0, 0),
+					range: artifactEditor.document.lineAt(0).range,
+					hoverMessage: this.failureHover(),
 					renderOptions: {
 						after: { contentText: ` ${stateText}` },
 					},
@@ -627,6 +633,19 @@ export class ArtifactDecorator {
 		return this.content ? action(this.content) : undefined;
 	}
 
+	private failureHover(): MarkdownString | undefined {
+		if (!this.failure || !this.content) {
+			return undefined;
+		}
+		const details = failureDetails(this.failure);
+		return new MarkdownString('**Compilation failed.** The listing below is from the last successful compile.')
+			.appendCodeblock(
+				details.length > maximumHoverLength ? `${details.slice(0, maximumHoverLength)}\n…` : details,
+				'text',
+			)
+			.appendMarkdown('Compiler diagnostics are in the Problems view.');
+	}
+
 	private stateDecorationText(): string | undefined {
 		switch (this.compilationState) {
 			case 'compiling':
@@ -635,15 +654,20 @@ export class ArtifactDecorator {
 				return 'Artifact is stale. Refresh pending.';
 			case 'cancelled':
 				return 'Artifact generation was cancelled.';
-			case 'failed':
-				return this.truncated
+			case 'failed': {
+				const failure = this.truncated
 					? 'Compilation failed because process output was truncated.'
 					: 'Compilation failed.';
+				// After a failure the editor keeps the last successful listing.
+				return this.content ? `${failure} Showing the last successful output; hover for details.` : failure;
+			}
 			case 'successful':
 				return this.truncated ? 'Artifact output was truncated.' : undefined;
 		}
 	}
 }
+
+const maximumHoverLength = 4_000;
 
 function clearDecorations(editor: TextEditor, decorations: readonly TextEditorDecorationType[]): void {
 	for (const decoration of decorations) {

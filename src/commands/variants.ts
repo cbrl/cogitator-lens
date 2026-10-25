@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto';
 import * as vscode from 'vscode';
 import type { CompilationService } from '../compilation/index.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
-import { supportedLanguageIdentifiers } from '../toolchains/toolchain-map.js';
+import { getToolchainDefinition, supportedLanguageIdentifiers } from '../toolchains/toolchain-map.js';
 import type { CompilationVariant, ManualCompilationVariantSettings, ToolchainProfile } from '../types/index.js';
 import type { CompilationInfoTreeNode } from '../tree/compilation-info-tree.js';
 import { inputStringArray, inputStringRecord, pickFrom } from '../ui/quick-input.js';
@@ -43,25 +43,85 @@ export function register(context: vscode.ExtensionContext, deps: VariantCommandD
 			if (!isSupportedSourceDocument(editor.document)) {
 				return;
 			}
+			await waitForProviders(compilationService);
+			if (compilationService.getVariants(editor.document.uri).length === 0) {
+				await explainMissingVariant(editor.document, deps);
+				return;
+			}
 			await pickVariant(editor.document.uri, compilationService);
 		}),
 	);
 }
 
-export async function pickVariantIfNeeded(source: vscode.Uri, service: CompilationService): Promise<boolean> {
-	const variants = service.getVariants(source);
-	if (variants.length <= 1) {
-		return variants.length === 1;
+/**
+ * Returns the variant that produces artifacts for a source document. It waits for the first provider
+ * results, asks for a choice when several discovered variants describe the source, and explains what
+ * to configure when none does.
+ */
+export async function resolveSourceVariant(
+	document: vscode.TextDocument,
+	deps: VariantCommandDependencies,
+): Promise<CompilationVariant | undefined> {
+	const { compilationService } = deps;
+	await waitForProviders(compilationService);
+	if (compilationService.getVariants(document.uri).length === 0) {
+		await explainMissingVariant(document, deps);
+		return undefined;
 	}
-	return service.hasExplicitVariantSelection(source) || pickVariant(source, service);
+	if (compilationService.needsVariantChoice(document.uri) && !(await pickVariant(document.uri, compilationService))) {
+		return undefined;
+	}
+	return compilationService.getSelectedVariant(document.uri);
+}
+
+async function waitForProviders(service: CompilationService): Promise<void> {
+	if (!service.providersAreReady) {
+		await vscode.window.withProgress(
+			{ location: vscode.ProgressLocation.Window, title: 'Discovering compilation variants' },
+			() => service.whenProvidersReady(),
+		);
+	}
+}
+
+async function explainMissingVariant(document: vscode.TextDocument, deps: VariantCommandDependencies): Promise<void> {
+	const { compilationService, configuration } = deps;
+	const name = path.basename(document.uri.fsPath);
+	// Project toolchains (CMake, compilation databases, Python environments) only compile their own files.
+	const projectToolchainExists = compilationService.toolchainRegistry
+		.getProfiles()
+		.some((profile) => getToolchainDefinition(profile.kind).languageIdentifiers.includes(document.languageId));
+	if (projectToolchainExists) {
+		const choice = await vscode.window.showWarningMessage(
+			`${name} is not part of a discovered project. Add a variant to choose its toolchain and arguments.`,
+			'Add Variant…',
+			'Add Toolchain…',
+		);
+		if (choice === 'Add Variant…') {
+			await configureManualVariant(document.uri, undefined, compilationService, configuration);
+		} else if (choice === 'Add Toolchain…') {
+			await vscode.commands.executeCommand('coglens.AddToolchain');
+		}
+		return;
+	}
+	const detectionEnabled = configuration.getDetectToolchainsOnPath();
+	const choice = await vscode.window.showWarningMessage(
+		detectionEnabled
+			? `No toolchain that compiles ${name} was found on PATH or in settings.`
+			: `No toolchain that compiles ${name} is configured, and detection on PATH is turned off.`,
+		'Add Toolchain…',
+		detectionEnabled ? 'Detect Again' : 'Turn On Detection',
+	);
+	if (choice === 'Add Toolchain…') {
+		await vscode.commands.executeCommand('coglens.AddToolchain');
+	} else if (choice === 'Detect Again') {
+		await vscode.commands.executeCommand('coglens.DetectToolchains');
+	} else if (choice === 'Turn On Detection') {
+		await vscode.commands.executeCommand('workbench.action.openSettings', 'coglens.detectToolchainsOnPath');
+	}
 }
 
 export async function pickVariant(source: vscode.Uri, service: CompilationService): Promise<boolean> {
 	const variants = service.getVariants(source);
-	if (variants.length === 0) {
-		await vscode.window.showErrorMessage('No compilation variant is available for this file.');
-		return false;
-	}
 	const selected = service.getSelectedVariant(source);
 	const choice = await pickFrom(
 		variants,

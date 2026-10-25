@@ -13,6 +13,7 @@ import type {
 	ProviderSnapshot,
 	RawArtifact,
 	SourceState,
+	ToolchainProfile,
 } from '../types/index.js';
 import type { ArtifactRenderContext } from '../artifacts/core/artifact-contracts.js';
 import {
@@ -32,7 +33,15 @@ import { resolveArtifactPreset, type ArtifactPreset } from '../artifacts/ui/pres
 import { artifactInputComparisonKey, validateArtifactInputs } from './artifact-inputs.js';
 import { RawArtifactCache } from './raw-artifact-cache.js';
 import { renderArtifact } from './artifact-rendering.js';
-import { sourceUriComparisonKey } from '../file-identity.js';
+import { localFileComparisonKey, sourceUriComparisonKey, uriComparisonKey } from '../file-identity.js';
+import { getToolchainDefinition } from '../toolchains/toolchain-map.js';
+import type { ConfigurationOrigin } from '../buildsystems/variant-provider.js';
+
+/** Toolchains that can compile any file of their languages, so they stand in for missing variants. */
+const fallbackToolchainOrigins: readonly ConfigurationOrigin[] = ['user', 'path'];
+
+/** How long a request waits for the first provider results before it uses what is known. */
+const providerReadyTimeoutMs = 10_000;
 
 export class CompilationService {
 	readonly toolchainRegistry: ToolchainRegistry;
@@ -44,6 +53,8 @@ export class CompilationService {
 	private readonly rawArtifactCache = new RawArtifactCache();
 	private readonly inputWatchers = new Map<string, Disposable>();
 	private readonly currentArtifactOptions = new Map<ArtifactKind, ArtifactOptions>();
+	private providersReady: Promise<void> = Promise.resolve();
+	private providersSettled = true;
 
 	readonly onVariantsChanged: Event<readonly Uri[]> = this.changeEmitter.event;
 	readonly onArtifactOptionsChanged: Event<ArtifactKind> = this.artifactOptionsChangeEmitter.event;
@@ -95,13 +106,18 @@ export class CompilationService {
 		void this.configuration.updateArtifactOptions(kind, options);
 	}
 
+	/** Returns the discovered variants of a file, or its fallback variants when nothing describes it. */
 	getVariants(file: Uri): readonly CompilationVariant[] {
 		const variants = this.variants.getVariants(file);
-		if (variants.length > 0) {
-			return variants;
-		}
-		const fallback = this.createDefaultVariant(file);
-		return fallback ? [fallback] : [];
+		return variants.length > 0 ? variants : this.fallbackVariants(file);
+	}
+
+	/** Finds a variant by ID, including a fallback variant that a newer discovery has since replaced. */
+	findVariant(file: Uri, variantId: string): CompilationVariant | undefined {
+		return (
+			this.variants.getVariants(file).find((variant) => variant.id === variantId) ??
+			this.fallbackVariants(file, { forLookup: true }).find((variant) => variant.id === variantId)
+		);
 	}
 
 	getAllSources(): readonly Uri[] {
@@ -109,19 +125,60 @@ export class CompilationService {
 	}
 
 	getSelectedVariant(file: Uri): CompilationVariant | undefined {
-		return this.variants.getSelectedVariant(file) ?? this.createDefaultVariant(file);
+		const discovered = this.variants.getSelectedVariant(file);
+		if (discovered) {
+			return discovered;
+		}
+		const fallbacks = this.fallbackVariants(file);
+		const persisted = this.workspaceState?.get<string>(this.selectionKey(file));
+		return fallbacks.find((variant) => variant.id === persisted) ?? fallbacks[0];
 	}
 
-	hasExplicitVariantSelection(file: Uri): boolean {
-		return this.variants.hasSelectedVariant(file);
+	/** Whether several discovered variants describe a file and none has been chosen. Fallbacks never ask. */
+	needsVariantChoice(file: Uri): boolean {
+		return this.variants.getVariants(file).length > 1 && !this.variants.hasSelectedVariant(file);
 	}
 
 	async selectVariant(file: Uri, variantId: string): Promise<boolean> {
-		const selected = this.variants.selectVariant(file, variantId);
+		const selected = this.variants.selectVariant(file, variantId) || this.selectFallbackVariant(file, variantId);
 		if (selected) {
 			await this.workspaceState?.update(this.selectionKey(file), variantId);
 		}
 		return selected;
+	}
+
+	/** Records the initialization of the variant providers, so requests can wait for their first results. */
+	trackProviderInitialization(initialization: Promise<unknown>): void {
+		this.providersSettled = false;
+		const ready = initialization.then(
+			() => undefined,
+			() => undefined,
+		);
+		this.providersReady = ready;
+		void ready.then(() => {
+			if (this.providersReady === ready) {
+				this.providersSettled = true;
+			}
+		});
+	}
+
+	/** Whether the variant providers have published their first results. */
+	get providersAreReady(): boolean {
+		return this.providersSettled;
+	}
+
+	/**
+	 * Waits until the variant providers have published their first results, or until the timeout.
+	 * Before that, a file in a compilation database could otherwise resolve to a fallback variant.
+	 */
+	whenProvidersReady(timeoutMs = providerReadyTimeoutMs): Promise<void> {
+		let timeout: ReturnType<typeof setTimeout> | undefined;
+		return Promise.race([
+			this.providersReady,
+			new Promise<void>((resolve) => {
+				timeout = setTimeout(resolve, timeoutMs);
+			}),
+		]).finally(() => clearTimeout(timeout));
 	}
 
 	reconcileProviderSnapshot(snapshot: ProviderSnapshot): void {
@@ -271,6 +328,75 @@ export class CompilationService {
 		}
 	}
 
+	/**
+	 * Variants for a file that no provider describes: the configured default invocation, then the
+	 * toolchains that compile the file's language.
+	 *
+	 * `forLookup` includes every workspace and PATH toolchain, so an open artifact still finds its
+	 * variant while its source is closed, or after a workspace override or default hides it.
+	 */
+	private fallbackVariants(
+		file: Uri,
+		{ forLookup = false }: { readonly forLookup?: boolean } = {},
+	): CompilationVariant[] {
+		const defaultVariant = this.createDefaultVariant(file);
+		const profiles = forLookup ? this.fallbackToolchains() : this.languageToolchains(file, defaultVariant);
+		return [
+			...(defaultVariant ? [defaultVariant] : []),
+			...profiles.map((profile) => this.createToolchainVariant(file, profile)),
+		];
+	}
+
+	private fallbackToolchains(): ToolchainProfile[] {
+		return fallbackToolchainOrigins.flatMap((origin) => this.toolchainRegistry.getProfiles(origin));
+	}
+
+	/**
+	 * The workspace and PATH toolchains for the language of the open document, in that order. The
+	 * default invocation's toolchain and a PATH toolchain that duplicates a workspace one are left out.
+	 */
+	private languageToolchains(file: Uri, defaultVariant: CompilationVariant | undefined): ToolchainProfile[] {
+		const languageId = openDocumentLanguage(file);
+		if (!languageId) {
+			return [];
+		}
+		const userExecutables = new Set(
+			this.toolchainRegistry.getProfiles('user').map((profile) => localFileComparisonKey(profile.executable)),
+		);
+		return this.fallbackToolchains().filter(
+			(profile) =>
+				profile.id !== defaultVariant?.toolchainProfileId &&
+				getToolchainDefinition(profile.kind).languageIdentifiers.includes(languageId) &&
+				(this.toolchainRegistry.getOrigin(profile.id) === 'user' ||
+					!userExecutables.has(localFileComparisonKey(profile.executable))),
+		);
+	}
+
+	private selectFallbackVariant(file: Uri, variantId: string): boolean {
+		if (
+			this.variants.getVariants(file).length > 0 ||
+			!this.fallbackVariants(file).some((variant) => variant.id === variantId)
+		) {
+			return false;
+		}
+		this.variantSelectionEmitter.fire(file);
+		return true;
+	}
+
+	private createToolchainVariant(file: Uri, profile: ToolchainProfile): CompilationVariant {
+		const detected = this.toolchainRegistry.getOrigin(profile.id) === 'path';
+		return {
+			id: `toolchain:${profile.id}|${sourceUriComparisonKey(file)}`,
+			provider: 'default',
+			source: file,
+			toolchainProfileId: profile.id,
+			workingDirectory: workspace.getWorkspaceFolder(file)?.uri.fsPath ?? path.dirname(file.fsPath),
+			arguments: [],
+			environment: {},
+			displayLabel: detected ? `${profile.displayName} (PATH)` : profile.displayName,
+		};
+	}
+
 	private createDefaultVariant(file: Uri): CompilationVariant | undefined {
 		const info = this.configuration.getDefaultCompilationSettings(file);
 		if (!info) {
@@ -345,6 +471,19 @@ export class CompilationService {
 	}
 }
 
+/** The language of the open document for a file, which decides the toolchains that can compile it. */
+function openDocumentLanguage(file: Uri): string | undefined {
+	const documents = workspace.textDocuments.filter((document) => document.uri.scheme === 'file');
+	const key = uriComparisonKey(file);
+	const exact = documents.find((candidate) => uriComparisonKey(candidate.uri) === key);
+	if (exact) {
+		return exact.languageId;
+	}
+	// The same file reached through a symlink.
+	const sourceKey = sourceUriComparisonKey(file);
+	return documents.find((candidate) => sourceUriComparisonKey(candidate.uri) === sourceKey)?.languageId;
+}
+
 async function readSourceSnapshot(source: Uri): Promise<
 	| {
 			readonly ok: true;
@@ -380,6 +519,20 @@ async function readSourceSnapshot(source: Uri): Promise<
 			explanation: `Source is unavailable or unreadable: ${source.fsPath} (${reason})`,
 		};
 	}
+}
+
+const maximumFailureOutputLength = 20_000;
+
+/**
+ * The failure message followed by the tool's own output. Compilers report most errors there, and
+ * the message alone only names the exit code.
+ */
+export function failureDetails(error: unknown): string {
+	const message = error instanceof Error ? error.message : String(error);
+	const output = toolErrorOutput(error instanceof Error ? error.cause : undefined);
+	const clip = (text: string): string =>
+		text.length > maximumFailureOutputLength ? `${text.slice(0, maximumFailureOutputLength)}\n…` : text;
+	return [message, clip(output.stderr.trim()), clip(output.stdout.trim())].filter(Boolean).join('\n\n');
 }
 
 function toolErrorOutput(error: unknown): { stdout: string; stderr: string } {

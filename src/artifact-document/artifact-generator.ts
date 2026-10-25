@@ -7,6 +7,7 @@ import {
 	EventEmitter,
 	Uri,
 } from 'vscode';
+import path from 'path';
 import { CompilationService } from '../compilation/index.js';
 import type { ArtifactKind, CompilationVariant, InvocationDetails, RenderedArtifact } from '../types/index.js';
 import { CompilationError } from '../types/index.js';
@@ -47,7 +48,7 @@ export class ArtifactGenerator implements Disposable {
 	constructor(
 		sourceUri: Uri,
 		artifactUri: Uri,
-		private readonly variant: CompilationVariant,
+		private readonly variantId: string,
 		private readonly artifactKind: ArtifactKind,
 		private readonly presetId: string,
 		private readonly compilationService: CompilationService,
@@ -70,6 +71,10 @@ export class ArtifactGenerator implements Disposable {
 		this.transition('compiling');
 
 		try {
+			const variant = await this.resolveVariant();
+			if (!isCurrent() || cancellation.token.isCancellationRequested) {
+				throw new CancellationError();
+			}
 			const preset = this.compilationService.getArtifactPreset(this.artifactKind, this.presetId, this.sourceUri);
 			if (!preset) {
 				throw new CompilationError(
@@ -78,7 +83,7 @@ export class ArtifactGenerator implements Disposable {
 			}
 			const baseOptions = this.compilationService.getArtifactOptions(this.artifactKind);
 			const artifact = await this.compilationService.compile({
-				variant: this.variant,
+				variant,
 				artifactKind: this.artifactKind,
 				...(this.artifactOutputId ? { artifactOutputId: this.artifactOutputId } : {}),
 				presetId: this.presetId,
@@ -142,6 +147,25 @@ export class ArtifactGenerator implements Disposable {
 				this.cancellation = undefined;
 			}
 		}
+	}
+
+	/**
+	 * Looks the variant up for every update, so edits to it, a provider refresh, or a toolchain change
+	 * apply to an open artifact. A restored artifact waits for the providers that describe its source.
+	 */
+	private async resolveVariant(): Promise<CompilationVariant> {
+		let variant = this.compilationService.findVariant(this.sourceUri, this.variantId);
+		if (!variant && !this.compilationService.providersAreReady) {
+			await this.compilationService.whenProvidersReady();
+			variant = this.compilationService.findVariant(this.sourceUri, this.variantId);
+		}
+		if (!variant) {
+			throw new CompilationError(
+				`The compilation variant of this artifact is no longer available for ${path.basename(this.sourceUri.fsPath)}. ` +
+					'Open the artifact again from the source to use its current variant.',
+			);
+		}
+		return variant;
 	}
 
 	get onDidChange(): Event<ArtifactStatus> {

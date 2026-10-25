@@ -115,9 +115,7 @@ export class GlobalOptionsTreeProvider extends TreeProvider<GlobalOptionsNode> {
 				.uri;
 		}
 		const variant = identity
-			? this.compilationService
-					.getVariants(identity.source)
-					.find((candidate) => candidate.id === identity.variantId)
+			? this.compilationService.findVariant(identity.source, identity.variantId)
 			: source
 				? this.compilationService.getSelectedVariant(source)
 				: undefined;

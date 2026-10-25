@@ -6,7 +6,14 @@ Cogitator Lens is a VS Code extension for inspecting compiler and interpreter ar
 
 ## Usage
 
-Cogitator Lens discovers C and C++ compile settings from `compile_commands.json` and
+Open a source file and run `Cogitator Lens: Open Artifact`. Without any configuration, Cogitator
+Lens uses the compilers and interpreters it finds on `PATH`: `gcc`, `clang`, `rustc`, `python3` (or
+`python`), `go`, `zig`, `dotnet`, and `nvcc`. Run `Cogitator Lens: Detect Toolchains on PATH` after
+installing a new one, or set `coglens.detectToolchainsOnPath` to `false` to turn detection off. When
+several toolchains compile a file, run `Cogitator Lens: Select Compilation Variant` to switch between
+them.
+
+Cogitator Lens also discovers C and C++ compile settings from `compile_commands.json` and
 `build/compile_commands.json` in each workspace folder. Set `coglens.compilationDatabases` to use
 other paths, or to `[]` to disable compilation-database discovery.
 
@@ -17,6 +24,10 @@ required variant in the picker.
 Use the sidebar to browse variants and toolchains. Run `Cogitator Lens: Open Artifact` to generate
 an artifact for the active variant. Run `Cogitator Lens: Compare Artifacts` to compare a supported
 text artifact from two variants or presets. Control-flow graphs open in their own view.
+
+Saving the source regenerates its open artifacts. When a compile fails, the editor keeps the last
+successful output and marks it on the first line; hover there for the compiler output. Diagnostics
+appear in the Problems view. Open artifacts follow edits to their variant and toolchain.
 
 The **Artifact Details** view shows the active artifact's status, diagnostics, invocation, and
 metrics.
@@ -37,9 +48,10 @@ metrics.
 
 ## Configuration
 
-For simple projects, configure toolchains and a default invocation in workspace settings.
-`coglens.toolchains` defines available toolchains, and `coglens.defaultInvocation` selects the
-default. You can also add, clone, edit, and delete workspace toolchains and variants from the
+To use a toolchain that is not on `PATH`, or to give it default arguments, configure it in
+workspace settings. `coglens.toolchains` defines available toolchains, and they are offered for files
+without another variant ahead of those found on `PATH`. `coglens.defaultInvocation` selects the
+toolchain and arguments to try first. You can also add, clone, edit, and delete workspace toolchains and variants from the
 sidebar.
 
 A toolchain has the form

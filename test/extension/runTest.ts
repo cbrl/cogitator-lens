@@ -17,7 +17,7 @@ import {
 	type RenderedTextArtifact,
 	type ToolchainProfile,
 } from '../../src/types/index.js';
-import { SourceUriMap } from '../../src/file-identity.js';
+import { SourceUriMap, sourceUriComparisonKey } from '../../src/file-identity.js';
 import { composeDiagnosticParsers } from '../../src/diagnostics.js';
 import { parseGnuDiagnostics } from '../../src/toolchains/c-family/diagnostics.js';
 import { parseParenthesizedDiagnostics } from '../../src/toolchains/msvc/diagnostics.js';
@@ -90,6 +90,8 @@ export async function run(): Promise<void> {
 	await verifyDisplayFilterCaching(workspaceFolder);
 	await verifyMissingSourceIsUnavailable(workspaceFolder);
 	await verifyArtifactGeneratorStates(workspaceFolder);
+	await verifyArtifactGeneratorFollowsVariant(workspaceFolder);
+	await verifyFallbackVariants(workspaceFolder);
 	await verifyNativeStackProduction(workspaceFolder);
 	await verifyArtifactDetailsTree(workspaceFolder);
 	await verifyCompilationDatabaseVariantProvider(workspaceFolder);
@@ -278,6 +280,9 @@ async function verifyArtifactGeneratorStates(workspaceFolder: vscode.WorkspaceFo
 	let waitForCancellation = false;
 	let lastRequest: ArtifactRequest | undefined;
 	const compilationService = {
+		providersAreReady: true,
+		findVariant: (file: vscode.Uri, id: string) =>
+			file.toString() === source.toString() && id === variant.id ? variant : undefined,
 		getArtifactOptions: () => defaultArtifactOptions,
 		getArtifactPreset: () => ({
 			id: 'default',
@@ -341,7 +346,7 @@ async function verifyArtifactGeneratorStates(workspaceFolder: vscode.WorkspaceFo
 			};
 		},
 	} as unknown as CompilationService;
-	const handler = new ArtifactGenerator(source, assemblyUri, variant, 'assembly', 'default', compilationService);
+	const handler = new ArtifactGenerator(source, assemblyUri, variant.id, 'assembly', 'default', compilationService);
 	const states: string[] = [handler.status.state];
 	const subscription = handler.onDidChange((status) => states.push(status.state));
 	const cancellation = new vscode.CancellationTokenSource();
@@ -377,6 +382,151 @@ async function verifyArtifactGeneratorStates(workspaceFolder: vscode.WorkspaceFo
 		cancellation.dispose();
 		subscription.dispose();
 		handler.dispose();
+	}
+}
+
+async function verifyArtifactGeneratorFollowsVariant(workspaceFolder: vscode.WorkspaceFolder): Promise<void> {
+	const source = vscode.Uri.joinPath(workspaceFolder.uri, 'variant-follow-test.cpp');
+	let variant: CompilationVariant | undefined = {
+		...compilationVariant('manual:follow', source, 'Follow'),
+		arguments: ['-O1'],
+	};
+	const requests: ArtifactRequest[] = [];
+	const compilationService = {
+		providersAreReady: true,
+		findVariant: () => variant,
+		getArtifactOptions: () => defaultArtifactOptions,
+		getArtifactPreset: () => ({
+			id: 'default',
+			artifactKind: 'assembly',
+			extraArguments: [],
+			productionOptions: {},
+		}),
+		compile: async (request: ArtifactRequest) => {
+			requests.push(request);
+			return {
+				status: 'available',
+				artifact: {
+					kind: 'assembly',
+					presentation: 'text',
+					text: 'ret',
+					lines: [{ text: 'ret' }],
+					sourceLocations: [],
+					links: [],
+					folds: [],
+					symbols: [],
+					metrics: {},
+					raw: 'ret',
+					diagnostics: [],
+					durationMs: 1,
+					generatedAt: 0,
+					command: { executable: process.execPath, args: [], environmentVariableNames: [], cwd: '/' },
+					truncated: false,
+					toolOutputTruncated: false,
+				},
+			};
+		},
+	} as unknown as CompilationService;
+	const handler = new ArtifactGenerator(
+		source,
+		getArtifactUri(source, variant, 'assembly', 'default'),
+		variant.id,
+		'assembly',
+		'default',
+		compilationService,
+	);
+	const cancellation = new vscode.CancellationTokenSource();
+	try {
+		await handler.update(cancellation.token);
+		variant = { ...variant, arguments: ['-O3'] };
+		await handler.update(cancellation.token);
+		assert.deepEqual(
+			requests.map((request) => request.variant.arguments),
+			[['-O1'], ['-O3']],
+			'An open artifact should compile with the current arguments of its variant',
+		);
+
+		variant = undefined;
+		await assert.rejects(handler.update(cancellation.token), /no longer available/);
+		assert.equal(handler.status.state, 'failed');
+		assert.ok(handler.status.artifact, 'A failure should retain the last successful artifact');
+	} finally {
+		cancellation.dispose();
+		handler.dispose();
+	}
+}
+
+async function verifyFallbackVariants(workspaceFolder: vscode.WorkspaceFolder): Promise<void> {
+	const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'coglens-fallback-'));
+	const source = vscode.Uri.file(path.join(temporaryDirectory, 'main.cpp'));
+	await fs.promises.writeFile(source.fsPath, 'int main() { return 0; }\n');
+	const userExecutable = path.join(temporaryDirectory, 'g++');
+	const configurationChange = new vscode.EventEmitter<void>();
+	const state = new Map<string, unknown>();
+	const workspaceState = {
+		keys: () => [...state.keys()],
+		get: (key: string) => state.get(key),
+		update: async (key: string, value: unknown) => {
+			state.set(key, value);
+		},
+	} as unknown as vscode.Memento;
+	const service = new CompilationService(
+		testConfiguration(configurationChange, {
+			getToolchains: () => [{ ...toolchainProfile('Workspace GCC', '-O2'), executable: userExecutable }],
+		}),
+		workspaceState,
+	);
+	try {
+		service.reconcileProviderSnapshot({
+			provider: 'path',
+			toolchainProfiles: [
+				{ ...toolchainProfile('clang', '-O0'), kind: 'clang', displayName: 'clang 18' },
+				{ ...toolchainProfile('python3', '-O0'), kind: 'python', displayName: 'python3 3.12' },
+				// The same executable as the workspace toolchain.
+				{ ...toolchainProfile('g++', '-O0'), executable: userExecutable },
+			],
+			variants: [],
+		});
+		const document = await vscode.workspace.openTextDocument(source);
+		assert.equal(document.languageId, 'cpp');
+
+		const fallbacks = service.getVariants(source);
+		assert.deepEqual(
+			fallbacks.map((variant) => [variant.toolchainProfileId, variant.displayLabel]),
+			[
+				['user:Workspace GCC', 'Test GCC'],
+				['path:clang', 'clang 18 (PATH)'],
+			],
+			'Workspace toolchains come first, PATH toolchains follow, and other languages are left out',
+		);
+		assert.equal(service.needsVariantChoice(source), false, 'Fallback variants never ask for a choice');
+		assert.equal(service.getSelectedVariant(source)?.id, fallbacks[0].id);
+
+		assert.equal(await service.selectVariant(source, fallbacks[1].id), true);
+		assert.equal(service.getSelectedVariant(source)?.id, fallbacks[1].id);
+
+		const hiddenId = `toolchain:path:g++|${sourceUriComparisonKey(source)}`;
+		assert.equal(service.findVariant(source, hiddenId)?.toolchainProfileId, 'path:g++');
+
+		service.reconcileProviderSnapshot({
+			provider: 'cmake',
+			toolchainProfiles: [toolchainProfile('gcc', '-O0')],
+			variants: [{ ...compilationVariant('cmake:main', source, 'CMake'), toolchainProfileId: 'cmake:gcc' }],
+		});
+		assert.deepEqual(
+			service.getVariants(source).map((variant) => variant.id),
+			['cmake:main'],
+			'Discovered variants replace the fallbacks',
+		);
+		assert.equal(
+			service.findVariant(source, fallbacks[1].id)?.toolchainProfileId,
+			'path:clang',
+			'An artifact opened with a fallback keeps its variant',
+		);
+	} finally {
+		service.dispose();
+		configurationChange.dispose();
+		await fs.promises.rm(temporaryDirectory, { recursive: true, force: true });
 	}
 }
 
