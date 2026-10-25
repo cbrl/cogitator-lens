@@ -4,6 +4,31 @@ import type { ToolchainProfile } from '../types/index.js';
 import { createToolchainProfile } from '../toolchains/toolchain-map.js';
 import { localFileComparisonKey } from '../file-identity.js';
 
+/** Directories whose Python files belong to an environment, a cache, or a dependency, not to the workspace. */
+export const excludedPythonDirectories = [
+	'.git',
+	'.hg',
+	'.svn',
+	'.nox',
+	'.tox',
+	'.venv',
+	'__pycache__',
+	'env',
+	'node_modules',
+	'site-packages',
+	'venv',
+] as const;
+
+const excludedPythonDirectorySet = new Set<string>(excludedPythonDirectories);
+
+/** Whether a workspace-relative path to a Python file lies in one of those directories. */
+export function isExcludedPythonSource(relativePath: string): boolean {
+	return relativePath
+		.split(/[\\/]/)
+		.slice(0, -1)
+		.some((segment) => excludedPythonDirectorySet.has(segment));
+}
+
 export interface PythonEnvironmentProfile {
 	readonly environment: ResolvedEnvironment;
 	readonly profile: ToolchainProfile;

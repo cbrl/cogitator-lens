@@ -229,10 +229,14 @@ async function verifyPythonEnvironmentVariantProvider(workspaceFolder: vscode.Wo
 	const activeChanges = new vscode.EventEmitter<never>();
 	const variableChanges = new vscode.EventEmitter<never>();
 	let refreshes = 0;
+	let reads = 0;
 	const api = {
 		ready: Promise.resolve(),
 		environments: {
-			known: [environment],
+			get known() {
+				reads++;
+				return [environment];
+			},
 			getActiveEnvironmentPath: () => ({ id: environment.id, path: environment.path }),
 			onDidChangeEnvironments: environmentChanges.event,
 			onDidChangeActiveEnvironmentPath: activeChanges.event,
@@ -249,6 +253,7 @@ async function verifyPythonEnvironmentVariantProvider(workspaceFolder: vscode.Wo
 	const subscription = provider.onSnapshot((value) => {
 		snapshot = value;
 	});
+	const scratch = path.join(workspaceFolder.uri.fsPath, 'out', 'python-watch-test');
 
 	try {
 		await provider.initialize();
@@ -264,7 +269,39 @@ async function verifyPythonEnvironmentVariantProvider(workspaceFolder: vscode.Wo
 		assert.equal(fixture.toolchainProfileId, snapshot.toolchainProfiles[0].id);
 		assert.equal(fixture.environment.PYTHONPATH, workspaceFolder.uri.fsPath);
 		assert.equal(fixture.target, 'Bytecode');
+
+		// A burst of environment events reads the workspace once.
+		let before = reads;
+		for (let index = 0; index < 5; index++) {
+			environmentChanges.fire(undefined as never);
+		}
+		await delay(1_500);
+		assert.equal(reads, before + 1, 'A burst of environment events should refresh once');
+
+		// A file installed into an environment is not a source, so it does not rescan the workspace.
+		before = reads;
+		const installed = path.join(scratch, '.tox', 'py313', 'lib', 'site-packages', 'installed.py');
+		await fs.promises.mkdir(path.dirname(installed), { recursive: true });
+		await fs.promises.writeFile(installed, 'pass\n');
+		await delay(1_500);
+		assert.equal(reads, before, 'A file inside an environment should not refresh the variants');
+
+		const sources = ['burst-a.py', 'burst-b.py'].map((name) => path.join(scratch, name));
+		await Promise.all(sources.map((source) => fs.promises.writeFile(source, 'pass\n')));
+		const deadline = Date.now() + 10_000;
+		const hasSources = (): boolean =>
+			sources.every((source) => snapshot?.variants.some((variant) => variant.source.fsPath === source) ?? false);
+		while (!hasSources() && Date.now() < deadline) {
+			await delay(50);
+		}
+		assert.ok(hasSources(), 'New workspace sources should become variants');
+		assert.equal(
+			snapshot?.variants.some((variant) => variant.source.fsPath === installed),
+			false,
+			'Installed files are not variants',
+		);
 	} finally {
+		await fs.promises.rm(scratch, { recursive: true, force: true });
 		subscription.dispose();
 		provider.dispose();
 		environmentChanges.dispose();
@@ -1653,4 +1690,8 @@ function testConfiguration(
 		updateArtifactOption: async () => undefined,
 		...overrides,
 	} as unknown as ConfigurationService;
+}
+
+function delay(milliseconds: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }

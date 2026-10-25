@@ -22,10 +22,14 @@ export function mergeSnapshots(parts: readonly VariantSnapshot[]): VariantSnapsh
 	return { toolchainProfiles: [...profiles.values()], variants: parts.flatMap((part) => part.variants) };
 }
 
+/** How long a provider waits after a change event for the rest of its burst. */
+const defaultRefreshDelayMs = 250;
+
 /** Discovers compilation variants from one external source and publishes them as snapshots. */
 export abstract class VariantProvider {
 	private readonly snapshotEmitter = new EventEmitter<ProviderSnapshot>();
 	private refreshGeneration = 0;
+	private pendingRefresh?: ReturnType<typeof setTimeout>;
 	protected disposed = false;
 	/** Disposed together with the provider. */
 	protected readonly subscriptions: Disposable[] = [];
@@ -41,6 +45,7 @@ export abstract class VariantProvider {
 
 	/** Reads and publishes the variants, unless a newer refresh starts first. */
 	async refresh(): Promise<void> {
+		clearTimeout(this.pendingRefresh);
 		const generation = ++this.refreshGeneration;
 		const snapshot = await this.read();
 		if (!this.disposed && generation === this.refreshGeneration) {
@@ -48,11 +53,18 @@ export abstract class VariantProvider {
 		}
 	}
 
+	/** Refreshes once a burst of change events has passed, rather than once for each event. */
+	protected scheduleRefresh(delayMs = defaultRefreshDelayMs): void {
+		clearTimeout(this.pendingRefresh);
+		this.pendingRefresh = setTimeout(() => void this.refresh(), delayMs);
+	}
+
 	protected publish(snapshot: VariantSnapshot): void {
 		this.snapshotEmitter.fire({ provider: this.providerId, ...snapshot });
 	}
 
 	dispose(): void {
+		clearTimeout(this.pendingRefresh);
 		this.disposed = true;
 		this.refreshGeneration++;
 		this.subscriptions.splice(0).forEach((subscription) => subscription.dispose());

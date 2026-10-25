@@ -13,6 +13,8 @@ import { emptySnapshot, VariantProvider, type VariantSnapshot } from './variant-
 import { sourceUriComparisonKey } from '../file-identity.js';
 import {
 	createPythonEnvironmentProfiles,
+	excludedPythonDirectories,
+	isExcludedPythonSource,
 	matchesPythonEnvironment,
 	pythonEnvironmentVersion,
 	type PythonEnvironmentProfile,
@@ -20,7 +22,9 @@ import {
 
 const providerId = 'python-environments';
 const pythonSourcePattern = '**/*.py';
-const pythonSourceExclusions = '**/{.git,.hg,.svn,.nox,.tox,.venv,__pycache__,env,node_modules,site-packages,venv}/**';
+const pythonSourceExclusions = `**/{${excludedPythonDirectories.join(',')}}/**`;
+/** Reading the variants searches the whole workspace, so a checkout or an environment scan reads once. */
+const pythonRefreshDelayMs = 500;
 
 type PythonApiFactory = () => Promise<PythonExtensionApi>;
 
@@ -49,7 +53,11 @@ export class PythonEnvironmentVariantProvider extends VariantProvider {
 		};
 		const trigger = Disposable.from(
 			sourceWatcher,
-			sourceWatcher.onDidCreate(start),
+			sourceWatcher.onDidCreate((uri) => {
+				if (isPythonSource(uri)) {
+					start();
+				}
+			}),
 			workspace.onDidOpenTextDocument((document) => {
 				if (document.languageId === 'python') {
 					start();
@@ -72,17 +80,21 @@ export class PythonEnvironmentVariantProvider extends VariantProvider {
 			return;
 		}
 
-		this.subscriptions.push(
-			this.api.environments.onDidChangeEnvironments(() => void this.refresh()),
-			this.api.environments.onDidChangeActiveEnvironmentPath(() => void this.refresh()),
-			this.api.environments.onDidEnvironmentVariablesChange(() => void this.refresh()),
-			workspace.onDidChangeWorkspaceFolders(() => void this.refresh()),
-		);
+		const refreshSoon = (): void => this.scheduleRefresh(pythonRefreshDelayMs);
+		const sourceChanged = (uri: Uri): void => {
+			if (isPythonSource(uri)) {
+				refreshSoon();
+			}
+		};
 		const sourceWatcher = workspace.createFileSystemWatcher(pythonSourcePattern);
 		this.subscriptions.push(
+			this.api.environments.onDidChangeEnvironments(refreshSoon),
+			this.api.environments.onDidChangeActiveEnvironmentPath(refreshSoon),
+			this.api.environments.onDidEnvironmentVariablesChange(refreshSoon),
+			workspace.onDidChangeWorkspaceFolders(refreshSoon),
 			sourceWatcher,
-			sourceWatcher.onDidCreate(() => void this.refresh()),
-			sourceWatcher.onDidDelete(() => void this.refresh()),
+			sourceWatcher.onDidCreate(sourceChanged),
+			sourceWatcher.onDidDelete(sourceChanged),
 		);
 
 		try {
@@ -165,6 +177,11 @@ export class PythonEnvironmentVariantProvider extends VariantProvider {
 			displayLabel: item.profile.displayName,
 		}));
 	}
+}
+
+/** Whether a watched file is a workspace source, which an installed package or a cache is not. */
+function isPythonSource(uri: Uri): boolean {
+	return !isExcludedPythonSource(workspace.asRelativePath(uri, false));
 }
 
 async function hasPythonSources(): Promise<boolean> {

@@ -6,6 +6,7 @@ import test from 'node:test';
 import type { ResolvedEnvironment } from '@vscode/python-extension';
 import {
 	createPythonEnvironmentProfiles,
+	isExcludedPythonSource,
 	matchesPythonEnvironment,
 	pythonEnvironmentDisplayName,
 	pythonEnvironmentVersion,
@@ -155,6 +156,21 @@ test('resolved Python environments become deduplicated toolchain profiles', () =
 	// A selection matches by case-insensitive folder path or by environment id.
 	assert.ok(matchesPythonEnvironment({ id: 'selection', path: 'c:\\WORK\\.VENV' }, profiles[0], 'win32'));
 	assert.ok(matchesPythonEnvironment({ id: 'DUPLICATE-ID', path: 'unused' }, profiles[0], 'win32'));
+});
+
+test('Python files in environments, caches, and dependencies are not workspace sources', () => {
+	for (const excluded of [
+		'.venv/lib/python3.13/site-packages/six.py',
+		'tools\\venv\\Lib\\site.py',
+		'src/__pycache__/main.py',
+		'.tox/py313/lib/site-packages/pytest.py',
+		'web/node_modules/node-gyp/gyp/gyp_main.py',
+	]) {
+		assert.equal(isExcludedPythonSource(excluded), true, excluded);
+	}
+	for (const source of ['main.py', 'src/env.py', 'src/venv_tools/main.py', 'environment/main.py']) {
+		assert.equal(isExcludedPythonSource(source), false, source);
+	}
 });
 
 test('Visual Studio environment scripts are derived from the compiler location', () => {

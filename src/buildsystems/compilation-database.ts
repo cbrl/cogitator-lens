@@ -14,11 +14,8 @@ interface DatabaseFile {
 	readonly filePath: string;
 }
 
-const refreshDelayMs = 250;
-
 export class CompilationDatabaseVariantProvider extends VariantProvider {
 	private readonly watchers: Disposable[] = [];
-	private pendingRefresh?: ReturnType<typeof setTimeout>;
 
 	constructor(private readonly configuration: ConfigurationService) {
 		super(compilationDatabaseProviderId);
@@ -43,15 +40,8 @@ export class CompilationDatabaseVariantProvider extends VariantProvider {
 	}
 
 	override dispose(): void {
-		clearTimeout(this.pendingRefresh);
 		this.watchers.splice(0).forEach((watcher) => watcher.dispose());
 		super.dispose();
-	}
-
-	/** A build system rewrites a database in several steps, so a burst of events reads it once. */
-	private scheduleRefresh(): void {
-		clearTimeout(this.pendingRefresh);
-		this.pendingRefresh = setTimeout(() => void this.refresh(), refreshDelayMs);
 	}
 
 	private async reconfigure(): Promise<void> {
@@ -60,6 +50,7 @@ export class CompilationDatabaseVariantProvider extends VariantProvider {
 			const watcher = workspace.createFileSystemWatcher(
 				new RelativePattern(Uri.file(path.dirname(database.filePath)), path.basename(database.filePath)),
 			);
+			// A build system rewrites a database in several steps, so a burst of events reads it once.
 			this.watchers.push(
 				watcher,
 				watcher.onDidCreate(() => this.scheduleRefresh()),
