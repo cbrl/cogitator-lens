@@ -26,8 +26,6 @@ import type { AssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/
 import type { AssemblyLine } from '../artifacts/control-flow-graph/parsers/assembly-line.js';
 import type { GraphParseResult } from '../artifacts/control-flow-graph/control-flow-graph-model.js';
 
-const maxArtifactFileBytes = 50 * 1024 * 1024;
-
 export class ToolExitError extends Error {
 	constructor(
 		message: string,
@@ -86,6 +84,8 @@ export interface ArtifactOutputSpec {
 	/** Invocation-local environment additions, normally paths inside the temporary directory. */
 	readonly environment?: (temporaryDirectory: string) => Readonly<Record<string, string>>;
 	readonly acceptOutputOnError?: boolean;
+	/** Creates a filter for the stdout lines of one run, which drops output before it is kept. */
+	readonly stdoutLineFilter?: (sourcePath: string, workingDirectory: string) => (line: string) => boolean;
 }
 
 export interface DependencyCollectionSpec {
@@ -359,6 +359,7 @@ export class ToolchainBackend {
 				cancellationToken,
 				spec.acceptOutputOnError,
 				spec.environment?.(temporaryDirectory),
+				spec.stdoutLineFilter,
 			);
 			// The selected output holds the artifact text. The other streams hold diagnostics.
 			const [rawText, diagnosticOutput] =
@@ -417,6 +418,7 @@ export class ToolchainBackend {
 		cancellationToken: CancellationToken,
 		acceptOutputOnError = false,
 		invocationEnvironment: Readonly<Record<string, string>> = {},
+		stdoutLineFilter?: ArtifactOutputSpec['stdoutLineFilter'],
 	): Promise<ToolchainRun> {
 		const invocation = await this.prepareInvocation(
 			source,
@@ -433,7 +435,14 @@ export class ToolchainBackend {
 			'Toolchain',
 			this.profile.executable,
 			invocation.argumentsList,
-			{ cwd: invocation.workingDirectory, env: invocation.preparedEnvironment, cancellationToken },
+			{
+				cwd: invocation.workingDirectory,
+				env: invocation.preparedEnvironment,
+				cancellationToken,
+				...(stdoutLineFilter
+					? { stdoutLineFilter: stdoutLineFilter(source.fsPath, invocation.workingDirectory) }
+					: {}),
+			},
 			acceptOutputOnError,
 		);
 		return { invocation, result };
@@ -610,6 +619,7 @@ async function readBoundedArtifactFile(filename: string, optional = false): Prom
 		});
 	}
 	try {
+		const { maxOutputBytes: maxArtifactFileBytes } = exec.currentProcessLimits();
 		const stat = await handle.stat();
 		if (stat.size > maxArtifactFileBytes) {
 			throw artifactFileLimitError();
@@ -638,12 +648,12 @@ async function readBoundedArtifactFile(filename: string, optional = false): Prom
 /** Reads an artifact file only when it is within the backend's defensive size limit. */
 export async function readBoundedArtifactBuffer(filename: string): Promise<Buffer> {
 	const stat = await fs.promises.stat(filename);
-	if (stat.size > maxArtifactFileBytes) {
+	if (stat.size > exec.currentProcessLimits().maxOutputBytes) {
 		throw artifactFileLimitError();
 	}
 	return fs.promises.readFile(filename);
 }
 
 function artifactFileLimitError(): exec.ExecError {
-	return new exec.ExecError('output-limit', `Toolchain output file exceeded the ${maxArtifactFileBytes}-byte limit`);
+	return new exec.ExecError('output-limit', exec.outputLimitMessage(exec.currentProcessLimits().maxOutputBytes));
 }

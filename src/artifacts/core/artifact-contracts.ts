@@ -99,7 +99,8 @@ export const displayOptionDescriptors = {
 	},
 	showSystemDeclarations: {
 		id: 'showSystemDeclarations',
-		group: 'display',
+		// The Clang producer drops system declarations, so showing them compiles again.
+		group: 'production',
 		label: 'Show system declarations',
 		description: 'Include declarations originating from compiler and system headers',
 	},

@@ -20,6 +20,7 @@ import { rustArtifactArguments, rustOutputArguments } from '../../src/toolchains
 import { nvccOutputArguments, nvdisasm } from '../../src/toolchains/nvcc.js';
 import { zigLlvmIrOutput, zigOutputArguments } from '../../src/toolchains/zig.js';
 import { intelOutputArguments } from '../../src/toolchains/toolchain-backend.js';
+import { defaultArtifactOptions } from '../../src/types/index.js';
 import {
 	dotNetCompilerCommandLine,
 	dotNetIlDasmArguments,
@@ -274,18 +275,24 @@ test('dependency collection names its own output and keeps the project crate ide
 });
 
 test('Intel syntax arguments appear only where the syntax is selectable', () => {
-	assert.deepEqual(intelOutputArguments(toolchainDefinitions.gcc, { intel: true, demangle: false }), ['-masm=intel']);
-	assert.deepEqual(intelOutputArguments(toolchainDefinitions.gcc, { intel: false, demangle: false }), []);
-	assert.deepEqual(intelOutputArguments(toolchainDefinitions.rust, { intel: true, demangle: false }), [
-		'-C',
-		'llvm-args=-x86-asm-syntax=intel',
-	]);
+	assert.deepEqual(
+		intelOutputArguments(toolchainDefinitions.gcc, { ...defaultArtifactOptions.production, intel: true }),
+		['-masm=intel'],
+	);
+	assert.deepEqual(intelOutputArguments(toolchainDefinitions.gcc, defaultArtifactOptions.production), []);
+	assert.deepEqual(
+		intelOutputArguments(toolchainDefinitions.rust, { ...defaultArtifactOptions.production, intel: true }),
+		['-C', 'llvm-args=-x86-asm-syntax=intel'],
+	);
 	// MSVC emits Intel syntax inherently, so it contributes no argument.
-	assert.deepEqual(intelOutputArguments(toolchainDefinitions.msvc, { intel: true, demangle: false }), []);
+	assert.deepEqual(
+		intelOutputArguments(toolchainDefinitions.msvc, { ...defaultArtifactOptions.production, intel: true }),
+		[],
+	);
 	assert.deepEqual(
 		intelOutputArguments(
 			{ intelSyntax: 'selectable', intelArguments: undefined },
-			{ intel: true, demangle: false },
+			{ ...defaultArtifactOptions.production, intel: true },
 		),
 		[],
 	);

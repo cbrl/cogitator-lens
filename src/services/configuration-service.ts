@@ -33,6 +33,7 @@ import {
 	type SettingScopes,
 } from './settings-scopes.js';
 import { portablePath, type PathContext } from './path-variables.js';
+import type { ProcessLimits } from '../exec.js';
 
 /** A change to Cogitator Lens settings. */
 export interface SettingsChange {
@@ -120,6 +121,17 @@ export class ConfigurationService implements Disposable {
 
 	getSynchronizeSourceAndArtifactScrolling(uri: Uri): boolean {
 		return workspace.getConfiguration('coglens', uri).get('synchronizeSourceAndArtifactScrolling', true);
+	}
+
+	/** The time and output that each compiler or tool run may use. */
+	getProcessLimits(): ProcessLimits {
+		const configuration = workspace.getConfiguration('coglens');
+		const positive = (value: unknown, fallback: number): number =>
+			typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : fallback;
+		return {
+			timeoutMs: Math.round(positive(configuration.get('processTimeout'), 60) * 1000),
+			maxOutputBytes: Math.round(positive(configuration.get('processOutputLimit'), 50) * 1024 * 1024),
+		};
 	}
 
 	getDetectToolchainsOnPath(): boolean {

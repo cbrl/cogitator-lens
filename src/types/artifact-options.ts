@@ -3,6 +3,7 @@ import { structurallyEqual } from '../utils.js';
 export interface ProductionOptions {
 	readonly intel: boolean;
 	readonly demangle: boolean;
+	readonly showSystemDeclarations: boolean;
 }
 
 export interface DisplayOptions {
@@ -12,7 +13,6 @@ export interface DisplayOptions {
 	readonly showCommentOnlyLines: boolean;
 	readonly trim: boolean;
 	readonly showIncludedFiles: boolean;
-	readonly showSystemDeclarations: boolean;
 	readonly binaryColumns: boolean;
 	readonly sourceLineColorBands: boolean;
 }
@@ -30,6 +30,7 @@ export const defaultArtifactOptions: ArtifactOptions = Object.freeze({
 	production: Object.freeze({
 		intel: false,
 		demangle: false,
+		showSystemDeclarations: false,
 	}),
 	display: Object.freeze({
 		showUnusedLabels: false,
@@ -38,7 +39,6 @@ export const defaultArtifactOptions: ArtifactOptions = Object.freeze({
 		showCommentOnlyLines: false,
 		trim: false,
 		showIncludedFiles: true,
-		showSystemDeclarations: false,
 		binaryColumns: true,
 		sourceLineColorBands: true,
 	}),

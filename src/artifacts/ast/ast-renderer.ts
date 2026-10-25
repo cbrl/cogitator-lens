@@ -4,6 +4,8 @@ import { splitLines } from '../../common.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
 import { resolveCompilerPath, sameLocalFile } from '../../file-identity.js';
+import { isRecord } from '../../common.js';
+import { isCompilerDeclaration, isSystemDeclarationPath } from './clang-system-declarations.js';
 
 interface AstNode {
 	readonly kind: string;
@@ -26,10 +28,12 @@ interface AstSourceSpan extends AstSourcePosition {
 
 export function renderClangAst(
 	raw: RawArtifact,
-	options: DisplayOptions,
+	_options: DisplayOptions,
 	context: ArtifactRenderContext,
 ): RenderedTextArtifact {
 	const sourceFile = path.normalize(context.source.uri.fsPath);
+	// The producer records whether it kept system declarations; nested ones are hidden here.
+	const showSystemDeclarations = isRecord(raw.producerData) && raw.producerData.showSystemDeclarations === true;
 	const output: RenderedArtifactLine[] = [];
 	const nodes: Array<Omit<AstNode, 'endLine'>> = [];
 	const locations = new Map<number, AstSourcePosition>();
@@ -60,8 +64,15 @@ export function renderClangAst(
 		if (location) {
 			locations.set(parsed.depth, location);
 			lastFile = location.file;
+		} else {
+			// A node without a location must not lend its children the location of a previous sibling.
+			locations.delete(parsed.depth);
 		}
-		if (!options.showSystemDeclarations && location && isSystemDeclarationPath(location.file, sourceFile)) {
+		const compilerDeclaration = parsed.depth === 1 && isCompilerDeclaration(rawLine);
+		if (
+			!showSystemDeclarations &&
+			(compilerDeclaration || (location && isSystemDeclarationPath(location.file, sourceFile)))
+		) {
 			skipDepth = parsed.depth;
 			continue;
 		}
@@ -304,21 +315,6 @@ function clangDeclarationName(kind: string, text: string): string | undefined {
 
 function isDeclarationNode(kind: string): boolean {
 	return kind.endsWith('Decl') && !['TranslationUnitDecl', 'AccessSpecDecl'].includes(kind);
-}
-
-function isSystemDeclarationPath(filename: string, sourceFile: string): boolean {
-	if (sameLocalFile(filename, sourceFile)) {
-		return false;
-	}
-	const normalized = filename.replace(/\\/g, '/').toLowerCase();
-	return (
-		normalized.startsWith('/usr/include/') ||
-		normalized.includes('/lib/clang/') ||
-		normalized.includes('/windows kits/') ||
-		normalized.includes('/microsoft visual studio/') ||
-		normalized.includes('.app/contents/developer/toolchains/') ||
-		normalized.includes('/xcode.app/')
-	);
 }
 
 function addIndentationEnds(nodes: readonly Omit<AstNode, 'endLine'>[], lineCount: number): AstNode[] {

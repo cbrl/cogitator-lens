@@ -100,6 +100,11 @@ deprecated.
 }
 ```
 
+Each compiler or tool run may take up to `coglens.processTimeout` seconds and write up to
+`coglens.processOutputLimit` megabytes. The Clang AST leaves out declarations from system headers
+while it is produced, unless `ast.showSystemDeclarations` is set, so a file that includes the
+standard library stays within the limit.
+
 Preset arguments and production options are included in the artifact cache key. Display-only
 options do not regenerate an artifact.
 

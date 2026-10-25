@@ -31,11 +31,29 @@ export interface ExecOptions extends Omit<SpawnOptions, 'shell'> {
 	terminationGraceMs?: number;
 	cancellationToken?: CancellationLike;
 	stdin?: string | Buffer;
+	/**
+	 * Keeps only the stdout lines it accepts, without their line ending. Dropped lines do not count
+	 * toward the output limit, so a tool can print more than the limit when most of it is dropped.
+	 */
+	stdoutLineFilter?: (line: string) => boolean;
 }
 
-const defaultTimeoutMs = 60_000;
-const defaultMaxOutputBytes = 50 * 1024 * 1024;
+export interface ProcessLimits {
+	readonly timeoutMs: number;
+	readonly maxOutputBytes: number;
+}
+
+let processLimits: ProcessLimits = { timeoutMs: 60_000, maxOutputBytes: 50 * 1024 * 1024 };
 const defaultTerminationGraceMs = 2_000;
+
+/** Sets the limits that processes use unless their options name their own, from user settings. */
+export function setProcessLimits(limits: ProcessLimits): void {
+	processLimits = limits;
+}
+
+export function currentProcessLimits(): ProcessLimits {
+	return processLimits;
+}
 
 export async function execute(
 	command: string,
@@ -43,11 +61,12 @@ export async function execute(
 	options: ExecOptions = {},
 ): Promise<ExecResult> {
 	const {
-		timeoutMs = defaultTimeoutMs,
-		maxOutputBytes = defaultMaxOutputBytes,
+		timeoutMs = processLimits.timeoutMs,
+		maxOutputBytes = processLimits.maxOutputBytes,
 		terminationGraceMs = defaultTerminationGraceMs,
 		cancellationToken,
 		stdin,
+		stdoutLineFilter,
 		...spawnOptions
 	} = options;
 
@@ -109,13 +128,41 @@ export async function execute(
 			const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
 			outputBytes += data.byteLength;
 			if (maxOutputBytes > 0 && outputBytes > maxOutputBytes) {
-				fail('output-limit', `Process output exceeded the ${maxOutputBytes} byte limit`);
+				fail('output-limit', outputLimitMessage(maxOutputBytes));
 				return;
 			}
 			target.push(data);
 		};
 
-		process.stdout?.on('data', (chunk) => append(stdout, chunk));
+		// A line break never occurs inside a UTF-8 sequence, so lines split safely at byte 10.
+		let partialLine: Buffer[] = [];
+		let partialLineBytes = 0;
+		const acceptLine = (line: Buffer): void => {
+			const text = line.toString().replace(/\r?\n$/, '');
+			if (stdoutLineFilter?.(text)) {
+				append(stdout, line);
+			}
+		};
+		const appendFilteredStdout = (chunk: Buffer | string): void => {
+			const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+			let start = 0;
+			for (let end = data.indexOf(10); end !== -1; end = data.indexOf(10, start)) {
+				partialLine.push(data.subarray(start, end + 1));
+				acceptLine(Buffer.concat(partialLine));
+				partialLine = [];
+				partialLineBytes = 0;
+				start = end + 1;
+			}
+			if (start < data.length) {
+				partialLine.push(data.subarray(start));
+				partialLineBytes += data.length - start;
+				if (maxOutputBytes > 0 && partialLineBytes > maxOutputBytes) {
+					fail('output-limit', outputLimitMessage(maxOutputBytes));
+				}
+			}
+		};
+
+		process.stdout?.on('data', (chunk) => (stdoutLineFilter ? appendFilteredStdout(chunk) : append(stdout, chunk)));
 		process.stderr?.on('data', (chunk) => append(stderr, chunk));
 		process.stdin?.on('error', (error) => {
 			if ((error as NodeJS.ErrnoException).code !== 'EPIPE') {
@@ -126,7 +173,14 @@ export async function execute(
 
 		timeout =
 			timeoutMs > 0
-				? setTimeout(() => fail('timeout', `Process timed out after ${timeoutMs} ms`), timeoutMs)
+				? setTimeout(
+						() =>
+							fail(
+								'timeout',
+								`The process ran longer than ${formatSeconds(timeoutMs)}. Raise coglens.processTimeout to allow more time.`,
+							),
+						timeoutMs,
+					)
 				: undefined;
 		timeout?.unref();
 
@@ -151,6 +205,9 @@ export async function execute(
 			if (settled) {
 				return;
 			}
+			if (partialLine.length > 0 && !failure) {
+				acceptLine(Buffer.concat(partialLine));
+			}
 			settled = true;
 			finish();
 			if (failure) {
@@ -164,6 +221,21 @@ export async function execute(
 			});
 		});
 	});
+}
+
+/** Explains an output limit and the setting that raises it. */
+export function outputLimitMessage(maxOutputBytes: number): string {
+	return `The process wrote more than ${formatMegabytes(maxOutputBytes)} of output. Raise coglens.processOutputLimit to allow more.`;
+}
+
+function formatMegabytes(bytes: number): string {
+	const megabytes = bytes / (1024 * 1024);
+	return `${Number.isInteger(megabytes) ? megabytes : megabytes.toFixed(1)} MB`;
+}
+
+function formatSeconds(milliseconds: number): string {
+	const seconds = milliseconds / 1000;
+	return `${Number.isInteger(seconds) ? seconds : seconds.toFixed(1)} s`;
 }
 
 function processPlatformSupportsGroups(): boolean {

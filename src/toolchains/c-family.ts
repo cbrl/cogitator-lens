@@ -2,8 +2,9 @@ import { AsmParser } from '../vendor/lib/parsers/asm-parser.js';
 import { noopPropertyGetter } from '../vendor/compiler-props.js';
 import { outputProducer } from '../artifacts/core/compiler-output-producer.js';
 import { parseMakeDepfile } from '../compilation/artifact-inputs.js';
-import type { DependencyCollectionSpec } from './toolchain-backend.js';
-import { withoutOwnedArguments, type OwnedArguments } from './toolchain-contracts.js';
+import type { ArtifactOutputSpec, DependencyCollectionSpec } from './toolchain-backend.js';
+import { withoutOwnedArguments, type ArtifactProducer, type OwnedArguments } from './toolchain-contracts.js';
+import { systemDeclarationFilter } from '../artifacts/ast/clang-system-declarations.js';
 
 export const cFamilyLanguageIdentifiers = Object.freeze(['c', 'cpp', 'objective-c', 'objective-cpp', 'cuda']);
 
@@ -26,11 +27,31 @@ export const gnuPreprocessedSourceProducer = outputProducer({
 	arguments: () => ['-E'],
 });
 
-export const clangAstProducer = outputProducer({
+const clangAstOutput: ArtifactOutputSpec = Object.freeze({
 	output: 'stdout',
 	arguments: () => ['-Xclang', '-ast-dump', '-fsyntax-only'],
 	acceptOutputOnError: true,
 });
+
+const clangAstOutputWithoutSystemDeclarations: ArtifactOutputSpec = Object.freeze({
+	...clangAstOutput,
+	stdoutLineFilter: systemDeclarationFilter,
+});
+
+/**
+ * Dumps the Clang AST. Unless system declarations are shown, they are dropped as Clang prints
+ * them, so including the standard library stays within the output limit.
+ */
+export const clangAstProducer: ArtifactProducer = async (backend, source, options, cancellationToken) => {
+	const { showSystemDeclarations } = options.productionOptions;
+	const produced = await backend.produceArtifact(
+		source,
+		options,
+		showSystemDeclarations ? clangAstOutput : clangAstOutputWithoutSystemDeclarations,
+		cancellationToken,
+	);
+	return { ...produced, producerData: { showSystemDeclarations } };
+};
 
 export const gnuIntelArguments = Object.freeze(['-masm=intel']);
 export const defaultAsmParser = (): AsmParser => new AsmParser(noopPropertyGetter);

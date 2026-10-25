@@ -601,6 +601,20 @@
             "default": true,
             "description": "Look for gcc, clang, rustc, python, go, zig, dotnet, and nvcc on PATH, and use them for files that have no other compilation variant."
           },
+          "coglens.processTimeout": {
+            "type": "number",
+            "scope": "window",
+            "default": 60,
+            "minimum": 1,
+            "description": "Seconds that a compiler or tool may run before it is stopped."
+          },
+          "coglens.processOutputLimit": {
+            "type": "number",
+            "scope": "window",
+            "default": 50,
+            "minimum": 1,
+            "description": "Megabytes of output that a compiler or tool may write before it is stopped. A larger limit keeps more output in memory."
+          },
           "coglens.dimUnusedSourceLines": {
             "type": "boolean",
             "default": true,
@@ -1077,6 +1091,11 @@
                       "type": "boolean",
                       "title": "Demangle symbols",
                       "description": "Run the configured demangler before rendering assembly"
+                    },
+                    "showSystemDeclarations": {
+                      "type": "boolean",
+                      "title": "Show system declarations",
+                      "description": "Include declarations originating from compiler and system headers"
                     }
                   }
                 }

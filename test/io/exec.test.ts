@@ -124,3 +124,31 @@ test('a file-argument text tool receives a temporary input path', async () => {
 	);
 	assert.equal(output, 'file-input');
 });
+
+test('a stdout line filter drops lines before they count toward the output limit', async () => {
+	// Each line arrives in two writes, and the last line has no line break.
+	const script = String.raw`
+		for (let index = 0; index < 2000; index++) {
+			const keep = index % 100 === 0;
+			process.stdout.write(keep ? 'ke' : 'dr');
+			process.stdout.write((keep ? 'ep ' : 'op ') + index + '\n');
+		}
+		process.stdout.write('keep last');
+	`;
+	const result = await execute(process.execPath, ['-e', script], {
+		maxOutputBytes: 1_000,
+		stdoutLineFilter: (line) => line.startsWith('keep'),
+	});
+	assert.equal(result.returnCode, 0);
+	const lines = result.stdout.split('\n');
+	assert.equal(lines.length, 21);
+	assert.equal(lines[1], 'keep 100');
+	assert.equal(lines.at(-1), 'keep last');
+	await assert.rejects(
+		execute(process.execPath, ['-e', script], { maxOutputBytes: 1_000 }),
+		(error: unknown) =>
+			error instanceof ExecError &&
+			error.kind === 'output-limit' &&
+			/coglens\.processOutputLimit/.test(error.message),
+	);
+});

@@ -24,11 +24,18 @@ import {
 	createGlobalOptionsTreeView,
 	createToolchainTreeView,
 } from './views/index.js';
+import { setProcessLimits } from './exec.js';
 import * as logger from './logger.js';
 import { GraphPanelManager } from './webview/graph-panel-manager.js';
 
 export async function activate(context: ExtensionContext): Promise<void> {
 	const configuration = new ConfigurationService();
+	setProcessLimits(configuration.getProcessLimits());
+	const limitsSubscription = configuration.onDidChange((change) => {
+		if (change.affects('processTimeout') || change.affects('processOutputLimit')) {
+			setProcessLimits(configuration.getProcessLimits());
+		}
+	});
 	const compilationService = new CompilationService(configuration, context.workspaceState);
 	const artifactRegistry = new ArtifactDocumentRegistry(compilationService, configuration);
 	const artifactProvider = new ArtifactDocumentProvider(compilationService, configuration, artifactRegistry);
@@ -106,6 +113,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
 	await updateEditorContexts();
 
 	context.subscriptions.push(
+		limitsSubscription,
 		configuration,
 		compilationService,
 		artifactRegistry,
