@@ -187,7 +187,10 @@ export const assemblyControlFlowGraphOutput = controlFlowGraphOutput(
 	'Build a machine-level graph from the compiler assembly listing.',
 	assemblyProducer,
 	(raw, options, context) => {
-		const parsedAssembly = context.backend.parseAssembly(raw.text, options);
+		const parsedAssembly = context.backend.parseAssembly(raw.text, options, {
+			path: context.source.uri.fsPath,
+			workingDirectory: raw.command.cwd,
+		});
 		const lines = toAssemblyLines(parsedAssembly.asm, context.source.uri.toString(), raw.command.cwd);
 		return context.backend.parseAssemblyControlFlowGraph(lines);
 	},

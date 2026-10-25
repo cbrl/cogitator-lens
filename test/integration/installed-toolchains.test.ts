@@ -214,7 +214,9 @@ test('the Go compiler produces normalized assembly and a GOSSAFUNC graph', async
 		neverCancelled,
 	);
 	assert.ok(
-		backend.parseAssembly(assembly.text, display).asm.some((line) => /TEXT|CMPQ|JLE|NEGQ|RET/u.test(line.text)),
+		backend
+			.parseAssembly(assembly.text, display, { path: source, workingDirectory: assembly.command.cwd })
+			.asm.some((line) => /TEXT|CMPQ|JLE|NEGQ|RET/u.test(line.text)),
 	);
 
 	const output = declaredOutput('go', 'control-flow-graph', 'go-ssa');
@@ -244,7 +246,7 @@ test('nvcc produces line-mapped PTX and nvdisasm produces SASS', async (t) => {
 		neverCancelled,
 	);
 	assert.match(raw.text, /\.visible\s+\.entry\s+saxpy/u);
-	const parsed = backend.parseAssembly(raw.text, display);
+	const parsed = backend.parseAssembly(raw.text, display, { path: source, workingDirectory: raw.command.cwd });
 	assert.ok(parsed.asm.some((line) => /fma\.rn\.f32|mul\.wide|st\.global/u.test(line.text)));
 	assert.ok(parsed.asm.some((line) => line.source?.file?.endsWith('kernel.cu')));
 

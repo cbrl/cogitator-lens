@@ -18,6 +18,7 @@ import * as exec from '../exec.js';
 import { withTemporaryDirectory } from '../temporary-directory.js';
 import type { ToolchainDefinition } from './toolchain-contracts.js';
 import { snapshotArtifactInputs, type ArtifactInputMetadata } from '../compilation/artifact-inputs.js';
+import { markMainSource, withMainSourcePath, type MainSource } from '../artifacts/assembly/main-source.js';
 import type { InstructionType } from '../artifacts/control-flow-graph/parsers/instruction-sets.js';
 import type { AssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/assembly-cfg-parser.js';
 import type { AssemblyLine } from '../artifacts/control-flow-graph/parsers/assembly-line.js';
@@ -363,12 +364,13 @@ export class ToolchainBackend {
 		});
 	}
 
-	parseAssembly(rawAssembly: string, options: DisplayOptions): ParsedAsmResult {
+	/** Parses an assembly listing. The main source decides what "Hide library code" keeps. */
+	parseAssembly(rawAssembly: string, options: DisplayOptions, mainSource: MainSource): ParsedAsmResult {
 		if (!this.asmParser) {
 			throw new Error(`${this.profile.displayName} has no assembly parser.`);
 		}
 		const filters: ParseFiltersAndOutputOptions = { ...options };
-		return this.asmParser.process(rawAssembly, filters);
+		return withMainSourcePath(this.asmParser.process(markMainSource(rawAssembly, mainSource), filters), mainSource);
 	}
 
 	parseBinaryDisassembly(rawDisassembly: string, options: DisplayOptions): ParsedAsmResult {

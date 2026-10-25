@@ -39,12 +39,18 @@ test('GNU disassembly renders addresses, bytes, links, source mappings, symbols,
 		),
 	);
 	assert.ok(rendered.lines.some((line) => Boolean(line.source?.file) && line.source?.line === 7));
-	assert.ok(rendered.links.some((link) => link.targetLine >= 0));
+	const helper = rendered.lines.findIndex((line) => line.text.trim() === 'helper:');
+	const call = rendered.lines.findIndex((line) => line.disassembly?.includes('call'));
+	assert.equal(
+		rendered.links.find((link) => link.line === call)?.targetLine,
+		helper,
+		'A call links to the label line of its target',
+	);
 	assert.ok(
 		rendered.links.every((link) => link.edgeKind === undefined),
 		'calls must not be drawn as jump edges',
 	);
-	assert.ok(rendered.symbols.some((symbol) => symbol.name === 'helper'));
+	assert.equal(rendered.symbols.find((symbol) => symbol.name === 'helper')?.line, helper);
 	assert.ok(rendered.folds.some((fold) => fold.endLine > fold.startLine));
 	assert.deepEqual([rendered.metrics.codeSizeBytes, rendered.metrics.instructionCount], [11, 5]);
 });
