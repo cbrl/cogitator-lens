@@ -40,10 +40,7 @@ export function register(context: vscode.ExtensionContext, deps: PresetCommandDe
 				'Delete',
 			);
 			if (confirmation === 'Delete') {
-				await configuration.updateArtifactPresets(
-					configuration.getArtifactPresets(node.scope).filter((preset) => preset.id !== node.preset?.id),
-					workspaceFolderFor(node.scope),
-				);
+				await configuration.removeArtifactPreset(node.preset.id, node.scope);
 			}
 		}),
 		vscode.commands.registerCommand('coglens.SaveArtifactOptionsAsPreset', async () =>
@@ -196,17 +193,5 @@ async function upsertArtifactPreset(
 	previousId: string | undefined,
 	preset: ArtifactPreset,
 ): Promise<void> {
-	await configuration.updateArtifactPresets(
-		[
-			...configuration
-				.getArtifactPresets(scope)
-				.filter((candidate) => candidate.id !== previousId && candidate.id !== preset.id),
-			preset,
-		],
-		workspaceFolderFor(scope),
-	);
-}
-
-function workspaceFolderFor(scope: vscode.Uri | undefined): vscode.WorkspaceFolder | undefined {
-	return scope ? vscode.workspace.getWorkspaceFolder(scope) : vscode.workspace.workspaceFolders?.[0];
+	await configuration.upsertArtifactPreset(preset, previousId, scope);
 }

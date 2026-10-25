@@ -152,7 +152,14 @@ export function artifactOptionValue(
 
 /** The earlier option ID that an option of an artifact kind replaced, if any. */
 export function formerOptionId(kind: ArtifactKind, id: string): string | undefined {
-	return Object.entries(artifactDefinitions[kind].formerOptions ?? {}).find(([, current]) => current === id)?.[0];
+	return formerOptionIds(kind, id)[0];
+}
+
+/** The earlier option IDs that an option of an artifact kind replaced. */
+export function formerOptionIds(kind: ArtifactKind, id: string): string[] {
+	return Object.entries(artifactDefinitions[kind].formerOptions ?? {}).flatMap(([former, current]) =>
+		current === id ? [former] : [],
+	);
 }
 
 export function parseArtifactPresets(raw: unknown): ArtifactPreset[] {

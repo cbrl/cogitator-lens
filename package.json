@@ -467,7 +467,7 @@
       },
       {
         "command": "coglens.CreateWorkspaceOverride",
-        "title": "Create Workspace Override",
+        "title": "Copy Toolchain to Settings",
         "category": "Cogitator Lens",
         "icon": "$(copy)"
       },

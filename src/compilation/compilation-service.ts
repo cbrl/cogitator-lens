@@ -1,4 +1,14 @@
-import { CancellationError, Disposable, Event, EventEmitter, Memento, RelativePattern, Uri, workspace } from 'vscode';
+import {
+	CancellationError,
+	Disposable,
+	Event,
+	EventEmitter,
+	Memento,
+	RelativePattern,
+	Uri,
+	window,
+	workspace,
+} from 'vscode';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'node:url';
@@ -34,6 +44,7 @@ import { artifactInputComparisonKey, validateArtifactInputs } from './artifact-i
 import { RawArtifactCache } from './raw-artifact-cache.js';
 import { renderArtifact } from './artifact-rendering.js';
 import { withoutTerminalEscapes } from '../diagnostics.js';
+import { logChannel } from '../logger.js';
 import { localFileComparisonKey, sourceUriComparisonKey, uriComparisonKey } from '../file-identity.js';
 import { getToolchainDefinition } from '../toolchains/toolchain-map.js';
 import type { ConfigurationOrigin } from '../buildsystems/variant-provider.js';
@@ -104,7 +115,10 @@ export class CompilationService {
 		this.currentArtifactOptions.set(kind, options);
 		this.artifactOptionsChangeEmitter.fire(kind);
 		// Artifact options are currently global per kind, not scoped to a workspace folder.
-		void this.configuration.updateArtifactOptions(kind, options);
+		this.configuration.updateArtifactOption(kind, id, value).catch((error: unknown) => {
+			logChannel.error(`Could not save the ${kind} option ${id}: ${String(error)}`);
+			void window.showErrorMessage(`Could not save the artifact option: ${String(error)}`);
+		});
 	}
 
 	/** Returns the discovered variants of a file, or its fallback variants when nothing describes it. */

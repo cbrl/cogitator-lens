@@ -34,9 +34,7 @@ export function register(context: vscode.ExtensionContext, deps: VariantCommandD
 				'Delete',
 			);
 			if (confirmation === 'Delete') {
-				await configuration.updateManualCompilationVariants(
-					configuration.getManualCompilationVariants().filter((variant) => variant.id !== node.variant?.id),
-				);
+				await configuration.removeManualCompilationVariant(node.variant.id);
 			}
 		}),
 		vscode.commands.registerTextEditorCommand('coglens.PickCompilationVariant', async (editor) => {
@@ -201,18 +199,11 @@ async function configureManualVariant(
 		workingDirectory,
 		arguments: args,
 		environment,
-		project: existing?.project,
-		target: existing?.target,
-		configuration: existing?.configuration,
+		...(existing?.project ? { project: existing.project } : {}),
+		...(existing?.target ? { target: existing.target } : {}),
+		...(existing?.configuration ? { configuration: existing.configuration } : {}),
 	};
-	const variants = configuration.getManualCompilationVariants();
-	const index = variants.findIndex((variant) => variant.id === setting.id);
-	if (index >= 0) {
-		variants[index] = setting;
-	} else {
-		variants.push(setting);
-	}
-	await configuration.updateManualCompilationVariants(variants);
+	await configuration.upsertManualCompilationVariant(setting);
 	await compilationService.selectVariant(source, setting.id);
 }
 

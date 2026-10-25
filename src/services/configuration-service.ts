@@ -1,5 +1,6 @@
-import { ConfigurationTarget, Disposable, Event, EventEmitter, Uri, WorkspaceFolder, workspace } from 'vscode';
+import { ConfigurationTarget, Disposable, Event, EventEmitter, Uri, workspace } from 'vscode';
 import type {
+	ArtifactOptionId,
 	ArtifactOptions,
 	ArtifactKind,
 	DefaultCompilationSettings,
@@ -7,16 +8,29 @@ import type {
 	ToolchainProfile,
 	ToolchainSettings,
 } from '../types/index.js';
-import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
 import type { ArtifactPreset, ArtifactPresetConfiguration } from '../artifacts/ui/presets.js';
 import * as logger from '../logger.js';
 import {
+	formerOptionIds,
 	parseArtifactOptions,
 	parseArtifactPresets,
 	parseDefaultCompilationSettings,
 	parseManualCompilationVariants,
 	parseToolchainSettings,
 } from './configuration-normalization.js';
+import {
+	definesArtifactOption,
+	definingScope,
+	resourceScopes,
+	windowScopes,
+	withArtifactOption,
+	withListEntry,
+	withMapEntry,
+	withoutListEntry,
+	withoutMapEntry,
+	type SettingScope,
+	type SettingScopes,
+} from './settings-scopes.js';
 
 export class ConfigurationService implements Disposable {
 	private readonly changeEmitter = new EventEmitter<void>();
@@ -86,63 +100,118 @@ export class ConfigurationService implements Disposable {
 		return workspace.getConfiguration('coglens', scope).get<string[]>('compilationDatabases', []);
 	}
 
-	async updateToolchains(profiles: readonly ToolchainProfile[], folder?: WorkspaceFolder): Promise<void> {
-		const settings: ToolchainSettings[] = profiles.map((profile) => ({
-			displayName: profile.displayName,
-			kind: profile.kind,
-			executable: profile.executable,
-			defaultArguments: [...profile.defaultArguments],
-			environment: { ...profile.environment },
-			tools: { ...profile.tools },
-		}));
-		await workspace
-			.getConfiguration('coglens', folder?.uri)
-			.update('toolchains', settings, ConfigurationTarget.Workspace);
+	/**
+	 * Adds a toolchain, or replaces the one with the same display name. Lists are written whole in
+	 * the scope that defines them, because a list in a more specific scope hides the others.
+	 */
+	async upsertToolchain(entry: ToolchainSettings): Promise<void> {
+		await this.updateList('toolchains', (entries) => withListEntry(entries, 'displayName', { ...entry }));
 	}
 
-	async updateManualCompilationVariants(variants: readonly ManualCompilationVariantSettings[]): Promise<void> {
-		await workspace.getConfiguration('coglens').update('compileVariants', variants, ConfigurationTarget.Workspace);
+	async removeToolchain(displayName: string): Promise<void> {
+		await this.updateList('toolchains', (entries) => withoutListEntry(entries, 'displayName', displayName));
 	}
 
-	async updateArtifactOptions(kind: ArtifactKind, options: ArtifactOptions, folder?: WorkspaceFolder): Promise<void> {
-		const configuration = workspace.getConfiguration('coglens', folder?.uri);
-		const current = configuration.get<Record<string, unknown>>('artifactOptions', {});
-		const flat = { ...options.production, ...options.display };
-		const serialized = Object.fromEntries(
-			artifactDefinitions[kind].options.map((descriptor) => [descriptor.id, flat[descriptor.id]]),
-		);
-		await configuration.update(
-			'artifactOptions',
-			{
-				...current,
-				[kind]: serialized,
-			},
-			folder ? ConfigurationTarget.WorkspaceFolder : ConfigurationTarget.Workspace,
+	/** Adds a workspace compilation variant, or replaces the one with the same ID. */
+	async upsertManualCompilationVariant(entry: ManualCompilationVariantSettings): Promise<void> {
+		await this.updateList('compileVariants', (entries) => withListEntry(entries, 'id', { ...entry }));
+	}
+
+	async removeManualCompilationVariant(id: string): Promise<void> {
+		await this.updateList('compileVariants', (entries) => withoutListEntry(entries, 'id', id));
+	}
+
+	/**
+	 * Sets one artifact option in the scope that already sets it, or in user settings. It never
+	 * copies the other options, or values from other scopes, into a workspace.
+	 */
+	async updateArtifactOption(kind: ArtifactKind, id: ArtifactOptionId, value: boolean): Promise<void> {
+		const formerIds = formerOptionIds(kind, id);
+		const scopes = this.scopes<unknown>('artifactOptions');
+		const scope =
+			definingScope(
+				scopes,
+				(current) => definesArtifactOption(current, kind, [id, ...formerIds]),
+				windowScopes,
+			) ?? 'user';
+		await this.write('artifactOptions', scope, withArtifactOption(scopes[scope], kind, id, value, formerIds));
+	}
+
+	/**
+	 * Saves a preset, renaming `previousId` when given. An existing preset stays in its scope;
+	 * a new one goes to the folder of `resource`, the workspace, or user settings.
+	 */
+	async upsertArtifactPreset(preset: ArtifactPreset, previousId?: string, resource?: Uri): Promise<void> {
+		const scopes = this.scopes<unknown>('artifactPresets', resource);
+		const scope =
+			definingScope(scopes, definesKey(previousId ?? preset.id), resourceScopes) ??
+			definingScope(scopes, definesKey(preset.id), resourceScopes) ??
+			this.newEntryScope(resource);
+		const configuration: ArtifactPresetConfiguration = {
+			artifactKind: preset.artifactKind,
+			extraArguments: [...preset.extraArguments],
+			productionOptions: { ...preset.productionOptions },
+		};
+		await this.write(
+			'artifactPresets',
+			scope,
+			withMapEntry(scopes[scope], preset.id, configuration, previousId),
+			resource,
 		);
 	}
 
-	async updateArtifactPresets(presets: readonly ArtifactPreset[], folder?: WorkspaceFolder): Promise<void> {
-		const serialized = Object.fromEntries(
-			presets.map((preset) => {
-				const configuration: ArtifactPresetConfiguration = {
-					artifactKind: preset.artifactKind,
-					extraArguments: [...preset.extraArguments],
-					productionOptions: { ...preset.productionOptions },
-				};
-				return [preset.id, configuration];
-			}),
-		);
-		await workspace
-			.getConfiguration('coglens', folder?.uri)
-			.update(
-				'artifactPresets',
-				serialized,
-				folder ? ConfigurationTarget.WorkspaceFolder : ConfigurationTarget.Workspace,
-			);
+	/** Deletes a preset from every scope that defines it, so a less specific one does not reappear. */
+	async removeArtifactPreset(id: string, resource?: Uri): Promise<void> {
+		const scopes = this.scopes<unknown>('artifactPresets', resource);
+		for (const scope of resourceScopes) {
+			if (scopes[scope] !== undefined && definesKey(id)(scopes[scope])) {
+				await this.write('artifactPresets', scope, withoutMapEntry(scopes[scope], id), resource);
+			}
+		}
+	}
+
+	private async updateList(key: string, change: (entries: unknown) => unknown[]): Promise<void> {
+		const scopes = this.scopes<unknown>(key);
+		const scope = definingScope(scopes, Array.isArray, windowScopes) ?? this.newEntryScope();
+		await this.write(key, scope, change(scopes[scope]));
+	}
+
+	private scopes<T>(key: string, resource?: Uri): SettingScopes<T> {
+		const inspected = workspace.getConfiguration('coglens', resource).inspect<T>(key);
+		return {
+			// A folder value only differs from the workspace value in a multi-root workspace.
+			workspaceFolder: workspace.workspaceFile ? inspected?.workspaceFolderValue : undefined,
+			workspace: inspected?.workspaceValue,
+			user: inspected?.globalValue,
+		};
+	}
+
+	/** Where a new entry goes: the resource's folder in a multi-root workspace, the workspace, or user settings. */
+	private newEntryScope(resource?: Uri): SettingScope {
+		if (!workspace.workspaceFile && !workspace.workspaceFolders?.length) {
+			return 'user';
+		}
+		return workspace.workspaceFile && resource && workspace.getWorkspaceFolder(resource)
+			? 'workspaceFolder'
+			: 'workspace';
+	}
+
+	private async write(key: string, scope: SettingScope, value: unknown, resource?: Uri): Promise<void> {
+		const target =
+			scope === 'workspaceFolder'
+				? ConfigurationTarget.WorkspaceFolder
+				: scope === 'workspace'
+					? ConfigurationTarget.Workspace
+					: ConfigurationTarget.Global;
+		await workspace.getConfiguration('coglens', resource).update(key, value, target);
 	}
 
 	dispose(): void {
 		this.configurationSubscription.dispose();
 		this.changeEmitter.dispose();
 	}
+}
+
+function definesKey(key: string): (value: unknown) => boolean {
+	return (value) => typeof value === 'object' && value !== null && Object.hasOwn(value, key);
 }

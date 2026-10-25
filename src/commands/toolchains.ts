@@ -4,7 +4,7 @@ import type { CompilationService } from '../compilation/index.js';
 import * as logger from '../logger.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
 import type { PathToolchainProvider } from '../buildsystems/path-toolchains.js';
-import { createToolchainProfile, detectToolchainDefinition } from '../toolchains/toolchain-map.js';
+import { detectToolchainDefinition } from '../toolchains/toolchain-map.js';
 import type { ToolchainTreeNode } from '../tree/toolchain-tree.js';
 
 export interface ToolchainCommandDependencies {
@@ -76,50 +76,57 @@ export function register(context: vscode.ExtensionContext, deps: ToolchainComman
 				await vscode.window.showWarningMessage(`A user toolchain named "${name}" already exists.`);
 				return;
 			}
-			const profile = createToolchainProfile(detected.kind, name, selection[0].fsPath, { id: name });
-			await configuration.updateToolchains(
-				[...compilationService.toolchainRegistry.getProfiles('user'), profile],
-				vscode.workspace.getWorkspaceFolder(selection[0]),
-			);
+			await configuration.upsertToolchain({
+				displayName: name,
+				kind: detected.kind,
+				executable: selection[0].fsPath,
+			});
 		}),
 		vscode.commands.registerCommand('coglens.DeleteToolchain', async (node?: ToolchainTreeNode) => {
 			if (!node?.profile || node.origin !== 'user') {
 				return;
 			}
 			const confirmation = await vscode.window.showWarningMessage(
-				`Delete the workspace toolchain "${node.profile.displayName}"?`,
+				`Delete the toolchain "${node.profile.displayName}" from settings?`,
 				{ modal: true },
 				'Delete',
 			);
 			if (confirmation === 'Delete') {
-				await configuration.updateToolchains(
-					compilationService.toolchainRegistry
-						.getProfiles('user')
-						.filter((profile) => profile.id !== node.profile?.id),
-				);
+				await configuration.removeToolchain(node.profile.displayName);
 			}
 		}),
 		vscode.commands.registerCommand('coglens.CreateWorkspaceOverride', async (node?: ToolchainTreeNode) => {
 			if (!node?.profile || node.origin === 'user') {
 				return;
 			}
+			const userNames = new Set(
+				compilationService.toolchainRegistry.getProfiles('user').map((profile) => profile.displayName),
+			);
 			const name = (
 				await vscode.window.showInputBox({
-					title: 'Workspace toolchain override name',
+					title: 'Toolchain name in settings',
 					value: path.basename(node.profile.executable, path.extname(node.profile.executable)),
+					validateInput: (value) =>
+						!value.trim()
+							? 'A name is required'
+							: userNames.has(value.trim())
+								? `A toolchain named "${value.trim()}" is already in settings`
+								: undefined,
 				})
 			)?.trim();
 			if (!name) {
 				return;
 			}
-			await configuration.updateToolchains(
-				[
-					...compilationService.toolchainRegistry.getProfiles('user'),
-					{ ...node.profile, id: name, displayName: name },
-				],
-				vscode.workspace.workspaceFolders?.[0],
-			);
-			logger.logChannel.info(`Created workspace toolchain override "${name}".`);
+			// Discovered auxiliary tools are found again when the copy is read, so they are not copied.
+			const { kind, executable, defaultArguments, environment } = node.profile;
+			await configuration.upsertToolchain({
+				displayName: name,
+				kind,
+				executable,
+				...(defaultArguments.length ? { defaultArguments: [...defaultArguments] } : {}),
+				...(Object.keys(environment).length ? { environment: { ...environment } } : {}),
+			});
+			logger.logChannel.info(`Copied toolchain "${node.profile.displayName}" to settings as "${name}".`);
 		}),
 	);
 }

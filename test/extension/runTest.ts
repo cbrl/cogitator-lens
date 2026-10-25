@@ -24,7 +24,7 @@ import { parseParenthesizedDiagnostics } from '../../src/toolchains/msvc/diagnos
 import { parsePythonDiagnostics } from '../../src/toolchains/python/diagnostics.js';
 import { parseRustDiagnostics } from '../../src/toolchains/rust/diagnostics.js';
 import { CompilationService } from '../../src/compilation/compilation-service.js';
-import type { ConfigurationService } from '../../src/services/configuration-service.js';
+import { ConfigurationService } from '../../src/services/configuration-service.js';
 import { buildCompilationInfoTree, CompilationInfoTreeProvider } from '../../src/tree/compilation-info-tree.js';
 import { buildToolchainTreeNode, type ToolchainTreeNode } from '../../src/tree/toolchain-tree.js';
 import { getArtifactUri, parseArtifactUri } from '../../src/artifact-document/artifact-uri.js';
@@ -79,6 +79,7 @@ export async function run(): Promise<void> {
 		await configuration.update('artifactOptions', previousFilters, vscode.ConfigurationTarget.WorkspaceFolder);
 	}
 
+	await verifySettingsWrites(workspaceFolder);
 	verifyRegistryReconciliation();
 	verifyVariantSnapshots();
 	verifyUriMapping();
@@ -382,6 +383,80 @@ async function verifyArtifactGeneratorStates(workspaceFolder: vscode.WorkspaceFo
 		cancellation.dispose();
 		subscription.dispose();
 		handler.dispose();
+	}
+}
+
+async function verifySettingsWrites(workspaceFolder: vscode.WorkspaceFolder): Promise<void> {
+	const settings = (): vscode.WorkspaceConfiguration => vscode.workspace.getConfiguration('coglens');
+	const keys = ['artifactOptions', 'toolchains', 'artifactPresets'] as const;
+	const previous = Object.fromEntries(keys.map((key) => [key, settings().inspect(key)]));
+	const configuration = new ConfigurationService();
+	try {
+		for (const key of keys) {
+			await settings().update(key, undefined, vscode.ConfigurationTarget.Global);
+			await settings().update(key, undefined, vscode.ConfigurationTarget.Workspace);
+		}
+
+		// An option that no scope sets is saved alone in user settings.
+		await configuration.updateArtifactOption('assembly', 'showDirectives', true);
+		assert.deepEqual(settings().inspect('artifactOptions')?.globalValue, { assembly: { showDirectives: true } });
+		assert.equal(settings().inspect('artifactOptions')?.workspaceValue, undefined);
+
+		// An option the workspace sets, here by its earlier name, is changed there and renamed.
+		await settings().update(
+			'artifactOptions',
+			{ assembly: { labels: true, intel: true } },
+			vscode.ConfigurationTarget.Workspace,
+		);
+		await configuration.updateArtifactOption('assembly', 'showUnusedLabels', true);
+		assert.deepEqual(settings().inspect('artifactOptions')?.workspaceValue, {
+			assembly: { intel: true, showUnusedLabels: true },
+		});
+		assert.deepEqual(settings().inspect('artifactOptions')?.globalValue, { assembly: { showDirectives: true } });
+
+		// A toolchain list in user settings grows there, so no workspace list hides it.
+		await settings().update(
+			'toolchains',
+			[{ displayName: 'User GCC', kind: 'gcc', executable: 'gcc' }],
+			vscode.ConfigurationTarget.Global,
+		);
+		await configuration.upsertToolchain({ displayName: 'Copy', kind: 'clang', executable: 'clang' });
+		assert.deepEqual(
+			(settings().inspect<{ displayName: string }[]>('toolchains')?.globalValue ?? []).map(
+				(entry) => entry.displayName,
+			),
+			['User GCC', 'Copy'],
+		);
+		assert.equal(settings().inspect('toolchains')?.workspaceValue, undefined);
+		await configuration.removeToolchain('User GCC');
+		assert.deepEqual(settings().inspect('toolchains')?.globalValue, [
+			{ displayName: 'Copy', kind: 'clang', executable: 'clang' },
+		]);
+
+		// A new preset goes to the workspace; renaming one keeps it in its scope; deleting removes it everywhere.
+		await settings().update(
+			'artifactPresets',
+			{ shared: { artifactKind: 'assembly', extraArguments: ['-O1'] } },
+			vscode.ConfigurationTarget.Global,
+		);
+		const preset = {
+			id: 'fast',
+			artifactKind: 'assembly',
+			extraArguments: ['-O3'],
+			productionOptions: {},
+		} as const;
+		await configuration.upsertArtifactPreset(preset, undefined, workspaceFolder.uri);
+		assert.deepEqual(Object.keys(settings().inspect<object>('artifactPresets')?.workspaceValue ?? {}), ['fast']);
+		await configuration.upsertArtifactPreset({ ...preset, id: 'renamed' }, 'shared', workspaceFolder.uri);
+		assert.deepEqual(Object.keys(settings().inspect<object>('artifactPresets')?.globalValue ?? {}), ['renamed']);
+		await configuration.removeArtifactPreset('fast', workspaceFolder.uri);
+		assert.deepEqual(settings().inspect('artifactPresets')?.workspaceValue, {});
+	} finally {
+		configuration.dispose();
+		for (const key of keys) {
+			await settings().update(key, previous[key]?.globalValue, vscode.ConfigurationTarget.Global);
+			await settings().update(key, previous[key]?.workspaceValue, vscode.ConfigurationTarget.Workspace);
+		}
 	}
 }
 
@@ -1297,13 +1372,16 @@ async function assertFakeNativeStackFailure(
 async function verifyFilterChangeSignal(): Promise<void> {
 	const configurationChange = new vscode.EventEmitter<void>();
 	let persistedOptions = defaultArtifactOptions;
-	let updateFolder: vscode.WorkspaceFolder | undefined;
+	const writes: string[] = [];
 	const configuration = testConfiguration(configurationChange, {
 		getArtifactOptions: (kind) => (kind === 'assembly' ? persistedOptions : defaultArtifactOptions),
-		updateArtifactOptions: async (kind, options, folder) => {
-			updateFolder = folder;
+		updateArtifactOption: async (kind, id, value) => {
+			writes.push(`${kind}.${id}=${value}`);
 			if (kind === 'assembly') {
-				persistedOptions = options;
+				persistedOptions = {
+					...persistedOptions,
+					display: { ...persistedOptions.display, [id]: value },
+				};
 			}
 			configurationChange.fire();
 		},
@@ -1316,7 +1394,7 @@ async function verifyFilterChangeSignal(): Promise<void> {
 	assert.equal(changes, 1);
 	assert.equal(service.getArtifactOptions('assembly').display.showUnusedLabels, true);
 	await new Promise((resolve) => setTimeout(resolve, 0));
-	assert.equal(updateFolder, undefined, 'Global artifact options must use workspace scope');
+	assert.deepEqual(writes, ['assembly.showUnusedLabels=true'], 'Only the changed option is saved');
 	assert.equal(
 		service.getArtifactOptions('assembly').display.showUnusedLabels,
 		true,
@@ -1520,8 +1598,8 @@ function testConfiguration(
 		getDefaultCompilationSettings: () => undefined,
 		getManualCompilationVariants: () => [],
 		getDimUnusedSourceLines: () => true,
-		updateToolchains: async () => undefined,
-		updateArtifactOptions: async () => undefined,
+		upsertToolchain: async () => undefined,
+		updateArtifactOption: async () => undefined,
 		...overrides,
 	} as unknown as ConfigurationService;
 }
