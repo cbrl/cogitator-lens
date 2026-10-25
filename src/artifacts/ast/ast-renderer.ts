@@ -3,7 +3,7 @@ import type { DisplayOptions, RawArtifact, RenderedTextArtifact, RenderedArtifac
 import { splitLines } from '../../common.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
-import { resolveCompilerPath, sameLocalFile } from '../../file-identity.js';
+import { resolveCompilerPath, sameLocalFile, sameLocalFileTest } from '../../file-identity.js';
 import { isRecord } from '../../common.js';
 import { isCompilerDeclaration, isSystemDeclarationPath } from './clang-system-declarations.js';
 
@@ -32,6 +32,7 @@ export function renderClangAst(
 	context: ArtifactRenderContext,
 ): RenderedTextArtifact {
 	const sourceFile = path.normalize(context.source.uri.fsPath);
+	const isMainSource = sameLocalFileTest(sourceFile);
 	// The producer records whether it kept system declarations; nested ones are hidden here.
 	const showSystemDeclarations = isRecord(raw.producerData) && raw.producerData.showSystemDeclarations === true;
 	const output: RenderedArtifactLine[] = [];
@@ -71,7 +72,7 @@ export function renderClangAst(
 		const compilerDeclaration = parsed.depth === 1 && isCompilerDeclaration(rawLine);
 		if (
 			!showSystemDeclarations &&
-			(compilerDeclaration || (location && isSystemDeclarationPath(location.file, sourceFile)))
+			(compilerDeclaration || (location && isSystemDeclarationPath(location.file, isMainSource)))
 		) {
 			skipDepth = parsed.depth;
 			continue;
@@ -88,7 +89,7 @@ export function renderClangAst(
 						column: span.column,
 						endLine: span.endLine,
 						endColumn: span.endColumn,
-						mainSource: sameLocalFile(span.file, sourceFile),
+						mainSource: isMainSource(span.file),
 					}
 				: undefined,
 		});
@@ -286,7 +287,7 @@ function clangPosition(
 function sourceSpan(start: AstSourcePosition, end: AstSourcePosition | undefined): AstSourceSpan {
 	const validEnd =
 		end &&
-		sameLocalFile(start.file, end.file) &&
+		(start.file === end.file || sameLocalFile(start.file, end.file)) &&
 		(end.line > start.line || (end.line === start.line && end.column >= start.column))
 			? end
 			: start;

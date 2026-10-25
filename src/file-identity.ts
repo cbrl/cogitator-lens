@@ -57,6 +57,23 @@ export function sameLocalFile(left: string, right: string, workingDirectory?: st
 	);
 }
 
+/**
+ * Returns a test for whether a path names the target, as `sameLocalFile` compares them, that
+ * caches its answer for each path. A listing repeats a few paths on thousands of lines, and
+ * comparing two different spellings resolves both through the filesystem.
+ */
+export function sameLocalFileTest(target: string, workingDirectory?: string): (filename: string) => boolean {
+	const verdicts = new Map<string, boolean>();
+	return (filename) => {
+		let verdict = verdicts.get(filename);
+		if (verdict === undefined) {
+			verdict = sameLocalFile(filename, target, workingDirectory);
+			verdicts.set(filename, verdict);
+		}
+		return verdict;
+	};
+}
+
 /** Uses physical identity for file URIs and URI semantics for every other scheme. */
 export function localFileUriComparisonKey(uri: LocalFileUri): string {
 	if (uri.scheme !== 'file') {

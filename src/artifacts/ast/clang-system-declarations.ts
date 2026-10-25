@@ -1,7 +1,10 @@
-import { resolveCompilerPath, sameLocalFile } from '../../file-identity.js';
+import { resolveCompilerPath, sameLocalFileTest } from '../../file-identity.js';
 
-/** Whether a declaration's file is a compiler or platform header rather than the compiled file. */
-export function isSystemDeclarationPath(filename: string, sourceFile: string): boolean {
+/**
+ * Whether a declaration's file is a compiler or platform header rather than the compiled file,
+ * which `isMainSource` recognizes.
+ */
+export function isSystemDeclarationPath(filename: string, isMainSource: (filename: string) => boolean): boolean {
 	const normalized = filename.replace(/\\/g, '/').toLowerCase();
 	const system =
 		normalized.startsWith('/usr/include/') ||
@@ -10,7 +13,7 @@ export function isSystemDeclarationPath(filename: string, sourceFile: string): b
 		normalized.includes('/microsoft visual studio/') ||
 		normalized.includes('.app/contents/developer/toolchains/') ||
 		normalized.includes('/xcode.app/');
-	return system && !sameLocalFile(filename, sourceFile);
+	return system && !isMainSource(filename);
 }
 
 /**
@@ -25,11 +28,12 @@ export function isSystemDeclarationPath(filename: string, sourceFile: string): b
 export function systemDeclarationFilter(sourceFile: string, workingDirectory: string): (line: string) => boolean {
 	let lastFile: string | undefined;
 	let keepDeclaration = true;
+	const isMainSource = sameLocalFileTest(sourceFile);
 	const systemFiles = new Map<string, boolean>();
 	const isSystem = (filename: string): boolean => {
 		let system = systemFiles.get(filename);
 		if (system === undefined) {
-			system = isSystemDeclarationPath(resolveCompilerPath(filename, workingDirectory), sourceFile);
+			system = isSystemDeclarationPath(resolveCompilerPath(filename, workingDirectory), isMainSource);
 			systemFiles.set(filename, system);
 		}
 		return system;

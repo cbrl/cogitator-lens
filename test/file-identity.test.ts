@@ -10,6 +10,7 @@ import {
 	localFileComparisonKey,
 	localFileUriComparisonKey,
 	sameLocalFile,
+	sameLocalFileTest,
 } from '../src/file-identity.js';
 import { artifactInputComparisonKey } from '../src/compilation/artifact-inputs.js';
 import { diagnosticUri } from '../src/diagnostics.js';
@@ -33,6 +34,13 @@ test(
 			const physicalSource = path.join(physical, 'source.cs');
 			const aliasedSource = path.join(alias, 'source.cs');
 			assert.equal(sameLocalFile(physicalSource, aliasedSource), true);
+			const isAliasedSource = sameLocalFileTest(aliasedSource);
+			assert.deepEqual(
+				[physicalSource, aliasedSource, path.join(physical, 'other.cs'), '', physicalSource].map((file) =>
+					isAliasedSource(file),
+				),
+				[true, true, false, false, true],
+			);
 			assert.equal(canonicalLocalPath(aliasedSource), fs.realpathSync(physicalSource));
 			assert.equal(localFileComparisonKey(physicalSource), localFileComparisonKey(aliasedSource));
 			assert.equal(

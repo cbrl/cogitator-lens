@@ -3,7 +3,7 @@ import type { DisplayOptions, RawArtifact, RenderedTextArtifact, RenderedArtifac
 import { splitLines } from '../../common.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
-import { resolveCompilerPath, sameLocalFile } from '../../file-identity.js';
+import { resolveCompilerPath, sameLocalFileTest } from '../../file-identity.js';
 
 const lineMarker = /^\s*#(?:\s*line)?\s+(\d+)\s+"((?:\\.|[^"])*)"(?:\s+.*)?$/;
 
@@ -13,7 +13,9 @@ export function renderPreprocessedSource(
 	context: ArtifactRenderContext,
 ): RenderedTextArtifact {
 	const sourceFile = path.normalize(context.source.uri.fsPath);
+	const isMainSource = sameLocalFileTest(sourceFile);
 	let logicalFile = sourceFile;
+	let mainSource = true;
 	let logicalLine = 1;
 	const lines: RenderedArtifactLine[] = [];
 	const markerLines: number[] = [];
@@ -23,12 +25,12 @@ export function renderPreprocessedSource(
 		if (marker) {
 			logicalLine = Number.parseInt(marker[1], 10);
 			logicalFile = resolveMarkerPath(decodeMarkerFilename(marker[2]), raw.command.cwd);
+			mainSource = isMainSource(logicalFile);
 			markerLines.push(lines.length);
 			lines.push({ text });
 			continue;
 		}
 
-		const mainSource = sameLocalFile(logicalFile, sourceFile);
 		if (options.showIncludedFiles || mainSource) {
 			lines.push({
 				text,
