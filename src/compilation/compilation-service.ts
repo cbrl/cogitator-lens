@@ -33,6 +33,7 @@ import { resolveArtifactPreset, type ArtifactPreset } from '../artifacts/ui/pres
 import { artifactInputComparisonKey, validateArtifactInputs } from './artifact-inputs.js';
 import { RawArtifactCache } from './raw-artifact-cache.js';
 import { renderArtifact } from './artifact-rendering.js';
+import { withoutTerminalEscapes } from '../diagnostics.js';
 import { localFileComparisonKey, sourceUriComparisonKey, uriComparisonKey } from '../file-identity.js';
 import { getToolchainDefinition } from '../toolchains/toolchain-map.js';
 import type { ConfigurationOrigin } from '../buildsystems/variant-provider.js';
@@ -283,7 +284,7 @@ export class CompilationService {
 			}
 			const output = toolErrorOutput(error);
 			const diagnostics = backend.definition.parseDiagnostics(
-				`${output.stderr}\n${output.stdout}`,
+				withoutTerminalEscapes(`${output.stderr}\n${output.stdout}`),
 				variant.source,
 				variant.workingDirectory,
 			);
@@ -532,7 +533,13 @@ export function failureDetails(error: unknown): string {
 	const output = toolErrorOutput(error instanceof Error ? error.cause : undefined);
 	const clip = (text: string): string =>
 		text.length > maximumFailureOutputLength ? `${text.slice(0, maximumFailureOutputLength)}\n…` : text;
-	return [message, clip(output.stderr.trim()), clip(output.stdout.trim())].filter(Boolean).join('\n\n');
+	return [
+		message,
+		clip(withoutTerminalEscapes(output.stderr).trim()),
+		clip(withoutTerminalEscapes(output.stdout).trim()),
+	]
+		.filter(Boolean)
+		.join('\n\n');
 }
 
 function toolErrorOutput(error: unknown): { stdout: string; stderr: string } {

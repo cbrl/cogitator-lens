@@ -12,6 +12,14 @@ export type DiagnosticParser = (
 
 export type DiagnosticSeverity = CompileDiagnostic['severity'];
 
+// Control sequences (CSI) and operating system commands (OSC), such as colours and hyperlinks.
+const terminalEscapes = /\x1b\[[0-?]*[ -/]*[@-~]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g;
+
+/** Removes terminal colour and link sequences, which a tool can emit when a provider forces colour. */
+export function withoutTerminalEscapes(text: string): string {
+	return text.includes('\x1b') ? text.replace(terminalEscapes, '') : text;
+}
+
 /** Resolves a diagnostic filename consistently across every parser family. */
 export function diagnosticUri(filename: string, fallbackSource: Uri, workingDirectory: string): Uri {
 	const trimmed = filename.trim();

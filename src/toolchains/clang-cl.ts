@@ -35,10 +35,13 @@ const clangOptionsWithValues = new Set(['/clang:-o', '/clang:-foptimization-reco
 const clangOptionArtifactFlags =
 	/^\/clang:-(?:emit-llvm|S|gline-tables-only|save-temps(?:=.*)?|f(?:no-)?stack-usage|fsave-optimization-record(?:=.*)?|foptimization-record-file(?:=.*)?)$/;
 
+/** Clang's colour switches, which clang-cl accepts directly and in their /clang: form. */
+const clangClColorFlags = /^(?:\/clang:)?-f(?:no-)?(?:diagnostics-color(?:=.*)?|color-diagnostics|ansi-escape-codes)$/;
+
 /** cl.exe's switches, the /clang: forms of the GNU switches that clang-cl artifacts use, and the AST dump. */
 const clangClOwnedArguments: OwnedArguments = {
 	withValue: [...msvcOwnedArguments.withValue, clangOptionsWithValues, clangAstDumpPair],
-	standalone: [...msvcOwnedArguments.standalone, clangOptionArtifactFlags],
+	standalone: [...msvcOwnedArguments.standalone, clangOptionArtifactFlags, clangClColorFlags],
 };
 
 export function stripClangClManagedArguments(

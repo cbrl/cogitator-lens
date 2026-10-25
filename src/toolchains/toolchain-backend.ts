@@ -19,6 +19,7 @@ import { withTemporaryDirectory } from '../temporary-directory.js';
 import type { ToolchainDefinition } from './toolchain-contracts.js';
 import { snapshotArtifactInputs, type ArtifactInputMetadata } from '../compilation/artifact-inputs.js';
 import { markMainSource, withMainSourcePath, type MainSource } from '../artifacts/assembly/main-source.js';
+import { withoutTerminalEscapes } from '../diagnostics.js';
 import type { InstructionType } from '../artifacts/control-flow-graph/parsers/instruction-sets.js';
 import type { AssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/assembly-cfg-parser.js';
 import type { AssemblyLine } from '../artifacts/control-flow-graph/parsers/assembly-line.js';
@@ -430,7 +431,11 @@ export class ToolchainBackend {
 	): ProducedArtifact {
 		return {
 			text,
-			diagnostics: this.definition.parseDiagnostics(diagnosticOutput, source, invocation.workingDirectory),
+			diagnostics: this.definition.parseDiagnostics(
+				withoutTerminalEscapes(diagnosticOutput),
+				source,
+				invocation.workingDirectory,
+			),
 			durationMs: performance.now() - invocation.started,
 			generatedAt: Date.now(),
 			...inputMetadata,

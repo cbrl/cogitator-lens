@@ -45,10 +45,17 @@ const gnuArtifactOutputFlags =
 	/^(?:-emit-llvm|-fdump-tree-cfg(?:-[^=]+)*(?:=.*)?|-save-temps(?:=.*)?|-f(?:no-)?stack-usage|-fsave-optimization-record(?:=.*)?|-foptimization-record-file(?:=.*)?|-fopt-info(?:-[^=]+)?(?:=.*)?)$/;
 const gnuModeFlags = new Set(['-S', '-c', '-E', '-fsyntax-only', '-M', '-MM', '-MD', '-MMD']);
 
-/** Output, dependency, mode, and artifact switches that GCC and Clang own. */
+/**
+ * Switches that force colour, such as the -fdiagnostics-color=always that CMake adds. Coloured
+ * output hides diagnostics from their parsers and fills the AST dump with escape codes. Without
+ * them, GCC and Clang print no colour to a pipe.
+ */
+export const gnuColorFlags = /^-f(?:no-)?(?:diagnostics-color(?:=.*)?|color-diagnostics|ansi-escape-codes)$/;
+
+/** Output, dependency, mode, artifact, and colour switches that GCC and Clang own. */
 export const gnuOwnedArguments: OwnedArguments = {
 	withValue: [gnuFlagsWithSeparateValues, clangAstDumpPair],
-	standalone: [gnuModeFlags, gnuFlagsWithJoinedValues, gnuArtifactOutputFlags],
+	standalone: [gnuModeFlags, gnuFlagsWithJoinedValues, gnuArtifactOutputFlags, gnuColorFlags],
 };
 
 export function stripGnuManagedArguments(

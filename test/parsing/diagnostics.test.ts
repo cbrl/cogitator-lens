@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 import type { Uri } from 'vscode';
-import { composeDiagnosticParsers } from '../../src/diagnostics.js';
+import { composeDiagnosticParsers, withoutTerminalEscapes } from '../../src/diagnostics.js';
 import { parseGnuDiagnostics } from '../../src/toolchains/c-family/diagnostics.js';
 import { parseGoDiagnostics } from '../../src/toolchains/go/diagnostics.js';
 import { parseParenthesizedDiagnostics } from '../../src/toolchains/msvc/diagnostics.js';
@@ -32,6 +32,22 @@ test('GNU diagnostics support Windows paths and optional columns', () => {
 		[
 			{ line: 3, column: 6, severity: 'error', message: 'broken' },
 			{ line: 7, column: 0, severity: 'warning', message: 'suspicious' },
+		],
+	);
+});
+
+test('coloured GCC and Clang diagnostics parse once their escape sequences are removed', () => {
+	const gcc = '\x1b[01m\x1b[K../main.cpp:4:7:\x1b[m\x1b[K \x1b[01;31m\x1b[Kerror: \x1b[m\x1b[Kbroken';
+	const clang = '\x1b[1m../main.cpp:8:2: \x1b[0m\x1b[0;1;35mwarning: \x1b[0m\x1b[1msuspicious\x1b[0m';
+	const link = '\x1b]8;;https://gcc.gnu.org/onlinedocs/gcc/Warning-Options.html\x07-Wall\x1b]8;;\x07';
+	assert.equal(withoutTerminalEscapes(link), '-Wall');
+	assert.deepEqual(
+		parseGnuDiagnostics(withoutTerminalEscapes(`${gcc}\n${clang}`), fallback, workingDirectory).map(
+			({ line, column, severity, message }) => ({ line, column, severity, message }),
+		),
+		[
+			{ line: 3, column: 6, severity: 'error', message: 'broken' },
+			{ line: 7, column: 1, severity: 'warning', message: 'suspicious' },
 		],
 	);
 });
