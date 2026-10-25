@@ -15,23 +15,39 @@ import {
 	binaryDisassembly,
 	controlFlowGraphOutput,
 	toolDiscoverer,
+	withoutOwnedArguments,
+	type OwnedArguments,
 	type ToolchainDefinition,
 } from './toolchain-contracts.js';
-import {
-	cFamilyLanguageIdentifiers,
-	clangAstProducer,
-	defaultAsmParser,
-	stripCompilerManagedArguments,
-} from './c-family.js';
+import { cFamilyLanguageIdentifiers, clangAstDumpPair, clangAstProducer, defaultAsmParser } from './c-family.js';
 import {
 	captureWindowsEnvironment,
 	clangClOutputArguments,
 	msvcDependencyCollection,
+	msvcOwnedArguments,
 	msvcPreprocessedSourceProducer,
 } from './msvc.js';
 import { composeDiagnosticParsers } from '../diagnostics.js';
 import { parseGnuDiagnostics } from './c-family/diagnostics.js';
 import { parseParenthesizedDiagnostics } from './msvc/diagnostics.js';
+
+const clangOptionsWithValues = new Set(['/clang:-o', '/clang:-foptimization-record-file']);
+const clangOptionArtifactFlags =
+	/^\/clang:-(?:emit-llvm|S|gline-tables-only|save-temps(?:=.*)?|f(?:no-)?stack-usage|fsave-optimization-record(?:=.*)?|foptimization-record-file(?:=.*)?)$/;
+
+/** cl.exe's switches, the /clang: forms of the GNU switches that clang-cl artifacts use, and the AST dump. */
+const clangClOwnedArguments: OwnedArguments = {
+	withValue: [...msvcOwnedArguments.withValue, clangOptionsWithValues, clangAstDumpPair],
+	standalone: [...msvcOwnedArguments.standalone, clangOptionArtifactFlags],
+};
+
+export function stripClangClManagedArguments(
+	args: readonly string[],
+	sourceFile: string,
+	workingDirectory?: string,
+): string[] {
+	return withoutOwnedArguments(args, sourceFile, workingDirectory, clangClOwnedArguments);
+}
 
 export const clangCl: ToolchainDefinition = {
 	executablePattern: /^clang-cl(?:\.exe)?$/i,
@@ -42,7 +58,7 @@ export const clangCl: ToolchainDefinition = {
 	defineFlag: '/D',
 	objectFilename: 'output.obj',
 	outputArguments: clangClOutputArguments,
-	stripOwnedArguments: stripCompilerManagedArguments,
+	stripOwnedArguments: stripClangClManagedArguments,
 	dependencyCollection: msvcDependencyCollection,
 	createParser: defaultAsmParser,
 	createCfgParser: () => new ClangAssemblyCfgParser(new InstructionSetInfo()),

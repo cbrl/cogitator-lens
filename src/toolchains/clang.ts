@@ -25,7 +25,7 @@ import {
 	gnuIntelArguments,
 	gnuOutputArguments,
 	gnuPreprocessedSourceProducer,
-	stripCompilerManagedArguments,
+	stripGnuManagedArguments,
 } from './c-family.js';
 import { parseGnuDiagnostics } from './c-family/diagnostics.js';
 
@@ -64,7 +64,7 @@ export const clang: ToolchainDefinition = {
 	defineFlag: '-D',
 	objectFilename: 'output.o',
 	outputArguments: gnuOutputArguments(['-gline-tables-only']),
-	stripOwnedArguments: stripCompilerManagedArguments,
+	stripOwnedArguments: stripGnuManagedArguments,
 	dependencyCollection: gnuDependencyCollection,
 	createParser: defaultAsmParser,
 	createCfgParser: () => new ClangAssemblyCfgParser(new InstructionSetInfo()),

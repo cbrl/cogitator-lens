@@ -14,11 +14,11 @@ import {
 	type ToolchainDefinition,
 	withoutOwnedArguments,
 } from './toolchain-contracts.js';
-import { defaultAsmParser, stripCompilerManagedArguments } from './c-family.js';
+import { defaultAsmParser } from './c-family.js';
 import { parseRustDiagnostics } from './rust/diagnostics.js';
 
-const rustManagedFlagsWithValues = new Set(['--emit', '--error-format', '--json', '--out-dir', '--color']);
-const rustManagedFlagAssignments = /^(?:--emit|--error-format|--json|--out-dir|--color)=/;
+const rustManagedFlagsWithValues = new Set(['-o', '--emit', '--error-format', '--json', '--out-dir', '--color']);
+const rustManagedFlagAssignments = /^(?:-o.|(?:--emit|--error-format|--json|--out-dir|--color)=)/;
 
 /** Supplies crate metadata required by standalone rustc invocations unless the provider specifies it. */
 function rustDefaults(providerArguments: readonly string[]): readonly string[] {
@@ -73,18 +73,16 @@ export const rustLlvmIrOutput: ArtifactOutputSpec = Object.freeze({
 		rustArtifactArguments('llvm-ir', outputFile, providerArguments),
 });
 
-/** Removes backend-managed Rust output flags in addition to shared compiler-managed arguments. */
+/** Removes the output, emit, and diagnostic-format flags that the Rust backend owns. */
 export function stripRustManagedArguments(
 	args: readonly string[],
 	sourceFile: string,
 	workingDirectory?: string,
 ): string[] {
-	return withoutOwnedArguments(
-		stripCompilerManagedArguments(args, sourceFile, workingDirectory),
-		sourceFile,
-		workingDirectory,
-		{ withValue: [rustManagedFlagsWithValues], standalone: [rustManagedFlagAssignments] },
-	);
+	return withoutOwnedArguments(args, sourceFile, workingDirectory, {
+		withValue: [rustManagedFlagsWithValues],
+		standalone: [rustManagedFlagAssignments],
+	});
 }
 
 const rustDependencyCollection: DependencyCollectionSpec = Object.freeze({

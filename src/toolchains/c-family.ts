@@ -35,56 +35,26 @@ export const clangAstProducer = outputProducer({
 export const gnuIntelArguments = Object.freeze(['-masm=intel']);
 export const defaultAsmParser = (): AsmParser => new AsmParser(noopPropertyGetter);
 
-const flagsWithSeparateValues = new Set([
-	'-o',
-	'-MF',
-	'-MT',
-	'-MQ',
-	'-dumpdir',
-	'-foptimization-record-file',
-	'/clang:-o',
-	'/clang:-foptimization-record-file',
-	'/Fo',
-	'/Fa',
-	'/Fd',
-	'/Fi',
-	'/sourceDependencies',
-]);
-const flagsWithJoinedValues = /^(?:-o|-MF|-MT|-MQ|-dumpdir=|\/[Ff][OoAaDdIi]|\/[Ss]ource[Dd]ependencies:).+/;
-const artifactOutputFlags =
-	/^(?:-emit-llvm|-fdump-tree-cfg(?:-[^=]+)*(?:=.*)?|-save-temps(?:=.*)?|-f(?:no-)?stack-usage|-fsave-optimization-record(?:=.*)?|-foptimization-record-file(?:=.*)?|-fopt-info(?:-[^=]+)?(?:=.*)?|\/clang:-(?:emit-llvm|S|gline-tables-only|save-temps(?:=.*)?|f(?:no-)?stack-usage|fsave-optimization-record(?:=.*)?|foptimization-record-file(?:=.*)?))$/;
-const compilerManagedFlags = new Set([
-	'-S',
-	'-c',
-	'-E',
-	'-fsyntax-only',
-	'-M',
-	'-MM',
-	'-MD',
-	'-MMD',
-	'/c',
-	'/FA',
-	'/FAc',
-	'/FAs',
-	'/FAcs',
-	'/E',
-	'/EP',
-	'/P',
-]);
+/** The `-Xclang -ast-dump` pair that the AST producer adds. */
+export const clangAstDumpPair = (argument: string, index: number, args: readonly string[]): boolean =>
+	argument === '-Xclang' && args[index + 1] === '-ast-dump';
 
-/** Source, output, dependency, and artifact switches owned by the C-family backend. */
-export const compilerOwnedArguments: OwnedArguments = {
-	withValue: [
-		flagsWithSeparateValues,
-		(argument, index, args) => argument === '-Xclang' && args[index + 1] === '-ast-dump',
-	],
-	standalone: [compilerManagedFlags, flagsWithJoinedValues, artifactOutputFlags],
+const gnuFlagsWithSeparateValues = new Set(['-o', '-MF', '-MT', '-MQ', '-dumpdir', '-foptimization-record-file']);
+const gnuFlagsWithJoinedValues = /^(?:-o|-MF|-MT|-MQ|-dumpdir=).+/;
+const gnuArtifactOutputFlags =
+	/^(?:-emit-llvm|-fdump-tree-cfg(?:-[^=]+)*(?:=.*)?|-save-temps(?:=.*)?|-f(?:no-)?stack-usage|-fsave-optimization-record(?:=.*)?|-foptimization-record-file(?:=.*)?|-fopt-info(?:-[^=]+)?(?:=.*)?)$/;
+const gnuModeFlags = new Set(['-S', '-c', '-E', '-fsyntax-only', '-M', '-MM', '-MD', '-MMD']);
+
+/** Output, dependency, mode, and artifact switches that GCC and Clang own. */
+export const gnuOwnedArguments: OwnedArguments = {
+	withValue: [gnuFlagsWithSeparateValues, clangAstDumpPair],
+	standalone: [gnuModeFlags, gnuFlagsWithJoinedValues, gnuArtifactOutputFlags],
 };
 
-export function stripCompilerManagedArguments(
+export function stripGnuManagedArguments(
 	args: readonly string[],
 	sourceFile: string,
 	workingDirectory?: string,
 ): string[] {
-	return withoutOwnedArguments(args, sourceFile, workingDirectory, compilerOwnedArguments);
+	return withoutOwnedArguments(args, sourceFile, workingDirectory, gnuOwnedArguments);
 }

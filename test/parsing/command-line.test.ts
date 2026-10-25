@@ -3,7 +3,9 @@ import path from 'node:path';
 import test from 'node:test';
 import { CommandLineSyntaxError, tokenizePosix, tokenizeWindows } from '../../src/tokenize.js';
 import { removeSourceArgument } from '../../src/buildsystems/compilation-database-parser.js';
-import { stripCompilerManagedArguments } from '../../src/toolchains/c-family.js';
+import { stripGnuManagedArguments } from '../../src/toolchains/c-family.js';
+import { stripClangClManagedArguments } from '../../src/toolchains/clang-cl.js';
+import { stripMsvcManagedArguments } from '../../src/toolchains/msvc.js';
 import { stripPythonManagedArguments } from '../../src/toolchains/python.js';
 import { stripRustManagedArguments } from '../../src/toolchains/rust.js';
 
@@ -26,9 +28,9 @@ test('Windows tokenization handles quoting and backslash runs', () => {
 	assert.deepEqual(tokenizeWindows(String.raw`"a\\\"b" c`), [String.raw`a\"b`, 'c']);
 });
 
-test('native argument stripping removes every output, dependency, and mode flag the extension owns', () => {
+test('GCC and Clang argument stripping removes every output, dependency, and mode flag the extension owns', () => {
 	assert.deepEqual(
-		stripCompilerManagedArguments(
+		stripGnuManagedArguments(
 			[
 				'-O2',
 				'-c',
@@ -38,12 +40,10 @@ test('native argument stripping removes every output, dependency, and mode flag 
 				'-ast-dump',
 				'-o',
 				'old.o',
+				'-MD',
+				'-MT',
+				'old.o',
 				'-MFdeps.d',
-				'/Faold.asm',
-				'/E',
-				'/sourceDependencies',
-				'old-dependencies.json',
-				'/Fiold.i',
 				'-emit-llvm',
 				'-fsave-optimization-record=yaml',
 				'-foptimization-record-file=old.opt.yaml',
@@ -55,6 +55,65 @@ test('native argument stripping removes every output, dependency, and mode flag 
 				'-dumpdir',
 				'old-dumps/',
 				'-dumpdir=other-dumps/',
+				'/tmp/source.cpp',
+				'-Wall',
+			],
+			'/tmp/source.cpp',
+		),
+		['-O2', '-Wall'],
+	);
+});
+
+test('GCC and Clang argument stripping keeps paths that resemble MSVC switches', () => {
+	assert.deepEqual(
+		stripGnuManagedArguments(['-isystem', '/fast/include', '-I', '/Fo/include', '-include', '/files/pch.h'], 'a.c'),
+		['-isystem', '/fast/include', '-I', '/Fo/include', '-include', '/files/pch.h'],
+	);
+});
+
+test('MSVC argument stripping removes owned switches in either prefix and keeps runtime and include switches', () => {
+	assert.deepEqual(
+		stripMsvcManagedArguments(
+			[
+				'/nologo',
+				'-MD',
+				'/MTd',
+				'-openmp',
+				'/FIpch.h',
+				'/Yupch.h',
+				'/c',
+				'-c',
+				'/FAcs',
+				'/Faold.asm',
+				'-FoCMakeFiles/app.dir/main.cpp.obj',
+				'/FdTARGET_COMPILE_PDB',
+				'/Fiold.i',
+				'/Fo',
+				'old.obj',
+				'/E',
+				'/EP',
+				'/P',
+				'/sourceDependencies',
+				'old-dependencies.json',
+				'C:/project/main.cpp',
+				'/W4',
+			],
+			'C:/project/main.cpp',
+		),
+		['/nologo', '-MD', '/MTd', '-openmp', '/FIpch.h', '/Yupch.h', '/W4'],
+	);
+});
+
+test('clang-cl argument stripping adds the /clang: forms of the GNU artifact switches', () => {
+	assert.deepEqual(
+		stripClangClManagedArguments(
+			[
+				'-MD',
+				'/FIpch.h',
+				'/c',
+				'/FoCMakeFiles/app.dir/main.cpp.obj',
+				'-Xclang',
+				'-ast-dump',
 				'/clang:-emit-llvm',
 				'/clang:-S',
 				'/clang:-gline-tables-only',
@@ -64,12 +123,11 @@ test('native argument stripping removes every output, dependency, and mode flag 
 				'/clang:-foptimization-record-file=old.opt.yaml',
 				'/clang:-fstack-usage',
 				'/clang:-fno-stack-usage',
-				'/tmp/source.cpp',
-				'-Wall',
+				'/clang:-O3',
 			],
-			'/tmp/source.cpp',
+			'C:/project/main.cpp',
 		),
-		['-O2', '-Wall'],
+		['-MD', '/FIpch.h', '/clang:-O3'],
 	);
 });
 
@@ -89,6 +147,9 @@ test('Rust argument stripping removes conflicting output and diagnostic argument
 				'--color=always',
 				'-o',
 				'old.rlib',
+				'-oother.rlib',
+				'-L',
+				'/foo/lib',
 				source,
 				'-C',
 				'opt-level=2',
@@ -96,7 +157,7 @@ test('Rust argument stripping removes conflicting output and diagnostic argument
 			source,
 			workingDirectory,
 		),
-		['--edition=2021', '-C', 'opt-level=2'],
+		['--edition=2021', '-L', '/foo/lib', '-C', 'opt-level=2'],
 	);
 });
 

@@ -19,10 +19,12 @@ import {
 	assemblyControlFlowGraphOutput,
 	binaryDisassembly,
 	toolDiscoverer,
+	withoutOwnedArguments,
+	type OwnedArguments,
 	type ToolchainDefinition,
 } from './toolchain-contracts.js';
 import type { DependencyCollectionSpec } from './toolchain-backend.js';
-import { cFamilyLanguageIdentifiers, stripCompilerManagedArguments } from './c-family.js';
+import { cFamilyLanguageIdentifiers } from './c-family.js';
 import { parseParenthesizedDiagnostics } from './msvc/diagnostics.js';
 
 export const visualStudioDiscoveryArguments = [
@@ -301,6 +303,30 @@ export const msvcDependencyCollection: DependencyCollectionSpec = Object.freeze(
 	],
 	parse: parseMsvcSourceDependencies,
 });
+// cl.exe accepts either option prefix, and its option names are case-sensitive: /Fi names the
+// preprocessed output, while /FI force-includes a header and stays with the provider.
+const msvcOutputFlags = /^[-/](?:Fo|Fa|Fd|Fi|Fe)$/;
+const msvcOutputAssignments = /^[-/](?:Fo|Fa|Fd|Fi|Fe).+/;
+const msvcDependencyFlags = /^[-/]sourceDependencies(?::directives)?$/;
+const msvcModeFlags = /^[-/](?:c|E|EP|P|FA[csu]*)$/;
+
+/**
+ * Output, dependency, and mode switches that cl.exe owns. Runtime library switches such as
+ * -MD and -MTd, which share their spelling with GCC dependency flags, stay with the provider.
+ */
+export const msvcOwnedArguments = {
+	withValue: [msvcOutputFlags, msvcDependencyFlags],
+	standalone: [msvcModeFlags, msvcOutputAssignments],
+} as const satisfies OwnedArguments;
+
+export function stripMsvcManagedArguments(
+	args: readonly string[],
+	sourceFile: string,
+	workingDirectory?: string,
+): string[] {
+	return withoutOwnedArguments(args, sourceFile, workingDirectory, msvcOwnedArguments);
+}
+
 export const msvcPreprocessedSourceProducer = outputProducer({
 	output: 'stdout',
 	arguments: () => ['/E'],
@@ -315,7 +341,7 @@ export const msvc: ToolchainDefinition = {
 	defineFlag: '/D',
 	objectFilename: 'output.obj',
 	outputArguments: msvcOutputArguments,
-	stripOwnedArguments: stripCompilerManagedArguments,
+	stripOwnedArguments: stripMsvcManagedArguments,
 	dependencyCollection: msvcDependencyCollection,
 	createParser: createMsvcAsmParser,
 	createCfgParser: () => new MsvcAssemblyCfgParser(),
