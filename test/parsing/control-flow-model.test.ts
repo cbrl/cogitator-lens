@@ -145,6 +145,59 @@ test('graph structure identifies natural loops and unreachable nodes', () => {
 	assert.equal(structure.backEdges.size, 1);
 });
 
+test('graph structure finds nested loops, self-loops, and loops back to the entry', () => {
+	const edges = [
+		['entry', 'outer'],
+		['outer', 'inner'],
+		['inner', 'inner'],
+		['inner', 'latch'],
+		['latch', 'inner'],
+		['latch', 'outer'],
+		['outer', 'continue'],
+		['continue', 'outer'],
+		['outer', 'exit'],
+		['exit', 'entry'],
+		['dead', 'outer'],
+	].map(([from, to]) => ({ from, to, kind: 'unconditional' as const }));
+	const structure = analyzeGraphStructure({
+		id: 'nested',
+		label: 'nested',
+		entryNodeId: 'entry',
+		// Listed in reverse, which is the order the old fixpoint took longest on.
+		nodes: ['dead', 'exit', 'continue', 'latch', 'inner', 'outer', 'entry'].map((id) => ({ id, label: id })),
+		edges,
+	});
+	assert.deepEqual([...structure.backEdges].map((edge) => `${edge.from}->${edge.to}`).sort(), [
+		'continue->outer',
+		'exit->entry',
+		'inner->inner',
+		'latch->inner',
+		'latch->outer',
+	]);
+	assert.deepEqual([...structure.loopNodes].sort(), ['continue', 'entry', 'exit', 'inner', 'latch', 'outer']);
+	assert.equal(structure.reachable.has('dead'), false, 'An unreachable predecessor of a loop is not in it');
+});
+
+test('graph structure stays fast on a long chain of loops', { timeout: 10_000 }, () => {
+	const size = 5_000;
+	const ids = Array.from({ length: size }, (_, index) => `b${index}`);
+	const edges = ids.slice(1).map((to, index) => ({ from: ids[index], to, kind: 'unconditional' as const }));
+	for (let index = 10; index < size; index += 10) {
+		edges.push({ from: ids[index], to: ids[index - 9], kind: 'unconditional' });
+	}
+	const structure = analyzeGraphStructure({
+		id: 'chain',
+		label: 'chain',
+		entryNodeId: ids[0],
+		nodes: ids.map((id) => ({ id, label: id })).reverse(),
+		edges,
+	});
+	assert.equal(structure.reachable.size, size);
+	assert.equal(structure.backEdges.size, Math.floor((size - 1) / 10));
+	assert.equal(structure.loopNodes.has(ids[0]), false);
+	assert.equal(structure.loopNodes.has(ids[1]), true);
+});
+
 test('webview protocol accepts the exact message schemas and nothing more', () => {
 	assert.deepEqual(parseWebviewMessage({ type: 'ready' }), { type: 'ready' });
 	assert.deepEqual(parseWebviewMessage({ type: 'refresh' }), { type: 'refresh' });
