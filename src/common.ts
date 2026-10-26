@@ -16,3 +16,8 @@ export function splitLines(text: string): string[] {
 export function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
+
+/** The value as a record, or an empty record when it is not one. */
+export function asRecord(value: unknown): Record<string, unknown> {
+	return isRecord(value) ? value : {};
+}

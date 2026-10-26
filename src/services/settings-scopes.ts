@@ -1,3 +1,4 @@
+import { asRecord } from '../common.js';
 import type { ArtifactKind } from '../types/index.js';
 
 /** The value of one setting in each writable scope, as `inspect` reports them. */
@@ -82,10 +83,4 @@ export function withListEntry(value: unknown, field: string, entry: Record<strin
 /** A copy of a list setting without the entries whose `field` is `key`. */
 export function withoutListEntry(value: unknown, field: string, key: string): unknown[] {
 	return (Array.isArray(value) ? value : []).filter((candidate) => asRecord(candidate)[field] !== key);
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: {};
 }

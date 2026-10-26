@@ -14,6 +14,7 @@ import { artifactDefinitions, getArtifactKind } from '../artifacts/core/artifact
 import type { ArtifactPreset } from '../artifacts/ui/presets.js';
 import { createToolchainProfile, supportedToolchainKinds } from '../toolchains/toolchain-map.js';
 import { expandVariables, noWorkspaceContext, resolvePathSetting, type PathContext } from './path-variables.js';
+import { asRecord } from '../common.js';
 
 const toolchainKinds = new Set<string>(supportedToolchainKinds);
 
@@ -54,12 +55,6 @@ export function parseAuxiliaryTools(
 			return [[name, Object.freeze({ executable: path.normalize(executable), inputMode })]];
 		}),
 	);
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-	return typeof value === 'object' && value !== null && !Array.isArray(value)
-		? (value as Record<string, unknown>)
-		: {};
 }
 
 /**

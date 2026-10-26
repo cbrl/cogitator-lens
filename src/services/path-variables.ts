@@ -73,12 +73,23 @@ export function portablePath(absolutePath: string, context: PathContext): string
 			.map((folder) => ({ ...folder, primary: false })),
 	];
 	for (const folder of folders) {
-		const relative = path.relative(folder.path, absolutePath);
-		if (relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+		const relative = relativeWithin(folder.path, absolutePath);
+		if (relative === undefined) {
 			continue;
 		}
 		const prefix = folder.primary ? '${workspaceFolder}' : `\${workspaceFolder:${folder.name}}`;
 		return relative ? `${prefix}/${relative.split(path.sep).join('/')}` : prefix;
 	}
 	return absolutePath;
+}
+
+/**
+ * The path of a file relative to a directory that contains it, or an empty path for the directory
+ * itself. Nothing when the file is outside. Symlinks are not resolved.
+ */
+export function relativeWithin(directory: string, filePath: string): string | undefined {
+	const relative = path.relative(directory, filePath);
+	return relative === '..' || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)
+		? undefined
+		: relative;
 }

@@ -40,7 +40,7 @@ import { resolveArtifactImplementation } from '../toolchains/toolchain-artifacts
 import { ToolchainRegistry } from './toolchain-registry.js';
 import { CompilationConfigDatabase } from './compilation-config.js';
 import { resolveArtifactPreset, type ArtifactPreset } from '../artifacts/ui/presets.js';
-import { artifactInputComparisonKey, validateArtifactInputs } from './artifact-inputs.js';
+import { validateArtifactInputs } from './artifact-inputs.js';
 import { RawArtifactCache } from './raw-artifact-cache.js';
 import { renderArtifact } from './artifact-rendering.js';
 import { withoutTerminalEscapes } from '../diagnostics.js';
@@ -48,6 +48,7 @@ import { logChannel } from '../logger.js';
 import { localFileComparisonKey, sourceUriComparisonKey, uriComparisonKey } from '../file-identity.js';
 import { getToolchainDefinition } from '../toolchains/toolchain-map.js';
 import type { ConfigurationOrigin } from '../buildsystems/variant-provider.js';
+import { relativeWithin } from '../services/path-variables.js';
 
 const producerIdentities = new WeakMap<object, number>();
 let nextProducerIdentity = 1;
@@ -60,12 +61,6 @@ function producerIdentity(producer: object): number {
 		producerIdentities.set(producer, identity);
 	}
 	return identity;
-}
-
-/** Whether a path is inside a directory, without resolving symlinks. */
-function isInside(filePath: string, directory: string): boolean {
-	const relative = path.relative(directory, filePath);
-	return relative !== '' && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
 }
 
 /** Toolchains that can compile any file of their languages, so they stand in for missing variants. */
@@ -567,7 +562,7 @@ export class CompilationService {
 	private isWatchedInput(inputPath: string, source: Uri): boolean {
 		const folders = (workspace.workspaceFolders ?? []).filter((folder) => folder.uri.scheme === 'file');
 		return [path.dirname(source.fsPath), ...folders.map((folder) => folder.uri.fsPath)].some((root) =>
-			isInside(inputPath, root),
+			Boolean(relativeWithin(root, inputPath)),
 		);
 	}
 
