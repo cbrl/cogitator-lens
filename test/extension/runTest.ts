@@ -434,10 +434,33 @@ async function verifySettingsWrites(workspaceFolder: vscode.WorkspaceFolder): Pr
 			await settings().update(key, undefined, vscode.ConfigurationTarget.Workspace);
 		}
 
+		// An option set only by its earlier name applies, although VS Code merges in every default.
+		await settings().update(
+			'artifactOptions',
+			{ assembly: { libraryCode: true } },
+			vscode.ConfigurationTarget.Global,
+		);
+		assert.equal(configuration.getArtifactOptions('assembly').display.showLibraryCode, false);
+		await settings().update('artifactOptions', undefined, vscode.ConfigurationTarget.Global);
+
 		// An option that no scope sets is saved alone in user settings.
 		await configuration.updateArtifactOption('assembly', 'showDirectives', true);
 		assert.deepEqual(settings().inspect('artifactOptions')?.globalValue, { assembly: { showDirectives: true } });
 		assert.equal(settings().inspect('artifactOptions')?.workspaceValue, undefined);
+
+		// Toggles saved together each keep the other, since each write reads the one before it.
+		await Promise.all([
+			configuration.updateArtifactOption('assembly', 'showCommentOnlyLines', true),
+			configuration.updateArtifactOption('assembly', 'trim', true),
+		]);
+		assert.deepEqual(settings().inspect('artifactOptions')?.globalValue, {
+			assembly: { showDirectives: true, showCommentOnlyLines: true, trim: true },
+		});
+		await settings().update(
+			'artifactOptions',
+			{ assembly: { showDirectives: true } },
+			vscode.ConfigurationTarget.Global,
+		);
 
 		// An option the workspace sets, here by its earlier name, is changed there and renamed.
 		await settings().update(
@@ -470,6 +493,17 @@ async function verifySettingsWrites(workspaceFolder: vscode.WorkspaceFolder): Pr
 			{ displayName: 'Copy', kind: 'clang', executable: 'clang' },
 		]);
 
+		// User settings apply to every workspace, so a path in this one stays absolute there.
+		const workspaceCompiler = path.join(workspaceFolder.uri.fsPath, 'tools', 'gcc');
+		await configuration.upsertToolchain({ displayName: 'Local', kind: 'gcc', executable: workspaceCompiler });
+		assert.equal(
+			settings()
+				.inspect<{ displayName: string; executable: string }[]>('toolchains')
+				?.globalValue?.find((entry) => entry.displayName === 'Local')?.executable,
+			workspaceCompiler,
+		);
+		await configuration.removeToolchain('Local');
+
 		// A new preset goes to the workspace; renaming one keeps it in its scope; deleting removes it everywhere.
 		await settings().update(
 			'artifactPresets',
@@ -493,7 +527,7 @@ async function verifySettingsWrites(workspaceFolder: vscode.WorkspaceFolder): Pr
 		const root = workspaceFolder.uri.fsPath;
 		await configuration.upsertManualCompilationVariant({
 			id: 'manual:portable',
-			source: configuration.portablePath(path.join(root, 'src', 'main.cpp')),
+			source: path.join(root, 'src', 'main.cpp'),
 			displayLabel: 'Portable',
 			toolchainProfileId: 'user:Copy',
 			workingDirectory: 'build',
@@ -510,6 +544,18 @@ async function verifySettingsWrites(workspaceFolder: vscode.WorkspaceFolder): Pr
 		assert.equal(variant.source, path.join(root, 'src', 'main.cpp'));
 		assert.equal(variant.workingDirectory, path.join(root, 'build'));
 		assert.deepEqual(variant.arguments, [`-I${root}/include`]);
+		// Editing starts from the spelling in settings, so variables are written back unexpanded.
+		assert.deepEqual(configuration.getSpelledManualCompilationVariant('manual:portable'), {
+			workingDirectory: 'build',
+			arguments: ['-I${workspaceFolder}/include'],
+			environment: {},
+		});
+		await settings().update(
+			'artifactPresets',
+			{ spelled: { artifactKind: 'assembly', extraArguments: ['-I${workspaceFolder}/include'] } },
+			vscode.ConfigurationTarget.Workspace,
+		);
+		assert.deepEqual(configuration.getSpelledPresetArguments('spelled'), ['-I${workspaceFolder}/include']);
 	} finally {
 		configuration.dispose();
 		for (const key of keys) {
@@ -1444,6 +1490,7 @@ async function verifyFilterChangeSignal(): Promise<void> {
 	let persistedOptions = defaultArtifactOptions;
 	const writes: string[] = [];
 	let toolchainReads = 0;
+	let slowWrites = false;
 	const configuration = testConfiguration(configurationChange, {
 		getToolchains: () => {
 			toolchainReads++;
@@ -1451,6 +1498,9 @@ async function verifyFilterChangeSignal(): Promise<void> {
 		},
 		getArtifactOptions: (kind) => (kind === 'assembly' ? persistedOptions : defaultArtifactOptions),
 		updateArtifactOption: async (kind, id, value) => {
+			if (slowWrites) {
+				await delay(5);
+			}
 			writes.push(`${kind}.${id}=${value}`);
 			if (kind === 'assembly') {
 				persistedOptions = {
@@ -1483,6 +1533,27 @@ async function verifyFilterChangeSignal(): Promise<void> {
 	service.setArtifactOption('assembly', 'binaryColumns', false);
 	assert.equal(changes, 1, 'A decoration-only option does not render artifacts again');
 	assert.equal(decorationChanges, 1);
+
+	// The reload after the first of two quick toggles is saved must not undo the second.
+	slowWrites = true;
+	service.setArtifactOption('assembly', 'showDirectives', true);
+	service.setArtifactOption('assembly', 'trim', true);
+	const trimDuringSaves: boolean[] = [];
+	const trimSubscription = service.onArtifactOptionsChanged(() =>
+		trimDuringSaves.push(service.getArtifactOptions('assembly').display.trim),
+	);
+	await delay(20);
+	trimSubscription.dispose();
+	assert.ok(!trimDuringSaves.includes(false), 'A reload while the second toggle is unsaved keeps it');
+	assert.deepEqual(
+		[
+			service.getArtifactOptions('assembly').display.showDirectives,
+			service.getArtifactOptions('assembly').display.trim,
+		],
+		[true, true],
+	);
+	assert.equal(persistedOptions.display.trim, true);
+	slowWrites = false;
 
 	toolchainReads = 0;
 	(configurationChange as unknown as vscode.EventEmitter<SettingsChange>).fire({

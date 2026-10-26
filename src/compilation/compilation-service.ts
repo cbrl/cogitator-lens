@@ -85,6 +85,8 @@ export class CompilationService {
 	private readonly rawArtifactCache = new RawArtifactCache();
 	private readonly inputWatchers = new Map<string, Disposable>();
 	private readonly currentArtifactOptions = new Map<ArtifactKind, ArtifactOptions>();
+	/** Options set here whose write to settings has not finished, by kind and ID. */
+	private readonly unsavedArtifactOptions = new Map<string, UnsavedArtifactOption>();
 	private providersReady: Promise<void> = Promise.resolve();
 	private providersSettled = true;
 
@@ -129,20 +131,27 @@ export class CompilationService {
 
 	setArtifactOption(kind: ArtifactKind, id: ArtifactOptionId, value: boolean): void {
 		const current = this.getArtifactOptions(kind);
-		const production = Object.hasOwn(current.production, id)
-			? { ...current.production, [id]: value }
-			: current.production;
-		const display = Object.hasOwn(current.display, id) ? { ...current.display, [id]: value } : current.display;
-		const options = immutableArtifactOptions({ production, display });
+		const options = withArtifactOptionValue(current, id, value);
 		if (artifactOptionsEqual(current, options)) {
 			return;
 		}
 		this.acceptArtifactOptions(kind, options);
+		// Until it is saved, a settings reload caused by an earlier toggle must not undo this one.
+		const key = `${kind}\0${id}`;
+		const unsaved = { kind, id, value };
+		this.unsavedArtifactOptions.set(key, unsaved);
 		// Artifact options are currently global per kind, not scoped to a workspace folder.
-		this.configuration.updateArtifactOption(kind, id, value).catch((error: unknown) => {
-			logChannel.error(`Could not save the ${kind} option ${id}: ${String(error)}`);
-			void window.showErrorMessage(`Could not save the artifact option: ${String(error)}`);
-		});
+		this.configuration
+			.updateArtifactOption(kind, id, value)
+			.catch((error: unknown) => {
+				logChannel.error(`Could not save the ${kind} option ${id}: ${String(error)}`);
+				void window.showErrorMessage(`Could not save the artifact option: ${String(error)}`);
+			})
+			.finally(() => {
+				if (this.unsavedArtifactOptions.get(key) === unsaved) {
+					this.unsavedArtifactOptions.delete(key);
+				}
+			});
 	}
 
 	/** Returns the discovered variants of a file, or its fallback variants when nothing describes it. */
@@ -373,7 +382,12 @@ export class CompilationService {
 		}
 		if (affects('artifactOptions')) {
 			for (const kind of supportedArtifactKinds) {
-				const options = this.configuration.getArtifactOptions(kind);
+				let options = this.configuration.getArtifactOptions(kind);
+				for (const unsaved of this.unsavedArtifactOptions.values()) {
+					if (unsaved.kind === kind) {
+						options = withArtifactOptionValue(options, unsaved.id, unsaved.value);
+					}
+				}
 				if (!artifactOptionsEqual(this.getArtifactOptions(kind), options)) {
 					this.acceptArtifactOptions(kind, options);
 				}
@@ -636,4 +650,19 @@ function toolErrorOutput(error: unknown): { stdout: string; stderr: string } {
 		return { stdout: error.stdout, stderr: error.stderr };
 	}
 	return { stdout: '', stderr: '' };
+}
+
+interface UnsavedArtifactOption {
+	readonly kind: ArtifactKind;
+	readonly id: ArtifactOptionId;
+	readonly value: boolean;
+}
+
+/** Options with one option set, in whichever group it belongs to. */
+function withArtifactOptionValue(options: ArtifactOptions, id: ArtifactOptionId, value: boolean): ArtifactOptions {
+	const production = Object.hasOwn(options.production, id)
+		? { ...options.production, [id]: value }
+		: options.production;
+	const display = Object.hasOwn(options.display, id) ? { ...options.display, [id]: value } : options.display;
+	return immutableArtifactOptions({ production, display });
 }

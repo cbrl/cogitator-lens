@@ -18,6 +18,8 @@ import {
 	parseDefaultCompilationSettings,
 	parseManualCompilationVariants,
 	parseToolchainSettings,
+	spelledManualCompilationVariant,
+	spelledPresetArguments,
 } from './configuration-normalization.js';
 import {
 	definesArtifactOption,
@@ -44,6 +46,7 @@ export interface SettingsChange {
 export class ConfigurationService implements Disposable {
 	private readonly changeEmitter = new EventEmitter<SettingsChange>();
 	private readonly configurationSubscription: Disposable;
+	private pendingWrite: Promise<unknown> = Promise.resolve();
 
 	readonly onDidChange: Event<SettingsChange> = this.changeEmitter.event;
 
@@ -83,14 +86,35 @@ export class ConfigurationService implements Disposable {
 		return parseManualCompilationVariants(raw, this.pathContext());
 	}
 
+	/** A workspace variant's working directory, arguments, and environment with their variables, for editing. */
+	getSpelledManualCompilationVariant(
+		id: string,
+	): Pick<ManualCompilationVariantSettings, 'workingDirectory' | 'arguments' | 'environment'> | undefined {
+		return spelledManualCompilationVariant(
+			workspace.getConfiguration('coglens').get<unknown>('compileVariants', []),
+			id,
+		);
+	}
+
 	getArtifactOptions(kind: ArtifactKind, scope?: Uri): ArtifactOptions {
-		const raw = workspace.getConfiguration('coglens', scope).get<unknown>('artifactOptions', {});
-		return parseArtifactOptions(raw, kind);
+		const scopes = this.scopes<unknown>('artifactOptions', scope);
+		return parseArtifactOptions(
+			resourceScopes.map((name) => scopes[name]),
+			kind,
+		);
 	}
 
 	getArtifactPresets(scope?: Uri): readonly ArtifactPreset[] {
 		const raw = workspace.getConfiguration('coglens', scope).get<unknown>('artifactPresets', {});
 		return parseArtifactPresets(raw, this.pathContext(scope));
+	}
+
+	/** A preset's extra arguments with their variables, for editing. */
+	getSpelledPresetArguments(id: string, scope?: Uri): string[] | undefined {
+		return spelledPresetArguments(
+			workspace.getConfiguration('coglens', scope).get<unknown>('artifactPresets', {}),
+			id,
+		);
 	}
 
 	/**
@@ -108,11 +132,6 @@ export class ConfigurationService implements Disposable {
 			userHome: os.homedir(),
 			environment: process.env,
 		};
-	}
-
-	/** Spells a path for settings relative to a workspace folder when it is inside one. */
-	portablePath(absolutePath: string): string {
-		return portablePath(absolutePath, this.pathContext());
 	}
 
 	getDimUnusedSourceLines(uri: Uri): boolean {
@@ -144,19 +163,31 @@ export class ConfigurationService implements Disposable {
 
 	/**
 	 * Adds a toolchain, or replaces the one with the same display name. Lists are written whole in
-	 * the scope that defines them, because a list in a more specific scope hides the others.
+	 * the scope that defines them, because a list in a more specific scope hides the others. An
+	 * absolute executable in a workspace folder is written relative to it in workspace settings.
 	 */
 	async upsertToolchain(entry: ToolchainSettings): Promise<void> {
-		await this.updateList('toolchains', (entries) => withListEntry(entries, 'displayName', { ...entry }));
+		await this.updateList('toolchains', (entries, scope) =>
+			withListEntry(entries, 'displayName', { ...entry, executable: this.spellPath(entry.executable, scope) }),
+		);
 	}
 
 	async removeToolchain(displayName: string): Promise<void> {
 		await this.updateList('toolchains', (entries) => withoutListEntry(entries, 'displayName', displayName));
 	}
 
-	/** Adds a workspace compilation variant, or replaces the one with the same ID. */
+	/**
+	 * Adds a workspace compilation variant, or replaces the one with the same ID. Its paths are
+	 * spelled relative to a workspace folder only in workspace settings.
+	 */
 	async upsertManualCompilationVariant(entry: ManualCompilationVariantSettings): Promise<void> {
-		await this.updateList('compileVariants', (entries) => withListEntry(entries, 'id', { ...entry }));
+		await this.updateList('compileVariants', (entries, scope) =>
+			withListEntry(entries, 'id', {
+				...entry,
+				source: this.spellPath(entry.source, scope),
+				workingDirectory: this.spellPath(entry.workingDirectory, scope),
+			}),
+		);
 	}
 
 	async removeManualCompilationVariant(id: string): Promise<void> {
@@ -168,15 +199,17 @@ export class ConfigurationService implements Disposable {
 	 * copies the other options, or values from other scopes, into a workspace.
 	 */
 	async updateArtifactOption(kind: ArtifactKind, id: ArtifactOptionId, value: boolean): Promise<void> {
-		const formerIds = formerOptionIds(kind, id);
-		const scopes = this.scopes<unknown>('artifactOptions');
-		const scope =
-			definingScope(
-				scopes,
-				(current) => definesArtifactOption(current, kind, [id, ...formerIds]),
-				windowScopes,
-			) ?? 'user';
-		await this.write('artifactOptions', scope, withArtifactOption(scopes[scope], kind, id, value, formerIds));
+		await this.serialized(async () => {
+			const formerIds = formerOptionIds(kind, id);
+			const scopes = this.scopes<unknown>('artifactOptions');
+			const scope =
+				definingScope(
+					scopes,
+					(current) => definesArtifactOption(current, kind, [id, ...formerIds]),
+					windowScopes,
+				) ?? 'user';
+			await this.write('artifactOptions', scope, withArtifactOption(scopes[scope], kind, id, value, formerIds));
+		});
 	}
 
 	/**
@@ -184,38 +217,62 @@ export class ConfigurationService implements Disposable {
 	 * a new one goes to the folder of `resource`, the workspace, or user settings.
 	 */
 	async upsertArtifactPreset(preset: ArtifactPreset, previousId?: string, resource?: Uri): Promise<void> {
-		const scopes = this.scopes<unknown>('artifactPresets', resource);
-		const scope =
-			definingScope(scopes, definesKey(previousId ?? preset.id), resourceScopes) ??
-			definingScope(scopes, definesKey(preset.id), resourceScopes) ??
-			this.newEntryScope(resource);
-		const configuration: ArtifactPresetConfiguration = {
-			artifactKind: preset.artifactKind,
-			extraArguments: [...preset.extraArguments],
-			productionOptions: { ...preset.productionOptions },
-		};
-		await this.write(
-			'artifactPresets',
-			scope,
-			withMapEntry(scopes[scope], preset.id, configuration, previousId),
-			resource,
-		);
+		await this.serialized(async () => {
+			const scopes = this.scopes<unknown>('artifactPresets', resource);
+			const scope =
+				definingScope(scopes, definesKey(previousId ?? preset.id), resourceScopes) ??
+				definingScope(scopes, definesKey(preset.id), resourceScopes) ??
+				this.newEntryScope(resource);
+			const configuration: ArtifactPresetConfiguration = {
+				artifactKind: preset.artifactKind,
+				extraArguments: [...preset.extraArguments],
+				productionOptions: { ...preset.productionOptions },
+			};
+			await this.write(
+				'artifactPresets',
+				scope,
+				withMapEntry(scopes[scope], preset.id, configuration, previousId),
+				resource,
+			);
+		});
 	}
 
 	/** Deletes a preset from every scope that defines it, so a less specific one does not reappear. */
 	async removeArtifactPreset(id: string, resource?: Uri): Promise<void> {
-		const scopes = this.scopes<unknown>('artifactPresets', resource);
-		for (const scope of resourceScopes) {
-			if (scopes[scope] !== undefined && definesKey(id)(scopes[scope])) {
-				await this.write('artifactPresets', scope, withoutMapEntry(scopes[scope], id), resource);
+		await this.serialized(async () => {
+			const scopes = this.scopes<unknown>('artifactPresets', resource);
+			for (const scope of resourceScopes) {
+				if (scopes[scope] !== undefined && definesKey(id)(scopes[scope])) {
+					await this.write('artifactPresets', scope, withoutMapEntry(scopes[scope], id), resource);
+				}
 			}
-		}
+		});
 	}
 
-	private async updateList(key: string, change: (entries: unknown) => unknown[]): Promise<void> {
-		const scopes = this.scopes<unknown>(key);
-		const scope = definingScope(scopes, Array.isArray, windowScopes) ?? this.newEntryScope();
-		await this.write(key, scope, change(scopes[scope]));
+	private async updateList(key: string, change: (entries: unknown, scope: SettingScope) => unknown[]): Promise<void> {
+		await this.serialized(async () => {
+			const scopes = this.scopes<unknown>(key);
+			const scope = definingScope(scopes, Array.isArray, windowScopes) ?? this.newEntryScope();
+			await this.write(key, scope, change(scopes[scope], scope));
+		});
+	}
+
+	/**
+	 * Runs one change to settings after the ones before it, so each reads what the last wrote
+	 * rather than a value that a write still in flight is about to replace.
+	 */
+	private serialized(change: () => Promise<void>): Promise<void> {
+		const result = this.pendingWrite.then(change, change);
+		this.pendingWrite = result.catch(() => undefined);
+		return result;
+	}
+
+	/**
+	 * Spells a path inside a workspace folder relative to it in workspace settings, which travel
+	 * with the folder. User settings keep it absolute, since they apply to every workspace.
+	 */
+	private spellPath(value: string, scope: SettingScope): string {
+		return scope === 'user' ? value : portablePath(value, this.pathContext());
 	}
 
 	private scopes<T>(key: string, resource?: Uri): SettingScopes<T> {

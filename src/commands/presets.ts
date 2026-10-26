@@ -71,7 +71,11 @@ async function configureArtifactPreset(
 	if (!artifactKind) {
 		return;
 	}
-	const extraArguments = await inputStringArray('Preset Compiler Arguments', existing?.extraArguments ?? []);
+	// A preset is edited as settings spell it, so its variables are written back unexpanded.
+	const extraArguments = await inputStringArray(
+		'Preset Compiler Arguments',
+		(existing && configuration.getSpelledPresetArguments(existing.id, scope)) ?? existing?.extraArguments ?? [],
+	);
 	if (!extraArguments) {
 		return;
 	}
@@ -161,7 +165,11 @@ async function saveActiveArtifactAsPreset(
 	await upsertArtifactPreset(configuration, source, undefined, {
 		id,
 		artifactKind: snapshot.identity.artifactKind,
-		extraArguments: [...(inherited?.extraArguments ?? [])],
+		extraArguments: [
+			...((inherited && configuration.getSpelledPresetArguments(inherited.id, source)) ??
+				inherited?.extraArguments ??
+				[]),
+		],
 		productionOptions: {
 			...compilationService.getArtifactOptions(snapshot.identity.artifactKind).production,
 			...inherited?.productionOptions,

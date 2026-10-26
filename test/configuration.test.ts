@@ -110,7 +110,7 @@ test('compilation settings and manual variants keep documented fields and drop i
 
 test('artifact options are split into frozen production and display groups', () => {
 	const result = parseArtifactOptions(
-		{ assembly: { intel: true, showUnusedLabels: true, notAnOption: true } },
+		[{ assembly: { intel: true, showUnusedLabels: true, notAnOption: true } }],
 		'assembly',
 	);
 	assert.equal(result.production.intel, true);
@@ -120,15 +120,17 @@ test('artifact options are split into frozen production and display groups', () 
 
 test('options that hid output when true still apply, inverted, until their replacement is set', () => {
 	const earlier = parseArtifactOptions(
-		{
-			assembly: {
-				labels: false,
-				libraryCode: true,
-				directives: false,
-				commentOnly: true,
-				dontMaskFilenames: false,
+		[
+			{
+				assembly: {
+					labels: false,
+					libraryCode: true,
+					directives: false,
+					commentOnly: true,
+					dontMaskFilenames: false,
+				},
 			},
-		},
+		],
 		'assembly',
 	);
 	assert.deepEqual(
@@ -140,8 +142,15 @@ test('options that hid output when true still apply, inverted, until their repla
 		],
 		[true, false, true, false],
 	);
-	const replaced = parseArtifactOptions({ assembly: { labels: false, showUnusedLabels: false } }, 'assembly');
+	const replaced = parseArtifactOptions([{ assembly: { labels: false, showUnusedLabels: false } }], 'assembly');
 	assert.equal(replaced.display.showUnusedLabels, false, 'The new option wins over the one it replaced');
+
+	// Scopes are read most specific first, by whichever name each one uses.
+	const workspace = { assembly: { showLibraryCode: true } };
+	const user = { assembly: { libraryCode: true, labels: false } };
+	const layered = parseArtifactOptions([undefined, workspace, user], 'assembly');
+	assert.equal(layered.display.showLibraryCode, true, 'The workspace value wins over an earlier user name');
+	assert.equal(layered.display.showUnusedLabels, true, 'An earlier name applies where no scope sets the new one');
 });
 
 test('presets keep kind-specific production inputs and drop unknown artifact kinds', () => {

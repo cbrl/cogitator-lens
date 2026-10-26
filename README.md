@@ -66,8 +66,10 @@ environment. Editing a discovered variant creates a workspace copy.
 
 Paths, arguments, and environment values in toolchains, variants, presets, and the default
 invocation may use `${workspaceFolder}`, `${workspaceFolder:name}`, `${userHome}`, and
-`${env:NAME}`. Relative variant paths resolve against the first workspace folder. The sidebar
-writes paths inside a workspace folder in this form, so the settings can be shared.
+`${env:NAME}`. Relative variant paths resolve against the first workspace folder. In workspace
+settings, the sidebar writes paths inside a workspace folder in this form, so the settings can be
+shared; user settings keep absolute paths, since they apply to every workspace. Editing a
+workspace variant or a preset keeps the variables it already uses.
 
 Sidebar changes are saved where the setting is already defined. Otherwise, artifact options go to
 user settings, and toolchains, variants, and presets go to the workspace, or to user settings when

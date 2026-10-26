@@ -170,12 +170,16 @@ async function configureManualVariant(
 	if (!profile) {
 		return;
 	}
+	// A workspace variant is edited as settings spell it, so its variables are written back unexpanded.
+	const spelled =
+		existing?.provider === 'manual' ? configuration.getSpelledManualCompilationVariant(existing.id) : undefined;
 	const workingDirectory = (
 		await vscode.window.showInputBox({
 			title: 'Working Directory',
 			value:
-				existing?.workingDirectory ??
-				vscode.workspace.getWorkspaceFolder(source)?.uri.fsPath ??
+				spelled?.workingDirectory ||
+				existing?.workingDirectory ||
+				vscode.workspace.getWorkspaceFolder(source)?.uri.fsPath ||
 				path.dirname(source.fsPath),
 			validateInput: (value) => (value.trim() ? undefined : 'A working directory is required'),
 		})
@@ -183,20 +187,23 @@ async function configureManualVariant(
 	if (!workingDirectory) {
 		return;
 	}
-	const args = await inputStringArray('Compiler Arguments', existing?.arguments ?? []);
+	const args = await inputStringArray('Compiler Arguments', spelled?.arguments ?? existing?.arguments ?? []);
 	if (!args) {
 		return;
 	}
-	const environment = await inputStringRecord('Environment Variables', existing?.environment ?? {});
+	const environment = await inputStringRecord(
+		'Environment Variables',
+		spelled?.environment ?? existing?.environment ?? {},
+	);
 	if (!environment) {
 		return;
 	}
 	const setting: ManualCompilationVariantSettings = {
 		id: existing?.provider === 'manual' ? existing.id : `manual:${randomUUID()}`,
-		source: configuration.portablePath(source.fsPath),
+		source: source.fsPath,
 		displayLabel,
 		toolchainProfileId: profile.id,
-		workingDirectory: configuration.portablePath(workingDirectory),
+		workingDirectory,
 		arguments: args,
 		environment,
 		...(existing?.project ? { project: existing.project } : {}),

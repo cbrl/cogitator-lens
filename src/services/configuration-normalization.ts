@@ -140,12 +140,19 @@ export function parseManualCompilationVariants(
 	});
 }
 
-export function parseArtifactOptions(raw: unknown, kind: ArtifactKind): ArtifactOptions {
-	const selected = asRecord(asRecord(raw)[kind]);
+/**
+ * Reads the options of a kind from the `coglens.artifactOptions` value of each scope, most
+ * specific first. The scopes are read apart, because the combined value includes the default of
+ * every option, which would hide an option that a scope still sets by its earlier name.
+ */
+export function parseArtifactOptions(scopes: readonly unknown[], kind: ArtifactKind): ArtifactOptions {
+	const selected = scopes.map((raw) => asRecord(asRecord(raw)[kind]));
 	const production: Record<string, boolean> = { ...defaultArtifactOptions.production };
 	const display: Record<string, boolean> = { ...defaultArtifactOptions.display };
 	for (const descriptor of artifactDefinitions[kind].options) {
-		const value = artifactOptionValue(selected, kind, descriptor.id);
+		const value = selected
+			.map((options) => artifactOptionValue(options, kind, descriptor.id))
+			.find((candidate) => candidate !== undefined);
 		if (value === undefined) {
 			continue;
 		}
@@ -204,6 +211,27 @@ export function parseArtifactPresets(raw: unknown, context: PathContext = noWork
 			},
 		];
 	});
+}
+
+/** The editable fields of a workspace variant as settings spell them, with their variables. */
+export function spelledManualCompilationVariant(
+	raw: unknown,
+	id: string,
+): Pick<ManualCompilationVariantSettings, 'workingDirectory' | 'arguments' | 'environment'> | undefined {
+	const entry = (Array.isArray(raw) ? raw : []).map(asRecord).find((candidate) => candidate.id === id);
+	return entry
+		? {
+				workingDirectory: asString(entry.workingDirectory),
+				arguments: asStringArray(entry.arguments),
+				environment: asStringRecord(entry.environment),
+			}
+		: undefined;
+}
+
+/** The extra arguments of a preset as settings spell them, with their variables. */
+export function spelledPresetArguments(raw: unknown, id: string): string[] | undefined {
+	const preset = asRecord(raw)[id];
+	return preset === undefined ? undefined : asStringArray(asRecord(preset).extraArguments);
 }
 
 function expandedStrings(value: unknown, context: PathContext): string[] {
