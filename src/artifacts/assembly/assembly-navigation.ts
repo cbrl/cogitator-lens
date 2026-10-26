@@ -2,8 +2,12 @@ import type { RenderedArtifactLine, RenderedTextArtifact } from '../../types/ind
 import type { ParsedAsmResultLine, ParsedAsmResult } from '../../vendor/types/asmresult/asmresult.interfaces.js';
 import type { InstructionType } from '../control-flow-graph/parsers/instruction-sets.js';
 
-/** A label definition line, which the vendored parser keeps even for a demangled name it cannot read. */
-const labelLine = /^(\S.*):\s*$/;
+/**
+ * A label definition line, which the vendored parser keeps even for a demangled name it cannot
+ * read. LLVM follows each function label with a comment naming it, which starts with `#`, `##`,
+ * `//`, or `@` depending on the target, and quotes names such as MSVC-mangled ones.
+ */
+const labelLine = /^("[^"]*"|\S.*?):[ \t]*(?:(?:#|\/\/|@|;).*)?$/;
 
 /**
  * Adds symbol, link, and fold metadata derived from a parsed assembly listing.
@@ -48,7 +52,8 @@ export function withLabelNavigation(
 	const symbols = (
 		isFunction
 			? artifact.lines.flatMap((line, index) => {
-					const name = labelLine.exec(line.text)?.[1];
+					const label = labelLine.exec(line.text)?.[1];
+					const name = label === undefined ? undefined : unquote(label);
 					return name !== undefined && isFunction(name) ? [{ name, line: index }] : [];
 				})
 			: Object.entries(definitions).map(([name, line]) => ({ name, line }))
@@ -73,8 +78,11 @@ export function functionLabelTest(rawAssembly: string): ((label: string) => bool
 	for (const match of rawAssembly.matchAll(/^[ \t]*\.type[ \t]+(.+),[ \t]*[@%]function[ \t]*$/gm)) {
 		declared.add(unquote(match[1].trim()));
 	}
-	for (const match of rawAssembly.matchAll(/^[ \t]*\.def[ \t]+([^;]+?)[ \t]*;.*\.type[ \t]+32[ \t]*;/gm)) {
-		declared.add(unquote(match[1].trim()));
+	// GCC writes `.def name; .scl 2; .type 32; .endef` on one line, and LLVM on four.
+	for (const match of rawAssembly.matchAll(/^[ \t]*\.def[ \t]+([^;\n]+?)[ \t]*;([\s\S]*?)\.endef/gm)) {
+		if (/\.type[ \t]+32\b/.test(match[2])) {
+			declared.add(unquote(match[1].trim()));
+		}
 	}
 	if (declared.size > 0) {
 		return (label) => declared.has(label);

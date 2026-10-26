@@ -89,6 +89,36 @@ test('demangled function labels stay in the outline', () => {
 	);
 });
 
+test('LLVM function labels with a trailing comment are outline symbols on every target', () => {
+	const listings = {
+		elf: '\t.type\tcount(int),@function\ncount(int):                # @count(int)\n.LBB0_1:  # =>This Inner Loop Header\n\tret\n',
+		aarch64: '\t.type\t_Z5counti,@function\n_Z5counti:                 // @_Z5counti\n// %bb.0:\n.LBB0_1:\n\tret\n',
+		machO: '\t.build_version macos, 14, 0\n__Z5counti:                ## @_Z5counti\nLBB0_1:   ## =>This Inner Loop Header\n\tretq\n',
+		msvc: '\t.def\t"?count@@YAHH@Z";\n\t.scl\t2;\n\t.type\t32;\n\t.endef\n"?count@@YAHH@Z":          # @"?count@@YAHH@Z"\n.LBB0_1:\n\tretq\n',
+		mingw: '\t.def\t@feat.00;\n\t.scl\t3;\n\t.type\t0;\n\t.endef\n\t.def\t_Z5counti;\n\t.scl\t2;\n\t.type\t32;\n\t.endef\n_Z5counti:   # @_Z5counti\n.LBB0_1:\n\tretq\n',
+	};
+	const expected = {
+		elf: 'count(int)',
+		aarch64: '_Z5counti',
+		machO: '__Z5counti',
+		msvc: '?count@@YAHH@Z',
+		mingw: '_Z5counti',
+	};
+	for (const [target, text] of Object.entries(listings)) {
+		const artifact = renderAssembly(
+			rawArtifact('assembly', text),
+			{ ...defaultArtifactOptions.display, showLibraryCode: true },
+			renderContext('clang', { file: source }),
+		);
+		assert.deepEqual(
+			artifact.symbols.map((symbol) => symbol.name),
+			[expected[target as keyof typeof expected]],
+			target,
+		);
+		assert.equal(artifact.folds?.length, 1, `${target} folds the function once`);
+	}
+});
+
 test('function labels come from type directives, or from Mach-O symbol names', () => {
 	const elf = functionLabelTest('\t.type\tmain, @function\nmain:\n.L2:\n');
 	assert.equal(elf?.('main'), true);
