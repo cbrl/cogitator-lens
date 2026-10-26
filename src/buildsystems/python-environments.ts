@@ -6,7 +6,7 @@ import {
 	type PythonExtension as PythonExtensionApi,
 	type ResolvedEnvironment,
 } from '@vscode/python-extension';
-import { Disposable, Uri, workspace } from 'vscode';
+import { Disposable, Uri, workspace, type TextDocument } from 'vscode';
 import type { CompilationVariant } from '../types/index.js';
 import * as logger from '../logger.js';
 import { emptySnapshot, VariantProvider, type VariantSnapshot } from './variant-provider.js';
@@ -59,7 +59,7 @@ export class PythonEnvironmentVariantProvider extends VariantProvider {
 				}
 			}),
 			workspace.onDidOpenTextDocument((document) => {
-				if (document.languageId === 'python') {
+				if (isWorkspacePythonDocument(document)) {
 					start();
 				}
 			}),
@@ -184,9 +184,22 @@ function isPythonSource(uri: Uri): boolean {
 	return !isExcludedPythonSource(workspace.asRelativePath(uri, false));
 }
 
+/**
+ * Whether an open document is a Python source of the workspace. Only those become variants, so a
+ * file from elsewhere, or from an environment, does not start the Python extension.
+ */
+export function isWorkspacePythonDocument(document: TextDocument): boolean {
+	return (
+		document.languageId === 'python' &&
+		document.uri.scheme === 'file' &&
+		workspace.getWorkspaceFolder(document.uri) !== undefined &&
+		isPythonSource(document.uri)
+	);
+}
+
 async function hasPythonSources(): Promise<boolean> {
 	return (
-		workspace.textDocuments.some((document) => document.languageId === 'python') ||
+		workspace.textDocuments.some(isWorkspacePythonDocument) ||
 		(await workspace.findFiles(pythonSourcePattern, pythonSourceExclusions, 1)).length > 0
 	);
 }

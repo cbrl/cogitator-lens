@@ -6,7 +6,10 @@ import { pathToFileURL } from 'node:url';
 import * as vscode from 'vscode';
 import type { PythonExtension, ResolvedEnvironment } from '@vscode/python-extension';
 import { CompilationDatabaseVariantProvider } from '../../src/buildsystems/compilation-database.js';
-import { PythonEnvironmentVariantProvider } from '../../src/buildsystems/python-environments.js';
+import {
+	isWorkspacePythonDocument,
+	PythonEnvironmentVariantProvider,
+} from '../../src/buildsystems/python-environments.js';
 import { CompilationConfigDatabase } from '../../src/compilation/compilation-config.js';
 import { ToolchainRegistry } from '../../src/compilation/toolchain-registry.js';
 import {
@@ -298,6 +301,18 @@ async function verifyPythonEnvironmentVariantProvider(workspaceFolder: vscode.Wo
 			await delay(50);
 		}
 		assert.ok(hasSources(), 'New workspace sources should become variants');
+
+		// Only a workspace source starts Python discovery when it is opened.
+		const outside = path.join(os.tmpdir(), `coglens-outside-${process.pid}.py`);
+		await fs.promises.writeFile(outside, 'pass\n');
+		try {
+			const documents = await Promise.all(
+				[sources[0], installed, outside].map((file) => vscode.workspace.openTextDocument(file)),
+			);
+			assert.deepEqual(documents.map(isWorkspacePythonDocument), [true, false, false]);
+		} finally {
+			await fs.promises.rm(outside, { force: true });
+		}
 		assert.equal(
 			snapshot?.variants.some((variant) => variant.source.fsPath === installed),
 			false,
