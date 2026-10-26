@@ -68,6 +68,18 @@ export async function activate(context: ExtensionContext): Promise<void> {
 	const providerSubscriptions = variantProviders.map((provider) =>
 		provider.onSnapshot((snapshot) => compilationService.reconcileProviderSnapshot(snapshot)),
 	);
+	context.subscriptions.push(...variantProviders, ...providerSubscriptions);
+	// Activation does not wait for discovery. Requests that need variants wait for it instead, so it
+	// is tracked before the content provider can be asked for an artifact tab that VS Code restores.
+	compilationService.trackProviderInitialization(
+		Promise.allSettled(variantProviders.map((provider) => provider.initialize())).then((results) => {
+			for (const result of results) {
+				if (result.status === 'rejected') {
+					logger.logChannel.error(`Variant discovery failed to start: ${String(result.reason)}`);
+				}
+			}
+		}),
+	);
 
 	const documentSelector = { scheme: ArtifactDocumentProvider.scheme };
 	const contentProvider = workspace.registerTextDocumentContentProvider(
@@ -119,8 +131,6 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		artifactRegistry,
 		artifactProvider,
 		graphPanels,
-		...variantProviders,
-		...providerSubscriptions,
 		contentProvider,
 		definitionRegistration,
 		linkRegistration,
@@ -131,16 +141,5 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		activeEditorSubscription,
 		openedDocumentSubscription,
 		closedDocumentSubscription,
-	);
-
-	// Activation does not wait for discovery. Requests that need variants wait for it instead.
-	compilationService.trackProviderInitialization(
-		Promise.allSettled(variantProviders.map((provider) => provider.initialize())).then((results) => {
-			for (const result of results) {
-				if (result.status === 'rejected') {
-					logger.logChannel.error(`Variant discovery failed to start: ${String(result.reason)}`);
-				}
-			}
-		}),
 	);
 }

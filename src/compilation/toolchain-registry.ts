@@ -7,6 +7,11 @@ import type { ConfigurationOrigin } from '../buildsystems/variant-provider.js';
 import { structurallyEqual } from '../utils.js';
 import { logChannel } from '../logger.js';
 
+/** The profiles that a reconciliation added, replaced, or removed, by ID. */
+export interface ToolchainRegistryChange {
+	readonly changed: ReadonlySet<string>;
+}
+
 interface RegistryEntry {
 	origin: ConfigurationOrigin;
 	profile: ToolchainProfile;
@@ -15,9 +20,9 @@ interface RegistryEntry {
 
 export class ToolchainRegistry implements Disposable {
 	private readonly entries = new Map<string, RegistryEntry>();
-	private readonly changeEmitter = new EventEmitter<void>();
+	private readonly changeEmitter = new EventEmitter<ToolchainRegistryChange>();
 
-	readonly onDidChange: Event<void> = this.changeEmitter.event;
+	readonly onDidChange: Event<ToolchainRegistryChange> = this.changeEmitter.event;
 
 	getProfiles(origin?: ConfigurationOrigin): readonly ToolchainProfile[] {
 		return [...this.entries.values()]
@@ -54,7 +59,7 @@ export class ToolchainRegistry implements Disposable {
 			id: ToolchainRegistry.profileId(origin, profile.id),
 		}));
 		const next = new Map(canonicalProfiles.map((profile) => [profile.id, profile]));
-		let changed = false;
+		const changed = new Set<string>();
 
 		for (const [id, entry] of this.entries) {
 			if (entry.origin !== origin) {
@@ -63,23 +68,23 @@ export class ToolchainRegistry implements Disposable {
 			const replacement = next.get(id);
 			if (!replacement) {
 				this.entries.delete(id);
-				changed = true;
+				changed.add(id);
 			} else if (!structurallyEqual(entry.profile, replacement)) {
 				this.entries.set(id, this.createEntry(origin, replacement));
-				changed = true;
+				changed.add(id);
 			}
 			next.delete(id);
 		}
 
 		for (const profile of next.values()) {
 			this.entries.set(profile.id, this.createEntry(origin, profile));
-			changed = true;
+			changed.add(profile.id);
 		}
 
-		if (changed) {
-			this.changeEmitter.fire();
+		if (changed.size > 0) {
+			this.changeEmitter.fire({ changed });
 		}
-		return changed;
+		return changed.size > 0;
 	}
 
 	dispose(): void {

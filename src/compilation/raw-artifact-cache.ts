@@ -17,11 +17,20 @@ function inputPath(uri: string): string {
 	}
 }
 
+interface CachedArtifact {
+	readonly artifact: RawArtifact;
+	readonly source: Uri;
+	readonly toolchainProfileId: string;
+	/** The identity of each input when the output was stored, by input URI. */
+	readonly inputKeys: ReadonlyMap<string, string>;
+}
+
 export class RawArtifactCache {
 	/** In order of use, least recent first. */
-	private readonly artifacts = new Map<string, RawArtifact>();
+	private readonly entries = new Map<string, CachedArtifact>();
 	private readonly inputToKeys = new Map<string, Set<string>>();
-	private readonly keyToSource = new Map<string, Uri>();
+	/** A URI of each input, by identity. */
+	private readonly inputUris = new Map<string, string>();
 	private characters = 0;
 
 	constructor(
@@ -30,49 +39,53 @@ export class RawArtifactCache {
 	) {}
 
 	get(key: string): RawArtifact | undefined {
-		const artifact = this.artifacts.get(key);
-		if (artifact) {
-			this.artifacts.delete(key);
-			this.artifacts.set(key, artifact);
+		const entry = this.entries.get(key);
+		if (entry) {
+			this.entries.delete(key);
+			this.entries.set(key, entry);
 		}
-		return artifact;
+		return entry?.artifact;
 	}
 
 	get size(): number {
-		return this.artifacts.size;
+		return this.entries.size;
 	}
 
-	/** Returns the distinct inputs of the cached outputs that `include` accepts. */
-	getInputUris(include: (inputPath: string, source: Uri) => boolean = () => true): readonly string[] {
+	/**
+	 * Returns the distinct inputs of the cached outputs that `include` accepts for the source of
+	 * an output that reads them, by input identity.
+	 */
+	getInputs(include: (inputPath: string, source: Uri) => boolean = () => true): ReadonlyMap<string, string> {
 		const inputs = new Map<string, string>();
-		for (const [key, artifact] of this.artifacts) {
-			const source = this.keyToSource.get(key);
-			for (const input of artifact.inputs) {
-				const inputKey = artifactInputComparisonKey(input.uri);
-				if (!inputs.has(inputKey) && source && include(inputPath(input.uri), source)) {
-					inputs.set(inputKey, input.uri);
-				}
+		for (const [inputKey, keys] of this.inputToKeys) {
+			const uri = this.inputUris.get(inputKey)!;
+			const path = inputPath(uri);
+			if ([...keys].some((key) => include(path, this.entries.get(key)!.source))) {
+				inputs.set(inputKey, uri);
 			}
 		}
-		return [...inputs.values()];
+		return inputs;
 	}
 
 	/** Stores an output. The newest output stays even when it alone exceeds the budget. */
-	set(key: string, artifact: RawArtifact, source: Uri): void {
+	set(key: string, artifact: RawArtifact, source: Uri, toolchainProfileId: string): void {
 		this.delete(key);
-		this.artifacts.set(key, artifact);
+		// Resolving an input's identity reads the filesystem, so it happens once for each output.
+		const inputKeys = new Map(artifact.inputs.map((input) => [input.uri, artifactInputComparisonKey(input.uri)]));
+		this.entries.set(key, { artifact, source, toolchainProfileId, inputKeys });
 		this.characters += artifact.text.length;
-		this.keyToSource.set(key, source);
-		for (const input of artifact.inputs) {
-			const inputKey = artifactInputComparisonKey(input.uri);
+		for (const [uri, inputKey] of inputKeys) {
 			const keys = this.inputToKeys.get(inputKey) ?? new Set<string>();
 			keys.add(key);
 			this.inputToKeys.set(inputKey, keys);
+			if (!this.inputUris.has(inputKey)) {
+				this.inputUris.set(inputKey, uri);
+			}
 		}
-		for (const oldest of this.artifacts.keys()) {
+		for (const oldest of this.entries.keys()) {
 			if (
 				oldest === key ||
-				(this.characters <= this.maximumCharacters && this.artifacts.size <= this.maximumEntries)
+				(this.characters <= this.maximumCharacters && this.entries.size <= this.maximumEntries)
 			) {
 				break;
 			}
@@ -81,28 +94,40 @@ export class RawArtifactCache {
 	}
 
 	delete(key: string): void {
-		const artifact = this.artifacts.get(key);
-		if (!artifact) {
+		const entry = this.entries.get(key);
+		if (!entry) {
 			return;
 		}
-		this.artifacts.delete(key);
-		this.characters -= artifact.text.length;
-		this.keyToSource.delete(key);
-		for (const input of artifact.inputs) {
-			const inputKey = artifactInputComparisonKey(input.uri);
+		this.entries.delete(key);
+		this.characters -= entry.artifact.text.length;
+		for (const inputKey of entry.inputKeys.values()) {
 			const keys = this.inputToKeys.get(inputKey);
 			keys?.delete(key);
 			if (keys?.size === 0) {
 				this.inputToKeys.delete(inputKey);
+				this.inputUris.delete(inputKey);
 			}
 		}
 	}
 
 	/** Evicts by the identity captured when a watcher was created, including after deletion. */
 	evictInputKey(inputKey: string): readonly Uri[] {
+		return this.evict([...(this.inputToKeys.get(inputKey) ?? [])]);
+	}
+
+	/** Evicts the outputs of the given toolchain profiles and returns their sources. */
+	evictToolchains(toolchainProfileIds: ReadonlySet<string>): readonly Uri[] {
+		return this.evict(
+			[...this.entries].flatMap(([key, entry]) =>
+				toolchainProfileIds.has(entry.toolchainProfileId) ? [key] : [],
+			),
+		);
+	}
+
+	private evict(keys: readonly string[]): readonly Uri[] {
 		const affectedSources = new Map<string, Uri>();
-		for (const key of [...(this.inputToKeys.get(inputKey) ?? [])]) {
-			const source = this.keyToSource.get(key);
+		for (const key of keys) {
+			const source = this.entries.get(key)?.source;
 			if (source) {
 				affectedSources.set(localFileUriComparisonKey(source), source);
 			}
@@ -113,8 +138,8 @@ export class RawArtifactCache {
 
 	clear(): void {
 		this.characters = 0;
-		this.artifacts.clear();
+		this.entries.clear();
 		this.inputToKeys.clear();
-		this.keyToSource.clear();
+		this.inputUris.clear();
 	}
 }

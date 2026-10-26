@@ -29,6 +29,7 @@ import { buildCompilationInfoTree, CompilationInfoTreeProvider } from '../../src
 import { buildToolchainTreeNode, type ToolchainTreeNode } from '../../src/tree/toolchain-tree.js';
 import { getArtifactUri, parseArtifactUri } from '../../src/artifact-document/artifact-uri.js';
 import { ArtifactGenerator } from '../../src/artifact-document/artifact-generator.js';
+import { ArtifactDocumentRegistry } from '../../src/artifact-document/artifact-document-registry.js';
 import { buildArtifactOptionsTree } from '../../src/tree/global-options-tree.js';
 import { buildArtifactPresetTreeNode } from '../../src/tree/artifact-presets-tree.js';
 import { ArtifactNavigationProvider } from '../../src/artifact-document/artifact-navigation-provider.js';
@@ -93,6 +94,8 @@ export async function run(): Promise<void> {
 	await verifyArtifactGeneratorStates(workspaceFolder);
 	await verifyArtifactGeneratorFollowsVariant(workspaceFolder);
 	await verifyFallbackVariants(workspaceFolder);
+	await verifyFallbackLanguagesAndBareNames();
+	await verifyToolchainChangeRefreshesItsDocuments();
 	await verifyNativeStackProduction(workspaceFolder);
 	await verifyArtifactDetailsTree(workspaceFolder);
 	await verifyCompilationDatabaseVariantProvider(workspaceFolder);
@@ -704,6 +707,99 @@ async function verifyFallbackVariants(workspaceFolder: vscode.WorkspaceFolder): 
 			'An artifact opened with a fallback keeps its variant',
 		);
 	} finally {
+		service.dispose();
+		configurationChange.dispose();
+		await fs.promises.rm(temporaryDirectory, { recursive: true, force: true });
+	}
+}
+
+async function verifyFallbackLanguagesAndBareNames(): Promise<void> {
+	const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'coglens-fallback-language-'));
+	const cppSource = vscode.Uri.file(path.join(temporaryDirectory, 'main.cpp'));
+	const pythonSource = vscode.Uri.file(path.join(temporaryDirectory, 'script.py'));
+	await fs.promises.writeFile(cppSource.fsPath, 'int main() { return 0; }\n');
+	await fs.promises.writeFile(pythonSource.fsPath, 'print(1)\n');
+	const configurationChange = new vscode.EventEmitter<void>();
+	const service = new CompilationService(
+		testConfiguration(configurationChange, {
+			// A bare name is found on PATH, as the detected gcc is.
+			getToolchains: () => [
+				{ ...toolchainProfile('Bare GCC', '-O2'), displayName: 'Bare GCC', executable: 'gcc' },
+			],
+			getDefaultCompilationSettings: () => ({ toolchain: 'Bare GCC', args: [], env: {} }),
+		}),
+	);
+	try {
+		service.reconcileProviderSnapshot({
+			provider: 'path',
+			toolchainProfiles: [
+				{
+					...toolchainProfile('gcc', '-O0'),
+					displayName: 'gcc 13',
+					executable: path.join(temporaryDirectory, 'gcc'),
+				},
+				{ ...toolchainProfile('python3', '-O0'), kind: 'python', displayName: 'python3 3.12' },
+			],
+			variants: [],
+		});
+		await vscode.workspace.openTextDocument(cppSource);
+		await vscode.workspace.openTextDocument(pythonSource);
+
+		assert.deepEqual(
+			service.getVariants(cppSource).map((variant) => variant.displayLabel),
+			['Default (Bare GCC)'],
+			'The detected gcc that a bare gcc in settings names is left out',
+		);
+		assert.deepEqual(
+			service.getVariants(pythonSource).map((variant) => variant.displayLabel),
+			['python3 3.12 (PATH)'],
+			'The default invocation does not compile a language its toolchain does not',
+		);
+		assert.equal(service.getSelectedVariant(pythonSource)?.toolchainProfileId, 'path:python3');
+	} finally {
+		service.dispose();
+		configurationChange.dispose();
+		await fs.promises.rm(temporaryDirectory, { recursive: true, force: true });
+	}
+}
+
+async function verifyToolchainChangeRefreshesItsDocuments(): Promise<void> {
+	const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'coglens-toolchain-change-'));
+	const source = vscode.Uri.file(path.join(temporaryDirectory, 'main.cpp'));
+	await fs.promises.writeFile(source.fsPath, 'int main() { return 0; }\n');
+	const configurationChange = new vscode.EventEmitter<void>();
+	const configuration = testConfiguration(configurationChange);
+	const service = new CompilationService(configuration);
+	const registry = new ArtifactDocumentRegistry(service, configuration);
+	const gcc = { ...toolchainProfile('gcc', '-O0'), displayName: 'gcc 13' };
+	const clang = { ...toolchainProfile('clang', '-O0'), kind: 'clang' as const, displayName: 'clang 18' };
+	const refreshes = new Map<string, number>();
+	try {
+		service.reconcileProviderSnapshot({ provider: 'path', toolchainProfiles: [gcc, clang], variants: [] });
+		await vscode.workspace.openTextDocument(source);
+		const sourceKey = sourceUriComparisonKey(source);
+		for (const profile of ['gcc', 'clang']) {
+			const uri = getArtifactUri(source, { id: `toolchain:path:${profile}|${sourceKey}` }, 'assembly', 'default');
+			registry.open(uri, () => ({
+				refresh: () => refreshes.set(profile, (refreshes.get(profile) ?? 0) + 1),
+				onStatus: () => undefined,
+				dispose: () => undefined,
+			}));
+		}
+
+		service.reconcileProviderSnapshot({
+			provider: 'path',
+			toolchainProfiles: [{ ...gcc, defaultArguments: ['-O2'] }, clang],
+			variants: [],
+		});
+		await delay(150);
+		assert.deepEqual(
+			Object.fromEntries(refreshes),
+			{ gcc: 1 },
+			'Only the artifact of the changed toolchain refreshes',
+		);
+	} finally {
+		registry.dispose();
 		service.dispose();
 		configurationChange.dispose();
 		await fs.promises.rm(temporaryDirectory, { recursive: true, force: true });

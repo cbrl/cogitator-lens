@@ -31,6 +31,8 @@ export interface ArtifactView {
 type ViewClass<V extends ArtifactView> = abstract new (...args: never[]) => V;
 
 interface RegisteredArtifactDocument extends ArtifactRegistryDocument {
+	/** The variant the identity describes, or nothing when it is not available. */
+	readonly variant: CompilationVariant | undefined;
 	view?: ArtifactView;
 	subscriptions: Disposable;
 	pendingRefresh?: ReturnType<typeof setTimeout>;
@@ -72,6 +74,11 @@ export class ArtifactDocumentRegistry implements Disposable {
 	private readonly documents = new Map<string, RegisteredArtifactDocument>();
 	private readonly stateEmitter = new EventEmitter<ArtifactDocumentSnapshot>();
 	private readonly subscriptions: Disposable;
+	/**
+	 * Advanced by every change that can alter a variant or a toolchain. Resolving a variant
+	 * rebuilds the fallback variants, so each document resolves its own once per change.
+	 */
+	private identityGeneration = 0;
 
 	readonly onDidChangeArtifactState: Event<ArtifactDocumentSnapshot> = this.stateEmitter.event;
 
@@ -81,6 +88,7 @@ export class ArtifactDocumentRegistry implements Disposable {
 	) {
 		this.subscriptions = Disposable.from(
 			compilationService.onVariantsChanged((sources) => {
+				this.identityGeneration++;
 				const changed = new Set(sources.map(sourceUriComparisonKey));
 				for (const document of this.documents.values()) {
 					if (changed.has(sourceUriComparisonKey(document.parsed.source))) {
@@ -97,12 +105,23 @@ export class ArtifactDocumentRegistry implements Disposable {
 			}),
 			// Other settings reach open artifacts through variant, toolchain, and option events.
 			configuration.onDidChange((change) => {
+				this.identityGeneration++;
 				if (change.affects('defaultInvocation') || change.affects('artifactPresets')) {
 					this.refreshAll();
 				}
 			}),
-			// Fallback variants are not indexed by source, so a toolchain change refreshes everything.
-			compilationService.toolchainRegistry.onDidChange(() => this.refreshAll()),
+			workspace.onDidChangeWorkspaceFolders(() => this.identityGeneration++),
+			// A document is refreshed when its toolchain changed, or when its variant may now resolve
+			// differently: one not found yet, or the default invocation, which names its toolchain.
+			compilationService.toolchainRegistry.onDidChange(({ changed }) => {
+				this.identityGeneration++;
+				for (const document of this.documents.values()) {
+					const variant = document.variant;
+					if (!variant || isDefaultInvocation(variant) || changed.has(variant.toolchainProfileId)) {
+						this.requestRefresh(document.uri);
+					}
+				}
+			}),
 			this.stateEmitter,
 		);
 	}
@@ -145,16 +164,31 @@ export class ArtifactDocumentRegistry implements Disposable {
 		const watcher = workspace.createFileSystemWatcher(
 			new RelativePattern(Uri.file(path.dirname(parsed.source.fsPath)), path.basename(parsed.source.fsPath)),
 		);
-		const compilationService = this.compilationService;
+		let resolved:
+			| { generation: number; variant: CompilationVariant | undefined; identity: ArtifactDocumentIdentity }
+			| undefined;
+		const resolve = (): NonNullable<typeof resolved> => {
+			if (resolved?.generation !== this.identityGeneration) {
+				const variant = this.compilationService.findVariant(parsed.source, parsed.variantId);
+				const profile = variant
+					? this.compilationService.toolchainRegistry.getToolchainById(variant.toolchainProfileId)?.profile
+					: undefined;
+				resolved = {
+					generation: this.identityGeneration,
+					variant,
+					identity: buildArtifactIdentity(uri, parsed, variant, profile),
+				};
+			}
+			return resolved;
+		};
 		const document: RegisteredArtifactDocument = {
 			uri,
 			parsed,
 			get identity() {
-				const variant = compilationService.findVariant(parsed.source, parsed.variantId);
-				const profile = variant
-					? compilationService.toolchainRegistry.getToolchainById(variant.toolchainProfileId)?.profile
-					: undefined;
-				return buildArtifactIdentity(uri, parsed, variant, profile);
+				return resolve().identity;
+			},
+			get variant() {
+				return resolve().variant;
 			},
 			handler,
 			get snapshot() {
@@ -219,4 +253,9 @@ export class ArtifactDocumentRegistry implements Disposable {
 			this.unregister(document.uri);
 		}
 	}
+}
+
+/** Whether a variant is the configured default invocation, which finds its toolchain by display name. */
+function isDefaultInvocation(variant: CompilationVariant): boolean {
+	return variant.provider === 'default' && variant.id.startsWith('default:');
 }

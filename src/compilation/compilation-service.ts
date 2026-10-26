@@ -85,6 +85,7 @@ export class CompilationService {
 	private readonly rawArtifactCache = new RawArtifactCache();
 	private readonly inputWatchers = new Map<string, Disposable>();
 	private readonly currentArtifactOptions = new Map<ArtifactKind, ArtifactOptions>();
+	private readonly executableIdentities = new Map<string, string>();
 	/** Options set here whose write to settings has not finished, by kind and ID. */
 	private readonly unsavedArtifactOptions = new Map<string, UnsavedArtifactOption>();
 	private providersReady: Promise<void> = Promise.resolve();
@@ -112,10 +113,16 @@ export class CompilationService {
 			workspace.onDidChangeWorkspaceFolders(() => this.reloadUserConfiguration()),
 			this.variants.onDidChange((sources) => this.changeEmitter.fire(sources)),
 			this.variants.onDidSelect((source) => this.variantSelectionEmitter.fire(source)),
-			this.toolchainRegistry.onDidChange(() => {
-				this.rawArtifactCache.clear();
+			// Outputs are keyed by profile ID, so a changed profile's outputs go; other outputs stay.
+			this.toolchainRegistry.onDidChange(({ changed }) => {
+				this.executableIdentities.clear();
+				this.rawArtifactCache.evictToolchains(changed);
 				this.syncInputWatchers();
-				this.changeEmitter.fire(this.variantsSources());
+				this.changeEmitter.fire(
+					this.variantsSources().filter((source) =>
+						this.variants.getVariants(source).some((variant) => changed.has(variant.toolchainProfileId)),
+					),
+				);
 			}),
 		);
 	}
@@ -316,7 +323,7 @@ export class CompilationService {
 				cancellationToken,
 			);
 			const raw: RawArtifact = { ...produced, kind: artifactKind };
-			this.rawArtifactCache.set(key, raw, variant.source);
+			this.rawArtifactCache.set(key, raw, variant.source, variant.toolchainProfileId);
 			this.syncInputWatchers();
 			return {
 				status: 'available',
@@ -423,12 +430,24 @@ export class CompilationService {
 		file: Uri,
 		{ forLookup = false }: { readonly forLookup?: boolean } = {},
 	): CompilationVariant[] {
-		const defaultVariant = this.createDefaultVariant(file);
-		const profiles = forLookup ? this.fallbackToolchains() : this.languageToolchains(file, defaultVariant);
+		const sourceKey = sourceUriComparisonKey(file);
+		const languageId = forLookup ? undefined : openDocumentLanguage(file);
+		const configuredDefault = this.createDefaultVariant(file, sourceKey);
+		// The default invocation is offered first only for a language its toolchain compiles.
+		const defaultVariant =
+			configuredDefault && languageId && !this.compilesLanguage(configuredDefault.toolchainProfileId, languageId)
+				? undefined
+				: configuredDefault;
+		const profiles = forLookup ? this.fallbackToolchains() : this.languageToolchains(languageId, defaultVariant);
 		return [
 			...(defaultVariant ? [defaultVariant] : []),
-			...profiles.map((profile) => this.createToolchainVariant(file, profile)),
+			...profiles.map((profile) => this.createToolchainVariant(file, profile, sourceKey)),
 		];
+	}
+
+	private compilesLanguage(toolchainProfileId: string, languageId: string): boolean {
+		const profile = this.toolchainRegistry.getToolchainById(toolchainProfileId)?.profile;
+		return profile !== undefined && getToolchainDefinition(profile.kind).languageIdentifiers.includes(languageId);
 	}
 
 	private fallbackToolchains(): ToolchainProfile[] {
@@ -439,21 +458,42 @@ export class CompilationService {
 	 * The workspace and PATH toolchains for the language of the open document, in that order. The
 	 * default invocation's toolchain and a PATH toolchain that duplicates a workspace one are left out.
 	 */
-	private languageToolchains(file: Uri, defaultVariant: CompilationVariant | undefined): ToolchainProfile[] {
-		const languageId = openDocumentLanguage(file);
+	private languageToolchains(
+		languageId: string | undefined,
+		defaultVariant: CompilationVariant | undefined,
+	): ToolchainProfile[] {
 		if (!languageId) {
 			return [];
 		}
 		const userExecutables = new Set(
-			this.toolchainRegistry.getProfiles('user').map((profile) => localFileComparisonKey(profile.executable)),
+			this.toolchainRegistry.getProfiles('user').map((profile) => this.executableIdentity(profile.executable)),
 		);
 		return this.fallbackToolchains().filter(
 			(profile) =>
 				profile.id !== defaultVariant?.toolchainProfileId &&
 				getToolchainDefinition(profile.kind).languageIdentifiers.includes(languageId) &&
 				(this.toolchainRegistry.getOrigin(profile.id) === 'user' ||
-					!userExecutables.has(localFileComparisonKey(profile.executable))),
+					!(
+						userExecutables.has(this.executableIdentity(profile.executable)) ||
+						userExecutables.has(executableName(profile.executable))
+					)),
 		);
+	}
+
+	/**
+	 * Identifies a toolchain executable: by its physical path, or by its name when it is a bare
+	 * name that is found on PATH. Paths are resolved once until the toolchains change.
+	 */
+	private executableIdentity(executable: string): string {
+		if (!/[\\/]/.test(executable)) {
+			return executableName(executable);
+		}
+		let identity = this.executableIdentities.get(executable);
+		if (identity === undefined) {
+			identity = localFileComparisonKey(executable);
+			this.executableIdentities.set(executable, identity);
+		}
+		return identity;
 	}
 
 	private selectFallbackVariant(file: Uri, variantId: string): boolean {
@@ -467,10 +507,10 @@ export class CompilationService {
 		return true;
 	}
 
-	private createToolchainVariant(file: Uri, profile: ToolchainProfile): CompilationVariant {
+	private createToolchainVariant(file: Uri, profile: ToolchainProfile, sourceKey: string): CompilationVariant {
 		const detected = this.toolchainRegistry.getOrigin(profile.id) === 'path';
 		return {
-			id: `toolchain:${profile.id}|${sourceUriComparisonKey(file)}`,
+			id: `toolchain:${profile.id}|${sourceKey}`,
 			provider: 'default',
 			source: file,
 			toolchainProfileId: profile.id,
@@ -481,7 +521,7 @@ export class CompilationService {
 		};
 	}
 
-	private createDefaultVariant(file: Uri): CompilationVariant | undefined {
+	private createDefaultVariant(file: Uri, sourceKey: string): CompilationVariant | undefined {
 		const info = this.configuration.getDefaultCompilationSettings(file);
 		if (!info) {
 			return undefined;
@@ -491,7 +531,7 @@ export class CompilationService {
 			return undefined;
 		}
 		return {
-			id: `default:${sourceUriComparisonKey(file)}`,
+			id: `default:${sourceKey}`,
 			provider: 'default',
 			source: file,
 			toolchainProfileId: backend.profile.id,
@@ -532,11 +572,7 @@ export class CompilationService {
 	}
 
 	private syncInputWatchers(): void {
-		const inputs = new Map(
-			this.rawArtifactCache
-				.getInputUris((inputPath, source) => this.isWatchedInput(inputPath, source))
-				.map((uri) => [artifactInputComparisonKey(uri), uri] as const),
-		);
+		const inputs = this.rawArtifactCache.getInputs((inputPath, source) => this.isWatchedInput(inputPath, source));
 		for (const [key, watcher] of this.inputWatchers) {
 			if (!inputs.has(key)) {
 				watcher.dispose();
@@ -656,6 +692,12 @@ interface UnsavedArtifactOption {
 	readonly kind: ArtifactKind;
 	readonly id: ArtifactOptionId;
 	readonly value: boolean;
+}
+
+/** The file name of an executable without its Windows extension, as a bare name on PATH spells it. */
+function executableName(executable: string): string {
+	const name = path.basename(executable);
+	return process.platform === 'win32' ? name.toLowerCase().replace(/\.exe$/, '') : name;
 }
 
 /** Options with one option set, in whichever group it belongs to. */

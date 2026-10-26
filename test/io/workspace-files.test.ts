@@ -61,13 +61,13 @@ test('the raw artifact cache keeps its dependency index correct across replaceme
 	const secondSource = fakeUri(path.resolve('second.cpp'));
 
 	// Replacing an entry must drop the inputs only the replaced entry depended on.
-	cache.set('first', cachedArtifact(staleInput), firstSource);
-	cache.set('first', cachedArtifact(liveInput), firstSource);
+	cache.set('first', cachedArtifact(staleInput), firstSource, 'toolchain');
+	cache.set('first', cachedArtifact(liveInput), firstSource, 'toolchain');
 	assert.deepEqual(cache.evictInputKey(artifactInputComparisonKey(pathToFileURL(staleInput).href)), []);
 	assert.ok(cache.get('first'));
 
-	cache.set('second', cachedArtifact(liveInput), secondSource);
-	cache.set('same-source', cachedArtifact(liveInput), firstSource);
+	cache.set('second', cachedArtifact(liveInput), secondSource, 'toolchain');
+	cache.set('same-source', cachedArtifact(liveInput), firstSource, 'toolchain');
 	assert.deepEqual(
 		cache.evictInputKey(artifactInputComparisonKey(pathToFileURL(liveInput).href)).map((uri) => uri.toString()),
 		[firstSource.toString(), secondSource.toString()],
@@ -80,35 +80,35 @@ test('the raw artifact cache keeps its dependency index correct across replaceme
 test('clearing the raw artifact cache also clears its invalidation index', () => {
 	const cache = new RawArtifactCache();
 	const input = path.resolve('input.h');
-	cache.set('artifact', cachedArtifact(input), fakeUri(path.resolve('source.cpp')));
+	cache.set('artifact', cachedArtifact(input), fakeUri(path.resolve('source.cpp')), 'toolchain');
 
 	cache.clear();
 
 	assert.equal(cache.get('artifact'), undefined);
 	assert.deepEqual(cache.evictInputKey(artifactInputComparisonKey(pathToFileURL(input).href)), []);
-	assert.deepEqual(cache.getInputUris(), []);
+	assert.deepEqual([...cache.getInputs().values()], []);
 });
 
 test('the raw artifact cache reports each live input once', () => {
 	const cache = new RawArtifactCache();
 	const sharedInput = path.resolve('shared-input.h');
 	const otherInput = path.resolve('other-input.h');
-	cache.set('first', cachedArtifact(sharedInput), fakeUri(path.resolve('first.cpp')));
-	cache.set('second', cachedArtifact(sharedInput), fakeUri(path.resolve('second.cpp')));
-	cache.set('other', cachedArtifact(otherInput), fakeUri(path.resolve('other.cpp')));
+	cache.set('first', cachedArtifact(sharedInput), fakeUri(path.resolve('first.cpp')), 'toolchain');
+	cache.set('second', cachedArtifact(sharedInput), fakeUri(path.resolve('second.cpp')), 'toolchain');
+	cache.set('other', cachedArtifact(otherInput), fakeUri(path.resolve('other.cpp')), 'toolchain');
 
 	assert.deepEqual(
-		new Set(cache.getInputUris()),
+		new Set([...cache.getInputs().values()]),
 		new Set([pathToFileURL(sharedInput).href, pathToFileURL(otherInput).href]),
 	);
 
 	cache.delete('first');
 	assert.deepEqual(
-		new Set(cache.getInputUris()),
+		new Set([...cache.getInputs().values()]),
 		new Set([pathToFileURL(sharedInput).href, pathToFileURL(otherInput).href]),
 	);
 	cache.delete('second');
-	assert.deepEqual(cache.getInputUris(), [pathToFileURL(otherInput).href]);
+	assert.deepEqual([...cache.getInputs().values()], [pathToFileURL(otherInput).href]);
 });
 
 test(
@@ -126,7 +126,7 @@ test(
 			fs.writeFileSync(input, '#pragma once\n');
 
 			const cache = new RawArtifactCache();
-			cache.set('artifact', cachedArtifact(input), fakeUri(path.join(alias, 'source.cpp')));
+			cache.set('artifact', cachedArtifact(input), fakeUri(path.join(alias, 'source.cpp')), 'toolchain');
 			const watcherKey = artifactInputComparisonKey(pathToFileURL(aliasedInput).href);
 			fs.rmSync(input);
 
@@ -141,10 +141,10 @@ test(
 test('the raw artifact cache evicts the least recently used output over its budget', () => {
 	const source = fakeUri(path.resolve('source.cpp'));
 	const byCharacters = new RawArtifactCache(10, 100);
-	byCharacters.set('a', cachedArtifact(path.resolve('a.h'), 'aaaa'), source);
-	byCharacters.set('b', cachedArtifact(path.resolve('b.h'), 'bbbb'), source);
+	byCharacters.set('a', cachedArtifact(path.resolve('a.h'), 'aaaa'), source, 'toolchain');
+	byCharacters.set('b', cachedArtifact(path.resolve('b.h'), 'bbbb'), source, 'toolchain');
 	assert.ok(byCharacters.get('a'), 'Reading an output makes it the most recent');
-	byCharacters.set('c', cachedArtifact(path.resolve('c.h'), 'cccc'), source);
+	byCharacters.set('c', cachedArtifact(path.resolve('c.h'), 'cccc'), source, 'toolchain');
 	assert.deepEqual(
 		['a', 'b', 'c'].map((key) => Boolean(byCharacters.get(key))),
 		[true, false, true],
@@ -156,23 +156,48 @@ test('the raw artifact cache evicts the least recently used output over its budg
 
 	const byEntries = new RawArtifactCache(1_000, 2);
 	for (const key of ['a', 'b', 'c']) {
-		byEntries.set(key, cachedArtifact(path.resolve(`${key}.h`)), source);
+		byEntries.set(key, cachedArtifact(path.resolve(`${key}.h`)), source, 'toolchain');
 	}
 	assert.equal(byEntries.size, 2);
 	assert.equal(byEntries.get('a'), undefined);
 
 	const oversized = new RawArtifactCache(2, 10);
-	oversized.set('large', cachedArtifact(path.resolve('large.h'), 'too large'), source);
+	oversized.set('large', cachedArtifact(path.resolve('large.h'), 'too large'), source, 'toolchain');
 	assert.ok(oversized.get('large'), 'The newest output stays even when it alone exceeds the budget');
+});
+
+test('a toolchain change evicts only the outputs of that toolchain', () => {
+	const cache = new RawArtifactCache();
+	const first = fakeUri(path.resolve('first.cpp'));
+	const second = fakeUri(path.resolve('second.cpp'));
+	cache.set('gcc', cachedArtifact(path.resolve('a.h')), first, 'path:gcc');
+	cache.set('clang', cachedArtifact(path.resolve('b.h')), second, 'path:clang');
+	assert.deepEqual(
+		cache.evictToolchains(new Set(['path:gcc'])).map((uri) => uri.fsPath),
+		[first.fsPath],
+	);
+	assert.equal(cache.get('gcc'), undefined);
+	assert.ok(cache.get('clang'));
+	assert.deepEqual([...cache.getInputs().values()], [pathToFileURL(path.resolve('b.h')).href]);
 });
 
 test('the raw artifact cache reports only the inputs a watcher filter accepts', () => {
 	const cache = new RawArtifactCache();
 	const project = path.resolve('project');
-	cache.set('first', cachedArtifact(path.join(project, 'header.h')), fakeUri(path.join(project, 'main.cpp')));
-	cache.set('second', cachedArtifact(path.resolve('/usr/include/stdio.h')), fakeUri(path.join(project, 'main.cpp')));
+	cache.set(
+		'first',
+		cachedArtifact(path.join(project, 'header.h')),
+		fakeUri(path.join(project, 'main.cpp')),
+		'toolchain',
+	);
+	cache.set(
+		'second',
+		cachedArtifact(path.resolve('/usr/include/stdio.h')),
+		fakeUri(path.join(project, 'main.cpp')),
+		'toolchain',
+	);
 	assert.deepEqual(
-		cache.getInputUris((input) => input.startsWith(project)),
+		[...cache.getInputs((input) => input.startsWith(project)).values()],
 		[pathToFileURL(path.join(project, 'header.h')).href],
 	);
 });
