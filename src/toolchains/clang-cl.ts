@@ -14,6 +14,7 @@ import {
 	assemblyControlFlowGraphOutput,
 	binaryDisassembly,
 	controlFlowGraphOutput,
+	ownedBeforeEndOfOptions,
 	toolDiscoverer,
 	withoutOwnedArguments,
 	type OwnedArguments,
@@ -38,10 +39,25 @@ const clangOptionArtifactFlags =
 /** Clang's colour switches, which clang-cl accepts directly and in their /clang: form. */
 const clangClColorFlags = /^(?:\/clang:)?-f(?:no-)?(?:diagnostics-color(?:=.*)?|color-diagnostics|ansi-escape-codes)$/;
 
-/** cl.exe's switches, the /clang: forms of the GNU switches that clang-cl artifacts use, and the AST dump. */
+/**
+ * The output and mode switches that clang-cl takes from the Clang driver: `-o` and `/o` with a
+ * separate or joined name, and `-fsyntax-only`. The joined form leaves out `/openmp` and
+ * `/options`, which also begin with an o.
+ */
+const clangClOutputFlags = new Set(['-o', '/o']);
+const clangClOutputAssignments = /^[-/]o(?!penmp|ptions).+$/;
+const clangClModeFlags = new Set(['-fsyntax-only']);
+
+/** cl.exe's switches, the Clang driver's output switches, the /clang: forms that artifacts use, and the AST dump. */
 const clangClOwnedArguments: OwnedArguments = {
-	withValue: [...msvcOwnedArguments.withValue, clangOptionsWithValues, clangAstDumpPair],
-	standalone: [...msvcOwnedArguments.standalone, clangOptionArtifactFlags, clangClColorFlags],
+	withValue: [...msvcOwnedArguments.withValue, clangClOutputFlags, clangOptionsWithValues, clangAstDumpPair],
+	standalone: [
+		...msvcOwnedArguments.standalone,
+		clangClOutputAssignments,
+		clangClModeFlags,
+		clangOptionArtifactFlags,
+		clangClColorFlags,
+	],
 };
 
 export function stripClangClManagedArguments(
@@ -61,6 +77,7 @@ export const clangCl: ToolchainDefinition = {
 	defineFlag: '/D',
 	objectFilename: 'output.obj',
 	outputArguments: clangClOutputArguments,
+	assembleArguments: ownedBeforeEndOfOptions,
 	stripOwnedArguments: stripClangClManagedArguments,
 	dependencyCollection: msvcDependencyCollection,
 	createParser: defaultAsmParser,

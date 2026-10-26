@@ -205,6 +205,17 @@ test(
 				),
 				['-I', path.join(root, 'link'), '-o', 'main.o'],
 			);
+
+			// A link with another name, such as a generated alias of the source, names it too.
+			fs.symlinkSync(path.join(root, 'real', 'main.cpp'), path.join(root, 'main_link.cpp'));
+			assert.deepEqual(
+				removeSourceArgument(
+					['-include', path.join(root, 'real', 'config.h'), path.join(root, 'main_link.cpp'), '-c'],
+					path.join(root, 'real', 'main.cpp'),
+					root,
+				),
+				['-include', path.join(root, 'real', 'config.h'), '-c'],
+			);
 		} finally {
 			fs.rmSync(root, { recursive: true, force: true });
 		}

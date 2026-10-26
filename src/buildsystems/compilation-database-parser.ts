@@ -162,9 +162,10 @@ export class PathIdentities {
 }
 
 /**
- * Removes the arguments that name the source file. Option-like arguments cannot name it, and a
- * file with another name is not resolved through symlinks, so most arguments cost no file
- * system access.
+ * Removes the arguments that name the source file. Option-like arguments cannot name it, and only
+ * an argument with the source's name or extension is resolved through symlinks, as a source
+ * reached through a link with another name would be, so include directories, headers, and
+ * outputs cost no file system access.
  */
 export function removeSourceArgument(
 	args: readonly string[],
@@ -174,6 +175,7 @@ export function removeSourceArgument(
 ): string[] {
 	const sourcePath = absoluteLocalPath(sourceFile);
 	const sourceName = comparableName(path.basename(sourcePath), platform);
+	const sourceExtension = comparableName(path.extname(sourcePath), platform);
 	return args.filter((argument) => {
 		if (!argument || argument.startsWith('-') || (platform === 'win32' && argument.startsWith('/'))) {
 			return true;
@@ -182,10 +184,10 @@ export function removeSourceArgument(
 		if (comparableName(candidate, platform) === comparableName(sourcePath, platform)) {
 			return false;
 		}
-		return (
-			comparableName(path.basename(candidate), platform) !== sourceName ||
-			identities.key(candidate) !== identities.key(sourcePath)
-		);
+		const sameName = comparableName(path.basename(candidate), platform) === sourceName;
+		const sameExtension =
+			sourceExtension !== '' && comparableName(path.extname(candidate), platform) === sourceExtension;
+		return !(sameName || sameExtension) || identities.key(candidate) !== identities.key(sourcePath);
 	});
 }
 

@@ -117,6 +117,21 @@ export const subcommandFirst: NonNullable<ToolchainDefinition['assembleArguments
 	sourcePath,
 ];
 
+/**
+ * Places the owned arguments before a provider's `--`, after which a compiler reads every
+ * argument as an input. CMake writes one before the source for clang-cl.
+ */
+export const ownedBeforeEndOfOptions: NonNullable<ToolchainDefinition['assembleArguments']> = (
+	owned,
+	provider,
+	sourcePath,
+) => {
+	const end = provider.indexOf('--');
+	return end < 0
+		? [...provider, ...owned, sourcePath]
+		: [...provider.slice(0, end), ...owned, ...provider.slice(end), sourcePath];
+};
+
 /** Matches an argument by exact name, by pattern, or by its position in the argument list. */
 export type ArgumentMatcher =
 	ReadonlySet<string> | RegExp | ((argument: string, index: number, args: readonly string[]) => boolean);

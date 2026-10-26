@@ -312,3 +312,24 @@ test('CMake include paths and definitions are flattened with each toolchain own 
 		);
 	}
 });
+
+test('clang-cl owns the driver output switches and keeps its own before a provider end of options', () => {
+	const clangCl = getToolchainDefinition('clang-cl');
+	const source = path.resolve('/project/main.cpp');
+	assert.deepEqual(
+		clangCl.stripOwnedArguments(
+			['/DNAME', '-o', 'main.obj', '/omain2.obj', '-fsyntax-only', '/Zs', '/openmp', '-c', '--', source],
+			source,
+			path.resolve('/project'),
+		),
+		['/DNAME', '/openmp', '--'],
+	);
+	assert.deepEqual(clangCl.assembleArguments?.(['/FA', '/c'], ['/DNAME', '--'], source), [
+		'/DNAME',
+		'/FA',
+		'/c',
+		'--',
+		source,
+	]);
+	assert.deepEqual(clangCl.assembleArguments?.(['/FA'], ['/DNAME'], source), ['/DNAME', '/FA', source]);
+});

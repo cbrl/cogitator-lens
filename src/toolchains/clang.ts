@@ -14,6 +14,7 @@ import {
 	assemblyControlFlowGraphOutput,
 	binaryDisassembly,
 	controlFlowGraphOutput,
+	ownedBeforeEndOfOptions,
 	toolDiscoverer,
 	type ToolchainDefinition,
 } from './toolchain-contracts.js';
@@ -64,6 +65,7 @@ export const clang: ToolchainDefinition = {
 	defineFlag: '-D',
 	objectFilename: 'output.o',
 	outputArguments: gnuOutputArguments(['-gline-tables-only']),
+	assembleArguments: ownedBeforeEndOfOptions,
 	stripOwnedArguments: stripGnuManagedArguments,
 	dependencyCollection: gnuDependencyCollection,
 	createParser: defaultAsmParser,

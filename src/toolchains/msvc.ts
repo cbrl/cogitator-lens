@@ -308,7 +308,7 @@ export const msvcDependencyCollection: DependencyCollectionSpec = Object.freeze(
 const msvcOutputFlags = /^[-/](?:Fo|Fa|Fd|Fi|Fe)$/;
 const msvcOutputAssignments = /^[-/](?:Fo|Fa|Fd|Fi|Fe).+/;
 const msvcDependencyFlags = /^[-/]sourceDependencies(?::directives)?$/;
-const msvcModeFlags = /^[-/](?:c|E|EP|P|FA[csu]*)$/;
+const msvcModeFlags = /^[-/](?:c|E|EP|P|Zs|FA[csu]*)$/;
 
 /**
  * Output, dependency, and mode switches that cl.exe owns. Runtime library switches such as
