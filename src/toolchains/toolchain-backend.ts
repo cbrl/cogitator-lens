@@ -18,7 +18,7 @@ import * as exec from '../exec.js';
 import { withTemporaryDirectory } from '../temporary-directory.js';
 import type { ToolchainDefinition } from './toolchain-contracts.js';
 import { snapshotArtifactInputs, type ArtifactInputMetadata } from '../compilation/artifact-inputs.js';
-import { markMainSource, withMainSourcePath, type MainSource } from '../artifacts/assembly/main-source.js';
+import { parseWithMainSource, type MainSource } from '../artifacts/assembly/main-source.js';
 import { withoutLibraryFunctions } from '../artifacts/binary-disassembly/library-functions.js';
 import { withoutTerminalEscapes } from '../diagnostics.js';
 import type { InstructionType } from '../artifacts/control-flow-graph/parsers/instruction-sets.js';
@@ -387,9 +387,9 @@ export class ToolchainBackend {
 		if (!this.asmParser) {
 			throw new Error(`${this.profile.displayName} has no assembly parser.`);
 		}
-		return withMainSourcePath(
-			this.asmParser.process(markMainSource(rawAssembly, mainSource), parseFilters(options)),
-			mainSource,
+		const parser = this.asmParser;
+		return parseWithMainSource(rawAssembly, mainSource, (assembly) =>
+			parser.process(assembly, parseFilters(options)),
 		);
 	}
 

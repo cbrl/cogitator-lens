@@ -1,4 +1,5 @@
-import { mainSourceTest, type MainSource } from '../assembly/main-source.js';
+import { sameLocalFileTest } from '../../file-identity.js';
+import type { MainSource } from '../assembly/main-source.js';
 
 /** A function header in objdump-style output, as the vendored parser reads it. */
 const functionHeader = /^[\da-f]+\s+<.+>:$/;
@@ -12,7 +13,7 @@ const lineMarker = /^((?:[A-Za-z]:)?\/.*?):\d+(?: \(discriminator \d+\))?\s*$/;
  * information are kept.
  */
 export function withoutLibraryFunctions(rawDisassembly: string, mainSource: MainSource): string {
-	const isMainSource = mainSourceTest(mainSource);
+	const isMainSource = sameLocalFileTest(mainSource.path, mainSource.workingDirectory);
 	const kept: string[] = [];
 	let chunk: string[] = [];
 	let sawSource = false;

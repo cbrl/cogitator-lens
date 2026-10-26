@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 import { functionLabelTest } from '../../src/artifacts/assembly/assembly-navigation.js';
+import { unescapeAssemblyString } from '../../src/artifacts/assembly/main-source.js';
 import { renderAssembly } from '../../src/artifacts/assembly/assembly-renderer.js';
 import { defaultArtifactOptions, type DisplayOptions, type RenderedTextArtifact } from '../../src/types/index.js';
 import { rawArtifact, renderContext } from '../support/artifacts.js';
@@ -132,4 +133,71 @@ test('function labels come from type directives, or from Mach-O symbol names', (
 	assert.equal(machO?.('LBB0_2'), false);
 
 	assert.equal(functionLabelTest('main:\n\tret\n'), undefined);
+});
+
+test('a compiled file whose path has escaped non-ASCII bytes is still the main source', () => {
+	// GCC and LLVM write each byte outside printable ASCII as an octal escape.
+	const accented = path.resolve('/projé/source.cpp');
+	const escaped = accented.replaceAll('\\', '\\\\').replace('é', '\\303\\251');
+	const text = listing.replaceAll('/project/source.cpp', escaped).replaceAll('/project/helper.h', '/projé/helper.h');
+	const render = (display: Partial<DisplayOptions>) =>
+		renderAssembly(
+			rawArtifact('assembly', text),
+			{ ...defaultArtifactOptions.display, ...display },
+			renderContext('gcc', { file: accented }),
+		);
+	const filtered = render({ showLibraryCode: false });
+	assert.ok(filtered.lines.some((line) => line.text.trim() === '_Z5counti:'));
+	assert.ok(filtered.lines.some((line) => line.source?.file === accented && line.source.mainSource));
+
+	// Shown directives keep the file names the compiler wrote, checksums included.
+	const directives = render({ showLibraryCode: true, showDirectives: true });
+	const fileLines = directives.lines.filter((line) => /^\s*\.file\s+\d/.test(line.text)).map((line) => line.text);
+	assert.ok(fileLines.length > 0);
+	assert.ok(
+		fileLines.every((line) => !line.includes('<source>')),
+		fileLines.join('\n'),
+	);
+	assert.ok(fileLines.some((line) => line.includes(escaped)));
+});
+
+test('Hide library code keeps the functions an MSVC listing attributes to the compiled file', () => {
+	const helper = path.resolve('/project/helper.h');
+	const msvcListing = [
+		'; Function compile flags: /Odtp',
+		'_TEXT\tSEGMENT',
+		'helper PROC',
+		`; File ${helper}`,
+		'; Line 2',
+		'\tret\t0',
+		'helper ENDP',
+		'_TEXT\tENDS',
+		'; Function compile flags: /Odtp',
+		'_TEXT\tSEGMENT',
+		'count PROC',
+		`; File ${source}`,
+		'; Line 4',
+		'\tcall\thelper',
+		'\tret\t0',
+		'count ENDP',
+		'_TEXT\tENDS',
+		'END',
+	].join('\n');
+	const artifact = renderAssembly(
+		rawArtifact('assembly', msvcListing),
+		{ ...defaultArtifactOptions.display, showLibraryCode: false },
+		renderContext('msvc', { file: source }),
+	);
+	assert.ok(artifact.lines.some((line) => line.text.trim() === 'count PROC'));
+	assert.equal(
+		artifact.lines.some((line) => line.text.trim() === 'helper PROC'),
+		false,
+	);
+	assert.ok(artifact.lines.some((line) => line.source?.file === source && line.source.line === 4));
+});
+
+test('assembler strings decode octal UTF-8 bytes and character escapes', () => {
+	assert.equal(unescapeAssemblyString(String.raw`/jos\303\251/a\\b\"c\td`), '/josé/a\\b"c\td');
+	assert.equal(unescapeAssemblyString('/plain/𝔵.c'), '/plain/𝔵.c');
+	assert.equal(unescapeAssemblyString(String.raw`/mixed/𝔵\303\251.c`), '/mixed/𝔵é.c');
 });
