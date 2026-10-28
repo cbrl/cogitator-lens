@@ -75,7 +75,12 @@ test('compilation settings and manual variants keep documented fields and drop i
 			env: { SDKROOT: '/sdk' },
 			workingDirectory: '/project/build',
 		}),
-		{ toolchain: 'clang', args: ['-O2'], env: { SDKROOT: '/sdk' }, workingDirectory: '/project/build' },
+		{
+			toolchain: 'clang',
+			args: ['-O2'],
+			env: { SDKROOT: '/sdk' },
+			workingDirectory: path.normalize('/project/build'),
+		},
 	);
 	assert.deepEqual(
 		parseManualCompilationVariants([
@@ -94,10 +99,10 @@ test('compilation settings and manual variants keep documented fields and drop i
 		[
 			{
 				id: 'manual:debug',
-				source: '/project/main.cpp',
+				source: path.normalize('/project/main.cpp'),
 				displayLabel: 'Debug',
 				toolchainProfileId: 'user:clang',
-				workingDirectory: '/project',
+				workingDirectory: path.normalize('/project'),
 				arguments: ['-O0', '-g'],
 				environment: { SDKROOT: '/sdk' },
 				project: 'app',
