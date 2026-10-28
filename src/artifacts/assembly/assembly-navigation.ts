@@ -1,4 +1,4 @@
-import type { RenderedArtifactLine, RenderedTextArtifact } from '../../types/index.js';
+import type { ArtifactLink, RenderedArtifactLine, RenderedTextArtifact } from '../../types/index.js';
 import type { ParsedAsmResultLine, ParsedAsmResult } from '../../vendor/types/asmresult/asmresult.interfaces.js';
 import type { InstructionType } from '../control-flow-graph/parsers/instruction-sets.js';
 
@@ -10,6 +10,15 @@ import type { InstructionType } from '../control-flow-graph/parsers/instruction-
 const labelLine = /^("[^"]*"|\S.*?):[ \t]*(?:(?:#|\/\/|@|;).*)?$/;
 /** The first line of a function in a MASM listing, which cl.exe writes. A demangled name holds spaces. */
 export const masmProcedureLine = /^(\S.*?)[ \t]+PROC\b/;
+
+/** The edge kind of a link from a jump, which the artifact draws. A call has none. */
+export function branchEdge(instructionType: InstructionType | undefined): Pick<ArtifactLink, 'edgeKind'> {
+	return instructionType === 'unconditional-jump'
+		? { edgeKind: 'unconditional' }
+		: instructionType === 'conditional-jump'
+			? { edgeKind: 'true' }
+			: {};
+}
 
 /**
  * Adds symbol, link, and fold metadata derived from a parsed assembly listing.
@@ -31,13 +40,6 @@ export function withLabelNavigation(
 	const links = parsed.asm.flatMap((line, lineIndex) =>
 		(line.labels ?? []).flatMap((label) => {
 			const targetLine = definitions[label.target ?? label.name];
-			const instructionType = classifyInstruction(line.disassembly ?? line.text);
-			const edgeKind =
-				instructionType === 'unconditional-jump'
-					? ('unconditional' as const)
-					: instructionType === 'conditional-jump'
-						? ('true' as const)
-						: undefined;
 			return targetLine === undefined || targetLine < 0
 				? []
 				: [
@@ -46,7 +48,7 @@ export function withLabelNavigation(
 							startCharacter: label.range.startCol - 1,
 							endCharacter: label.range.endCol - 1,
 							targetLine,
-							...(edgeKind ? { edgeKind } : {}),
+							...branchEdge(classifyInstruction(line.disassembly ?? line.text)),
 						},
 					];
 		}),

@@ -3,6 +3,7 @@ import test from 'node:test';
 import { artifactDefinitions } from '../../src/artifacts/core/artifact-definitions.js';
 import {
 	normalizeDisassemblySourcePaths,
+	normalizeLlvmObjdumpOutput,
 	withoutLineMarkerComments,
 } from '../../src/artifacts/binary-disassembly/binary-disassembly-producer.js';
 import { normalizeDumpbinOutput } from '../../src/toolchains/msvc.js';
@@ -130,9 +131,133 @@ test('label navigation marks only CFG-classified jumps as drawable edges', () =>
 	assert.equal(rendered.links.find((link) => rendered.lines[link.line].text.includes('call'))?.edgeKind, undefined);
 	assert.deepEqual(
 		rendered.links.map((link) => rendered.lines[link.line].text.slice(link.startCharacter, link.endCharacter)),
-		['done', 'helper'],
-		'A link covers its label exactly',
+		['4 <done>', '9 <helper>'],
+		'A link covers the target operand',
 	);
+});
+
+/** The text of each link and the text of its target line. */
+function branchLinks(rendered: ReturnType<typeof renderDisassembly>): [string, string][] {
+	return rendered.links.map((link) => [
+		rendered.lines[link.line].text.slice(link.startCharacter, link.endCharacter),
+		rendered.lines[link.targetLine].text.trim(),
+	]);
+}
+
+test('GNU objdump jumps link to their target instruction, and calls to the function of their relocation', () => {
+	// objdump -d -l -w -r of a g++ -O0 object. The call holds no target until it is linked.
+	const rendered = renderDisassembly(
+		'gcc',
+		[
+			'0000000000000000 <_Z6helperi>:',
+			'_Z6helperi():',
+			`${projectRoot}/source.cpp:1`,
+			'   0:\tf3 0f 1e fa          \tendbr64',
+			'  11:\tc3                   \tret',
+			'0000000000000012 <_Z5counti>:',
+			'_Z5counti():',
+			`${projectRoot}/source.cpp:7`,
+			'  2f:\teb 3d                \tjmp    6e <_Z5counti+0x5c>',
+			`${projectRoot}/source.cpp:8`,
+			'  31:\t8b 4d fc             \tmov    -0x4(%rbp),%ecx',
+			'  58:\t74 0f                \tje     69 <_Z5counti+0x57>',
+			`${projectRoot}/source.cpp:11`,
+			'  5f:\te8 00 00 00 00       \tcall   64 <_Z5counti+0x52>\t60: R_X86_64_PLT32\t_Z6helperi-0x4',
+			'  64:\t01 45 f8             \tadd    %eax,-0x8(%rbp)',
+			`${projectRoot}/source.cpp:9`,
+			'  69:\t90                   \tnop',
+			`${projectRoot}/source.cpp:7`,
+			'  6e:\t8b 45 fc             \tmov    -0x4(%rbp),%eax',
+			'  74:\t7c bb                \tjl     31 <_Z5counti+0x1f>',
+			'  7a:\tc3                   \tret',
+		].join('\n'),
+	);
+	assert.deepEqual(branchLinks(rendered), [
+		['6e <_Z5counti+0x5c>', 'mov    -0x4(%rbp),%eax'],
+		['69 <_Z5counti+0x57>', 'nop'],
+		['_Z6helperi', '_Z6helperi:'],
+		['31 <_Z5counti+0x1f>', 'mov    -0x4(%rbp),%ecx'],
+	]);
+	assert.deepEqual(
+		rendered.links.map((link) => link.edgeKind),
+		['unconditional', 'true', undefined, 'true'],
+	);
+});
+
+test('llvm-objdump branches link for ELF and COFF objects, with each relocation on its instruction line', () => {
+	// llvm-objdump --disassemble --line-numbers --reloc of a clang and a clang-cl -O0 object.
+	const listing = (helper: string, count: string, relocation: string) =>
+		normalizeLlvmObjdumpOutput(
+			[
+				`0000000000000000 <${helper}>:`,
+				`; ${helper}():`,
+				`; ${projectRoot}/source.cpp:1`,
+				'       0: 89 7d fc                     \tmovl\t%edi, -0x4(%rbp)',
+				'       f: c3                           \tretq',
+				`0000000000000010 <${count}>:`,
+				`; ${count}():`,
+				`; ${projectRoot}/source.cpp:7`,
+				'      29: 8b 45 f4                     \tmovl\t-0xc(%rbp), %eax',
+				`      2f: 7d 2b                        \tjge\t0x5c <${count}+0x4c>`,
+				`; ${projectRoot}/source.cpp:11`,
+				`      46: e8 00 00 00 00               \tcallq\t0x4b <${count}+0x3b>`,
+				`\t\t0000000000000047:  ${relocation}`,
+				'      4b: 03 45 f8                     \taddl\t-0x8(%rbp), %eax',
+				`      5a: eb cd                        \tjmp\t0x29 <${count}+0x19>`,
+				`; ${projectRoot}/source.cpp:13`,
+				'      5c: 8b 45 f8                     \tmovl\t-0x8(%rbp), %eax',
+				'      64: c3                           \tretq',
+			].join('\r\n'),
+		);
+
+	const elf = listing('_Z6helperi', '_Z5counti', 'R_X86_64_PLT32\t_Z6helperi-0x4');
+	assert.match(elf, /callq\t0x4b <_Z5counti\+0x3b>\t47: R_X86_64_PLT32\t_Z6helperi-0x4\n/);
+	assert.deepEqual(branchLinks(renderDisassembly('clang', elf)), [
+		['0x5c <_Z5counti+0x4c>', 'movl\t-0x8(%rbp), %eax'],
+		['_Z6helperi', '_Z6helperi:'],
+		['0x29 <_Z5counti+0x19>', 'movl\t-0xc(%rbp), %eax'],
+	]);
+
+	const coff = listing('?helper@@YAHH@Z', '?count@@YAHH@Z', 'IMAGE_REL_AMD64_REL32\t?helper@@YAHH@Z');
+	const rendered = renderDisassembly('clang-cl', coff);
+	assert.deepEqual(branchLinks(rendered), [
+		['0x5c <?count@@YAHH@Z+0x4c>', 'movl\t-0x8(%rbp), %eax'],
+		['?helper@@YAHH@Z', '?helper@@YAHH@Z:'],
+		['0x29 <?count@@YAHH@Z+0x19>', 'movl\t-0xc(%rbp), %eax'],
+	]);
+	// The relocation stays visible on its call.
+	assert.ok(rendered.lines.some((line) => line.text.includes('IMAGE_REL_AMD64_REL32')));
+});
+
+test('dumpbin jumps link to an address in their own function, though each COMDAT function starts at 0', () => {
+	const normalized = normalizeDumpbinOutput(
+		[
+			'?classify@@YAHH@Z (int __cdecl classify(int)):',
+			'  0000000000000000: 89 4C 24 08        mov         dword ptr [rsp+8],ecx',
+			'  0000000000000004: 83 7C 24 08 0A     cmp         dword ptr [rsp+8],0Ah',
+			'  0000000000000009: 7E 06              jle         0000000000000011',
+			'  000000000000000B: 8B 44 24 08        mov         eax,dword ptr [rsp+8]',
+			'  000000000000000F: EB 06              jmp         0000000000000017',
+			'  0000000000000011: 8B 44 24 08        mov         eax,dword ptr [rsp+8]',
+			'  0000000000000015: F7 D8              neg         eax',
+			'  0000000000000017: C3                 ret',
+			'',
+			'?loop@@YAXXZ (void __cdecl loop(void)):',
+			'  0000000000000000: 48 83 EC 28        sub         rsp,28h',
+			'  0000000000000004: E8 00 00 00 00     call        ?classify@@YAHH@Z',
+			'  0000000000000009: 85 C0              test        eax,eax',
+			'  000000000000000B: 74 F7              je          0000000000000004',
+			'  000000000000000D: EB FC              jmp         000000000000000B',
+		].join('\r\n'),
+	);
+	assert.deepEqual(branchLinks(renderDisassembly('msvc', normalized)), [
+		['0000000000000011', 'mov         eax,dword ptr [rsp+8]'],
+		['0000000000000017', 'ret'],
+		['0000000000000000 <?classify@@YAHH@Z>', '?classify@@YAHH@Z:'],
+		['0000000000000004', 'call        0000000000000000 <?classify@@YAHH@Z>'],
+		// dumpbin writes the address in uppercase.
+		['000000000000000b', 'je          0000000000000004'],
+	]);
 });
 
 test('malformed disassembler output produces a valid empty normalized artifact', () => {

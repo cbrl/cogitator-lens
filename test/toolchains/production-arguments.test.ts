@@ -59,10 +59,17 @@ test('object-file arguments carry line tables and name their own output', () => 
 });
 
 test('disassembler arguments stay shell-free with a path that contains spaces', () => {
-	assert.deepEqual(gnuObjdump.arguments('artifact with spaces.o'), ['-d', '-l', '-w', 'artifact with spaces.o']);
+	assert.deepEqual(gnuObjdump.arguments('artifact with spaces.o'), [
+		'-d',
+		'-l',
+		'-w',
+		'-r',
+		'artifact with spaces.o',
+	]);
 	assert.deepEqual(llvmObjdump.arguments('artifact with spaces.o'), [
 		'--disassemble',
 		'--line-numbers',
+		'--reloc',
 		'artifact with spaces.o',
 	]);
 	assert.deepEqual(dumpbin.arguments('artifact with spaces.obj'), [

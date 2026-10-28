@@ -358,21 +358,21 @@ export function normalizeDumpbinOutput(output: string): string {
 			pendingSymbol = symbol[1];
 		}
 	}
-	const symbolByAddress = new Map<string, string>();
+	// dumpbin names the target of a call or jump to another function. An address alone is a branch
+	// in the same section. Each COMDAT function starts at 0, so the address does not name a function.
+	// dumpbin writes the address in uppercase, and the addresses of the instructions are lowercase.
 	const addressBySymbol = new Map<string, string>();
 	for (const line of normalized) {
 		const label = /^([0-9a-f]+) <(.+)>:$/.exec(line);
 		if (label) {
-			symbolByAddress.set(canonicalAddress(label[1]), label[2]);
 			addressBySymbol.set(label[2], label[1]);
 		}
 	}
 	return normalized
 		.map((line) => {
-			const numericBranch = /\b(?:call|j[a-z]+)\s+([0-9a-f]+)$/i.exec(line);
-			const numericSymbol = numericBranch ? symbolByAddress.get(canonicalAddress(numericBranch[1])) : undefined;
-			if (numericBranch && numericSymbol) {
-				return `${line} <${numericSymbol}>`;
+			const numericBranch = /(\b(?:call|j[a-z]+)\s+)([0-9A-F]{8}|[0-9A-F]{16})$/.exec(line);
+			if (numericBranch) {
+				return `${line.slice(0, numericBranch.index)}${numericBranch[1]}${numericBranch[2].toLowerCase()}`;
 			}
 			const symbolicBranch = /\b(?:call|j[a-z]+)\s+(\S+)$/i.exec(line);
 			const address = symbolicBranch ? addressBySymbol.get(symbolicBranch[1]) : undefined;
@@ -381,11 +381,6 @@ export function normalizeDumpbinOutput(output: string): string {
 				: line;
 		})
 		.join('\n');
-}
-
-/** Normalizes hexadecimal addresses so branch targets match labels with different padding. */
-function canonicalAddress(address: string): string {
-	return address.toLowerCase().replace(/^0+/, '') || '0';
 }
 
 /**

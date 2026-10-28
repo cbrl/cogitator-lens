@@ -31,20 +31,47 @@ export function binaryDisassemblyProducer(disassembler: BinaryDisassembler): Art
 	};
 }
 
+/**
+ * In an object file, a call to another function holds no target until it is linked. The
+ * relocations name the function, and with `-w` each one is at the end of its instruction line.
+ */
 export const gnuObjdump: BinaryDisassembler = Object.freeze({
 	tool: 'disassembler',
-	arguments: (objectFile: string) => ['-d', '-l', '-w', objectFile],
+	arguments: (objectFile: string) => ['-d', '-l', '-w', '-r', objectFile],
 	normalizeOutput: normalizeDisassemblySourcePaths,
 });
 
 export const llvmObjdump: BinaryDisassembler = Object.freeze({
 	tool: 'disassembler',
-	arguments: (objectFile: string) => ['--disassemble', '--line-numbers', objectFile],
+	arguments: (objectFile: string) => ['--disassemble', '--line-numbers', '--reloc', objectFile],
 	normalizeOutput: normalizeLlvmObjdumpOutput,
 });
 
 export function normalizeLlvmObjdumpOutput(output: string): string {
-	return normalizeDisassemblySourcePaths(withoutLineMarkerComments(output));
+	return normalizeDisassemblySourcePaths(withInlineRelocations(withoutLineMarkerComments(output)));
+}
+
+/** An instruction line: its address and its bytes. */
+const instructionLine = /^\s*[\da-f]+:(?:\s[\da-f]{2})+\s/;
+/** A relocation on a line of its own: its offset, its type, and its symbol with an addend. */
+const relocationLine = /^\s+0*([\da-f]+?):\s+([A-Za-z][A-Za-z\d]*_\w+)\s+(.+?)\s*$/;
+
+/**
+ * Moves each relocation to the end of its instruction line, where GNU objdump writes it with
+ * `-w`. llvm-objdump writes it on the next line. On a line of its own, the parser keeps only an
+ * ELF relocation, because the type of a COFF or Mach-O relocation does not start with `R_`.
+ */
+export function withInlineRelocations(output: string): string {
+	const lines: string[] = [];
+	for (const line of output.split(/\r?\n/)) {
+		const relocation = relocationLine.exec(line);
+		if (relocation && lines.length > 0 && instructionLine.test(lines[lines.length - 1])) {
+			lines[lines.length - 1] += `\t${relocation[1]}: ${relocation[2]}\t${relocation[3]}`;
+		} else {
+			lines.push(line);
+		}
+	}
+	return lines.join('\n');
 }
 
 /**
