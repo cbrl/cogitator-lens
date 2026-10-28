@@ -113,7 +113,8 @@ options do not regenerate an artifact.
 ### Optional tools
 
 Binary disassembly uses `objdump` for GCC, `llvm-objdump` for Clang-family toolchains, `dumpbin`
-for MSVC, and `nvdisasm` for nvcc cubins. Configure a `disassembler` when the tool is not detected
+for MSVC, and `nvdisasm` for nvcc cubins. For MSVC and clang-cl, the source lines come from the
+CodeView line tables in the object file. Configure a `disassembler` when the tool is not detected
 automatically:
 
 ```json
@@ -217,7 +218,9 @@ function, or leave it unset to select the first non-`init` function in the sourc
 
 The nvcc assembly artifact is line-mapped device PTX, while binary disassembly compiles a cubin and
 runs the sibling `nvdisasm` to render SASS. On Windows, the Visual Studio host-compiler environment
-is discovered in the same way as MSVC.
+is discovered in the same way as MSVC. A CUDA release accepts only some MSVC toolsets. To use a
+toolset other than the default, add `-ccbin` with the path of its `cl.exe` to the arguments. The
+environment of that toolset is then loaded.
 
 ## Development samples
 

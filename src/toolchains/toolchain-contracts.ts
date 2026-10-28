@@ -96,10 +96,12 @@ export interface ToolchainDefinition {
 	readonly createParser?: () => AsmParser;
 	readonly createBinaryParser?: () => AsmParser;
 	readonly createCfgParser?: () => AssemblyCfgParser;
+	/** The provider arguments are the ones that remain after `stripOwnedArguments`. */
 	readonly prepareEnvironment?: (
 		profile: ToolchainProfile,
 		environment: NodeJS.ProcessEnv,
 		cancellationToken: CancellationToken,
+		providerArguments: readonly string[],
 	) => Promise<NodeJS.ProcessEnv>;
 	/** Omit when the toolchain cannot enumerate inputs beyond the main source. */
 	readonly dependencyCollection?: DependencyCollectionSpec;

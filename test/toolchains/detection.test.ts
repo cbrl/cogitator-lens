@@ -17,7 +17,12 @@ import {
 	getToolchainDefinition,
 	toolchainDefinitions,
 } from '../../src/toolchains/toolchain-map.js';
-import { visualStudioDiscoveryArguments, visualStudioEnvironmentCandidates } from '../../src/toolchains/msvc.js';
+import {
+	visualStudioDiscoveryArguments,
+	visualStudioEnvironmentCandidates,
+	visualStudioToolsetArgument,
+} from '../../src/toolchains/msvc.js';
+import { nvccHostCompiler } from '../../src/toolchains/nvcc.js';
 
 test('executable names resolve to the toolchain that owns them', () => {
 	for (const [executable, expected] of [
@@ -187,6 +192,28 @@ test('Visual Studio environment scripts are derived from the compiler location',
 		assert.deepEqual(visualStudioEnvironmentCandidates(compiler), [script]);
 	}
 	assert.ok(visualStudioDiscoveryArguments.includes('-prerelease'));
+});
+
+test('the Visual Studio environment selects the toolset of the compiler', () => {
+	const install = 'C:\\Program Files\\Microsoft Visual Studio\\18\\Insiders\\VC';
+	assert.equal(
+		visualStudioToolsetArgument(`${install}\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64\\cl.exe`),
+		'-vcvars_ver=14.44.35207',
+	);
+	// clang-cl and a compiler outside Visual Studio use the default toolset.
+	assert.equal(visualStudioToolsetArgument(`${install}\\Tools\\Llvm\\x64\\bin\\clang-cl.exe`), undefined);
+	assert.equal(visualStudioToolsetArgument('C:\\CUDA\\v13.3\\bin\\nvcc.exe'), undefined);
+});
+
+test('nvcc takes the host compiler of its environment from the last -ccbin', () => {
+	const bin = 'C:\\VS\\VC\\Tools\\MSVC\\14.44.35207\\bin\\Hostx64\\x64';
+	const compiler = `${bin}\\cl.exe`;
+	assert.equal(nvccHostCompiler(['-O2']), undefined);
+	assert.equal(nvccHostCompiler(['-ccbin', compiler]), compiler);
+	assert.equal(nvccHostCompiler(['-ccbin', bin]), compiler);
+	assert.equal(nvccHostCompiler([`--compiler-bindir=${bin}`]), compiler);
+	assert.equal(nvccHostCompiler(['-ccbin', 'C:\\old\\cl.exe', `-ccbin=${compiler}`]), compiler);
+	assert.equal(nvccHostCompiler(['-ccbin']), undefined);
 });
 
 function pythonEnvironment(options: {

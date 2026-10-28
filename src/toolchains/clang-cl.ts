@@ -1,4 +1,8 @@
-import { llvmObjdump } from '../artifacts/binary-disassembly/binary-disassembly-producer.js';
+import {
+	llvmObjdump,
+	normalizeLlvmObjdumpOutput,
+	type BinaryDisassembler,
+} from '../artifacts/binary-disassembly/binary-disassembly-producer.js';
 import { outputProducer, clangClLlvmIrOutput } from '../artifacts/core/compiler-output-producer.js';
 import { renderClangAst } from '../artifacts/ast/ast-renderer.js';
 import {
@@ -27,7 +31,9 @@ import {
 	msvcDependencyCollection,
 	msvcOwnedArguments,
 	msvcPreprocessedSourceProducer,
+	objectCodeViewLines,
 } from './msvc.js';
+import { withCodeViewSourceLines } from './msvc/codeview-lines.js';
 import { composeDiagnosticParsers } from '../diagnostics.js';
 import { parseGnuDiagnostics } from './c-family/diagnostics.js';
 import { parseParenthesizedDiagnostics } from './msvc/diagnostics.js';
@@ -60,6 +66,14 @@ const clangClOwnedArguments: OwnedArguments = {
 	],
 };
 
+/** llvm-objdump reads only DWARF line tables, so the lines come from the CodeView line table of the object. */
+export const clangClObjdump: BinaryDisassembler = Object.freeze({
+	tool: llvmObjdump.tool,
+	arguments: llvmObjdump.arguments,
+	normalizeOutput: async (output: string, objectFile: string) =>
+		withCodeViewSourceLines(normalizeLlvmObjdumpOutput(output), await objectCodeViewLines(objectFile)),
+});
+
 export function stripClangClManagedArguments(
 	args: readonly string[],
 	sourceFile: string,
@@ -86,7 +100,7 @@ export const clangCl: ToolchainDefinition = {
 	discoverTools: toolDiscoverer({ demangler: 'llvm-cxxfilt', disassembler: 'llvm-objdump' }),
 	artifacts: {
 		assembly: compilerAssembly,
-		'binary-disassembly': binaryDisassembly('llvm-objdump', llvmObjdump),
+		'binary-disassembly': binaryDisassembly('llvm-objdump', clangClObjdump),
 		'preprocessed-source': { producer: msvcPreprocessedSourceProducer },
 		ast: { producer: clangAstProducer, renderer: renderClangAst },
 		'llvm-ir': { producer: outputProducer(clangClLlvmIrOutput) },

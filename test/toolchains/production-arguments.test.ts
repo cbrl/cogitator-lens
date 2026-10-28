@@ -68,7 +68,6 @@ test('disassembler arguments stay shell-free with a path that contains spaces', 
 	assert.deepEqual(dumpbin.arguments('artifact with spaces.obj'), [
 		'/nologo',
 		'/disasm:bytes',
-		'/linenumbers',
 		'artifact with spaces.obj',
 	]);
 	assert.deepEqual(nvdisasm.arguments('out.cubin'), ['out.cubin', '-c', '-g', '-hex']);
@@ -262,6 +261,10 @@ test('dependency collection names its own output and keeps the project crate ide
 		'/sourceDependencies',
 		'deps.json',
 	]);
+	// With /Zi from the provider, cl.exe writes the program database into the working directory without /Fd.
+	assert.ok(
+		msvc.arguments('deps.json', temporary, ['/Zi']).includes(`/Fd${path.join(temporary, 'dependencies.pdb')}`),
+	);
 
 	const rust = getToolchainDefinition('rust').dependencyCollection;
 	assert.ok(rust);

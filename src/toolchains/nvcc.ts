@@ -1,3 +1,4 @@
+import path from 'path';
 import type { BinaryDisassembler } from '../artifacts/binary-disassembly/binary-disassembly-producer.js';
 import { noopPropertyGetter } from '../vendor/compiler-props.js';
 import { PTXAsmParser } from '../vendor/lib/parsers/asm-parser-ptx.js';
@@ -31,6 +32,41 @@ export const nvdisasm: BinaryDisassembler = Object.freeze({
 	arguments: (binaryFile: string) => [binaryFile, '-c', '-g', '-hex'],
 });
 
+/**
+ * Returns the host compiler that `-ccbin` or `--compiler-bindir` names, as a cl.exe path. The last
+ * switch wins, as in nvcc. The switch can name the compiler or its directory.
+ */
+export function nvccHostCompiler(args: readonly string[]): string | undefined {
+	let hostCompiler: string | undefined;
+	args.forEach((argument, index) => {
+		const joined = /^(?:-ccbin|--compiler-bindir)=(.+)$/u.exec(argument)?.[1];
+		const separate =
+			(argument === '-ccbin' || argument === '--compiler-bindir') && index + 1 < args.length
+				? args[index + 1]
+				: undefined;
+		hostCompiler = joined ?? separate ?? hostCompiler;
+	});
+	return hostCompiler && (/\.exe$/iu.test(hostCompiler) ? hostCompiler : path.win32.join(hostCompiler, 'cl.exe'));
+}
+
+/**
+ * Loads the Visual Studio environment of the host compiler. A CUDA release accepts only some MSVC
+ * toolsets, so `-ccbin` can name an older one than the default.
+ */
+export const prepareNvccEnvironment: NonNullable<ToolchainDefinition['prepareEnvironment']> = (
+	profile,
+	environment,
+	cancellationToken,
+	providerArguments,
+) => {
+	const hostCompiler = nvccHostCompiler(providerArguments);
+	return captureWindowsEnvironment(
+		hostCompiler ? { ...profile, executable: hostCompiler } : profile,
+		environment,
+		cancellationToken,
+	);
+};
+
 /** Removes nvcc output switches and the source path owned by artifact production. */
 export function stripNvccManagedArguments(
 	args: readonly string[],
@@ -54,7 +90,7 @@ export const nvcc: ToolchainDefinition = {
 	stripOwnedArguments: stripNvccManagedArguments,
 	createParser: () => new PTXAsmParser(noopPropertyGetter),
 	createBinaryParser: () => new SassAsmParser(noopPropertyGetter),
-	...(process.platform === 'win32' ? { prepareEnvironment: captureWindowsEnvironment } : {}),
+	...(process.platform === 'win32' ? { prepareEnvironment: prepareNvccEnvironment } : {}),
 	discoverTools: toolDiscoverer({ disassembler: 'nvdisasm' }),
 	artifacts: {
 		assembly: compilerAssembly,

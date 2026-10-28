@@ -59,7 +59,8 @@ export interface SecondaryToolSpec {
 	/** Profile key of the auxiliary tool that consumes the compiler output. */
 	readonly tool: string;
 	readonly toolArguments: (files: Readonly<Record<string, string>>) => readonly string[];
-	readonly normalizeOutput?: (output: string) => string;
+	/** Runs while the workspace files still exist. */
+	readonly normalizeOutput?: (output: string, files: Readonly<Record<string, string>>) => string | Promise<string>;
 	/** Runs after the compiler, before the tool; its result becomes RawArtifact.producerData. */
 	readonly producerData?: (files: Readonly<Record<string, string>>) => Promise<unknown>;
 }
@@ -318,7 +319,7 @@ export class ToolchainBackend {
 				cancellationToken,
 			);
 			const artifact = this.buildRawArtifact(
-				spec.normalizeOutput ? spec.normalizeOutput(toolResult.stdout) : toolResult.stdout,
+				spec.normalizeOutput ? await spec.normalizeOutput(toolResult.stdout, files) : toolResult.stdout,
 				[compilerResult.stderr, compilerResult.stdout, toolResult.stderr].join('\n'),
 				source,
 				invocation,
@@ -393,10 +394,14 @@ export class ToolchainBackend {
 		);
 	}
 
-	/** Parses disassembler output. The main source decides what hiding library code keeps. */
+	/**
+	 * Parses disassembler output. The main source decides what hiding library code keeps, and the
+	 * library functions are removed before parsing. The parser's own filter stays off. It also removes
+	 * each line without line information, such as all of a function that has no line table.
+	 */
 	parseBinaryDisassembly(rawDisassembly: string, options: DisplayOptions, mainSource: MainSource): ParsedAsmResult {
 		const text = options.showLibraryCode ? rawDisassembly : withoutLibraryFunctions(rawDisassembly, mainSource);
-		return this.binaryAsmParser.process(text, { ...parseFilters(options), binary: true });
+		return this.binaryAsmParser.process(text, { ...parseFilters(options), libraryCode: false, binary: true });
 	}
 
 	classifyAssemblyInstruction(instruction: string): InstructionType | undefined {
@@ -485,15 +490,14 @@ export class ToolchainBackend {
 			...options.env,
 			...invocationEnvironment,
 		};
-		const preparedEnvironment = this.definition.prepareEnvironment
-			? await this.definition.prepareEnvironment(this.profile, environment, cancellationToken)
-			: environment;
-
 		const providerArguments = this.definition.stripOwnedArguments(
 			[...this.profile.defaultArguments, ...(options.args ?? [])],
 			source.fsPath,
 			workingDirectory,
 		);
+		const preparedEnvironment = this.definition.prepareEnvironment
+			? await this.definition.prepareEnvironment(this.profile, environment, cancellationToken, providerArguments)
+			: environment;
 
 		const compilerArguments = ownedArguments(providerArguments);
 		const argumentsList = this.definition.assembleArguments

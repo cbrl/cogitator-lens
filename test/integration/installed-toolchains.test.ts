@@ -23,6 +23,7 @@ import {
 	pythonStackAnalysisHelper,
 } from '../../src/artifacts/stack-analysis/python-stack-analysis.js';
 import { inferGoSsaFunction } from '../../src/toolchains/go.js';
+import { ToolExitError } from '../../src/toolchains/toolchain-backend.js';
 import { defaultArtifactOptions } from '../../src/types/index.js';
 import { rawArtifact, renderContext, renderGraphs } from '../support/artifacts.js';
 import { fixturePath, requireCommand, run } from '../support/environment.js';
@@ -239,12 +240,22 @@ test('nvcc produces line-mapped PTX and nvdisasm produces SASS', async (t) => {
 	const options = { workingDirectory: path.dirname(source), productionOptions: defaultArtifactOptions.production };
 	const backend = toolchainBackend('nvcc', { executable: 'nvcc' });
 
-	const raw = await declaredImplementation('nvcc', 'assembly').producer(
-		backend,
-		sourceUri(source),
-		options,
-		neverCancelled,
-	);
+	let raw;
+	try {
+		raw = await declaredImplementation('nvcc', 'assembly').producer(
+			backend,
+			sourceUri(source),
+			options,
+			neverCancelled,
+		);
+	} catch (error) {
+		// Each CUDA release accepts only some MSVC toolsets, and the headers of a newer one stop the compile.
+		if (error instanceof ToolExitError && /STL1002|unsupported Microsoft Visual Studio/u.test(error.stdout)) {
+			t.skip('nvcc does not support the default Visual Studio toolset of this host');
+			return;
+		}
+		throw error;
+	}
 	assert.match(raw.text, /\.visible\s+\.entry\s+saxpy/u);
 	const parsed = backend.parseAssembly(raw.text, display, { path: source, workingDirectory: raw.command.cwd });
 	assert.ok(parsed.asm.some((line) => /fma\.rn\.f32|mul\.wide|st\.global/u.test(line.text)));

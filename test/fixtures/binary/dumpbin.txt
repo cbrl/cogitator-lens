@@ -1,11 +1,49 @@
-Microsoft (R) COFF/PE Dumper Version 14.40
+
+Dump of file output.obj
+
+File Type: COFF OBJECT
 
 ?helper@@YAHH@Z (int __cdecl helper(int)):
-C:/project/source.cpp(3)
-  0000000000000000: 55                    push        rbp
-  0000000000000006: C3                    ret
+  0000000000000000: 89 4C 24 08        mov         dword ptr [rsp+8],ecx
+  0000000000000004: 8B 44 24 08        mov         eax,dword ptr [rsp+8]
+  0000000000000008: D1 E0              shl         eax,1
+  000000000000000A: C3                 ret
+  000000000000000B: CC                 int         3
+  000000000000000C: CC                 int         3
+  000000000000000D: CC                 int         3
+  000000000000000E: CC                 int         3
+  000000000000000F: CC                 int         3
+  0000000000000010: CC                 int         3
+  0000000000000011: CC                 int         3
+  0000000000000012: CC                 int         3
+  0000000000000013: CC                 int         3
+  0000000000000014: CC                 int         3
+  0000000000000015: CC                 int         3
+  0000000000000016: CC                 int         3
+  0000000000000017: CC                 int         3
+  0000000000000018: CC                 int         3
+  0000000000000019: CC                 int         3
+  000000000000001A: CC                 int         3
+  000000000000001B: CC                 int         3
+  000000000000001C: CC                 int         3
+  000000000000001D: CC                 int         3
+  000000000000001E: CC                 int         3
+  000000000000001F: CC                 int         3
 ?entry@@YAHH@Z (int __cdecl entry(int)):
-C:/project/source.cpp(7)
-  0000000000000009: 6B C1 02              imul        eax,ecx,2
-  000000000000000C: E8 00 00 00 00        call        ?helper@@YAHH@Z
-  000000000000000C: C3                    ret
+  0000000000000020: 89 4C 24 08        mov         dword ptr [rsp+8],ecx
+  0000000000000024: 48 83 EC 28        sub         rsp,28h
+  0000000000000028: 8B 4C 24 30        mov         ecx,dword ptr [rsp+30h]
+  000000000000002C: E8 00 00 00 00     call        ?helper@@YAHH@Z
+  0000000000000031: FF C0              inc         eax
+  0000000000000033: 48 83 C4 28        add         rsp,28h
+  0000000000000037: C3                 ret
+
+  Summary
+
+          38 .chks64
+         360 .debug$S
+         520 .debug$T
+          2F .drectve
+           C .pdata
+          38 .text$mn
+           8 .xdata

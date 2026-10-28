@@ -8,6 +8,8 @@ import type { InstructionType } from '../control-flow-graph/parsers/instruction-
  * `//`, or `@` depending on the target, and quotes names such as MSVC-mangled ones.
  */
 const labelLine = /^("[^"]*"|\S.*?):[ \t]*(?:(?:#|\/\/|@|;).*)?$/;
+/** The first line of a function in a MASM listing, which cl.exe writes. A demangled name holds spaces. */
+export const masmProcedureLine = /^(\S.*?)[ \t]+PROC\b/;
 
 /**
  * Adds symbol, link, and fold metadata derived from a parsed assembly listing.
@@ -22,7 +24,7 @@ export function withLabelNavigation(
 	classifyInstruction: (instruction: string) => InstructionType | undefined,
 	isFunction?: (label: string) => boolean,
 ): RenderedTextArtifact {
-	// The parser reports one-based line numbers.
+	// The parser reports one-based line numbers and columns.
 	const definitions = Object.fromEntries(
 		Object.entries(parsed.labelDefinitions ?? {}).map(([name, line]) => [name, line - 1]),
 	);
@@ -41,8 +43,8 @@ export function withLabelNavigation(
 				: [
 						{
 							line: lineIndex,
-							startCharacter: label.range.startCol,
-							endCharacter: label.range.endCol,
+							startCharacter: label.range.startCol - 1,
+							endCharacter: label.range.endCol - 1,
 							targetLine,
 							...(edgeKind ? { edgeKind } : {}),
 						},
@@ -52,7 +54,7 @@ export function withLabelNavigation(
 	const symbols = (
 		isFunction
 			? artifact.lines.flatMap((line, index) => {
-					const label = labelLine.exec(line.text)?.[1];
+					const label = labelLine.exec(line.text)?.[1] ?? masmProcedureLine.exec(line.text)?.[1];
 					const name = label === undefined ? undefined : unquote(label);
 					return name !== undefined && isFunction(name) ? [{ name, line: index }] : [];
 				})
@@ -70,11 +72,14 @@ export function withLabelNavigation(
 
 /**
  * Returns a test for function labels when the listing declares its functions: ELF `.type` and
- * COFF `.def` directives name them, and Mach-O functions are the symbols with a leading
- * underscore. Returns nothing when the listing gives no way to tell.
+ * COFF `.def` directives and MASM `PROC` lines name them, and Mach-O functions are the symbols
+ * with a leading underscore. Returns nothing when the listing gives no way to tell.
  */
 export function functionLabelTest(rawAssembly: string): ((label: string) => boolean) | undefined {
 	const declared = new Set<string>();
+	for (const match of rawAssembly.matchAll(new RegExp(masmProcedureLine.source, 'gm'))) {
+		declared.add(match[1]);
+	}
 	for (const match of rawAssembly.matchAll(/^[ \t]*\.type[ \t]+(.+),[ \t]*[@%]function[ \t]*$/gm)) {
 		declared.add(unquote(match[1].trim()));
 	}

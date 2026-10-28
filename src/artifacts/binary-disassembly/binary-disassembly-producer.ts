@@ -4,7 +4,8 @@ export interface BinaryDisassembler {
 	/** The key of the auxiliary tool in the toolchain profile. */
 	readonly tool: string;
 	readonly arguments: (objectFile: string) => readonly string[];
-	readonly normalizeOutput?: (output: string) => string;
+	/** Converts the tool output to the GNU objdump shape. The object file still exists. */
+	readonly normalizeOutput?: (output: string, objectFile: string) => string | Promise<string>;
 }
 
 /** Compiles the source to an object file, then disassembles it with the auxiliary tool. */
@@ -23,7 +24,7 @@ export function binaryDisassemblyProducer(disassembler: BinaryDisassembler): Art
 					outputArguments('object', files.object, providerArguments),
 				tool: disassembler.tool,
 				toolArguments: (files) => disassembler.arguments(files.object),
-				normalizeOutput: disassembler.normalizeOutput,
+				normalizeOutput: (output, files) => disassembler.normalizeOutput?.(output, files.object) ?? output,
 			},
 			cancellationToken,
 		);
@@ -39,8 +40,12 @@ export const gnuObjdump: BinaryDisassembler = Object.freeze({
 export const llvmObjdump: BinaryDisassembler = Object.freeze({
 	tool: 'disassembler',
 	arguments: (objectFile: string) => ['--disassemble', '--line-numbers', objectFile],
-	normalizeOutput: (output: string) => normalizeDisassemblySourcePaths(withoutLineMarkerComments(output)),
+	normalizeOutput: normalizeLlvmObjdumpOutput,
 });
+
+export function normalizeLlvmObjdumpOutput(output: string): string {
+	return normalizeDisassemblySourcePaths(withoutLineMarkerComments(output));
+}
 
 /**
  * llvm-objdump prints line markers as "; /path/file.cpp:12". The parser reads only GNU objdump's

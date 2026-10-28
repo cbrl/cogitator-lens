@@ -26,12 +26,22 @@ function lineOf(artifact: RenderedTextArtifact, text: string): number {
 	return index;
 }
 
+/** The text that the link on a line covers. */
+function linkText(artifact: RenderedTextArtifact, line: number): string | undefined {
+	const link = artifact.links.find((candidate) => candidate.line === line);
+	return link && artifact.lines[line].text.slice(link.startCharacter, link.endCharacter);
+}
+
 test('assembly links, outline entries, and folds start on their label lines', () => {
 	const artifact = render({ showLibraryCode: true });
 	const jump = artifact.lines.findIndex((line) => /^\s*jmp\s+\.L4\b/.test(line.text));
 	const branch = artifact.lines.findIndex((line) => /^\s*jle\s+\.L5\b/.test(line.text));
 	assert.equal(artifact.links.find((link) => link.line === jump)?.targetLine, lineOf(artifact, '.L4:'));
 	assert.equal(artifact.links.find((link) => link.line === branch)?.targetLine, lineOf(artifact, '.L5:'));
+	assert.deepEqual(
+		[jump, branch].map((line) => linkText(artifact, line)),
+		['.L4', '.L5'],
+	);
 
 	const helper = lineOf(artifact, '_Z6helperi:');
 	const count = lineOf(artifact, '_Z5counti:');
@@ -194,6 +204,132 @@ test('Hide library code keeps the functions an MSVC listing attributes to the co
 		false,
 	);
 	assert.ok(artifact.lines.some((line) => line.source?.file === source && line.source.line === 4));
+});
+
+test('each instruction of an MSVC /FAcs listing maps to the source comment before it', () => {
+	// cl /FAcs writes the source text where /FA writes `; Line N`, and the address and bytes before
+	// each instruction. A long encoding wraps, and its instruction is on the continuation line.
+	const msvcListing = [
+		'; Function compile flags: /Odtp',
+		`; File ${source}`,
+		'_TEXT\tSEGMENT',
+		'value$ = 8',
+		'?classify@@YAHH@Z PROC\t\t\t\t\t; classify',
+		'',
+		'; 3    : int classify(int value) {',
+		'',
+		'  00000\t89 4c 24 08\t mov\t DWORD PTR [rsp+8], ecx',
+		'',
+		'; 4    : \tif (value > 10) {',
+		'',
+		'  00004\t83 7c 24 08 0a\t cmp\t DWORD PTR value$[rsp], 10',
+		'  00009\t7e 06\t\t jle\t SHORT $LN2@classify',
+		'$LN2@classify:',
+		'',
+		'; 6    : \t}',
+		'; 7    : \treturn -value;',
+		'',
+		'  0000b\tc7 44 24 20 00',
+		'\t00 00 00\t mov\t DWORD PTR value$[rsp], 0',
+		'  00013\tc3\t\t ret\t 0',
+		'?classify@@YAHH@Z ENDP\t\t\t\t\t; classify',
+		'_TEXT\tENDS',
+		'END',
+	].join('\n');
+	const render = (display: Partial<DisplayOptions>) =>
+		renderAssembly(
+			rawArtifact('assembly', msvcListing),
+			{ ...defaultArtifactOptions.display, ...display },
+			renderContext('msvc', { file: source }),
+		);
+	const sourceLine = (artifact: RenderedTextArtifact, instruction: RegExp) => {
+		const line = artifact.lines.find((candidate) => instruction.test(candidate.text));
+		assert.ok(line, `missing instruction ${instruction}`);
+		assert.equal(line.source?.file ?? source, source);
+		return line.source?.line;
+	};
+
+	const artifact = render({ showCommentOnlyLines: false });
+	assert.equal(sourceLine(artifact, /\bmov\s+DWORD PTR \[rsp\+8\], ecx/), 3);
+	assert.equal(sourceLine(artifact, /\bcmp\s/), 4);
+	assert.equal(sourceLine(artifact, /\bjle\s/), 4);
+	assert.equal(sourceLine(artifact, /\bmov\s+DWORD PTR value\$\[rsp\], 0/), 7);
+	assert.equal(sourceLine(artifact, /\bret\s/), 7);
+	// The bytes before a wrapped instruction are not an instruction.
+	assert.equal(sourceLine(artifact, /^\s*0000b\s+c7 44 24 20 00$/), undefined);
+
+	// Shown comments are the source text the compiler wrote, without the comments added for parsing.
+	const comments = render({ showCommentOnlyLines: true }).lines.filter((line) => line.text.startsWith(';'));
+	assert.deepEqual(
+		comments.map((line) => line.text.replace(/\s+/g, ' ')),
+		[
+			'; Function compile flags: /Odtp',
+			`; File ${source}`,
+			'; 3 : int classify(int value) {',
+			'; 4 : if (value > 10) {',
+			'; 6 : }',
+			'; 7 : return -value;',
+		],
+	);
+});
+
+test('MSVC jumps and calls link to their labels, and PROC lines are the outline', () => {
+	// Each function has its own `$LN4:` label, and its jump targets end with `@` and its name.
+	const msvcListing = [
+		'; Function compile flags: /Odtp',
+		`; File ${source}`,
+		'_TEXT\tSEGMENT',
+		'?helper@@YAHH@Z PROC\t\t\t\t\t; helper',
+		'$LN4:',
+		'; 1    : int helper(int value) {',
+		'  00000\t85 c9\t\t test\t ecx, ecx',
+		'  00002\t7e 02\t\t jle\t SHORT $LN2@helper',
+		'  00004\teb 00\t\t jmp\t SHORT $LN2@helper',
+		'$LN2@helper:',
+		'  00006\tc3\t\t ret\t 0',
+		'?helper@@YAHH@Z ENDP\t\t\t\t\t; helper',
+		'_TEXT\tENDS',
+		'; Function compile flags: /Odtp',
+		`; File ${source}`,
+		'_TEXT\tSEGMENT',
+		'?entry@@YAHH@Z PROC\t\t\t\t\t; entry',
+		'$LN4:',
+		'; 5    : int entry(int value) {',
+		'  00010\te8 00 00 00 00\t call\t ?helper@@YAHH@Z\t; helper',
+		'  00015\tff 15 00 00 00 00 call\t QWORD PTR __imp_exit',
+		'  0001b\tc3\t\t ret\t 0',
+		'?entry@@YAHH@Z ENDP\t\t\t\t\t; entry',
+		'_TEXT\tENDS',
+		'END',
+	].join('\n');
+	const artifact = renderAssembly(
+		rawArtifact('assembly', msvcListing),
+		defaultArtifactOptions.display,
+		renderContext('msvc', { file: source }),
+	);
+	const lineMatching = (pattern: RegExp) => artifact.lines.findIndex((line) => pattern.test(line.text));
+	const helper = lineMatching(/^\?helper@@YAHH@Z PROC/);
+	const entry = lineMatching(/^\?entry@@YAHH@Z PROC/);
+	const target = lineOf(artifact, '$LN2@helper:');
+	const links = [/\bjle\s/, /\bjmp\s/, /\bcall\s+\?helper/].map((pattern) => {
+		const line = lineMatching(pattern);
+		const link = artifact.links.find((candidate) => candidate.line === line);
+		return [linkText(artifact, line), link?.targetLine, link?.edgeKind];
+	});
+	assert.deepEqual(links, [
+		['$LN2@helper', target, 'true'],
+		['$LN2@helper', target, 'unconditional'],
+		['?helper@@YAHH@Z', helper, undefined],
+	]);
+	assert.equal(linkText(artifact, lineMatching(/__imp_exit/)), undefined, 'An import has no label in the listing');
+	assert.deepEqual(
+		artifact.symbols.map((symbol) => [symbol.name, symbol.line]),
+		[
+			['?helper@@YAHH@Z', helper],
+			['?entry@@YAHH@Z', entry],
+		],
+		'Local labels are not outline symbols',
+	);
 });
 
 test('assembler strings decode octal UTF-8 bytes and character escapes', () => {
