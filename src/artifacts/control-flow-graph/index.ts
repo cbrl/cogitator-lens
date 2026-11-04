@@ -6,7 +6,7 @@ export const controlFlowGraphArtifact = {
 	presentation: 'graph',
 	requiresOutputSelection: true,
 	icon: 'type-hierarchy',
-	filenameExtension: '.cfg',
+	filenameExtension: '.coglens.cfg',
 	documentLanguage: 'artifact',
 	metricLabels: {
 		graphCount: 'Function graphs',

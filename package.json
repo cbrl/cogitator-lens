@@ -36,7 +36,8 @@
     "onLanguage:objective-cpp",
     "onLanguage:python",
     "onLanguage:rust",
-    "onLanguage:zig"
+    "onLanguage:zig",
+    "onFileSystem:coglens-artifact"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -57,8 +58,8 @@
           "Compiler Assembly"
         ],
         "extensions": [
-          ".asm",
-          ".disasm"
+          ".coglens.asm",
+          ".coglens.disasm"
         ]
       },
       {
@@ -67,7 +68,7 @@
           "LLVM IR"
         ],
         "extensions": [
-          ".ll"
+          ".coglens.ll"
         ]
       },
       {
@@ -76,7 +77,7 @@
           "Compiler AST"
         ],
         "extensions": [
-          ".ast"
+          ".coglens.ast"
         ]
       },
       {
@@ -85,7 +86,7 @@
           "Rust MIR"
         ],
         "extensions": [
-          ".mir"
+          ".coglens.mir"
         ]
       }
     ],
@@ -1256,6 +1257,7 @@
     "manifest:check": "node --import tsx scripts/generate-manifest.ts --check",
     "test": "npm run test:unit",
     "test:unit": "node --import tsx --test \"test/**/*.test.ts\"",
+    "test:coverage": "node -e \"require('node:fs').mkdirSync('coverage', { recursive: true })\" && node --import tsx --test --experimental-test-coverage --test-coverage-include=\"src/**\" --test-coverage-exclude=\"src/vendor/**\" --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info \"test/**/*.test.ts\"",
     "test:extension": "npm run compile-tests && npm run compile && node scripts/run-extension-tests.mjs",
     "vendor:check": "node scripts/vendor-check.mjs",
     "package:vsix": "vsce package --no-dependencies"

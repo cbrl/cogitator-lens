@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { artifactScheme } from '../src/artifact-document/artifact-scheme.js';
 import { artifactDefinitions, supportedArtifactKinds } from '../src/artifacts/core/artifact-definitions.js';
 import type { ArtifactOptionDescriptor } from '../src/artifacts/core/artifact-contracts.js';
 import { artifactEditorLanguages } from '../src/artifacts/core/editor-languages.js';
@@ -73,9 +74,12 @@ export function generateManifest(manifest: JsonObject): JsonObject {
  */
 function activationEvents(manifest: JsonObject): string[] {
 	const existing = (manifest.activationEvents as string[] | undefined) ?? [];
+	// A restored artifact tab reads its document before any source language activates the extension.
+	const artifactDocuments = `onFileSystem:${artifactScheme}`;
 	return [
-		...existing.filter((event) => !event.startsWith('onLanguage:')),
+		...existing.filter((event) => !event.startsWith('onLanguage:') && event !== artifactDocuments),
 		...[...supportedLanguageIdentifiers].sort().map((language) => `onLanguage:${language}`),
+		artifactDocuments,
 	];
 }
 

@@ -10,6 +10,7 @@ import { repositoryRoot } from './support/environment.js';
 import { generateManifest, validateOptionDescriptors } from '../scripts/generate-manifest.js';
 
 interface Manifest {
+	readonly activationEvents: readonly string[];
 	readonly capabilities: { readonly untrustedWorkspaces: { readonly supported: boolean } };
 	readonly contributes: {
 		readonly languages: readonly { readonly id: string; readonly extensions: readonly string[] }[];
@@ -84,14 +85,29 @@ test('the manifest settings schema stays synchronized with the code tables', () 
 	);
 });
 
+test('a restored artifact tab activates the extension', () => {
+	assert.ok(manifest.activationEvents.includes('onFileSystem:coglens-artifact'));
+	assert.equal(
+		manifest.activationEvents.filter((event) => event.startsWith('onFileSystem:')).length,
+		1,
+		'The generator must not add the event twice',
+	);
+});
+
 test('artifact editor languages and grammars are derived from artifact definitions', () => {
 	const extensionsByLanguage = new Map(
 		manifest.contributes.languages.map((language) => [language.id, [...language.extensions].sort()]),
 	);
-	assert.deepEqual(extensionsByLanguage.get('coglens-asm'), ['.asm', '.disasm']);
-	assert.deepEqual(extensionsByLanguage.get('coglens-llvm-ir'), ['.ll']);
-	assert.deepEqual(extensionsByLanguage.get('coglens-ast'), ['.ast']);
-	assert.deepEqual(extensionsByLanguage.get('coglens-mir'), ['.mir']);
+	// Private suffixes keep these languages off the user's own .asm, .ll, .ast, and .mir files.
+	assert.deepEqual(extensionsByLanguage.get('coglens-asm'), ['.coglens.asm', '.coglens.disasm']);
+	assert.deepEqual(extensionsByLanguage.get('coglens-llvm-ir'), ['.coglens.ll']);
+	assert.deepEqual(extensionsByLanguage.get('coglens-ast'), ['.coglens.ast']);
+	assert.deepEqual(extensionsByLanguage.get('coglens-mir'), ['.coglens.mir']);
+	for (const definition of Object.values(artifactDefinitions)) {
+		if (definition.documentLanguage === 'artifact') {
+			assert.match(definition.filenameExtension, /^\.coglens\./u, definition.label);
+		}
+	}
 	assert.ok(manifest.contributes.languages.some((language) => language.id === 'zig'));
 	for (const language of ['coglens-asm', 'coglens-llvm-ir', 'coglens-ast', 'coglens-mir']) {
 		assert.equal(manifest.contributes.grammars.filter((grammar) => grammar.language === language).length, 1);

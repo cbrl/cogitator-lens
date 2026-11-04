@@ -33,6 +33,7 @@ import {
 	type ArtifactView,
 } from './artifact-document-registry.js';
 import { localFileUriComparisonKey } from '../file-identity.js';
+import { uniqueDiagnostics } from '../diagnostics.js';
 import type { ArtifactDocumentSnapshot } from './artifact-identity.js';
 
 /** The state of one open text artifact document. */
@@ -151,6 +152,11 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 		return this.activeView()?.document.handler.cancel() ?? false;
 	}
 
+	/** Whether the active artifact has a compile in progress. Its state can be stale at that time. */
+	activeArtifactIsGenerating(): boolean {
+		return this.activeView()?.document.handler.generating ?? false;
+	}
+
 	requestRefresh(artifactUri: Uri): void {
 		this.registry.requestRefresh(artifactUri);
 	}
@@ -255,20 +261,14 @@ export class ArtifactDocumentProvider implements TextDocumentContentProvider, Di
 
 	private rebuildDiagnostics(): void {
 		this.diagnostics.clear();
+		// The open artifacts of one source report the same compiler diagnostics. Show each diagnostic once.
+		const items = uniqueDiagnostics(this.registry.views(TextArtifactView).flatMap((view) => view.diagnostics));
 		const grouped = new Map<string, { uri: Uri; diagnostics: Diagnostic[] }>();
-		for (const view of this.registry.views(TextArtifactView)) {
-			for (const item of view.diagnostics) {
-				const key = localFileUriComparisonKey(item.uri);
-				const group = grouped.get(key) ?? { uri: item.uri, diagnostics: [] };
-				group.diagnostics.push(
-					new Diagnostic(
-						new Range(new Position(item.line, item.column), new Position(item.line, item.column + 1)),
-						item.message,
-						toDiagnosticSeverity(item.severity),
-					),
-				);
-				grouped.set(key, group);
-			}
+		for (const item of items) {
+			const key = localFileUriComparisonKey(item.uri);
+			const group = grouped.get(key) ?? { uri: item.uri, diagnostics: [] };
+			group.diagnostics.push(toDiagnostic(item));
+			grouped.set(key, group);
 		}
 		for (const group of grouped.values()) {
 			this.diagnostics.set(group.uri, group.diagnostics);
@@ -280,6 +280,17 @@ export { getArtifactUri, parseArtifactUri } from './artifact-uri.js';
 
 function artifactText(artifact: RenderedTextArtifact): string {
 	return artifact.lines.map((line) => line.text).join('\n');
+}
+
+/** The name that the Problems view shows as the origin of each diagnostic. */
+const diagnosticSource = 'Cogitator Lens';
+
+function toDiagnostic(item: CompileDiagnostic): Diagnostic {
+	// With an empty range, the editor underlines the word at the position. This also works for a closed source.
+	const position = new Position(item.line, item.column);
+	const diagnostic = new Diagnostic(new Range(position, position), item.message, toDiagnosticSeverity(item.severity));
+	diagnostic.source = diagnosticSource;
+	return diagnostic;
 }
 
 function toDiagnosticSeverity(severity: CompileDiagnostic['severity']): DiagnosticSeverity {

@@ -3,7 +3,7 @@ import childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import test from 'node:test';
-import { execute, ExecError, type CancellationLike } from '../../src/exec.js';
+import { execute, ExecError, untilCancelled, type CancellationLike } from '../../src/exec.js';
 import { executeTextTool } from '../../src/toolchains/toolchain-backend.js';
 import { neverCancelled } from '../support/toolchains.js';
 
@@ -151,4 +151,30 @@ test('a stdout line filter drops lines before they count toward the output limit
 			error.kind === 'output-limit' &&
 			/coglens\.processOutputLimit/.test(error.message),
 	);
+});
+
+test('a cancelled waiter stops waiting while the shared work continues for the others', async () => {
+	let finish!: (value: string) => void;
+	const shared = new Promise<string>((resolve) => {
+		finish = resolve;
+	});
+	const cancelled = new TestCancellationToken();
+	const first = untilCancelled(shared, cancelled);
+	const second = untilCancelled(shared, new TestCancellationToken());
+	cancelled.cancel();
+	await assert.rejects(first, (error: unknown) => error instanceof ExecError && error.kind === 'cancelled');
+	finish('environment');
+	assert.equal(await second, 'environment');
+});
+
+test('a waiter with a cancelled token rejects at once, and a failure reaches each waiter', async () => {
+	const cancelled = new TestCancellationToken();
+	cancelled.cancel();
+	await assert.rejects(
+		untilCancelled(new Promise<never>(() => {}), cancelled),
+		(error: unknown) => error instanceof ExecError && error.kind === 'cancelled',
+	);
+	const failure = Promise.reject(new Error('capture failed'));
+	await assert.rejects(untilCancelled(failure, new TestCancellationToken()), /capture failed/);
+	await assert.rejects(untilCancelled(failure), /capture failed/);
 });

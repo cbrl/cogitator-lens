@@ -51,11 +51,19 @@ export function parseMsvcSourceDependencies(text: string, workingDirectory: stri
 	return normalizeDependencyPaths([...source, ...includes], workingDirectory);
 }
 
+/**
+ * Records the state of each input after a tool ran.
+ *
+ * `startedAt` is the Unix epoch time in milliseconds when the tool started. An input that changed
+ * after that time can be newer than the output, so its record never validates. A modification
+ * time later than the current time is clock skew, not a change during the run.
+ */
 export async function snapshotArtifactInputs(
 	sourceFile: string,
 	dependencies: readonly string[],
 	coverage: ArtifactInputMetadata['dependencyCoverage'],
 	workingDirectory: string,
+	startedAt?: number,
 ): Promise<ArtifactInputMetadata> {
 	const paths = normalizeDependencyPaths(
 		[sourceFile, ...(coverage === 'complete' ? dependencies : [])],
@@ -65,19 +73,17 @@ export async function snapshotArtifactInputs(
 		paths.map(async (filename) => {
 			try {
 				const stat = await fs.promises.stat(filename);
-				return Object.freeze({
-					uri: pathToFileURL(filename).href,
-					size: stat.size,
-					mtimeMs: stat.mtimeMs,
-				});
+				const changedDuringRun =
+					startedAt !== undefined && stat.mtimeMs >= startedAt && stat.mtimeMs <= Date.now();
+				return changedDuringRun
+					? unusableInput(filename)
+					: Object.freeze({
+							uri: pathToFileURL(filename).href,
+							size: stat.size,
+							mtimeMs: stat.mtimeMs,
+						});
 			} catch {
-				// Retaining an unreadable path guarantees that the entry cannot
-				// validate as a cache hit later.
-				return Object.freeze({
-					uri: pathToFileURL(filename).href,
-					size: -1,
-					mtimeMs: -1,
-				});
+				return unusableInput(filename);
 			}
 		}),
 	);
@@ -85,6 +91,15 @@ export async function snapshotArtifactInputs(
 		inputs: Object.freeze(inputs),
 		dependencyCoverage: coverage,
 	};
+}
+
+/** Records an input that can never validate as a cache hit, because its state is unknown. */
+function unusableInput(filename: string): ArtifactInputState {
+	return Object.freeze({
+		uri: pathToFileURL(filename).href,
+		size: -1,
+		mtimeMs: -1,
+	});
 }
 
 export async function validateArtifactInputs(inputs: readonly ArtifactInputState[]): Promise<boolean> {

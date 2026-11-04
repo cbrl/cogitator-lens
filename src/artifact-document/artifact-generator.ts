@@ -182,8 +182,14 @@ export class ArtifactGenerator implements Disposable {
 		}
 	}
 
+	/** Whether a compile is in progress. A refresh request makes the state stale before the compile ends. */
+	get generating(): boolean {
+		return this.cancellation !== undefined;
+	}
+
 	cancel(): boolean {
-		if (!this.cancellation || this.currentStatus.state !== 'compiling') {
+		// Use the token, not the state. A refresh request sets the state to stale during a compile.
+		if (!this.cancellation) {
 			return false;
 		}
 		this.cancellation.cancel();

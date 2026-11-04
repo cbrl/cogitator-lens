@@ -5,7 +5,7 @@ export const astArtifact = {
 	options: [displayOptionDescriptors.showSystemDeclarations],
 	presentation: 'text',
 	icon: 'symbol-structure',
-	filenameExtension: '.ast',
+	filenameExtension: '.coglens.ast',
 	documentLanguage: 'artifact',
 	editorLanguageId: 'coglens-ast',
 } as const satisfies ArtifactDefinition;

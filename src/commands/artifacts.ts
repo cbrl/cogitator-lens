@@ -204,13 +204,16 @@ function unavailableArtifactPickerItem(choice: ArtifactPickerChoice): ArtifactQu
 	};
 }
 
-interface ComparisonTarget {
+export interface ComparisonTarget {
 	readonly id: string;
 	readonly label: string;
 	readonly description: string;
 	readonly variant: CompilationVariant;
 	readonly preset?: ArtifactPreset;
 }
+
+/** The part of the toolchain registry that decides which artifact kinds a target supports. */
+export type ArtifactAvailabilityLookup = Pick<CompilationService['toolchainRegistry'], 'getArtifactAvailability'>;
 
 const graphComparisonMessage =
 	'Control-flow graphs cannot be compared in the native text diff. Open each graph separately.';
@@ -230,22 +233,12 @@ async function compareArtifacts(
 	if (!selectedVariant) {
 		return;
 	}
-	const variants = compilationService.getVariants(editor.document.uri);
-	const targets: ComparisonTarget[] = [
-		...variants.map((variant) => ({
-			id: `variant:${variant.id}`,
-			label: variant.displayLabel,
-			description: 'Compilation variant',
-			variant,
-		})),
-		...configuration.getArtifactPresets(editor.document.uri).map((preset) => ({
-			id: `preset:${preset.id}`,
-			label: preset.id,
-			description: `${artifactDefinitions[preset.artifactKind].label} preset`,
-			variant: selectedVariant,
-			preset,
-		})),
-	];
+	const registry = compilationService.toolchainRegistry;
+	const targets = comparisonTargets(
+		compilationService.getVariants(editor.document.uri),
+		configuration.getArtifactPresets(editor.document.uri),
+		selectedVariant,
+	);
 	if (targets.length < 2) {
 		await vscode.window.showInformationMessage(
 			'Artifact comparison needs at least two variants or configured presets.',
@@ -256,9 +249,7 @@ async function compareArtifacts(
 	if (!left) {
 		return;
 	}
-	const compatibleTargets = targets.filter(
-		(target) => target.id !== left.id && comparisonTargetsAreCompatible(left, target, compilationService),
-	);
+	const compatibleTargets = compatibleComparisonTargets(left, targets, registry);
 	if (compatibleTargets.length === 0) {
 		await vscode.window.showInformationMessage(
 			`No other configured variant or preset is compatible with "${left.label}".`,
@@ -273,24 +264,20 @@ async function compareArtifacts(
 		await vscode.window.showInformationMessage(graphComparisonMessage);
 		return;
 	}
-	const allCommonKinds = supportedArtifactKinds.filter(
-		(kind) =>
-			targetSupportsKind(left, kind, compilationService) && targetSupportsKind(right, kind, compilationService),
-	);
-	const commonKinds = allCommonKinds.filter((kind) => artifactDefinitions[kind].presentation === 'text');
-	if (commonKinds.length === 0) {
+	const { textKinds, hasGraphKind } = commonComparisonKinds(left, right, registry);
+	if (textKinds.length === 0) {
 		await vscode.window.showWarningMessage(
-			allCommonKinds.some((kind) => artifactDefinitions[kind].presentation === 'graph')
+			hasGraphKind
 				? graphComparisonMessage
 				: `"${left.label}" and "${right.label}" do not support a common artifact kind.`,
 		);
 		return;
 	}
 	const kind =
-		commonKinds.length === 1
-			? commonKinds[0]
+		textKinds.length === 1
+			? textKinds[0]
 			: await pickFrom(
-					commonKinds,
+					textKinds,
 					(artifactKind) => ({
 						label: artifactDefinitions[artifactKind].label,
 					}),
@@ -316,6 +303,59 @@ async function compareArtifacts(
 	);
 }
 
+/** The variants of a source, then each configured preset applied to the selected variant. */
+export function comparisonTargets(
+	variants: readonly CompilationVariant[],
+	presets: readonly ArtifactPreset[],
+	selectedVariant: CompilationVariant,
+): ComparisonTarget[] {
+	return [
+		...variants.map((variant) => ({
+			id: `variant:${variant.id}`,
+			label: variant.displayLabel,
+			description: 'Compilation variant',
+			variant,
+		})),
+		...presets.map((preset) => ({
+			id: `preset:${preset.id}`,
+			label: preset.id,
+			description: `${artifactDefinitions[preset.artifactKind].label} preset`,
+			variant: selectedVariant,
+			preset,
+		})),
+	];
+}
+
+/** The other targets that share at least one artifact kind with the left target. */
+export function compatibleComparisonTargets(
+	left: ComparisonTarget,
+	targets: readonly ComparisonTarget[],
+	registry: ArtifactAvailabilityLookup,
+): ComparisonTarget[] {
+	return targets.filter(
+		(target) =>
+			target.id !== left.id &&
+			supportedArtifactKinds.some(
+				(kind) => targetSupportsKind(left, kind, registry) && targetSupportsKind(target, kind, registry),
+			),
+	);
+}
+
+/** The text artifact kinds that both targets support, and whether they also share a graph kind. */
+export function commonComparisonKinds(
+	left: ComparisonTarget,
+	right: ComparisonTarget,
+	registry: ArtifactAvailabilityLookup,
+): { readonly textKinds: ArtifactKind[]; readonly hasGraphKind: boolean } {
+	const common = supportedArtifactKinds.filter(
+		(kind) => targetSupportsKind(left, kind, registry) && targetSupportsKind(right, kind, registry),
+	);
+	return {
+		textKinds: common.filter((kind) => artifactDefinitions[kind].presentation === 'text'),
+		hasGraphKind: common.some((kind) => artifactDefinitions[kind].presentation === 'graph'),
+	};
+}
+
 function targetIsGraph(target: ComparisonTarget): boolean {
 	return Boolean(target.preset && artifactDefinitions[target.preset.artifactKind].presentation === 'graph');
 }
@@ -337,30 +377,18 @@ function pickComparisonTarget(
 	);
 }
 
-function comparisonTargetsAreCompatible(
-	left: ComparisonTarget,
-	right: ComparisonTarget,
-	compilationService: CompilationService,
-): boolean {
-	return supportedArtifactKinds.some(
-		(kind) =>
-			targetSupportsKind(left, kind, compilationService) && targetSupportsKind(right, kind, compilationService),
-	);
-}
-
 function targetSupportsKind(
 	target: ComparisonTarget,
 	kind: ArtifactKind,
-	compilationService: CompilationService,
+	registry: ArtifactAvailabilityLookup,
 ): boolean {
 	return (
 		(!target.preset || target.preset.artifactKind === kind) &&
-		compilationService.toolchainRegistry.getArtifactAvailability(target.variant.toolchainProfileId, kind).status ===
-			'available'
+		registry.getArtifactAvailability(target.variant.toolchainProfileId, kind).status === 'available'
 	);
 }
 
-function comparisonUri(source: vscode.Uri, target: ComparisonTarget, kind: ArtifactKind): vscode.Uri {
+export function comparisonUri(source: vscode.Uri, target: ComparisonTarget, kind: ArtifactKind): vscode.Uri {
 	return getArtifactUri(source, target.variant, kind, target.preset?.id ?? 'default', undefined);
 }
 
@@ -376,7 +404,7 @@ async function showArtifactStatusActions(artifacts: ArtifactDocumentProvider): P
 				description: 'Regenerate from the current source and settings',
 				command: 'coglens.RefreshArtifact',
 			},
-			...(snapshot.status.state === 'compiling'
+			...(artifacts.activeArtifactIsGenerating()
 				? [
 						{
 							label: '$(debug-stop) Cancel Generation',

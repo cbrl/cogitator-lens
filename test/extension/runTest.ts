@@ -47,6 +47,11 @@ import {
 } from '../../src/artifacts/stack-analysis/native-stack-analysis.js';
 import { ExecError } from '../../src/exec.js';
 import { isSupportedSourceDocument } from '../../src/commands/variants.js';
+import {
+	verifyArtifactDocumentDiagnostics,
+	verifyArtifactDocumentNames,
+	verifyComparisonTargets,
+} from './artifact-documents.js';
 
 const extensionToolchainHost = {
 	log() {},
@@ -95,6 +100,9 @@ export async function run(): Promise<void> {
 	await verifyDisplayFilterCaching(workspaceFolder);
 	await verifyMissingSourceIsUnavailable(workspaceFolder);
 	await verifyArtifactGeneratorStates(workspaceFolder);
+	await verifyArtifactDocumentNames();
+	await verifyArtifactDocumentDiagnostics(workspaceFolder.uri.fsPath);
+	verifyComparisonTargets();
 	await verifyArtifactGeneratorFollowsVariant(workspaceFolder);
 	await verifyFallbackVariants(workspaceFolder);
 	await verifyFallbackLanguagesAndBareNames();
@@ -423,6 +431,18 @@ async function verifyArtifactGeneratorStates(workspaceFolder: vscode.WorkspaceFo
 		await assert.rejects(cancelledUpdate, vscode.CancellationError);
 		assert.equal(handler.status.state, 'cancelled');
 		assert.equal(handler.cancel(), false);
+		assert.equal(handler.generating, false);
+
+		// A refresh request sets the state to stale during a compile. Cancel must still stop that compile.
+		const staleUpdate = handler.update(cancellation.token);
+		await Promise.resolve();
+		handler.markStale();
+		assert.equal(handler.status.state, 'stale');
+		assert.equal(handler.generating, true);
+		assert.equal(handler.cancel(), true);
+		await assert.rejects(staleUpdate, vscode.CancellationError);
+		assert.equal(handler.status.state, 'cancelled');
+		assert.equal(handler.generating, false);
 		assert.deepEqual(states, [
 			'stale',
 			'compiling',
@@ -432,6 +452,9 @@ async function verifyArtifactGeneratorStates(workspaceFolder: vscode.WorkspaceFo
 			'compiling',
 			'failed',
 			'compiling',
+			'cancelled',
+			'compiling',
+			'stale',
 			'cancelled',
 		]);
 	} finally {
@@ -837,7 +860,7 @@ function verifyAssemblyUriRoundTrip(): void {
 	assert.equal(identity.variantId, 'cmake:app:Debug/x64');
 	assert.equal(identity.artifactKind, 'assembly');
 	assert.equal(identity.presetId, 'default');
-	assert.match(uri.path, /main\.asm$/);
+	assert.match(uri.path, /main\.coglens\.asm$/);
 	const presetUri = getArtifactUri(
 		source,
 		{
@@ -888,7 +911,7 @@ function verifyAssemblyUriRoundTrip(): void {
 		'assembly',
 		'default',
 	);
-	assert.match(pythonUri.path, /main\.asm$/);
+	assert.match(pythonUri.path, /main\.coglens\.asm$/);
 	assert.equal(parseArtifactUri(pythonUri)?.artifactKind, 'assembly');
 	const stackUri = getArtifactUri(
 		source,

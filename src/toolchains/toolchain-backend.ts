@@ -211,7 +211,10 @@ interface PreparedInvocation {
 	readonly providerArguments: readonly string[];
 	readonly overriddenNames: readonly string[];
 	readonly environmentVariableNames: readonly string[];
+	/** A monotonic time for the duration. */
 	readonly started: number;
+	/** The Unix epoch time in milliseconds, for comparison with file modification times. */
+	readonly startedAt: number;
 }
 
 interface ToolchainRun {
@@ -516,6 +519,7 @@ export class ToolchainBackend {
 			}).sort(),
 			environmentVariableNames: Object.keys(preparedEnvironment).sort(),
 			started: performance.now(),
+			startedAt: Date.now(),
 		};
 		this.reportInvocation(options, invocation);
 		return invocation;
@@ -538,7 +542,13 @@ export class ToolchainBackend {
 	): Promise<ArtifactInputMetadata> {
 		const spec = this.definition.dependencyCollection;
 		if (!spec) {
-			return snapshotArtifactInputs(source.fsPath, [], 'source-only', invocation.workingDirectory);
+			return snapshotArtifactInputs(
+				source.fsPath,
+				[],
+				'source-only',
+				invocation.workingDirectory,
+				invocation.startedAt,
+			);
 		}
 		const dependencyFile = path.join(temporaryDirectory, spec.outputFilename);
 		const dependencyArguments = spec.arguments(dependencyFile, temporaryDirectory, invocation.providerArguments);
@@ -554,14 +564,32 @@ export class ToolchainBackend {
 				},
 			);
 			if (result.returnCode !== 0) {
-				return snapshotArtifactInputs(source.fsPath, [], 'source-only', invocation.workingDirectory);
+				return snapshotArtifactInputs(
+					source.fsPath,
+					[],
+					'source-only',
+					invocation.workingDirectory,
+					invocation.startedAt,
+				);
 			}
 			const dependencyText = await readBoundedArtifactFile(dependencyFile);
 			const dependencies = spec.parse(dependencyText, invocation.workingDirectory);
 			if (dependencies.length === 0) {
-				return snapshotArtifactInputs(source.fsPath, [], 'source-only', invocation.workingDirectory);
+				return snapshotArtifactInputs(
+					source.fsPath,
+					[],
+					'source-only',
+					invocation.workingDirectory,
+					invocation.startedAt,
+				);
 			}
-			return snapshotArtifactInputs(source.fsPath, dependencies, 'complete', invocation.workingDirectory);
+			return snapshotArtifactInputs(
+				source.fsPath,
+				dependencies,
+				'complete',
+				invocation.workingDirectory,
+				invocation.startedAt,
+			);
 		} catch (error) {
 			if (
 				cancellationToken.isCancellationRequested ||
@@ -569,7 +597,13 @@ export class ToolchainBackend {
 			) {
 				throw error;
 			}
-			return snapshotArtifactInputs(source.fsPath, [], 'source-only', invocation.workingDirectory);
+			return snapshotArtifactInputs(
+				source.fsPath,
+				[],
+				'source-only',
+				invocation.workingDirectory,
+				invocation.startedAt,
+			);
 		}
 	}
 

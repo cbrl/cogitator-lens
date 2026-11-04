@@ -19,3 +19,4 @@ tsconfig.json
 tsconfig.unit.json
 tsconfig.extension-tests.json
 tsconfig.webview.json
+coverage/**

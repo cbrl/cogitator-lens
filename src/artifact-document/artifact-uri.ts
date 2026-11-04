@@ -2,9 +2,9 @@ import { Uri } from 'vscode';
 import path from 'path';
 import type { ArtifactKind, CompilationVariant } from '../types/index.js';
 import { artifactDefinitions, getArtifactKind } from '../artifacts/core/artifact-definitions.js';
-import { replaceExtension } from '../utils.js';
+import { artifactScheme } from './artifact-scheme.js';
 
-export const artifactScheme = 'coglens-artifact';
+export { artifactScheme };
 
 export interface ArtifactUriIdentity {
 	readonly source: Uri;
@@ -45,10 +45,16 @@ export function getArtifactUri(
 	});
 }
 
+/**
+ * Replaces the source extension with the artifact suffix. A URI path always uses forward slashes, so
+ * the platform path module must not change it. On Windows, it would write backslashes.
+ */
 function artifactPath(sourcePath: string, artifactKind: ArtifactKind): string {
 	const definition = artifactDefinitions[artifactKind];
-	const sourceExtension = definition.documentLanguage === 'source' ? path.extname(sourcePath) : '';
-	return replaceExtension(sourcePath, `${definition.filenameExtension}${sourceExtension}`);
+	const sourceExtension = path.posix.extname(sourcePath);
+	const stem = sourcePath.slice(0, sourcePath.length - sourceExtension.length);
+	const languageExtension = definition.documentLanguage === 'source' ? sourceExtension : '';
+	return `${stem}${definition.filenameExtension}${languageExtension}`;
 }
 
 export function parseArtifactUri(uri: Uri): ArtifactUriIdentity | undefined {

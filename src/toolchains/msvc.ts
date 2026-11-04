@@ -8,7 +8,6 @@ import type { ParsedAsmResult } from '../vendor/types/asmresult/asmresult.interf
 import type { ParseFiltersAndOutputOptions } from '../vendor/types/features/filters.interfaces.js';
 import type { ToolchainProfile } from '../types/index.js';
 import * as exec from '../exec.js';
-import { ExecError } from '../exec.js';
 import { outputProducer } from '../artifacts/core/compiler-output-producer.js';
 import type { BinaryDisassembler } from '../artifacts/binary-disassembly/binary-disassembly-producer.js';
 import { masmProcedureLine } from '../artifacts/assembly/assembly-navigation.js';
@@ -177,12 +176,8 @@ export async function captureWindowsEnvironment(
 	const cacheKey = `${localFileComparisonKey(profile.executable)}\0${architecture}`;
 	let environmentPromise = environmentCache.get(cacheKey);
 	if (!environmentPromise) {
-		environmentPromise = captureVisualStudioEnvironment(
-			{ ...process.env },
-			profile.executable,
-			architecture,
-			cancellationToken,
-		);
+		// All waiters share the capture, so the token of the first waiter must not stop it.
+		environmentPromise = captureVisualStudioEnvironment({ ...process.env }, profile.executable, architecture);
 		environmentCache.set(cacheKey, environmentPromise);
 		void environmentPromise.catch(() => {
 			if (environmentCache.get(cacheKey) === environmentPromise) {
@@ -190,7 +185,7 @@ export async function captureWindowsEnvironment(
 			}
 		});
 	}
-	const visualStudioEnvironment = { ...(await environmentPromise) };
+	const visualStudioEnvironment = { ...(await exec.untilCancelled(environmentPromise, cancellationToken)) };
 	for (const [name, value] of Object.entries(environment)) {
 		if (value !== process.env[name]) {
 			visualStudioEnvironment[name] = value;
@@ -203,15 +198,13 @@ async function captureVisualStudioEnvironment(
 	baseEnvironment: NodeJS.ProcessEnv,
 	executable: string,
 	vcvarsArchitectureValue: string,
-	cancellationToken: CancellationToken,
 ): Promise<NodeJS.ProcessEnv> {
-	const vcvarsScript = await findVisualStudioEnvironmentScript(executable, baseEnvironment, cancellationToken);
+	const vcvarsScript = await findVisualStudioEnvironmentScript(executable, baseEnvironment);
 
 	const toolset = visualStudioToolsetArgument(executable);
 	const captureCommand = `call "${vcvarsScript}" ${vcvarsArchitectureValue}${toolset ? ` ${toolset}` : ''} >nul && set`;
 	const result = await exec.execute('cmd.exe', ['/d', '/s', '/c', captureCommand], {
 		env: baseEnvironment,
-		cancellationToken,
 		windowsVerbatimArguments: true,
 	});
 	if (result.returnCode !== 0) {
@@ -236,7 +229,6 @@ async function captureVisualStudioEnvironment(
 async function findVisualStudioEnvironmentScript(
 	executable: string,
 	baseEnvironment: NodeJS.ProcessEnv,
-	cancellationToken: CancellationToken,
 ): Promise<string> {
 	for (const candidate of visualStudioEnvironmentCandidates(executable)) {
 		if (fs.existsSync(candidate)) {
@@ -251,7 +243,6 @@ async function findVisualStudioEnvironmentScript(
 			try {
 				const result = await exec.execute(vswhere, visualStudioDiscoveryArguments, {
 					env: baseEnvironment,
-					cancellationToken,
 				});
 				if (result.returnCode === 0) {
 					const installationPath = result.stdout
@@ -265,10 +256,8 @@ async function findVisualStudioEnvironmentScript(
 						}
 					}
 				}
-			} catch (error) {
-				if (error instanceof ExecError && error.kind === 'cancelled') {
-					throw error;
-				}
+			} catch {
+				// A vswhere failure leaves only the error below.
 			}
 		}
 	}

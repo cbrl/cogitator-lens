@@ -49,7 +49,7 @@ export const assemblyArtifact = {
 	presentation: 'text',
 	listingSyntax: 'native-assembly',
 	icon: 'symbol-method',
-	filenameExtension: '.asm',
+	filenameExtension: '.coglens.asm',
 	documentLanguage: 'artifact',
 	editorLanguageId: 'coglens-asm',
 	renderer: renderAssembly,

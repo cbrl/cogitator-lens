@@ -9,3 +9,4 @@ samples/**/bin/
 samples/**/obj/
 samples/rust/target/
 samples/python/**/__pycache__/
+coverage/

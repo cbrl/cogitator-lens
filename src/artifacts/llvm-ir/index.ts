@@ -7,7 +7,7 @@ export const llvmIrArtifact = {
 	presentation: 'text',
 	listingSyntax: 'llvm-ir',
 	icon: 'circuit-board',
-	filenameExtension: '.ll',
+	filenameExtension: '.coglens.ll',
 	documentLanguage: 'artifact',
 	editorLanguageId: 'coglens-llvm-ir',
 	renderer: renderLlvmIr,

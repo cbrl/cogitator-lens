@@ -55,6 +55,35 @@ export function currentProcessLimits(): ProcessLimits {
 	return processLimits;
 }
 
+/**
+ * Waits for a promise that several callers share, but rejects when this caller's token is cancelled.
+ * The shared work continues for the other callers.
+ */
+export function untilCancelled<T>(promise: Promise<T>, cancellationToken?: CancellationLike): Promise<T> {
+	if (!cancellationToken) {
+		return promise;
+	}
+	if (cancellationToken.isCancellationRequested) {
+		return Promise.reject(new ExecError('cancelled', 'Process execution was cancelled'));
+	}
+	return new Promise<T>((resolve, reject) => {
+		const subscription = cancellationToken.onCancellationRequested(() => {
+			subscription.dispose();
+			reject(new ExecError('cancelled', 'Process execution was cancelled'));
+		});
+		promise.then(
+			(value) => {
+				subscription.dispose();
+				resolve(value);
+			},
+			(error: unknown) => {
+				subscription.dispose();
+				reject(error);
+			},
+		);
+	});
+}
+
 export async function execute(
 	command: string,
 	args: readonly string[],

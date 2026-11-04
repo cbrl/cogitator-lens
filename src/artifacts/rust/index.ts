@@ -6,7 +6,7 @@ export const rustMirArtifact = {
 	options: [],
 	presentation: 'text',
 	icon: 'symbol-namespace',
-	filenameExtension: '.mir',
+	filenameExtension: '.coglens.mir',
 	documentLanguage: 'artifact',
 	editorLanguageId: 'coglens-mir',
 	renderer: renderRustMir,

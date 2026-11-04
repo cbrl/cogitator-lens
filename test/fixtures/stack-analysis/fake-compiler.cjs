@@ -55,6 +55,9 @@ if (args.includes('--fail')) {
 	process.exitCode = 2;
 	return;
 }
+if (args.includes('--warn')) {
+	process.stderr.write(`${source}:1:5: warning: expected fake warning\n`);
+}
 fs.writeFileSync(output, 'object');
 if (args.includes('--missing-stack')) {
 	return;

@@ -7,6 +7,7 @@ import {
 	type SerializedGraphArtifact,
 	type WebviewMessage,
 } from '../src/webview/graph-protocol.js';
+import { inlineComputedStyles } from './svg-export.js';
 
 interface PersistedState {
 	readonly selectedGraphId?: string;
@@ -536,7 +537,17 @@ function exportSvg(): void {
 		return;
 	}
 	const copy = svg.cloneNode(true) as SVGSVGElement;
-	copy.setAttribute('viewBox', `0 0 ${canvas.clientWidth} ${canvas.clientHeight}`);
+	inlineComputedStyles(svg, copy, (element) => getComputedStyle(element as unknown as Element));
+	const width = String(canvas.clientWidth);
+	const height = String(canvas.clientHeight);
+	copy.setAttribute('viewBox', `0 0 ${width} ${height}`);
+	copy.setAttribute('width', width);
+	copy.setAttribute('height', height);
+	// The theme sets the canvas color. Without a background, light text can be on a white page.
+	copy.insertBefore(
+		svgElement('rect', { width: '100%', height: '100%', fill: getComputedStyle(document.body).backgroundColor }),
+		copy.firstChild,
+	);
 	vscode.postMessage({
 		type: 'exportSvg',
 		graphId: currentGraph.id,

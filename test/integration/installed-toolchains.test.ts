@@ -199,6 +199,31 @@ test('the Python stack helper honors declared encodings and reports syntax error
 	}
 });
 
+test('the Python bytecode producer ignores modules beside the source', async (t) => {
+	if (!requireCommand(t, 'python')) {
+		return;
+	}
+	const temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'coglens-python-shadow-'));
+	try {
+		const source = path.join(temporary, 'main.py');
+		await fs.promises.writeFile(source, 'def answer():\n    return 42\n');
+		// Each module replaces a standard module that `python -m dis` imports.
+		for (const name of ['dis', 'opcode']) {
+			await fs.promises.writeFile(path.join(temporary, `${name}.py`), `print("SHADOWED ${name}")\n`);
+		}
+		const produced = await declaredImplementation('python', 'assembly').producer(
+			toolchainBackend('python', { executable: 'python' }),
+			sourceUri(source),
+			{ workingDirectory: temporary, productionOptions: defaultArtifactOptions.production },
+			neverCancelled,
+		);
+		assert.doesNotMatch(produced.text, /SHADOWED/u);
+		assert.match(produced.text, /RETURN_(?:VALUE|CONST)/u);
+	} finally {
+		await fs.promises.rm(temporary, { recursive: true, force: true });
+	}
+});
+
 test('the Go compiler produces normalized assembly and a GOSSAFUNC graph', async (t) => {
 	if (!requireCommand(t, 'go', 'version')) {
 		return;

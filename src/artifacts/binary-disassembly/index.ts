@@ -16,7 +16,7 @@ export const binaryDisassemblyArtifact = {
 	presentation: 'text',
 	listingSyntax: 'native-assembly',
 	icon: 'package',
-	filenameExtension: '.disasm',
+	filenameExtension: '.coglens.disasm',
 	documentLanguage: 'artifact',
 	editorLanguageId: 'coglens-asm',
 	renderer: renderBinaryDisassembly,

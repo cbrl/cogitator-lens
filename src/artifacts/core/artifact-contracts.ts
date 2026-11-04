@@ -46,6 +46,10 @@ export interface ArtifactDefinition {
 	readonly requiresOutputSelection?: true;
 	readonly label: string;
 	readonly icon: string;
+	/**
+	 * The suffix of the artifact document name. An `artifact` document needs a private suffix, such as
+	 * `.coglens.asm`. Its language contribution then cannot claim the user's own files.
+	 */
 	readonly filenameExtension: string;
 	readonly documentLanguage: 'artifact' | 'source';
 	/** Language contribution used for artifact-owned text document extensions. */

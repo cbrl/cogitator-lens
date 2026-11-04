@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { Uri } from 'vscode';
 import {
 	artifactInputComparisonKey,
@@ -48,6 +48,48 @@ test('input snapshots detect a changed or deleted dependency', async () => {
 
 		await fs.promises.rm(header);
 		assert.equal(await validateArtifactInputs(snapshot.inputs), false);
+	} finally {
+		await fs.promises.rm(temporary, { recursive: true, force: true });
+	}
+});
+
+test('an input that changed while the tool ran never validates', async () => {
+	const temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'coglens-inputs-'));
+	try {
+		const source = path.join(temporary, 'source.cpp');
+		const before = path.join(temporary, 'before.h');
+		const during = path.join(temporary, 'during.h');
+		const future = path.join(temporary, 'future.h');
+		await Promise.all(
+			[source, before, during, future].map((filename) => fs.promises.writeFile(filename, '#pragma once\n')),
+		);
+		const startedAt = Date.now() - 60_000;
+		const setModified = (filename: string, modified: number): Promise<void> =>
+			fs.promises.utimes(filename, new Date(modified), new Date(modified));
+		await Promise.all([
+			setModified(source, startedAt - 60_000),
+			setModified(before, startedAt - 60_000),
+			setModified(during, startedAt + 30_000),
+			// A time after the snapshot is clock skew, not an edit while the tool ran.
+			setModified(future, Date.now() + 3_600_000),
+		]);
+
+		const snapshot = await snapshotArtifactInputs(
+			source,
+			[before, during, future],
+			'complete',
+			temporary,
+			startedAt,
+		);
+		const sizes = new Map(snapshot.inputs.map((input) => [path.basename(fileURLToPath(input.uri)), input.size]));
+		assert.notEqual(sizes.get('source.cpp'), -1);
+		assert.notEqual(sizes.get('before.h'), -1);
+		assert.equal(sizes.get('during.h'), -1);
+		assert.notEqual(sizes.get('future.h'), -1);
+		assert.equal(await validateArtifactInputs(snapshot.inputs), false);
+
+		const unchanged = await snapshotArtifactInputs(source, [before, future], 'complete', temporary, startedAt);
+		assert.equal(await validateArtifactInputs(unchanged.inputs), true);
 	} finally {
 		await fs.promises.rm(temporary, { recursive: true, force: true });
 	}

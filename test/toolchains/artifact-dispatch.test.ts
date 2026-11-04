@@ -99,7 +99,7 @@ test('stdout-backed producers pass execution modes rather than an output file', 
 	for (const [toolchain, artifact, expected] of [
 		['gcc', 'preprocessed-source', ['-E']],
 		['msvc', 'preprocessed-source', ['/E']],
-		['python', 'assembly', ['-m', 'dis']],
+		['python', 'assembly', ['-I', '-m', 'dis']],
 	] as const) {
 		const recorded = await recordProduction(declaredImplementation(toolchain, artifact).producer, {
 			profileKind: toolchain,

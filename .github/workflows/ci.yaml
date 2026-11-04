@@ -27,7 +27,18 @@ jobs:
       - name: Vendored sources
         if: runner.os == 'Linux'
         run: npm run vendor:check
-      - run: npm run test:unit
+      - name: Unit tests
+        if: runner.os != 'Linux'
+        run: npm run test:unit
+      - name: Unit tests with coverage
+        if: runner.os == 'Linux'
+        run: npm run test:coverage
+      - name: Coverage report
+        if: runner.os == 'Linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-lcov
+          path: coverage/lcov.info
       - run: npm run compile
       - name: Extension host tests (Linux)
         if: runner.os == 'Linux'
@@ -60,6 +71,7 @@ jobs:
           grep -q 'extension/dist/webview/control-flow-graph.css' vsix-files.txt
           grep -q 'extension/LICENSE.txt' vsix-files.txt
           grep -q 'extension/THIRD_PARTY_NOTICES.md' vsix-files.txt
+          grep -q 'extension/CHANGELOG.md' vsix-files.txt
           grep -q 'extension/resources/gear-phi.png' vsix-files.txt
           grep -q 'extension/syntaxes/coglens-ast.tmLanguage.json' vsix-files.txt
           grep -q 'extension/syntaxes/coglens-mir.tmLanguage.json' vsix-files.txt
