@@ -13,6 +13,7 @@ All notable changes to Cogitator Lens are in this file.
 - Python bytecode runs in isolated mode. A local `dis.py` or `opcode.py` beside the source no longer replaces the standard module.
 - A header edit during a compile no longer lets the old output validate as current. The next refresh compiles again.
 - Artifact documents use private file suffixes, such as `main.coglens.asm`. The extension no longer claims your own `.asm`, `.ll`, `.ast`, and `.mir` files.
+- MSVC assembly obeys "Show address and opcode columns". Before, the address and code bytes from `/FAcs` were part of each line, so they always showed. They are now columns beside the text, as in binary disassembly. Search, copy, and instruction hovers see only the instruction, and a wrapped long encoding is one line.
 - Exported control-flow graph SVG files keep their colors, fonts, and background.
 - The manifest declares `onFileSystem:coglens-artifact`, so a restored artifact tab can activate the extension.
 

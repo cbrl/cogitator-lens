@@ -255,8 +255,26 @@ test('each instruction of an MSVC /FAcs listing maps to the source comment befor
 	assert.equal(sourceLine(artifact, /\bjle\s/), 4);
 	assert.equal(sourceLine(artifact, /\bmov\s+DWORD PTR value\$\[rsp\], 0/), 7);
 	assert.equal(sourceLine(artifact, /\bret\s/), 7);
-	// The bytes before a wrapped instruction are not an instruction.
-	assert.equal(sourceLine(artifact, /^\s*0000b\s+c7 44 24 20 00$/), undefined);
+
+	// The address and bytes leave the text for the line fields. The editor shows them as columns only
+	// when the display option asks for them, as for binary disassembly.
+	const columns = (instruction: RegExp) => {
+		const line = artifact.lines.find((candidate) => instruction.test(candidate.text));
+		return [line?.address, line?.opcodes?.join(' '), line?.text.trim().replace(/\s+/g, ' ')];
+	};
+	assert.deepEqual(columns(/\bcmp\s/), [0x04, '83 7c 24 08 0a', 'cmp DWORD PTR value$[rsp], 10']);
+	assert.deepEqual(columns(/\bjle\s/), [0x09, '7e 06', 'jle SHORT $LN2@classify']);
+	// A wrapped encoding is one instruction with all of its bytes.
+	assert.deepEqual(columns(/\bmov\s+DWORD PTR value\$\[rsp\], 0/), [
+		0x0b,
+		'c7 44 24 20 00 00 00 00',
+		'mov DWORD PTR value$[rsp], 0',
+	]);
+	assert.equal(
+		artifact.lines.some((line) => /^\s*[0-9a-f]{5}\s|\b(?:c7 44 24 20 00|89 4c 24 08)\b|coglens/.test(line.text)),
+		false,
+		'No line text holds an address, encoded bytes, or a parsing marker',
+	);
 
 	// Shown comments are the source text the compiler wrote, without the comments added for parsing.
 	const comments = render({ showCommentOnlyLines: true }).lines.filter((line) => line.text.startsWith(';'));

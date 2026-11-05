@@ -74,6 +74,14 @@ const addedLineComment = /^\s*; Line \d+ <coglens>$/;
  * as `DD`, in uppercase.
  */
 const msvcCodeColumns = /^\s*(?:[0-9a-f]{5,16}\s+)?(?:[0-9a-f]{2}\s+)+/;
+/**
+ * A code line of a `/FAcs` listing: the address in the function, the encoded bytes, and the
+ * instruction. A long encoding wraps. Its first line has the address and the first bytes, and the
+ * next line has the other bytes and the instruction.
+ */
+const msvcCodeLine = /^[ \t]*(?:([0-9a-f]{5,16})[ \t]+)?((?:[0-9a-f]{2} )*[0-9a-f]{2})(?:[ \t]+(\S.*))?$/;
+/** Carries the address and bytes of an instruction through the vendored parser, at the end of its line. */
+const codeColumnsMarker = /\s*;@coglens:([0-9a-f]*):([0-9a-f]*)$/;
 const msvcProcedureEnd = /^\S.*?[ \t]+ENDP\b/;
 const msvcLabelLine = /^(\S+):$/;
 /** A jump or a call, its distance, and its target, which runs to the comment. */
@@ -109,14 +117,13 @@ function withMsvcLabels(parsed: ParsedAsmResult): ParsedAsmResult {
 			procedure = start;
 			return line;
 		}
-		const instruction = line.text.replace(msvcCodeColumns, '');
-		const branch = msvcBranch.exec(instruction);
+		const branch = msvcBranch.exec(line.text);
 		const name = branch?.[2];
 		const target = name && [scoped(procedure, name), name].find((key) => Object.hasOwn(labelDefinitions, key));
 		if (!branch || !name || !target) {
 			return line;
 		}
-		const startCol = line.text.length - instruction.length + branch[1].length + 1;
+		const startCol = branch[1].length + 1;
 		const range = { startCol, endCol: startCol + name.length };
 		return { ...line, labels: [{ name, ...(target === name ? {} : { target }), range }] };
 	});
@@ -124,12 +131,67 @@ function withMsvcLabels(parsed: ParsedAsmResult): ParsedAsmResult {
 }
 
 /**
+ * Moves the address and bytes of each `/FAcs` code line to a marker at the end of the line, so the
+ * instruction starts the line as in a `/FA` listing. A wrapped encoding becomes one line.
+ */
+function withCodeColumnMarkers(asm: string): string {
+	const result: string[] = [];
+	let pending: { readonly lines: string[]; readonly address: string; readonly bytes: string[] } | undefined;
+	const keepPending = (): void => {
+		result.push(...(pending?.lines ?? []));
+		pending = undefined;
+	};
+	for (const line of asm.split(/\r?\n/)) {
+		const code = msvcCodeLine.exec(line);
+		if (!code) {
+			keepPending();
+			result.push(line);
+			continue;
+		}
+		const [, address, bytes, instruction] = code;
+		if (address !== undefined) {
+			keepPending();
+		}
+		pending ??= { lines: [], address: address ?? '', bytes: [] };
+		pending.lines.push(line);
+		pending.bytes.push(...bytes.split(' '));
+		if (instruction !== undefined) {
+			result.push(`\t${instruction} ;@coglens:${pending.address}:${pending.bytes.join('')}`);
+			pending = undefined;
+		}
+	}
+	keepPending();
+	return result.join('\n');
+}
+
+/** Reads the marker of each instruction into the address and opcodes of its line. */
+function withCodeColumns(parsed: ParsedAsmResult): ParsedAsmResult {
+	return {
+		...parsed,
+		asm: parsed.asm.map((line) => {
+			const marker = codeColumnsMarker.exec(line.text);
+			if (!marker) {
+				return line;
+			}
+			const [, address, bytes] = marker;
+			return {
+				...line,
+				text: line.text.slice(0, marker.index),
+				...(address ? { address: Number.parseInt(address, 16) } : {}),
+				opcodes: bytes.match(/../g) ?? [],
+			};
+		}),
+	};
+}
+
+/**
  * Reads the source line of each instruction in a `/FAcs` listing. The vendored parser expects the
  * `/FA` form: a `; Line N` comment, and the instruction at the start of its line. `/FAcs` writes
  * the source text in place of that comment. It also writes the address and bytes before each
  * instruction. A `; Line N` comment goes before each source comment for the parser, and is removed
- * from what the parser returns. The opcode test skips the address and bytes. The parser also finds
- * no labels, so they are added after it.
+ * from what the parser returns. The address and bytes go into the fields of each line, so the text
+ * holds only the instruction. The editor shows them only when the display option asks for them.
+ * The parser also finds no labels, so they are added after it.
  */
 class MsvcListingParser extends VcAsmParser {
 	override hasOpcode(line: string): boolean {
@@ -140,8 +202,11 @@ class MsvcListingParser extends VcAsmParser {
 		if (filters.binary || filters.binaryObject) {
 			return super.processAsm(asm, filters);
 		}
-		const parsed = super.processAsm(asm.replace(msvcSourceComment, '; Line $1 <coglens>\n$&'), filters);
-		return withMsvcLabels({ ...parsed, asm: parsed.asm.filter((line) => !addedLineComment.test(line.text)) });
+		const marked = withCodeColumnMarkers(asm).replace(msvcSourceComment, '; Line $1 <coglens>\n$&');
+		const parsed = super.processAsm(marked, filters);
+		return withMsvcLabels(
+			withCodeColumns({ ...parsed, asm: parsed.asm.filter((line) => !addedLineComment.test(line.text)) }),
+		);
 	}
 }
 
