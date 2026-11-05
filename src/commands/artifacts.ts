@@ -1,10 +1,27 @@
 import path from 'path';
 import * as vscode from 'vscode';
 import { getArtifactUri, type ArtifactDocumentProvider } from '../artifact-document/artifact-document-provider.js';
-import { artifactDefinitions, supportedArtifactKinds } from '../artifacts/core/artifact-definitions.js';
-import { partitionArtifactPickerChoices, type ArtifactPickerChoice } from '../artifacts/ui/artifact-picker.js';
+import type { ActiveArtifact } from '../artifact-document/active-artifact.js';
+import type { ArtifactState } from '../artifact-document/artifact-generator.js';
+import {
+	artifactDefinitions,
+	getArtifactKind,
+	supportedArtifactKinds,
+} from '../artifacts/core/artifact-definitions.js';
+import {
+	partitionArtifactPickerChoices,
+	recentArtifactKinds,
+	withRecentUse,
+	type ArtifactPickerChoice,
+} from '../artifacts/ui/artifact-picker.js';
 import { effectiveArtifactPresets, type ArtifactPreset } from '../artifacts/ui/presets.js';
 import type { CompilationService } from '../compilation/index.js';
+import {
+	maximumListingLineLimit,
+	minimumListingLineLimit,
+	parseListingLineLimit,
+} from '../compilation/listing-limit.js';
+import { CompilationError } from '../types/index.js';
 import * as logger from '../logger.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
 import { getArtifactOutputChoices } from '../toolchains/toolchain-artifacts.js';
@@ -18,17 +35,35 @@ export interface ArtifactCommandDependencies {
 	readonly compilationService: CompilationService;
 	readonly configuration: ConfigurationService;
 	readonly artifacts: ArtifactDocumentProvider;
+	readonly activeArtifact: ActiveArtifact;
 	readonly graphPanels: GraphPanelManager;
 }
 
+/** What `coglens.OpenArtifact` accepts from a key binding, so a key can open one kind or preset. */
+export interface OpenArtifactArguments {
+	readonly kind?: ArtifactKind;
+	readonly preset?: string;
+}
+
+/** The global state key of the artifact kinds that the user opened last. */
+const recentKindsKey = 'coglens.recentArtifactKinds';
+
 export function register(context: vscode.ExtensionContext, deps: ArtifactCommandDependencies): void {
-	const { compilationService, configuration, artifacts } = deps;
+	const { compilationService, configuration, artifacts, activeArtifact } = deps;
+	const recentKinds = {
+		get: () => recentArtifactKinds(context.globalState.get(recentKindsKey)),
+		use: (kind: ArtifactKind) => context.globalState.update(recentKindsKey, withRecentUse(recentKinds.get(), kind)),
+	};
 	context.subscriptions.push(
-		vscode.commands.registerTextEditorCommand('coglens.OpenArtifact', (editor) =>
-			openArtifact(editor, undefined, deps),
-		),
+		// The explorer gives a file URI, and a key binding can give OpenArtifactArguments.
+		vscode.commands.registerCommand('coglens.OpenArtifact', async (argument?: unknown) => {
+			const target = await openArtifactTarget(argument);
+			if (target) {
+				await openArtifact(target.document, target.request, deps, recentKinds);
+			}
+		}),
 		vscode.commands.registerTextEditorCommand('coglens.OpenControlFlowGraph', (editor) =>
-			openArtifact(editor, 'control-flow-graph', deps),
+			openArtifact(editor.document, { kind: 'control-flow-graph' }, deps, recentKinds),
 		),
 		vscode.commands.registerTextEditorCommand('coglens.CompareArtifacts', (editor) =>
 			compareArtifacts(editor, compilationService, configuration),
@@ -40,18 +75,21 @@ export function register(context: vscode.ExtensionContext, deps: ArtifactCommand
 			}
 		}),
 		vscode.commands.registerCommand('coglens.RefreshArtifact', async () => {
-			if (!artifacts.refreshActiveArtifact()) {
-				await vscode.window.showInformationMessage('Focus an open text artifact to refresh it.');
+			const document = activeArtifact.document;
+			if (document) {
+				artifacts.requestRefresh(document.uri);
+			} else {
+				await vscode.window.showInformationMessage('Open an artifact to refresh it.');
 			}
 		}),
 		vscode.commands.registerCommand('coglens.CancelGeneration', async () => {
-			if (!artifacts.cancelActiveArtifact()) {
+			if (!activeArtifact.document?.handler.cancel()) {
 				await vscode.window.showInformationMessage('The active artifact is not being generated.');
 			}
 		}),
 		vscode.commands.registerCommand('coglens.ShowLog', () => logger.logChannel.show()),
 		vscode.commands.registerCommand('coglens.RevealArtifactSource', async () => {
-			const snapshot = artifacts.getActiveArtifactDocumentState();
+			const snapshot = activeArtifact.document?.snapshot;
 			if (snapshot) {
 				const activeEditor = vscode.window.activeTextEditor;
 				const mappedSource = activeEditor
@@ -72,7 +110,9 @@ export function register(context: vscode.ExtensionContext, deps: ArtifactCommand
 				});
 			}
 		}),
-		vscode.commands.registerCommand('coglens.ShowArtifactStatus', async () => showArtifactStatusActions(artifacts)),
+		vscode.commands.registerCommand('coglens.ShowArtifactStatus', async () =>
+			showArtifactStatusActions(activeArtifact, configuration),
+		),
 		...[
 			['coglens.OpenToolchainSettingsJson', 'coglens.toolchains'],
 			['coglens.OpenCompileSettingsJson', 'coglens.compileVariants'],
@@ -82,19 +122,69 @@ export function register(context: vscode.ExtensionContext, deps: ArtifactCommand
 	);
 }
 
+/** The source and the request of an Open Artifact command, from its argument or the active editor. */
+async function openArtifactTarget(
+	argument: unknown,
+): Promise<{ readonly document: vscode.TextDocument; readonly request: OpenArtifactArguments } | undefined> {
+	if (argument instanceof vscode.Uri) {
+		// The explorer gives the file. Show it, so the artifact opens beside it and maps its lines.
+		const editor = await vscode.window.showTextDocument(argument, { preview: false });
+		return { document: editor.document, request: {} };
+	}
+	const request = openArtifactArguments(argument);
+	if (!request) {
+		await vscode.window.showErrorMessage(
+			'Open Artifact accepts { "kind": "<artifact kind>", "preset": "<preset>" }. ' +
+				`The artifact kinds are ${supportedArtifactKinds.join(', ')}.`,
+		);
+		return undefined;
+	}
+	// A command link, such as one in the walkthrough, runs while no text editor has the focus.
+	const document =
+		vscode.window.activeTextEditor?.document ??
+		vscode.window.visibleTextEditors.find((editor) => isSupportedSourceDocument(editor.document))?.document;
+	if (!document) {
+		await vscode.window.showInformationMessage('Open a source file to open its artifacts.');
+		return undefined;
+	}
+	return { document, request };
+}
+
+/** Reads the arguments of a key binding. Nothing, or an argument that is not an object, means no choice. */
+export function openArtifactArguments(argument: unknown): OpenArtifactArguments | undefined {
+	if (argument === undefined || argument === null || typeof argument !== 'object' || Array.isArray(argument)) {
+		return {};
+	}
+	const { kind, preset } = argument as Record<string, unknown>;
+	const artifactKind = typeof kind === 'string' ? getArtifactKind(kind) : undefined;
+	if ((kind !== undefined && !artifactKind) || (preset !== undefined && typeof preset !== 'string')) {
+		return undefined;
+	}
+	return {
+		...(artifactKind ? { kind: artifactKind } : {}),
+		...(typeof preset === 'string' ? { preset } : {}),
+	};
+}
+
+interface RecentArtifactKinds {
+	get(): ArtifactKind[];
+	use(kind: ArtifactKind): Thenable<void>;
+}
+
 async function openArtifact(
-	editor: vscode.TextEditor,
-	requestedKind: ArtifactKind | undefined,
+	sourceDocument: vscode.TextDocument,
+	request: OpenArtifactArguments,
 	deps: ArtifactCommandDependencies,
+	recentKinds: RecentArtifactKinds,
 ): Promise<void> {
 	const { compilationService, artifacts, graphPanels, configuration } = deps;
-	if (!isSupportedSourceDocument(editor.document)) {
+	if (!isSupportedSourceDocument(sourceDocument)) {
 		await vscode.window.showWarningMessage(
 			'Cogitator Lens supports saved, file-backed sources declared by its toolchains.',
 		);
 		return;
 	}
-	const variant = await resolveSourceVariant(editor.document, deps);
+	const variant = await resolveSourceVariant(sourceDocument, deps);
 	if (!variant) {
 		return;
 	}
@@ -103,7 +193,7 @@ async function openArtifact(
 		await vscode.window.showErrorMessage(`Toolchain profile not found: ${variant.toolchainProfileId}`);
 		return;
 	}
-	let kind = requestedKind;
+	let kind = request.kind;
 	if (!kind) {
 		const sections = partitionArtifactPickerChoices(
 			supportedArtifactKinds.map((artifactKind) => ({
@@ -115,6 +205,7 @@ async function openArtifact(
 					artifactKind,
 				),
 			})),
+			recentKinds.get(),
 		);
 		const items: Array<vscode.QuickPickItem | ArtifactQuickPickChoice> = [];
 		if (sections.unavailable.length > 0) {
@@ -161,22 +252,31 @@ async function openArtifact(
 	if (outputChoices.length > 0 && !artifactOutput) {
 		return;
 	}
-	const presets = [...effectiveArtifactPresets(configuration.getArtifactPresets(editor.document.uri), kind).values()];
+	const presets = [...effectiveArtifactPresets(configuration.getArtifactPresets(sourceDocument.uri), kind).values()];
+	if (request.preset !== undefined && !presets.some((candidate) => candidate.id === request.preset)) {
+		await vscode.window.showErrorMessage(
+			`The preset "${request.preset}" does not exist for ${artifactDefinitions[kind].label}.`,
+		);
+		return;
+	}
 	const preset =
-		presets.length === 1
-			? presets[0]
-			: await pickFrom(
-					presets,
-					(candidate) => ({
-						label: candidate.id === 'default' ? 'Default' : candidate.id,
-						description: candidate.extraArguments.join(' '),
-					}),
-					{ title: `${artifactDefinitions[kind].label} preset` },
-				);
+		request.preset !== undefined
+			? presets.find((candidate) => candidate.id === request.preset)
+			: presets.length === 1
+				? presets[0]
+				: await pickFrom(
+						presets,
+						(candidate) => ({
+							label: candidate.id === 'default' ? 'Default' : candidate.id,
+							description: candidate.extraArguments.join(' '),
+						}),
+						{ title: `${artifactDefinitions[kind].label} preset` },
+					);
 	if (!preset) {
 		return;
 	}
-	const artifactUri = getArtifactUri(editor.document.uri, variant, kind, preset.id, artifactOutput?.id);
+	void recentKinds.use(kind);
+	const artifactUri = getArtifactUri(sourceDocument.uri, variant, kind, preset.id, artifactOutput?.id);
 	if (artifactDefinitions[kind].presentation === 'graph') {
 		await graphPanels.open(artifactUri);
 		return;
@@ -392,49 +492,98 @@ export function comparisonUri(source: vscode.Uri, target: ComparisonTarget, kind
 	return getArtifactUri(source, target.variant, kind, target.preset?.id ?? 'default', undefined);
 }
 
-async function showArtifactStatusActions(artifacts: ArtifactDocumentProvider): Promise<void> {
-	const snapshot = artifacts.getActiveArtifactDocumentState();
-	if (!snapshot) {
+interface StatusAction extends vscode.QuickPickItem {
+	run(): Thenable<unknown>;
+}
+
+async function showArtifactStatusActions(
+	activeArtifact: ActiveArtifact,
+	configuration: ConfigurationService,
+): Promise<void> {
+	const document = activeArtifact.document;
+	if (!document) {
 		return;
 	}
-	const choice = await vscode.window.showQuickPick(
-		[
-			{
-				label: '$(refresh) Refresh Artifact',
-				description: 'Regenerate from the current source and settings',
-				command: 'coglens.RefreshArtifact',
-			},
-			...(artifacts.activeArtifactIsGenerating()
-				? [
-						{
-							label: '$(debug-stop) Cancel Generation',
-							description: 'Stop the active compilation',
-							command: 'coglens.CancelGeneration',
-						},
-					]
-				: []),
-			{
-				label: '$(go-to-file) Reveal Source',
-				description: path.basename(snapshot.identity.sourceLabel),
-				command: 'coglens.RevealArtifactSource',
-			},
-			{
-				label: '$(output) Show Log',
-				description: 'Open the Cogitator Lens output channel',
-				command: 'coglens.ShowLog',
-			},
-		],
+	const { identity, status } = document.snapshot;
+	const command = (name: string) => () => vscode.commands.executeCommand(name);
+	const actions: StatusAction[] = [
 		{
-			title: `${snapshot.identity.artifactLabel} · ${statusLabel(snapshot.status.state)}`,
-			matchOnDescription: true,
+			label: '$(refresh) Refresh Artifact',
+			description: 'Regenerate from the current source and settings',
+			run: command('coglens.RefreshArtifact'),
 		},
-	);
-	if (choice) {
-		await vscode.commands.executeCommand(choice.command);
+		...(document.handler.generating
+			? [
+					{
+						label: '$(debug-stop) Cancel Generation',
+						description: 'Stop the active compilation',
+						run: command('coglens.CancelGeneration'),
+					},
+				]
+			: []),
+		...truncationActions(status, configuration),
+		{
+			label: '$(go-to-file) Reveal Source',
+			description: path.basename(identity.sourceLabel),
+			run: command('coglens.RevealArtifactSource'),
+		},
+		{
+			label: '$(output) Show Log',
+			description: 'Open the Cogitator Lens output channel',
+			run: command('coglens.ShowLog'),
+		},
+	];
+	const choice = await vscode.window.showQuickPick(actions, {
+		title: `${identity.artifactLabel} · ${statusLabel(status.state)}`,
+		matchOnDescription: true,
+	});
+	await choice?.run();
+}
+
+/** The action that raises the limit which cut the output: the process output or the listing lines. */
+function truncationActions(status: ActiveArtifactStatus, configuration: ConfigurationService): StatusAction[] {
+	if (status.state === 'failed' && status.error instanceof CompilationError && status.error.truncated) {
+		return [
+			{
+				label: '$(settings) Raise Process Output Limit',
+				description: 'The compiler wrote more output than coglens.processOutputLimit allows',
+				run: () =>
+					vscode.commands.executeCommand('workbench.action.openSettings', 'coglens.processOutputLimit'),
+			},
+		];
+	}
+	if (status.artifact?.truncated) {
+		return [
+			{
+				label: '$(settings) Raise Listing Line Limit',
+				description: `The listing stops at ${configuration.getListingLineLimit()} lines`,
+				run: () => raiseListingLineLimit(configuration),
+			},
+		];
+	}
+	return [];
+}
+
+type ActiveArtifactStatus = NonNullable<ActiveArtifact['document']>['snapshot']['status'];
+
+async function raiseListingLineLimit(configuration: ConfigurationService): Promise<void> {
+	const current = configuration.getListingLineLimit();
+	const value = await vscode.window.showInputBox({
+		title: 'Listing Line Limit',
+		prompt: 'The number of lines that binary disassembly and LLVM IR listings show',
+		value: String(Math.min(current * 2, maximumListingLineLimit)),
+		validateInput: (text) =>
+			parseListingLineLimit(text) === undefined
+				? `Type a whole number from ${minimumListingLineLimit} to ${maximumListingLineLimit}.`
+				: undefined,
+	});
+	const limit = value === undefined ? undefined : parseListingLineLimit(value);
+	if (limit !== undefined) {
+		await configuration.updateListingLineLimit(limit);
 	}
 }
 
-function statusLabel(state: import('../artifact-document/artifact-generator.js').ArtifactState): string {
+function statusLabel(state: ArtifactState): string {
 	return state[0].toUpperCase() + state.slice(1);
 }
 

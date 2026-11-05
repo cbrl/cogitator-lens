@@ -23,14 +23,32 @@ required variant in the picker.
 
 Use the sidebar to browse variants and toolchains. Run `Cogitator Lens: Open Artifact` to generate
 an artifact for the active variant. Run `Cogitator Lens: Compare Artifacts` to compare a supported
-text artifact from two variants or presets. Control-flow graphs open in their own view.
+text artifact from two variants or presets. Control-flow graphs open in their own view. The
+**Cogitator Lens** submenu of the editor context menu has these commands, and the explorer context
+menu has **Open Artifact** for a source file. The **Get Started with Cogitator Lens** walkthrough
+shows the first steps.
 
-Saving the source regenerates its open artifacts. When a compile fails, the editor keeps the last
-successful output and marks it on the first line; hover there for the compiler output. Diagnostics
-appear in the Problems view. Open artifacts follow edits to their variant and toolchain.
+Saving the source regenerates its open artifacts. A slow first compile opens the artifact at once
+with a "Compiling…" line, and the output replaces it when the compile ends. When a compile fails,
+the editor keeps the last successful output and marks it on the first line; hover there for the
+compiler output. Diagnostics appear in the Problems view, for text artifacts and control-flow graphs.
+Open artifacts follow edits to their variant and toolchain. An empty listing names the likely
+causes, such as an unused `static` function or a template without an instantiation.
 
-The **Artifact Details** view shows the active artifact's status, diagnostics, invocation, and
-metrics.
+The compiler reads the saved file. While a source has unsaved changes, the artifact says so on its
+first line, and the line mapping to that source stops until you save.
+
+The status bar shows the state of the focused artifact. When the focus is in a source, it shows a
+visible artifact of that source. Click it for the artifact actions: refresh, cancel, reveal the
+source, and raise a limit that cut the output. **Refresh Artifact** and **Cancel Artifact
+Generation** use the same artifact.
+
+The control-flow graph view shows its state: compiling, stale, cancelled, or failed. A failure shows
+the compiler output. The function filter takes the arrow keys, and graph search moves between
+matches with Enter and Shift+Enter. Open graphs come back after VS Code restarts.
+
+The **Artifact Details** view shows the active artifact's status, each diagnostic, the invocation,
+and the metrics.
 
 ### Artifact support
 
@@ -102,10 +120,22 @@ deprecated.
 }
 ```
 
+A key binding can open one artifact kind with one preset. Without `preset`, Open Artifact asks
+for one when the kind has more than one:
+
+```json
+{
+	"key": "ctrl+alt+o",
+	"command": "coglens.OpenArtifact",
+	"args": { "kind": "assembly", "preset": "optimized-intel" }
+}
+```
+
 Each compiler or tool run may take up to `coglens.processTimeout` seconds and write up to
 `coglens.processOutputLimit` megabytes. The Clang AST leaves out declarations from system headers
 while it is produced, unless `ast.showSystemDeclarations` is set, so a file that includes the
-standard library stays within the limit.
+standard library stays within the limit. Binary disassembly and LLVM IR listings stop at
+`coglens.listingLineLimit` lines, 5000 by default.
 
 Preset arguments and production options are included in the artifact cache key. Display-only
 options do not regenerate an artifact.

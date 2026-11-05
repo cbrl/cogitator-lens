@@ -81,6 +81,7 @@ function groupIcon(id: string): vscode.ThemeIcon {
 		{
 			artifact: 'symbol-file',
 			status: 'pulse',
+			diagnostics: 'warning',
 			invocation: 'terminal',
 			environment: 'symbol-variable',
 			metrics: 'graph',

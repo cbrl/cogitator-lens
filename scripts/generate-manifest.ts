@@ -7,6 +7,7 @@ import { artifactEditorLanguages } from '../src/artifacts/core/editor-languages.
 import { supportedToolchainKinds } from '../src/toolchains/toolchain-kinds.js';
 import { supportedLanguageIdentifiers } from '../src/toolchains/toolchain-map.js';
 import { defaultArtifactOptions } from '../src/types/artifact-options.js';
+import { graphPanelViewType } from '../src/webview/graph-protocol.js';
 
 type JsonObject = Record<string, unknown>;
 
@@ -15,6 +16,7 @@ export function generateManifest(manifest: JsonObject): JsonObject {
 	const generated = structuredClone(manifest);
 	generated.activationEvents = activationEvents(generated);
 	generateEditorContributions(generated);
+	generateSourceMenus(generated);
 	const properties = configurationProperties(generated);
 	const toolchains = properties['coglens.toolchains'] as JsonObject;
 	const toolchainItems = toolchains.items as JsonObject;
@@ -76,11 +78,30 @@ function activationEvents(manifest: JsonObject): string[] {
 	const existing = (manifest.activationEvents as string[] | undefined) ?? [];
 	// A restored artifact tab reads its document before any source language activates the extension.
 	const artifactDocuments = `onFileSystem:${artifactScheme}`;
+	// A restored graph panel needs its serializer, which the extension registers when it activates.
+	const graphPanels = `onWebviewPanel:${graphPanelViewType}`;
 	return [
-		...existing.filter((event) => !event.startsWith('onLanguage:') && event !== artifactDocuments),
+		...existing.filter(
+			(event) => !event.startsWith('onLanguage:') && event !== artifactDocuments && event !== graphPanels,
+		),
 		...[...supportedLanguageIdentifiers].sort().map((language) => `onLanguage:${language}`),
 		artifactDocuments,
+		graphPanels,
 	];
+}
+
+/**
+ * The explorer shows Open Artifact for the source languages. The condition uses the language of the
+ * file name, so it works before the extension activates.
+ */
+function generateSourceMenus(manifest: JsonObject): void {
+	const menus = (manifest.contributes as JsonObject).menus as Record<string, JsonObject[]>;
+	const languages = [...supportedLanguageIdentifiers].sort().join('|');
+	for (const item of menus['explorer/context'] ?? []) {
+		if (item.command === 'coglens.OpenArtifact') {
+			item.when = `resourceScheme == file && resourceLangId =~ /^(?:${languages})$/`;
+		}
+	}
 }
 
 /** Rebuilds artifact-owned language and grammar contributions while preserving third-party entries. */

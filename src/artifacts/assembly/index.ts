@@ -60,5 +60,6 @@ export const assemblyArtifact = {
 		sourceLineCount: 'Mapped source lines',
 		codeSizeBytes: 'Code size',
 		labelCount: 'Label count',
+		filteredLineCount: 'Filtered lines',
 	},
 } as const satisfies ArtifactDefinition;

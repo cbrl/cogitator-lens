@@ -51,6 +51,11 @@ export function buildArtifactDetails(
 			...(status.state === 'failed' ? [value('failure', 'Failure', status.error.message)] : []),
 		]),
 		group(
+			'diagnostics',
+			'Diagnostics',
+			diagnostics.length ? diagnostics.map(diagnosticItem) : [empty('diagnostics-none', '(none)')],
+		),
+		group(
 			'invocation',
 			'Invocation',
 			invocation ? invocationItems(invocation) : [empty('invocation-unavailable', 'Not available')],
@@ -101,6 +106,17 @@ function countDiagnostics(diagnostics: readonly CompileDiagnostic[]): Record<Com
 		result[diagnostic.severity]++;
 	}
 	return result;
+}
+
+/** One diagnostic, labeled with its severity and its location. The value is the message. */
+function diagnosticItem(diagnostic: CompileDiagnostic, index: number): ArtifactDetailsItem {
+	const severity = diagnostic.severity[0].toUpperCase() + diagnostic.severity.slice(1);
+	const file = diagnostic.uri.fsPath.split(/[\\/]/u).at(-1) ?? diagnostic.uri.fsPath;
+	return value(
+		`diagnostic-${index}`,
+		`${severity} · ${file}:${diagnostic.line + 1}:${diagnostic.column + 1}`,
+		diagnostic.message,
+	);
 }
 
 function invocationItems(invocation: InvocationDetails): ArtifactDetailsItem[] {

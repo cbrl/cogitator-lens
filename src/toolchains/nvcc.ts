@@ -1,6 +1,7 @@
 import path from 'path';
 import type { BinaryDisassembler } from '../artifacts/binary-disassembly/binary-disassembly-producer.js';
 import { noopPropertyGetter } from '../vendor/compiler-props.js';
+import { listingPropertyGetter } from '../compilation/listing-limit.js';
 import { PTXAsmParser } from '../vendor/lib/parsers/asm-parser-ptx.js';
 import { SassAsmParser } from '../vendor/lib/parsers/asm-parser-sass.js';
 import {
@@ -89,7 +90,7 @@ export const nvcc: ToolchainDefinition = {
 	outputArguments: nvccOutputArguments,
 	stripOwnedArguments: stripNvccManagedArguments,
 	createParser: () => new PTXAsmParser(noopPropertyGetter),
-	createBinaryParser: () => new SassAsmParser(noopPropertyGetter),
+	createBinaryParser: () => new SassAsmParser(listingPropertyGetter),
 	...(process.platform === 'win32' ? { prepareEnvironment: prepareNvccEnvironment } : {}),
 	discoverTools: toolDiscoverer({ disassembler: 'nvdisasm' }),
 	artifacts: {

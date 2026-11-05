@@ -3,18 +3,19 @@ import type { DisplayOptions, RawArtifact, RenderedTextArtifact, RenderedArtifac
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
 import { LLVMIRDemangler } from '../../vendor/lib/demangler/llvm.js';
 import { LlvmIrParser } from '../../vendor/lib/llvm-ir.js';
-import { noopPropertyGetter } from '../../vendor/compiler-props.js';
+import { listingPropertyGetter, perListingLineLimit } from '../../compilation/listing-limit.js';
 import { decodeLlvmString } from './llvm-names.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
 
-const llvmIrParser = new LlvmIrParser(noopPropertyGetter, new LLVMIRDemangler());
+// The parser reads the listing line limit when it is made, so a new limit makes a new parser.
+const llvmIrParser = perListingLineLimit(() => new LlvmIrParser(listingPropertyGetter, new LLVMIRDemangler()));
 
 export async function renderLlvmIr(
 	raw: RawArtifact,
 	_options: DisplayOptions,
 	_context: ArtifactRenderContext,
 ): Promise<RenderedTextArtifact> {
-	const parsed = await llvmIrParser.process(raw.text, {
+	const parsed = await llvmIrParser().process(raw.text, {
 		filterDebugInfo: false,
 		filterIRMetadata: false,
 		filterAttributes: false,

@@ -50,6 +50,11 @@ if (args.includes('--wait-for-cancellation')) {
 	setTimeout(() => {}, 30_000);
 	return;
 }
+// --delay=<milliseconds> makes a slow compile.
+const delay = args.find((argument) => argument.startsWith('--delay='));
+if (delay) {
+	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(delay.slice('--delay='.length)));
+}
 if (args.includes('--fail')) {
 	process.stderr.write(`${source}:1:1: error: expected fake failure\n`);
 	process.exitCode = 2;
@@ -58,7 +63,7 @@ if (args.includes('--fail')) {
 if (args.includes('--warn')) {
 	process.stderr.write(`${source}:1:5: warning: expected fake warning\n`);
 }
-fs.writeFileSync(output, 'object');
+fs.writeFileSync(output, args.includes('--empty') ? '' : 'object');
 if (args.includes('--missing-stack')) {
 	return;
 }

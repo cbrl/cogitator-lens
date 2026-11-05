@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import * as vscode from 'vscode';
+import { ActiveArtifact, type GraphPanelFocus } from '../../src/artifact-document/active-artifact.js';
 import { ArtifactDocumentProvider } from '../../src/artifact-document/artifact-document-provider.js';
 import { ArtifactDocumentRegistry } from '../../src/artifact-document/artifact-document-registry.js';
 import { getArtifactUri } from '../../src/artifact-document/artifact-uri.js';
@@ -12,6 +13,7 @@ import {
 	compatibleComparisonTargets,
 	comparisonTargets,
 	comparisonUri,
+	openArtifactArguments,
 	type ArtifactAvailabilityLookup,
 } from '../../src/commands/artifacts.js';
 import { CompilationService } from '../../src/compilation/compilation-service.js';
@@ -64,11 +66,23 @@ export async function verifyArtifactDocumentNames(): Promise<void> {
 	}
 }
 
-/**
- * Opens text artifacts through the document provider with a fake compiler. The Problems view must
- * show a diagnostic once, and a failure must keep the last listing or show the compiler output.
- */
-export async function verifyArtifactDocumentDiagnostics(repositoryRoot: string): Promise<void> {
+/** A document provider of its own, with a fake compiler and a variant whose arguments a test sets. */
+interface DocumentEnvironment {
+	readonly source: vscode.Uri;
+	readonly service: CompilationService;
+	readonly registry: ArtifactDocumentRegistry;
+	readonly provider: ArtifactDocumentProvider;
+	/** The URI of an assembly document of the fake variant with a preset. */
+	uri(preset?: string, kind?: ArtifactKind): vscode.Uri;
+	/** Sets the arguments of the fake variant. */
+	compileWith(args: readonly string[]): void;
+	provide(uri: vscode.Uri): Promise<string>;
+}
+
+async function withDocumentEnvironment(
+	repositoryRoot: string,
+	test: (environment: DocumentEnvironment) => Promise<void>,
+): Promise<void> {
 	const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'coglens-documents-'));
 	const source = vscode.Uri.file(path.join(directory, 'main.cpp'));
 	await fs.promises.writeFile(source.fsPath, 'int main() { return 0; }\n');
@@ -82,19 +96,12 @@ export async function verifyArtifactDocumentDiagnostics(repositoryRoot: string):
 		tools: {},
 	};
 	const variantId = 'fake:documents';
-	const variantWith = (args: readonly string[]): CompilationVariant => ({
-		id: variantId,
-		provider: 'cmake',
-		source,
-		toolchainProfileId: profile.id,
-		workingDirectory: directory,
-		arguments: args,
-		environment: {},
-		displayLabel: 'Fake documents',
-	});
-	const presets: ArtifactPreset[] = [
-		{ id: 'second', artifactKind: 'assembly', extraArguments: ['-DSECOND'], productionOptions: {} },
-	];
+	const presets: ArtifactPreset[] = ['second', 'third', 'fourth'].map((id) => ({
+		id,
+		artifactKind: 'assembly',
+		extraArguments: [`-D${id.toUpperCase()}`],
+		productionOptions: {},
+	}));
 	const changes = new vscode.EventEmitter<SettingsChange>();
 	const configuration = {
 		onDidChange: changes.event,
@@ -110,18 +117,59 @@ export async function verifyArtifactDocumentDiagnostics(repositoryRoot: string):
 	const registry = new ArtifactDocumentRegistry(service, configuration);
 	const provider = new ArtifactDocumentProvider(service, configuration, registry);
 	const cancellation = new vscode.CancellationTokenSource();
-	const provide = async (uri: vscode.Uri): Promise<string> =>
-		(await provider.provideTextDocumentContent(uri, cancellation.token)) ?? '';
-	const reported = (): vscode.Diagnostic[] =>
-		vscode.languages.getDiagnostics(source).filter((diagnostic) => diagnostic.source === 'Cogitator Lens');
 	try {
-		service.reconcileProviderSnapshot({
-			provider: 'cmake',
-			toolchainProfiles: [profile],
-			variants: [variantWith(['--warn'])],
+		await test({
+			source,
+			service,
+			registry,
+			provider,
+			uri: (preset = 'default', kind = 'assembly') => getArtifactUri(source, { id: variantId }, kind, preset),
+			compileWith: (args) =>
+				service.reconcileProviderSnapshot({
+					provider: 'cmake',
+					toolchainProfiles: [profile],
+					variants: [
+						{
+							id: variantId,
+							provider: 'cmake',
+							source,
+							toolchainProfileId: profile.id,
+							workingDirectory: directory,
+							arguments: args,
+							environment: {},
+							displayLabel: 'Fake documents',
+						},
+					],
+				}),
+			provide: async (uri) => (await provider.provideTextDocumentContent(uri, cancellation.token)) ?? '',
 		});
-		const defaultUri = getArtifactUri(source, { id: variantId }, 'assembly', 'default');
-		const secondUri = getArtifactUri(source, { id: variantId }, 'assembly', 'second');
+	} finally {
+		cancellation.dispose();
+		provider.dispose();
+		registry.dispose();
+		service.dispose();
+		changes.dispose();
+		// On Windows, VS Code watches the folder of a file that an editor showed. It stops a moment after
+		// the editor closes, and until then the folder cannot be removed.
+		await fs.promises.rm(directory, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+	}
+}
+
+/**
+ * Opens text artifacts through the document provider with a fake compiler. The Problems view must
+ * show a diagnostic once, and a failure must keep the last listing or show the compiler output.
+ */
+export async function verifyArtifactDocumentDiagnostics(repositoryRoot: string): Promise<void> {
+	let source: vscode.Uri | undefined;
+	const reported = (): vscode.Diagnostic[] =>
+		source
+			? vscode.languages.getDiagnostics(source).filter((diagnostic) => diagnostic.source === 'Cogitator Lens')
+			: [];
+	await withDocumentEnvironment(repositoryRoot, async ({ provider, uri, compileWith, provide, ...environment }) => {
+		source = environment.source;
+		compileWith(['--warn']);
+		const defaultUri = uri();
+		const secondUri = uri('second');
 		const listing = await provide(defaultUri);
 		await provide(secondUri);
 		assert.equal(provider.getArtifactDocumentState(defaultUri)?.status.state, 'successful');
@@ -136,11 +184,7 @@ export async function verifyArtifactDocumentDiagnostics(repositoryRoot: string):
 		assert.deepEqual([warning.range.start.line, warning.range.start.character], [0, 4]);
 
 		// A failure after a success keeps the last listing and reports the compiler error.
-		service.reconcileProviderSnapshot({
-			provider: 'cmake',
-			toolchainProfiles: [profile],
-			variants: [variantWith(['--fail'])],
-		});
+		compileWith(['--fail']);
 		assert.equal(await provide(defaultUri), listing);
 		assert.equal(provider.getArtifactDocumentState(defaultUri)?.status.state, 'failed');
 		const errors = reported().filter((diagnostic) => diagnostic.severity === vscode.DiagnosticSeverity.Error);
@@ -150,22 +194,147 @@ export async function verifyArtifactDocumentDiagnostics(repositoryRoot: string):
 		);
 
 		// A failure without an earlier listing shows the compiler output instead.
-		const stackUri = getArtifactUri(source, { id: variantId }, 'stack-analysis', 'default');
+		const stackUri = uri('default', 'stack-analysis');
 		assert.match(await provide(stackUri), /expected fake failure/u);
 		assert.equal(provider.getArtifactDocumentState(stackUri)?.status.state, 'failed');
 		assert.equal(
 			reported().filter((diagnostic) => diagnostic.severity === vscode.DiagnosticSeverity.Error).length,
 			1,
 		);
-	} finally {
-		cancellation.dispose();
-		provider.dispose();
-		registry.dispose();
-		service.dispose();
-		changes.dispose();
-		await fs.promises.rm(directory, { recursive: true, force: true });
-	}
+	});
 	assert.equal(reported().length, 0, 'Closing the artifacts removes their diagnostics');
+}
+
+/**
+ * A slow first compile opens with a placeholder, and its result follows as a change. The next
+ * content request collects the result without a compile. A fast compile shows no placeholder.
+ */
+export async function verifyArtifactDocumentPlaceholder(repositoryRoot: string): Promise<void> {
+	await withDocumentEnvironment(repositoryRoot, async ({ provider, registry, uri, compileWith, provide }) => {
+		compileWith(['--delay=1500']);
+		const slowUri = uri();
+		const changed = nextChange(provider, slowUri);
+		assert.equal(await provide(slowUri), 'Compiling main.cpp with Fake documents GCC…');
+		assert.equal(provider.getArtifactDocumentState(slowUri)?.status.state, 'compiling');
+		await changed;
+		const generatedAt = provider.getRenderedArtifact(slowUri)?.generatedAt;
+		assert.equal(await provide(slowUri), 'object');
+		assert.equal(provider.getRenderedArtifact(slowUri)?.generatedAt, generatedAt, 'No second compile');
+
+		// A cache hit shows the listing at once.
+		registry.unregister(slowUri);
+		assert.equal(await provide(slowUri), 'object');
+
+		// A cancelled first compile replaces the placeholder with a notice.
+		const cancelledUri = uri('second');
+		const cancelled = nextChange(provider, cancelledUri);
+		assert.match(await provide(cancelledUri), /^Compiling main\.cpp/u);
+		assert.equal(registry.document(cancelledUri)?.handler.cancel(), true);
+		await cancelled;
+		assert.match(await provide(cancelledUri), /^Generation was cancelled\. Run "Refresh Artifact"/u);
+		assert.equal(provider.getArtifactDocumentState(cancelledUri)?.status.state, 'cancelled');
+
+		// A refresh of a document that shows a listing keeps the listing until the result.
+		compileWith(['--delay=400']);
+		const refreshed = provide(slowUri);
+		assert.equal(await refreshed, 'object');
+
+		// An empty listing explains itself.
+		compileWith(['--empty']);
+		const emptyUri = uri('third');
+		assert.match(await provide(emptyUri), /^The compiler made no Assembly output for main\.cpp\./u);
+		assert.equal(provider.getArtifactDocumentState(emptyUri)?.status.state, 'successful');
+	});
+}
+
+/**
+ * The provider forgets a document when its last tab closes, and a stand-in artifact follows the
+ * focused source. The tabs show the extension's own documents, which have the same URIs.
+ */
+export async function verifyArtifactDocumentTabs(repositoryRoot: string): Promise<void> {
+	await withDocumentEnvironment(repositoryRoot, async ({ source, registry, provider, uri, compileWith, provide }) => {
+		compileWith([]);
+		const artifactUri = uri('fourth');
+		await provide(artifactUri);
+		assert.ok(registry.document(artifactUri));
+
+		const panelsChanged = new vscode.EventEmitter<void>();
+		const graphs: GraphPanelFocus = {
+			activeDocument: undefined,
+			visibleDocuments: () => [],
+			onDidChangePanels: panelsChanged.event,
+		};
+		const active = new ActiveArtifact(registry, graphs);
+		// A call is not narrowed by an assertion before it, as a property read is.
+		const activeUri = (): string | undefined => active.document?.uri.toString();
+		try {
+			await vscode.window.showTextDocument(source, { viewColumn: vscode.ViewColumn.One, preview: false });
+			assert.equal(activeUri(), undefined, 'No artifact of the source is visible');
+			await vscode.window.showTextDocument(artifactUri, {
+				viewColumn: vscode.ViewColumn.Two,
+				preserveFocus: true,
+				preview: false,
+			});
+			assert.equal(vscode.window.activeTextEditor?.document.uri.fsPath, source.fsPath);
+			assert.equal(activeUri(), artifactUri.toString(), 'The visible artifact stands in');
+
+			await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+			await waitFor(() => registry.document(artifactUri) === undefined, 'The closed tab removes the document');
+			assert.equal(activeUri(), undefined);
+
+			// VS Code keeps the document of a closed tab for a while. A reopened tab uses it without a
+			// content request, so the provider announces a change, which makes VS Code request the content.
+			assert.ok(
+				vscode.workspace.textDocuments.some((document) => document.uri.toString() === artifactUri.toString()),
+			);
+			const reopened = nextChange(provider, artifactUri);
+			await vscode.window.showTextDocument(artifactUri, { preview: false });
+			await reopened;
+			assert.equal(await provide(artifactUri), 'object');
+			assert.ok(registry.document(artifactUri));
+		} finally {
+			active.dispose();
+			panelsChanged.dispose();
+			await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+		}
+	});
+}
+
+/** Open Artifact reads a kind and a preset from a key binding, and refuses others. */
+export function verifyOpenArtifactArguments(): void {
+	assert.deepEqual(openArtifactArguments(undefined), {});
+	assert.deepEqual(openArtifactArguments({ kind: 'llvm-ir' }), { kind: 'llvm-ir' });
+	assert.deepEqual(openArtifactArguments({ kind: 'assembly', preset: 'fast' }), {
+		kind: 'assembly',
+		preset: 'fast',
+	});
+	assert.deepEqual(openArtifactArguments({ preset: 'fast' }), { preset: 'fast' });
+	assert.equal(openArtifactArguments({ kind: 'machine-code' }), undefined);
+	assert.equal(openArtifactArguments({ kind: 'assembly', preset: 3 }), undefined);
+}
+
+function nextChange(provider: ArtifactDocumentProvider, uri: vscode.Uri): Promise<void> {
+	return new Promise((resolve, reject) => {
+		const timeout = setTimeout(() => {
+			subscription.dispose();
+			reject(new Error(`No change for ${uri.toString()}`));
+		}, 20_000);
+		const subscription = provider.onDidChange((changed) => {
+			if (changed.toString() === uri.toString()) {
+				clearTimeout(timeout);
+				subscription.dispose();
+				resolve();
+			}
+		});
+	});
+}
+
+async function waitFor(condition: () => boolean, message: string): Promise<void> {
+	const deadline = Date.now() + 10_000;
+	while (!condition()) {
+		assert.ok(Date.now() < deadline, message);
+		await new Promise((resolve) => setTimeout(resolve, 50));
+	}
 }
 
 /** Comparison offers variants and presets, keeps only compatible pairs, and never diffs graphs. */

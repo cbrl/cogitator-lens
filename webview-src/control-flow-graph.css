@@ -91,6 +91,10 @@ input {
 .function-option:focus {
 	background: var(--vscode-list-hoverBackground);
 }
+.function-option.active {
+	color: var(--vscode-list-activeSelectionForeground, var(--vscode-foreground));
+	background: var(--vscode-list-activeSelectionBackground, var(--vscode-list-hoverBackground));
+}
 
 button {
 	padding: 2px 9px;
@@ -111,12 +115,33 @@ select:focus-visible,
 	flex: 1;
 }
 
-#stale-badge {
+#state-badge {
 	padding: 3px 7px;
 	min-height: auto;
 	border-radius: 10px;
 	color: var(--vscode-editorWarning-foreground);
 	background: var(--vscode-editorWarning-background, transparent);
+}
+#state-badge[data-state='compiling'] {
+	color: var(--vscode-foreground);
+	background: var(--vscode-badge-background, transparent);
+}
+#state-badge[data-state='failed'] {
+	color: var(--vscode-errorForeground);
+}
+
+#search-previous,
+#search-next {
+	padding: 2px 6px;
+}
+button:disabled {
+	cursor: default;
+	opacity: 0.5;
+}
+#search-count {
+	min-width: 5em;
+	color: var(--vscode-descriptionForeground);
+	white-space: nowrap;
 }
 
 #diagnostics {
@@ -127,6 +152,9 @@ select:focus-visible,
 	background: var(--vscode-editorWidget-background);
 }
 
+.diagnostic {
+	white-space: pre-wrap;
+}
 .diagnostic + .diagnostic {
 	margin-top: 5px;
 }

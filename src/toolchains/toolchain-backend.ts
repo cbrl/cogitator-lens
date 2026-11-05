@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import type { CancellationToken, Uri } from 'vscode';
 import { AsmParser } from '../vendor/lib/parsers/asm-parser.js';
-import { noopPropertyGetter } from '../vendor/compiler-props.js';
+import { listingPropertyGetter, perListingLineLimit } from '../compilation/listing-limit.js';
 import type { ParseFiltersAndOutputOptions } from '../vendor/types/features/filters.interfaces.js';
 import type { ParsedAsmResult } from '../vendor/types/asmresult/asmresult.interfaces.js';
 import type {
@@ -232,7 +232,8 @@ export class ToolchainBackend {
 	// dialect `asmParser` handles for textual assembly. Parsing it with a dedicated plain
 	// `AsmParser` keeps that independent of a backend's assembly dialect (e.g. MSVC's
 	// `VcAsmParser`, whose own binary-mode parsing is an unimplemented upstream stub).
-	private readonly binaryAsmParser: AsmParser;
+	// The parser reads the listing line limit when it is made, so a new limit makes a new parser.
+	private readonly binaryAsmParser: () => AsmParser;
 	private readonly cfgParser?: AssemblyCfgParser;
 
 	constructor(profile: ToolchainProfile, definition: ToolchainDefinition, host: ToolchainHost) {
@@ -240,7 +241,9 @@ export class ToolchainBackend {
 		this.definition = definition;
 		this.host = host;
 		this.asmParser = definition.createParser?.();
-		this.binaryAsmParser = definition.createBinaryParser?.() ?? new AsmParser(noopPropertyGetter);
+		this.binaryAsmParser = perListingLineLimit(
+			() => definition.createBinaryParser?.() ?? new AsmParser(listingPropertyGetter),
+		);
 		this.cfgParser = definition.createCfgParser?.();
 	}
 
@@ -404,7 +407,7 @@ export class ToolchainBackend {
 	 */
 	parseBinaryDisassembly(rawDisassembly: string, options: DisplayOptions, mainSource: MainSource): ParsedAsmResult {
 		const text = options.showLibraryCode ? rawDisassembly : withoutLibraryFunctions(rawDisassembly, mainSource);
-		return this.binaryAsmParser.process(text, { ...parseFilters(options), libraryCode: false, binary: true });
+		return this.binaryAsmParser().process(text, { ...parseFilters(options), libraryCode: false, binary: true });
 	}
 
 	classifyAssemblyInstruction(instruction: string): InstructionType | undefined {

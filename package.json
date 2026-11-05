@@ -37,7 +37,8 @@
     "onLanguage:python",
     "onLanguage:rust",
     "onLanguage:zig",
-    "onFileSystem:coglens-artifact"
+    "onFileSystem:coglens-artifact",
+    "onWebviewPanel:coglens.controlFlowGraph"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -418,7 +419,6 @@
         "command": "coglens.OpenArtifact",
         "title": "Open Artifact",
         "category": "Cogitator Lens",
-        "enablement": "coglens.supportedSource",
         "icon": "$(preview)"
       },
       {
@@ -536,7 +536,7 @@
         "command": "coglens.SaveArtifactOptionsAsPreset",
         "title": "Save Current Options as Artifact Preset",
         "category": "Cogitator Lens",
-        "enablement": "coglens.artifactDocument",
+        "enablement": "coglens.activeArtifact",
         "icon": "$(save-as)"
       },
       {
@@ -549,14 +549,14 @@
         "command": "coglens.RefreshArtifact",
         "title": "Refresh Artifact",
         "category": "Cogitator Lens",
-        "enablement": "coglens.artifactDocument",
+        "enablement": "coglens.activeArtifact",
         "icon": "$(refresh)"
       },
       {
         "command": "coglens.CancelGeneration",
         "title": "Cancel Artifact Generation",
         "category": "Cogitator Lens",
-        "enablement": "coglens.artifactDocument",
+        "enablement": "coglens.activeArtifact",
         "icon": "$(debug-stop)"
       },
       {
@@ -569,14 +569,14 @@
         "command": "coglens.RevealArtifactSource",
         "title": "Reveal Artifact Source",
         "category": "Cogitator Lens",
-        "enablement": "coglens.artifactDocument",
+        "enablement": "coglens.activeArtifact",
         "icon": "$(go-to-file)"
       },
       {
         "command": "coglens.ShowArtifactStatus",
         "title": "Show Artifact Status and Actions",
         "category": "Cogitator Lens",
-        "enablement": "coglens.artifactDocument"
+        "enablement": "coglens.activeArtifact"
       }
     ],
     "configuration": [
@@ -615,6 +615,14 @@
             "default": 50,
             "minimum": 1,
             "description": "Megabytes of output that a compiler or tool may write before it is stopped. A larger limit keeps more output in memory."
+          },
+          "coglens.listingLineLimit": {
+            "type": "integer",
+            "scope": "window",
+            "default": 5000,
+            "minimum": 100,
+            "maximum": 1000000,
+            "description": "Lines that a binary disassembly or LLVM IR listing shows. A longer listing stops at this limit, and its last line says that it was truncated."
           },
           "coglens.dimUnusedSourceLines": {
             "type": "boolean",
@@ -1119,6 +1127,38 @@
           "when": "resourceScheme == coglens-artifact"
         }
       ],
+      "editor/context": [
+        {
+          "submenu": "coglens.editorContext",
+          "when": "coglens.supportedSource",
+          "group": "1_coglens@1"
+        }
+      ],
+      "coglens.editorContext": [
+        {
+          "command": "coglens.OpenArtifact",
+          "group": "1_open@1"
+        },
+        {
+          "command": "coglens.OpenControlFlowGraph",
+          "group": "1_open@2"
+        },
+        {
+          "command": "coglens.CompareArtifacts",
+          "group": "1_open@3"
+        },
+        {
+          "command": "coglens.PickCompilationVariant",
+          "group": "2_variant@1"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "coglens.OpenArtifact",
+          "when": "resourceScheme == file && resourceLangId =~ /^(?:c|cpp|csharp|cuda|cuda-cpp|go|objective-c|objective-cpp|python|rust|zig)$/",
+          "group": "navigation@90"
+        }
+      ],
       "view/title": [
         {
           "command": "coglens.AddToolchain",
@@ -1162,7 +1202,7 @@
         },
         {
           "command": "coglens.SaveArtifactOptionsAsPreset",
-          "when": "view == coglens.artifactPresets && coglens.artifactDocument",
+          "when": "view == coglens.artifactPresets && coglens.activeArtifact",
           "group": "navigation@2"
         },
         {
@@ -1216,6 +1256,40 @@
           "when": "view == coglens.artifactPresets && viewItem == artifactPreset",
           "group": "inline@2"
         }
+      ],
+      "commandPalette": [
+        {
+          "command": "coglens.OpenArtifact",
+          "when": "coglens.supportedSource"
+        },
+        {
+          "command": "coglens.CopyText",
+          "when": "false"
+        },
+        {
+          "command": "coglens.DeleteToolchain",
+          "when": "false"
+        },
+        {
+          "command": "coglens.CreateWorkspaceOverride",
+          "when": "false"
+        },
+        {
+          "command": "coglens.EditCompilationVariant",
+          "when": "false"
+        },
+        {
+          "command": "coglens.DeleteCompilationVariant",
+          "when": "false"
+        },
+        {
+          "command": "coglens.EditArtifactPreset",
+          "when": "false"
+        },
+        {
+          "command": "coglens.DeleteArtifactPreset",
+          "when": "false"
+        }
       ]
     },
     "keybindings": [
@@ -1236,6 +1310,67 @@
         "key": "ctrl+alt+c",
         "mac": "cmd+alt+c",
         "when": "editorTextFocus && coglens.supportedSource"
+      }
+    ],
+    "submenus": [
+      {
+        "id": "coglens.editorContext",
+        "label": "Cogitator Lens"
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "coglens.gettingStarted",
+        "title": "Get Started with Cogitator Lens",
+        "description": "Compile a source file, and look at what the compiler makes from it.",
+        "steps": [
+          {
+            "id": "detectToolchain",
+            "title": "Find a toolchain",
+            "description": "Cogitator Lens finds compilers and interpreters on PATH. You can also add one by its path.\n[Detect Toolchains](command:coglens.DetectToolchains)\n[Add Toolchain](command:coglens.AddToolchain)",
+            "media": {
+              "markdown": "resources/walkthrough/detect-toolchain.md"
+            },
+            "completionEvents": [
+              "onCommand:coglens.DetectToolchains",
+              "onCommand:coglens.AddToolchain"
+            ]
+          },
+          {
+            "id": "openAssembly",
+            "title": "Open the assembly of a file",
+            "description": "Open a source file, such as a C++ or Rust file. Then open its assembly beside it.\n[Open Artifact](command:coglens.OpenArtifact)",
+            "media": {
+              "markdown": "resources/walkthrough/open-assembly.md"
+            },
+            "completionEvents": [
+              "onCommand:coglens.OpenArtifact"
+            ]
+          },
+          {
+            "id": "compareArtifacts",
+            "title": "Compare two builds",
+            "description": "Compare the output of two variants or two presets in a diff editor.\n[Compare Artifacts](command:coglens.CompareArtifacts)",
+            "media": {
+              "markdown": "resources/walkthrough/compare-artifacts.md"
+            },
+            "completionEvents": [
+              "onCommand:coglens.CompareArtifacts"
+            ]
+          },
+          {
+            "id": "savePreset",
+            "title": "Save options as a preset",
+            "description": "A preset keeps the extra arguments and the options of one artifact kind. Open an artifact first.\n[Save Current Options as Preset](command:coglens.SaveArtifactOptionsAsPreset)",
+            "media": {
+              "markdown": "resources/walkthrough/save-preset.md"
+            },
+            "completionEvents": [
+              "onCommand:coglens.SaveArtifactOptionsAsPreset",
+              "onCommand:coglens.AddArtifactPreset"
+            ]
+          }
+        ]
       }
     ]
   },

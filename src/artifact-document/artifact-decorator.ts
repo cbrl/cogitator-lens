@@ -81,6 +81,11 @@ export class ArtifactDecorator {
 
 	private active: boolean = true;
 	private readonly synchronizedScroll = new ScrollSyncSuppression<TextEditor>();
+	/**
+	 * Mapped sources with unsaved edits, by URI. The compiler reads the saved file, so the line mapping
+	 * of an edited source is wrong until the next save, and it stops until then.
+	 */
+	private readonly unsavedSources = new Set<string>();
 
 	constructor(
 		sourceUri: Uri,
@@ -89,11 +94,14 @@ export class ArtifactDecorator {
 		configService: ConfigurationService,
 		private readonly artifactOptions: (kind: ArtifactKind) => ArtifactOptions,
 		decorationOptionsEvent: Event<ArtifactKind>,
+		/** Whether the document shows a notice, such as the placeholder, in place of the artifact. */
+		private readonly showsNotice: () => boolean = () => false,
 	) {
 		this.artifactUri = artifactUri;
 		this.sourceUri = sourceUri;
 		this.configService = configService;
 
+		this.syncUnsavedSources();
 		this.refreshDecorations();
 
 		// Rebuild the source map when the artifact changes. A status keeps the last artifact while it
@@ -105,6 +113,7 @@ export class ArtifactDecorator {
 			const artifact = status.artifact?.presentation === 'text' ? status.artifact : undefined;
 			if (artifact !== this.content?.artifact) {
 				this.content = artifact && { artifact, sources: buildSourceLineMap(artifact) };
+				this.syncUnsavedSources();
 			}
 			this.refreshDecorations();
 		});
@@ -120,11 +129,18 @@ export class ArtifactDecorator {
 			this.onEditorVisibleRangesChanged.bind(this),
 		);
 
-		const documentChangeRegistration = workspace.onDidChangeTextDocument((event) => {
-			if (equalUri(event.document.uri, this.artifactUri)) {
-				this.refreshDecorations();
-			}
-		});
+		const documentChangeRegistration = Disposable.from(
+			workspace.onDidChangeTextDocument((event) => {
+				if (equalUri(event.document.uri, this.artifactUri)) {
+					this.refreshDecorations();
+				} else {
+					this.updateUnsavedSources(event.document);
+				}
+			}),
+			// A save does not always change the text, so it can come without a change event.
+			workspace.onDidSaveTextDocument((document) => this.updateUnsavedSources(document)),
+			workspace.onDidCloseTextDocument((document) => this.updateUnsavedSources(document)),
+		);
 
 		// Options that change only decorations do not render the artifact again, so redraw here.
 		const decorationOptionsRegistration = Disposable.from(
@@ -167,7 +183,7 @@ export class ArtifactDecorator {
 		}
 
 		this.withContent((content) => {
-			if (content.sources.has(event.textEditor.document.uri)) {
+			if (this.isMappedEditor(content, event.textEditor)) {
 				this.onSrcLineSelected(content, event.textEditor);
 			} else if (equalUri(event.textEditor.document.uri, this.artifactUri)) {
 				this.onArtifactLineSelected(content, event.textEditor);
@@ -188,7 +204,7 @@ export class ArtifactDecorator {
 		}
 
 		this.withContent((content) => {
-			if (content.sources.has(event.textEditor.document.uri)) {
+			if (this.isMappedEditor(content, event.textEditor)) {
 				const mapping = content.sources.get(event.textEditor.document.uri);
 				const anchor = mapping
 					? event.visibleRanges
@@ -254,7 +270,8 @@ export class ArtifactDecorator {
 			}
 		});
 
-		const stateText = this.stateDecorationText();
+		// A notice, such as the placeholder, already states what the decoration would.
+		const stateText = this.showsNotice() ? undefined : this.stateDecorationText();
 		const artifactEditor = stateText ? this.artifactEditor() : undefined;
 		if (stateText && artifactEditor) {
 			// The whole first line carries the hover, so the failure details are reachable.
@@ -637,8 +654,44 @@ export class ArtifactDecorator {
 		}
 	}
 
+	/** The visible editors of mapped sources. An editor of a source with unsaved edits is left out. */
 	private getAllSourceEditors(content = this.content): TextEditor[] {
-		return content ? window.visibleTextEditors.filter((editor) => content.sources.has(editor.document.uri)) : [];
+		return content ? window.visibleTextEditors.filter((editor) => this.isMappedEditor(content, editor)) : [];
+	}
+
+	private isMappedEditor(content: MappedArtifact, editor: TextEditor): boolean {
+		return content.sources.has(editor.document.uri) && !this.unsavedSources.has(editor.document.uri.toString());
+	}
+
+	/** Whether a document is the compiled source, or a source that the artifact maps lines to. */
+	private isMappedSource(document: TextDocument): boolean {
+		return equalUri(document.uri, this.sourceUri) || Boolean(this.content?.sources.has(document.uri));
+	}
+
+	/** Records whether a mapped source has unsaved edits. A change redraws the decorations. */
+	private updateUnsavedSources(document: TextDocument): void {
+		const key = document.uri.toString();
+		if (this.isUnsavedSource(document) === this.unsavedSources.has(key)) {
+			return;
+		}
+		// The decorations leave out an unsaved source, so clear its decorations before the set changes.
+		this.clearAllDecorations();
+		this.syncUnsavedSources();
+		this.refreshDecorations();
+	}
+
+	/** Finds the mapped sources that have unsaved edits. */
+	private syncUnsavedSources(): void {
+		this.unsavedSources.clear();
+		for (const document of workspace.textDocuments) {
+			if (this.isUnsavedSource(document)) {
+				this.unsavedSources.add(document.uri.toString());
+			}
+		}
+	}
+
+	private isUnsavedSource(document: TextDocument): boolean {
+		return !document.isClosed && document.isDirty && this.isMappedSource(document);
 	}
 
 	private artifactEditor(): TextEditor | undefined {
@@ -663,6 +716,13 @@ export class ArtifactDecorator {
 	}
 
 	private stateDecorationText(): string | undefined {
+		const unsaved =
+			this.unsavedSources.size > 0 ? 'Source has unsaved changes. The artifact shows the saved file.' : undefined;
+		const state = this.compilationStateText();
+		return state && unsaved ? `${state} ${unsaved}` : (state ?? unsaved);
+	}
+
+	private compilationStateText(): string | undefined {
 		switch (this.compilationState) {
 			case 'compiling':
 				return 'Compiling…';

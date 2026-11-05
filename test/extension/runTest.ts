@@ -50,7 +50,10 @@ import { isSupportedSourceDocument } from '../../src/commands/variants.js';
 import {
 	verifyArtifactDocumentDiagnostics,
 	verifyArtifactDocumentNames,
+	verifyArtifactDocumentPlaceholder,
+	verifyArtifactDocumentTabs,
 	verifyComparisonTargets,
+	verifyOpenArtifactArguments,
 } from './artifact-documents.js';
 
 const extensionToolchainHost = {
@@ -102,7 +105,10 @@ export async function run(): Promise<void> {
 	await verifyArtifactGeneratorStates(workspaceFolder);
 	await verifyArtifactDocumentNames();
 	await verifyArtifactDocumentDiagnostics(workspaceFolder.uri.fsPath);
+	await verifyArtifactDocumentPlaceholder(workspaceFolder.uri.fsPath);
+	await verifyArtifactDocumentTabs(workspaceFolder.uri.fsPath);
 	verifyComparisonTargets();
+	verifyOpenArtifactArguments();
 	await verifyArtifactGeneratorFollowsVariant(workspaceFolder);
 	await verifyFallbackVariants(workspaceFolder);
 	await verifyFallbackLanguagesAndBareNames();
@@ -1360,7 +1366,7 @@ async function verifyArtifactDetailsTree(workspaceFolder: vscode.WorkspaceFolder
 	const roots = provider.getChildren();
 	assert.deepEqual(
 		roots.map((node) => node.label),
-		['Artifact', 'Status', 'Invocation', 'Environment', 'Metrics'],
+		['Artifact', 'Status', 'Diagnostics', 'Invocation', 'Environment', 'Metrics'],
 	);
 	const environment = roots.find((node) => node.label === 'Environment');
 	assert.deepEqual(

@@ -10,6 +10,7 @@ import { sourceUriComparisonKey, uriComparisonKey } from '../file-identity.js';
 import { parseArtifactUri, type ArtifactUriIdentity } from './artifact-uri.js';
 import { ArtifactGenerator, type ArtifactStatus } from './artifact-generator.js';
 import type { ArtifactDocumentIdentity, ArtifactDocumentSnapshot } from './artifact-identity.js';
+import { ArtifactProblems } from './artifact-problems.js';
 
 export interface ArtifactRegistryDocument {
 	readonly uri: Uri;
@@ -73,6 +74,8 @@ export function buildArtifactIdentity(
 export class ArtifactDocumentRegistry implements Disposable {
 	private readonly documents = new Map<string, RegisteredArtifactDocument>();
 	private readonly stateEmitter = new EventEmitter<ArtifactDocumentSnapshot>();
+	private readonly documentsEmitter = new EventEmitter<void>();
+	private readonly problems = new ArtifactProblems();
 	private readonly subscriptions: Disposable;
 	/**
 	 * Advanced by every change that can alter a variant or a toolchain. Resolving a variant
@@ -81,6 +84,8 @@ export class ArtifactDocumentRegistry implements Disposable {
 	private identityGeneration = 0;
 
 	readonly onDidChangeArtifactState: Event<ArtifactDocumentSnapshot> = this.stateEmitter.event;
+	/** Fires when a document opens or closes. */
+	readonly onDidChangeDocuments: Event<void> = this.documentsEmitter.event;
 
 	constructor(
 		private readonly compilationService: CompilationService,
@@ -123,7 +128,14 @@ export class ArtifactDocumentRegistry implements Disposable {
 				}
 			}),
 			this.stateEmitter,
+			this.documentsEmitter,
+			this.problems,
 		);
+	}
+
+	/** Returns an open document. */
+	document(uri: Uri): ArtifactRegistryDocument | undefined {
+		return this.documents.get(uriComparisonKey(uri));
 	}
 
 	/** Returns the view of an open document when the view has the given class. */
@@ -202,12 +214,14 @@ export class ArtifactDocumentRegistry implements Disposable {
 			watcher,
 			watcher.onDidChange(() => this.requestRefresh(uri)),
 			handler.onDidChange((status) => {
+				this.problems.accept(key, status);
 				view.onStatus(status);
 				this.stateEmitter.fire(document.snapshot);
 			}),
 		);
 		this.documents.set(key, document);
 		this.stateEmitter.fire(document.snapshot);
+		this.documentsEmitter.fire();
 		return view;
 	}
 
@@ -245,13 +259,15 @@ export class ArtifactDocumentRegistry implements Disposable {
 		document.subscriptions.dispose();
 		document.view?.dispose();
 		document.handler.dispose();
+		this.problems.delete(key);
+		this.documentsEmitter.fire();
 	}
 
 	dispose(): void {
-		this.subscriptions.dispose();
 		for (const document of [...this.documents.values()]) {
 			this.unregister(document.uri);
 		}
+		this.subscriptions.dispose();
 	}
 }
 

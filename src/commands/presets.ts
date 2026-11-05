@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { ArtifactDocumentProvider } from '../artifact-document/artifact-document-provider.js';
+import type { ActiveArtifact } from '../artifact-document/active-artifact.js';
 import { artifactDefinitions, supportedArtifactKinds } from '../artifacts/core/artifact-definitions.js';
 import type { ArtifactPreset } from '../artifacts/ui/presets.js';
 import type { CompilationService } from '../compilation/index.js';
@@ -11,11 +11,11 @@ import { inputStringArray, pickFrom } from '../ui/quick-input.js';
 export interface PresetCommandDependencies {
 	readonly compilationService: CompilationService;
 	readonly configuration: ConfigurationService;
-	readonly artifacts: ArtifactDocumentProvider;
+	readonly activeArtifact: ActiveArtifact;
 }
 
 export function register(context: vscode.ExtensionContext, deps: PresetCommandDependencies): void {
-	const { compilationService, configuration, artifacts } = deps;
+	const { compilationService, configuration, activeArtifact } = deps;
 	context.subscriptions.push(
 		vscode.commands.registerCommand('coglens.AddArtifactPreset', async (node?: ArtifactPresetTreeNode) => {
 			await configureArtifactPreset(
@@ -44,7 +44,7 @@ export function register(context: vscode.ExtensionContext, deps: PresetCommandDe
 			}
 		}),
 		vscode.commands.registerCommand('coglens.SaveArtifactOptionsAsPreset', async () =>
-			saveActiveArtifactAsPreset(artifacts, compilationService, configuration),
+			saveActiveArtifactAsPreset(activeArtifact, compilationService, configuration),
 		),
 	);
 }
@@ -136,13 +136,13 @@ async function pickProductionOptions(
 }
 
 async function saveActiveArtifactAsPreset(
-	artifacts: ArtifactDocumentProvider,
+	activeArtifact: ActiveArtifact,
 	compilationService: CompilationService,
 	configuration: ConfigurationService,
 ): Promise<void> {
-	const snapshot = artifacts.getActiveArtifactDocumentState();
+	const snapshot = activeArtifact.document?.snapshot;
 	if (!snapshot) {
-		await vscode.window.showInformationMessage('Focus an open text artifact to save its options.');
+		await vscode.window.showInformationMessage('Open an artifact to save its options as a preset.');
 		return;
 	}
 	const source = vscode.Uri.parse(snapshot.identity.sourceUri);

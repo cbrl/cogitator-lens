@@ -3,6 +3,7 @@ import type { ControlFlowEdge, ControlFlowGraph, ControlFlowNode } from '../src/
 import { analyzeGraphStructure } from '../src/artifacts/control-flow-graph/graph-structure.js';
 import {
 	parseHostMessage,
+	type GraphArtifactState,
 	type HostMessage,
 	type SerializedGraphArtifact,
 	type WebviewMessage,
@@ -10,6 +11,8 @@ import {
 import { inlineComputedStyles } from './svg-export.js';
 
 interface PersistedState {
+	/** The artifact document of the panel. VS Code gives this state back to restore the panel. */
+	readonly documentUri?: string;
 	readonly selectedGraphId?: string;
 	readonly viewport?: Viewport;
 }
@@ -37,7 +40,10 @@ const layoutDirection = requiredElement<HTMLSelectElement>('layout-direction');
 const canvas = requiredElement<HTMLDivElement>('graph-canvas');
 const diagnostics = requiredElement<HTMLDetailsElement>('diagnostics');
 const diagnosticList = requiredElement<HTMLDivElement>('diagnostic-list');
-const staleBadge = requiredElement<HTMLButtonElement>('stale-badge');
+const stateBadge = requiredElement<HTMLButtonElement>('state-badge');
+const searchPrevious = requiredElement<HTMLButtonElement>('search-previous');
+const searchNext = requiredElement<HTMLButtonElement>('search-next');
+const searchCount = requiredElement<HTMLElement>('search-count');
 const emptyState = requiredElement<HTMLDivElement>('empty-state');
 const svg = requiredElement<SVGSVGElement>('graph-svg');
 const viewportGroup = requiredElement<SVGGElement>('graph-viewport');
@@ -58,6 +64,15 @@ let selectedNode: ControlFlowNode | undefined;
 let focusedNodeId: string | undefined;
 let rankDirection: 'TB' | 'LR' = 'TB';
 const dragThreshold = 4;
+/** The highlighted entry of the function list, which Enter selects. */
+let activeOptionIndex = -1;
+/** The node positions of the drawn graph, so search can center a match. */
+const nodePositions = new Map<string, { readonly x: number; readonly y: number }>();
+/** The matches of the graph search, in node order, and the one that search moved to last. */
+let searchMatches: ControlFlowNode[] = [];
+let searchIndex = -1;
+/** The failure that the diagnostics list shows now. */
+let shownFailure: string | undefined;
 
 selector.addEventListener('change', selectNamedGraph);
 selector.addEventListener('focus', () => {
@@ -74,15 +89,39 @@ selector.addEventListener('blur', () => {
 	}, 120);
 });
 selector.addEventListener('keydown', (event) => {
+	if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+		event.preventDefault();
+		if (functionOptions.hidden) {
+			renderFunctionOptions();
+		}
+		moveActiveOption(event.key === 'ArrowDown' ? 1 : -1);
+	}
 	if (event.key === 'Enter') {
 		event.preventDefault();
-		selectNamedGraph();
+		const active = activeOptionIndex >= 0 ? functionOptionGraphs()[activeOptionIndex] : undefined;
+		if (active) {
+			chooseFunction(active);
+		} else {
+			selectNamedGraph();
+		}
 	}
 	if (event.key === 'Escape') {
 		hideFunctionOptions();
 	}
 });
-graphSearch.addEventListener('input', applySearch);
+graphSearch.addEventListener('input', () => {
+	applySearch();
+	searchIndex = -1;
+	renderSearchCount();
+});
+graphSearch.addEventListener('keydown', (event) => {
+	if (event.key === 'Enter') {
+		event.preventDefault();
+		moveToMatch(event.shiftKey ? -1 : 1);
+	}
+});
+searchPrevious.addEventListener('click', () => moveToMatch(-1));
+searchNext.addEventListener('click', () => moveToMatch(1));
 layoutDirection.addEventListener('change', () => {
 	rankDirection = layoutDirection.value === 'LR' ? 'LR' : 'TB';
 	if (currentGraph) {
@@ -103,7 +142,9 @@ requiredElement<HTMLButtonElement>('export-dot').addEventListener('click', () =>
 	}
 });
 requiredElement<HTMLButtonElement>('legend-toggle').addEventListener('click', toggleLegend);
-staleBadge.addEventListener('click', () => vscode.postMessage({ type: 'refresh' }));
+stateBadge.addEventListener('click', () =>
+	vscode.postMessage({ type: artifact?.state === 'compiling' ? 'cancel' : 'refresh' }),
+);
 requiredElement<HTMLButtonElement>('close-node-details').addEventListener('click', () => {
 	nodeDetails.hidden = true;
 });
@@ -163,28 +204,63 @@ window.addEventListener('message', (event) => {
 vscode.postMessage({ type: 'ready' });
 
 function handleHostMessage(message: HostMessage): void {
-	if (message.type === 'theme') {
-		document.body.dataset.theme = message.theme;
-		return;
-	}
 	artifact = message.artifact;
-	staleBadge.hidden = !artifact.stale;
+	renderStateBadge(artifact.state);
 	renderDiagnostics(artifact);
 	const priorState = vscode.getState();
+	if (priorState?.documentUri !== message.documentUri) {
+		vscode.setState({ ...priorState, documentUri: message.documentUri });
+	}
 	const previous = message.selectedGraphId ?? priorState?.selectedGraphId ?? selector.value;
 	const selected = artifact.graphs.find((graph) => graph.id === previous) ?? artifact.graphs[0];
 	selector.disabled = artifact.graphs.length < 2;
 	if (!selected) {
 		currentGraph = undefined;
 		viewportGroup.replaceChildren();
+		nodePositions.clear();
 		canvas.dataset.empty = 'true';
+		emptyState.textContent = emptyStateText(artifact.state);
 		emptyState.hidden = false;
+		applySearch();
+		renderSearchCount();
 		return;
 	}
 	selector.value = selected.label;
 	renderFunctionOptions();
 	hideFunctionOptions();
 	selectGraph(selected.id, false, priorState?.selectedGraphId !== selected.id);
+}
+
+/** The badge names a state that is not current, and offers the action that fixes it. */
+function renderStateBadge(state: GraphArtifactState): void {
+	const badges: Record<GraphArtifactState, { text: string; title: string } | undefined> = {
+		compiling: { text: 'Compiling · Cancel', title: 'Cancel the compile' },
+		stale: { text: 'Stale · Refresh', title: 'Refresh the graph' },
+		cancelled: { text: 'Cancelled · Refresh', title: 'Refresh the graph' },
+		failed: { text: 'Failed · Refresh', title: 'Refresh the graph. The diagnostics show the failure.' },
+		successful: undefined,
+	};
+	const badge = badges[state];
+	stateBadge.hidden = !badge;
+	stateBadge.dataset.state = state;
+	stateBadge.textContent = badge?.text ?? '';
+	stateBadge.title = badge?.title ?? '';
+	stateBadge.setAttribute('aria-label', badge?.title ?? '');
+}
+
+function emptyStateText(state: GraphArtifactState): string {
+	switch (state) {
+		case 'compiling':
+			return 'Compiling…';
+		case 'stale':
+			return 'A refresh is pending.';
+		case 'cancelled':
+			return 'Generation was cancelled. Select Refresh to compile again.';
+		case 'failed':
+			return 'Compilation failed. The diagnostics above show the compiler output.';
+		case 'successful':
+			return 'No valid function graphs were found.';
+	}
 }
 
 function selectNamedGraph(): void {
@@ -197,18 +273,27 @@ function selectNamedGraph(): void {
 	hideFunctionOptions();
 }
 
-function renderFunctionOptions(): void {
+/** The functions that the filter text matches, in the order of the list. */
+function functionOptionGraphs(): ControlFlowGraph[] {
 	const query = selector.value.trim().toLocaleLowerCase();
-	const matching = (artifact?.graphs ?? []).filter(
+	return (artifact?.graphs ?? []).filter(
 		(graph) =>
 			!query || graph.label.toLocaleLowerCase().includes(query) || graph.id.toLocaleLowerCase().includes(query),
 	);
+}
+
+function renderFunctionOptions(): void {
+	const matching = functionOptionGraphs();
+	clearActiveOption();
 	functionOptions.replaceChildren(
-		...matching.map((graph) => {
+		...matching.map((graph, index) => {
 			const option = document.createElement('button');
 			option.type = 'button';
+			option.id = `function-option-${index}`;
 			option.className = 'function-option';
 			option.role = 'option';
+			option.setAttribute('aria-selected', 'false');
+			option.tabIndex = -1;
 			option.textContent = graph.label;
 			option.title = graph.id;
 			option.addEventListener('pointerdown', (event) => {
@@ -232,6 +317,33 @@ function chooseFunction(graph: ControlFlowGraph): void {
 function hideFunctionOptions(): void {
 	functionOptions.hidden = true;
 	selector.setAttribute('aria-expanded', 'false');
+	clearActiveOption();
+}
+
+/** Moves the highlight through the function list. The focus stays in the filter box. */
+function moveActiveOption(step: number): void {
+	const options = [...functionOptions.querySelectorAll<HTMLElement>('.function-option')];
+	if (options.length === 0) {
+		return;
+	}
+	activeOptionIndex =
+		activeOptionIndex < 0
+			? step > 0
+				? 0
+				: options.length - 1
+			: (activeOptionIndex + step + options.length) % options.length;
+	options.forEach((option, index) => {
+		option.classList.toggle('active', index === activeOptionIndex);
+		option.setAttribute('aria-selected', String(index === activeOptionIndex));
+	});
+	const active = options[activeOptionIndex];
+	selector.setAttribute('aria-activedescendant', active.id);
+	active.scrollIntoView({ block: 'nearest' });
+}
+
+function clearActiveOption(): void {
+	activeOptionIndex = -1;
+	selector.removeAttribute('aria-activedescendant');
 }
 
 function selectGraph(graphId: string, notifyHost: boolean, fit: boolean): void {
@@ -249,6 +361,8 @@ function selectGraph(graphId: string, notifyHost: boolean, fit: boolean): void {
 	viewportGroup.replaceChildren();
 	drawGraph(graph);
 	applySearch();
+	searchIndex = -1;
+	renderSearchCount();
 	const prior = vscode.getState();
 	vscode.setState({ ...prior, selectedGraphId: graph.id, viewport });
 	if (notifyHost) {
@@ -322,6 +436,7 @@ function drawGraph(graph: ControlFlowGraph): void {
 	layout(layoutGraph);
 	const bounds = layoutGraph.graph();
 	graphBounds = { width: bounds.width ?? 1, height: bounds.height ?? 1 };
+	nodePositions.clear();
 
 	const edgeLayer = svgElement('g', { class: 'edges' });
 	for (const edgeRef of layoutGraph.edges()) {
@@ -353,6 +468,7 @@ function drawGraph(graph: ControlFlowGraph): void {
 		if (!position) {
 			continue;
 		}
+		nodePositions.set(node.id, { x: position.x, y: position.y });
 		const group = svgElement('g', {
 			class: `node${node.terminal ? ` terminal terminal-${node.terminal}` : ''}${node.source ? ' source-linked' : ''}${structure.loopNodes.has(node.id) ? ' loop-node' : ''}${!structure.reachable.has(node.id) ? ' unreachable' : ''}`,
 			transform: `translate(${position.x},${position.y})`,
@@ -405,7 +521,12 @@ function drawGraph(graph: ControlFlowGraph): void {
 }
 
 function renderDiagnostics(value: SerializedGraphArtifact): void {
-	const messages = [...(value.failure ? [`Refresh failed: ${value.failure}`] : []), ...value.diagnostics];
+	// The failure holds the message and the compiler output. A new failure opens the list once.
+	if (value.failure && value.failure !== shownFailure) {
+		diagnostics.open = true;
+	}
+	shownFailure = value.failure;
+	const messages = [...(value.failure ? [value.failure] : []), ...value.diagnostics];
 	diagnosticList.replaceChildren(
 		...messages.map((message) => {
 			const row = document.createElement('div');
@@ -426,7 +547,8 @@ function renderDiagnostics(value: SerializedGraphArtifact): void {
 	diagnostics.hidden = messages.length === 0;
 }
 
-function selectNode(graph: ControlFlowGraph, node: ControlFlowNode): void {
+/** Selects a node. Search moves to a node without the focus, so the search box keeps it. */
+function selectNode(graph: ControlFlowGraph, node: ControlFlowNode, focus = true): void {
 	selectedNode = node;
 	focusedNodeId = node.id;
 	emphasize(node.id, true);
@@ -441,8 +563,9 @@ function selectNode(graph: ControlFlowGraph, node: ControlFlowNode): void {
 	for (const candidate of viewportGroup.querySelectorAll<SVGGElement>('.node')) {
 		candidate.tabIndex = candidate.dataset.nodeId === node.id ? 0 : -1;
 	}
-	const group = viewportGroup.querySelector<SVGGElement>(`[data-node-id="${cssEscape(node.id)}"]`);
-	group?.focus();
+	if (focus) {
+		viewportGroup.querySelector<SVGGElement>(`[data-node-id="${cssEscape(node.id)}"]`)?.focus();
+	}
 }
 
 function tracePath(graph: ControlFlowGraph, targetId: string): void {
@@ -522,14 +645,58 @@ function emphasize(nodeId: string | undefined, persistent = false): void {
 
 function applySearch(): void {
 	const query = graphSearch.value.trim().toLocaleLowerCase();
+	searchMatches = query
+		? (currentGraph?.nodes.filter((node) => node.label.toLocaleLowerCase().includes(query)) ?? [])
+		: [];
+	const matches = new Set(searchMatches.map((node) => node.id));
 	for (const element of viewportGroup.querySelectorAll<SVGGElement>('.node')) {
-		const node = currentGraph?.nodes.find((candidate) => candidate.id === element.dataset.nodeId);
-		element.classList.toggle(
-			'search-match',
-			Boolean(query) && Boolean(node?.label.toLocaleLowerCase().includes(query)),
-		);
-		element.classList.toggle('search-muted', Boolean(query) && !node?.label.toLocaleLowerCase().includes(query));
+		const matched = matches.has(element.dataset.nodeId ?? '');
+		element.classList.toggle('search-match', matched);
+		element.classList.toggle('search-muted', Boolean(query) && !matched);
 	}
+}
+
+/** Selects the next or the previous search match, and centers it. */
+function moveToMatch(step: number): void {
+	if (!currentGraph || searchMatches.length === 0) {
+		return;
+	}
+	searchIndex =
+		searchIndex < 0
+			? step > 0
+				? 0
+				: searchMatches.length - 1
+			: (searchIndex + step + searchMatches.length) % searchMatches.length;
+	const node = searchMatches[searchIndex];
+	selectNode(currentGraph, node, false);
+	centerNode(node.id);
+	renderSearchCount();
+}
+
+function renderSearchCount(): void {
+	const count = searchMatches.length;
+	searchPrevious.disabled = count === 0;
+	searchNext.disabled = count === 0;
+	searchCount.textContent = !graphSearch.value.trim()
+		? ''
+		: count === 0
+			? 'No matches'
+			: searchIndex < 0
+				? `${count} ${count === 1 ? 'match' : 'matches'}`
+				: `${searchIndex + 1} of ${count}`;
+}
+
+function centerNode(nodeId: string): void {
+	const position = nodePositions.get(nodeId);
+	if (!position) {
+		return;
+	}
+	viewport = {
+		...viewport,
+		x: canvas.clientWidth / 2 - position.x * viewport.scale,
+		y: canvas.clientHeight / 2 - position.y * viewport.scale,
+	};
+	applyViewport();
 }
 
 function exportSvg(): void {

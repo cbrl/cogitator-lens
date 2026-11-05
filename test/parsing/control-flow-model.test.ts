@@ -214,11 +214,35 @@ test('webview protocol accepts the exact message schemas and nothing more', () =
 	assert.equal(parseWebviewMessage({ type: 'unknown' }), undefined);
 	assert.equal(parseWebviewMessage({ type: 'exportSvg', graphId: 'g', svg: 'x'.repeat(10_000_001) }), undefined);
 
-	assert.deepEqual(parseHostMessage({ type: 'theme', theme: 'high-contrast' }), {
-		type: 'theme',
-		theme: 'high-contrast',
-	});
-	assert.equal(parseHostMessage({ type: 'theme', theme: 'blue' }), undefined);
+	assert.deepEqual(parseWebviewMessage({ type: 'cancel' }), { type: 'cancel' });
+	assert.equal(parseWebviewMessage({ type: 'cancel', graphId: 'g' }), undefined);
+
+	// No stylesheet reads a theme, so the host sends none.
+	assert.equal(parseHostMessage({ type: 'theme', theme: 'high-contrast' }), undefined);
+});
+
+test('the host protocol carries each generation state and the document of the panel', () => {
+	for (const state of ['compiling', 'stale', 'cancelled', 'failed', 'successful']) {
+		const parsed = parseHostMessage({ ...renderMessage([]), artifact: { ...renderArtifact([]), state } });
+		assert.equal(parsed?.artifact.state, state);
+		assert.equal(parsed?.documentUri, documentUri);
+	}
+	assert.equal(
+		parseHostMessage({ ...renderMessage([]), artifact: { ...renderArtifact([]), state: 'unknown' } }),
+		undefined,
+	);
+	assert.equal(
+		parseHostMessage({ ...renderMessage([]), artifact: { ...renderArtifact([]), stale: false } }),
+		undefined,
+	);
+	const { documentUri: _documentUri, ...withoutDocument } = renderMessage([]);
+	assert.equal(parseHostMessage(withoutDocument), undefined);
+	const failure = 'error: expected fake failure\n'.repeat(100);
+	assert.equal(
+		parseHostMessage({ ...renderMessage([]), artifact: { ...renderArtifact([]), state: 'failed', failure } })
+			?.artifact.failure,
+		failure,
+	);
 });
 
 test('the host protocol rejects injected fields but carries markup through as data', () => {
@@ -265,9 +289,12 @@ function sourceGraph(id: string, source?: ControlFlowSourceLocation): ControlFlo
 	return graph(id, { ...(source ? { source } : {}), nodes: [{ id: 'entry', label: 'entry' }], edges: [] });
 }
 
+const documentUri = 'coglens-artifact:/work/main.coglens.cfg?kind=control-flow-graph';
+
 function renderMessage(graphs: readonly unknown[]): Record<string, unknown> {
-	return {
-		type: 'render',
-		artifact: { graphs, metrics: {}, diagnostics: [], stale: false },
-	};
+	return { type: 'render', documentUri, artifact: renderArtifact(graphs) };
+}
+
+function renderArtifact(graphs: readonly unknown[]): Record<string, unknown> {
+	return { graphs, metrics: {}, diagnostics: [], state: 'successful' };
 }

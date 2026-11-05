@@ -1,7 +1,7 @@
 import type { DisplayOptions, RawArtifact, RenderedTextArtifact } from '../../types/index.js';
 import { parsedLine, withLabelNavigation } from '../assembly/assembly-navigation.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
-import { renderedArtifact } from '../core/rendered-artifact.js';
+import { filteredLineCountMetric, renderedArtifact } from '../core/rendered-artifact.js';
 import { binaryBranchLinks } from './branch-links.js';
 
 /**
@@ -24,6 +24,7 @@ export function renderBinaryDisassembly(
 		renderedArtifact(raw, lines, {
 			codeSizeBytes: parsed.asm.reduce((total, line) => total + (line.opcodes?.length ?? 0), 0),
 			instructionCount: parsed.asm.filter((line) => line.opcodes?.length).length,
+			...(parsed.filteredCount === undefined ? {} : { [filteredLineCountMetric]: parsed.filteredCount }),
 		}),
 		parsed,
 		classifyInstruction,

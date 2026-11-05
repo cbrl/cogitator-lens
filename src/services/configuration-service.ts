@@ -36,6 +36,7 @@ import {
 } from './settings-scopes.js';
 import { portablePath, type PathContext } from './path-variables.js';
 import type { ProcessLimits } from '../exec.js';
+import { defaultListingLineLimit, parseListingLineLimit } from '../compilation/listing-limit.js';
 
 /** A change to Cogitator Lens settings. */
 export interface SettingsChange {
@@ -151,6 +152,23 @@ export class ConfigurationService implements Disposable {
 			timeoutMs: Math.round(positive(configuration.get('processTimeout'), 60) * 1000),
 			maxOutputBytes: Math.round(positive(configuration.get('processOutputLimit'), 50) * 1024 * 1024),
 		};
+	}
+
+	/** The number of lines that a binary disassembly or LLVM IR listing shows. */
+	getListingLineLimit(): number {
+		return (
+			parseListingLineLimit(workspace.getConfiguration('coglens').get('listingLineLimit')) ??
+			defaultListingLineLimit
+		);
+	}
+
+	/** Sets the listing line limit in the scope that sets it now, or in user settings. */
+	async updateListingLineLimit(limit: number): Promise<void> {
+		await this.serialized(async () => {
+			const scopes = this.scopes<unknown>('listingLineLimit');
+			const scope = definingScope(scopes, () => true, windowScopes) ?? 'user';
+			await this.write('listingLineLimit', scope, limit);
+		});
 	}
 
 	getDetectToolchainsOnPath(): boolean {

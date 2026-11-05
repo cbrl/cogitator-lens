@@ -1,5 +1,7 @@
 import vscode, { commands, type ExtensionContext, window, workspace } from 'vscode';
+import { ActiveArtifact } from './artifact-document/active-artifact.js';
 import { ArtifactDocumentProvider } from './artifact-document/artifact-document-provider.js';
+import { ArtifactStatusBar } from './artifact-document/artifact-status-bar.js';
 import { ArtifactDocumentRegistry } from './artifact-document/artifact-document-registry.js';
 import { ArtifactNavigationProvider } from './artifact-document/artifact-navigation-provider.js';
 import {
@@ -25,21 +27,29 @@ import {
 	createToolchainTreeView,
 } from './views/index.js';
 import { setProcessLimits } from './exec.js';
+import { setListingLineLimit } from './compilation/listing-limit.js';
 import * as logger from './logger.js';
 import { GraphPanelManager } from './webview/graph-panel-manager.js';
 
 export async function activate(context: ExtensionContext): Promise<void> {
 	const configuration = new ConfigurationService();
 	setProcessLimits(configuration.getProcessLimits());
+	setListingLineLimit(configuration.getListingLineLimit());
+	// This listener comes before the artifact registry's, so a refresh that a change starts uses the new limits.
 	const limitsSubscription = configuration.onDidChange((change) => {
 		if (change.affects('processTimeout') || change.affects('processOutputLimit')) {
 			setProcessLimits(configuration.getProcessLimits());
+		}
+		if (change.affects('listingLineLimit')) {
+			setListingLineLimit(configuration.getListingLineLimit());
 		}
 	});
 	const compilationService = new CompilationService(configuration, context.workspaceState);
 	const artifactRegistry = new ArtifactDocumentRegistry(compilationService, configuration);
 	const artifactProvider = new ArtifactDocumentProvider(compilationService, configuration, artifactRegistry);
 	const graphPanels = new GraphPanelManager(context, artifactRegistry);
+	const activeArtifact = new ActiveArtifact(artifactRegistry, graphPanels);
+	const statusBar = new ArtifactStatusBar(activeArtifact);
 	const navigationProvider = new ArtifactNavigationProvider((uri) => artifactProvider.getRenderedArtifact(uri));
 
 	createToolchainTreeView(context, compilationService.toolchainRegistry);
@@ -53,6 +63,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		compilationService,
 		configuration,
 		artifacts: artifactProvider,
+		activeArtifact,
 	};
 	toolchainCommands.register(context, { ...sharedCommandDependencies, pathToolchains });
 	variantCommands.register(context, sharedCommandDependencies);
@@ -97,22 +108,15 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		artifactSemanticTokensLegend,
 	);
 
-	const updateEditorContexts = (): Thenable<unknown[]> =>
-		Promise.all([
-			commands.executeCommand(
-				'setContext',
-				'coglens.supportedSource',
-				Boolean(
-					window.activeTextEditor &&
-					variantCommands.isSupportedSourceDocument(window.activeTextEditor.document),
-				),
+	// The status bar sets coglens.activeArtifact, which follows graph panels and the source of an artifact too.
+	const updateEditorContexts = (): Thenable<unknown> =>
+		commands.executeCommand(
+			'setContext',
+			'coglens.supportedSource',
+			Boolean(
+				window.activeTextEditor && variantCommands.isSupportedSourceDocument(window.activeTextEditor.document),
 			),
-			commands.executeCommand(
-				'setContext',
-				'coglens.artifactDocument',
-				window.activeTextEditor?.document.uri.scheme === ArtifactDocumentProvider.scheme,
-			),
-		]);
+		);
 	const activeEditorSubscription = window.onDidChangeActiveTextEditor(() => {
 		void updateEditorContexts();
 	});
@@ -131,6 +135,8 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		artifactRegistry,
 		artifactProvider,
 		graphPanels,
+		activeArtifact,
+		statusBar,
 		contentProvider,
 		definitionRegistration,
 		linkRegistration,

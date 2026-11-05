@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import {
 	CancellationTokenSource,
-	ColorThemeKind,
 	Disposable,
 	Event,
 	EventEmitter,
@@ -15,7 +14,11 @@ import {
 	WebviewPanel,
 	window,
 	workspace,
+	type WebviewOptions,
+	type WebviewPanelOptions,
 } from 'vscode';
+import { isRecord } from '../common.js';
+import { failureDetails } from '../compilation/compilation-service.js';
 import { localFileUriComparisonKey } from '../file-identity.js';
 import type { ControlFlowGraph, ControlFlowSourceLocation, RenderedGraphArtifact } from '../types/index.js';
 import type { ArtifactStatus } from '../artifact-document/artifact-generator.js';
@@ -26,11 +29,14 @@ import {
 	type ArtifactView,
 } from '../artifact-document/artifact-document-registry.js';
 import { parseArtifactUri } from '../artifact-document/artifact-uri.js';
+import type { GraphPanelFocus } from '../artifact-document/active-artifact.js';
+import { graphLimits } from '../artifacts/control-flow-graph/control-flow-graph-model.js';
 import { logChannel } from '../logger.js';
 import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
 import {
+	graphPanelViewType,
 	parseWebviewMessage,
-	type GraphTheme,
+	type GraphArtifactState,
 	type HostMessage,
 	type SerializedGraphArtifact,
 } from './graph-protocol.js';
@@ -54,27 +60,42 @@ class GraphPanelView implements ArtifactView {
 	}
 }
 
-export class GraphPanelManager implements Disposable {
+export class GraphPanelManager implements Disposable, GraphPanelFocus {
 	private readonly activeEmitter = new EventEmitter<ArtifactDocumentSnapshot | undefined>();
+	private readonly panelsEmitter = new EventEmitter<void>();
 	private readonly subscriptions: Disposable;
 	private activeView?: GraphPanelView;
 
 	readonly onDidChangeActiveGraph: Event<ArtifactDocumentSnapshot | undefined> = this.activeEmitter.event;
+	readonly onDidChangePanels: Event<void> = this.panelsEmitter.event;
 
 	constructor(
 		private readonly context: ExtensionContext,
 		private readonly registry: ArtifactDocumentRegistry,
 	) {
 		this.subscriptions = Disposable.from(
-			window.onDidChangeActiveColorTheme(() => {
-				this.registry.views(GraphPanelView).forEach((view) => this.postTheme(view));
+			// VS Code restores a graph panel after a restart from the state that its webview saved.
+			window.registerWebviewPanelSerializer(graphPanelViewType, {
+				deserializeWebviewPanel: (panel, state) => this.restore(panel, state),
 			}),
 			this.activeEmitter,
+			this.panelsEmitter,
 		);
 	}
 
 	get activeSnapshot(): ArtifactDocumentSnapshot | undefined {
 		return this.activeView?.document.snapshot;
+	}
+
+	get activeDocument(): ArtifactRegistryDocument | undefined {
+		return this.activeView?.document;
+	}
+
+	visibleDocuments(): readonly ArtifactRegistryDocument[] {
+		return this.registry
+			.views(GraphPanelView)
+			.filter((view) => view.panel.visible)
+			.map((view) => view.document);
 	}
 
 	get onDidChangeArtifactState(): Event<ArtifactDocumentSnapshot> {
@@ -92,33 +113,46 @@ export class GraphPanelManager implements Disposable {
 			return;
 		}
 
-		const parsed = parseArtifactUri(uri);
-		const definition = parsed ? artifactDefinitions[parsed.artifactKind] : undefined;
-		if (
-			definition?.presentation !== 'graph' ||
-			definition.requiresOutputSelection !== true ||
-			!parsed?.artifactOutputId
-		) {
+		if (!isGraphArtifactUri(uri)) {
 			throw new Error(`Invalid control-flow graph URI: ${uri.toString()}`);
 		}
-		const view: GraphPanelView = this.registry.open(uri, (document) => {
-			const panel = window.createWebviewPanel(
-				'coglens.controlFlowGraph',
-				`${path.basename(document.parsed.source.fsPath)} — ${document.identity.artifactLabel}`,
+		const view = this.attach(uri, (document) =>
+			window.createWebviewPanel(
+				graphPanelViewType,
+				panelTitle(document),
 				{ viewColumn: ViewColumn.Beside, preserveFocus: true },
-				{
-					enableScripts: true,
-					retainContextWhenHidden: true,
-					localResourceRoots: [Uri.joinPath(this.context.extensionUri, 'dist', 'webview')],
-				},
-			);
-			return new GraphPanelView(
-				document,
-				panel,
-				() => void this.refresh(view),
-				(status) => this.acceptStatus(view, status),
-			);
+				this.webviewOptions(),
+			),
+		);
+		await this.refresh(view);
+	}
+
+	/** Restores a panel from the state that its webview saved. A panel without a usable state closes. */
+	private async restore(panel: WebviewPanel, state: unknown): Promise<void> {
+		const uri = restoredDocumentUri(state);
+		if (!uri || this.registry.document(uri)) {
+			panel.dispose();
+			return;
+		}
+		panel.webview.options = this.webviewOptions();
+		const view = this.attach(uri, (document) => {
+			panel.title = panelTitle(document);
+			return panel;
 		});
+		await this.refresh(view);
+	}
+
+	private attach(uri: Uri, createPanel: (document: ArtifactRegistryDocument) => WebviewPanel): GraphPanelView {
+		const view: GraphPanelView = this.registry.open(
+			uri,
+			(document) =>
+				new GraphPanelView(
+					document,
+					createPanel(document),
+					() => void this.refresh(view),
+					(status) => this.acceptStatus(view, status),
+				),
+		);
 		view.panel.webview.html = this.html(view.panel);
 		view.subscriptions = Disposable.from(
 			view.panel.webview.onDidReceiveMessage((message) => this.acceptMessage(view, message)),
@@ -128,13 +162,23 @@ export class GraphPanelManager implements Disposable {
 				} else if (this.activeView === view) {
 					this.setActive(undefined);
 				}
+				this.panelsEmitter.fire();
 			}),
 			view.panel.onDidDispose(() => this.remove(view)),
 		);
 		if (view.panel.active) {
 			this.setActive(view);
 		}
-		await this.refresh(view);
+		this.panelsEmitter.fire();
+		return view;
+	}
+
+	private webviewOptions(): WebviewPanelOptions & WebviewOptions {
+		return {
+			enableScripts: true,
+			retainContextWhenHidden: true,
+			localResourceRoots: [Uri.joinPath(this.context.extensionUri, 'dist', 'webview')],
+		};
 	}
 
 	dispose(): void {
@@ -177,7 +221,6 @@ export class GraphPanelManager implements Disposable {
 		switch (message.type) {
 			case 'ready':
 				view.ready = true;
-				this.postTheme(view);
 				this.postRender(view, view.document.handler.status);
 				break;
 			case 'selectionChanged':
@@ -189,6 +232,9 @@ export class GraphPanelManager implements Disposable {
 				break;
 			case 'refresh':
 				this.registry.requestRefresh(view.document.uri);
+				break;
+			case 'cancel':
+				view.document.handler.cancel();
 				break;
 			case 'exportDot': {
 				const graph = view.artifact?.graphs.find((candidate) => candidate.id === message.graphId);
@@ -258,22 +304,17 @@ export class GraphPanelManager implements Disposable {
 			graphs: retained?.graphs ?? [],
 			metrics: retained?.metrics ?? {},
 			diagnostics: diagnosticMessages(status, retained),
-			stale: status.state !== 'successful',
-			...(status.state === 'failed' ? { failure: status.error.message } : {}),
+			state: panelState(status, view.document.handler.generating),
+			...(status.state === 'failed'
+				? { failure: failureDetails(status.error).slice(0, graphLimits.labelLength) }
+				: {}),
 		};
 		this.postMessage(view, {
 			type: 'render',
+			documentUri: view.document.uri.toString(),
 			artifact,
 			...(view.selectedGraphId === undefined ? {} : { selectedGraphId: view.selectedGraphId }),
 		});
-	}
-
-	private postTheme(view: GraphPanelView): void {
-		if (!view.ready) {
-			return;
-		}
-		const message: HostMessage = { type: 'theme', theme: currentTheme() };
-		this.postMessage(view, message);
 	}
 
 	private postMessage(view: GraphPanelView, message: HostMessage): void {
@@ -298,6 +339,7 @@ export class GraphPanelManager implements Disposable {
 		if (this.activeView === view) {
 			this.setActive(undefined);
 		}
+		this.panelsEmitter.fire();
 	}
 
 	private html(panel: WebviewPanel): string {
@@ -332,6 +374,9 @@ export class GraphPanelManager implements Disposable {
 <div id="function-options" role="listbox" hidden></div>
 </div>
 <input id="graph-search" type="search" aria-label="Find in graph" placeholder="Find instruction or register">
+<button id="search-previous" type="button" title="Previous match (Shift+Enter)" aria-label="Previous match" disabled>↑</button>
+<button id="search-next" type="button" title="Next match (Enter)" aria-label="Next match" disabled>↓</button>
+<span id="search-count" role="status" aria-live="polite"></span>
 <label for="layout-direction">Layout</label>
 <select id="layout-direction" aria-label="Graph layout direction"><option value="TB">Top to bottom</option><option value="LR">Left to right</option></select>
 <button id="fit" type="button" title="Fit to view">Fit</button>
@@ -348,7 +393,7 @@ export class GraphPanelManager implements Disposable {
 <span class="legend-item legend-fallthrough">Fallthrough</span>
 <span class="legend-item legend-exception">Exception</span>
 </div>
-<button id="stale-badge" type="button" title="Refresh graph" aria-label="Refresh stale graph" hidden>Stale · Refresh</button>
+<button id="state-badge" type="button" hidden></button>
 </div>
 <details id="diagnostics" role="status" aria-live="polite" hidden><summary>Diagnostics</summary><div id="diagnostic-list"></div></details>
 <div id="graph-canvas" data-empty="true" aria-label="Control-flow graph canvas">
@@ -364,6 +409,38 @@ export class GraphPanelManager implements Disposable {
 </body>
 </html>`;
 	}
+}
+
+function panelTitle(document: ArtifactRegistryDocument): string {
+	return `${path.basename(document.parsed.source.fsPath)} — ${document.identity.artifactLabel}`;
+}
+
+function isGraphArtifactUri(uri: Uri): boolean {
+	const parsed = parseArtifactUri(uri);
+	const definition = parsed ? artifactDefinitions[parsed.artifactKind] : undefined;
+	return (
+		definition?.presentation === 'graph' &&
+		definition.requiresOutputSelection === true &&
+		Boolean(parsed?.artifactOutputId)
+	);
+}
+
+/** The artifact document in the state of a restored panel, when it is a graph document. */
+function restoredDocumentUri(state: unknown): Uri | undefined {
+	if (!isRecord(state) || typeof state.documentUri !== 'string') {
+		return undefined;
+	}
+	try {
+		const uri = Uri.parse(state.documentUri, true);
+		return isGraphArtifactUri(uri) ? uri : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** The state that the panel shows. A refresh request makes a compile stale, but the compile still runs. */
+function panelState(status: ArtifactStatus, generating: boolean): GraphArtifactState {
+	return status.state === 'stale' && generating ? 'compiling' : status.state;
 }
 
 function toDot(graph: ControlFlowGraph): string {
@@ -431,15 +508,4 @@ function highlightVisibleSource(source: ControlFlowSourceLocation): void {
 	const requestedEnd = new Position(source.endLine ?? source.line, source.endColumn ?? source.column);
 	editor.selection = new Selection(start, requestedEnd.isBefore(start) ? start : requestedEnd);
 	editor.revealRange(editor.selection);
-}
-
-function currentTheme(): GraphTheme {
-	switch (window.activeColorTheme.kind) {
-		case ColorThemeKind.Light:
-			return 'light';
-		case ColorThemeKind.Dark:
-			return 'dark';
-		default:
-			return 'high-contrast';
-	}
 }

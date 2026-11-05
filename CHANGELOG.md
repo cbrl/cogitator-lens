@@ -4,8 +4,31 @@ All notable changes to Cogitator Lens are in this file.
 
 ## Unreleased
 
+### Added
+
+- A slow first compile opens the artifact at once with a "Compiling main.cpp with GCC…" line. The output replaces it when the compile ends. A compile that ends within 150 ms shows no placeholder.
+- The control-flow graph view shows each state: compiling, stale, cancelled, or failed. A badge cancels a compile or starts a refresh. A failure shows the compiler output.
+- Control-flow graph diagnostics appear in the Problems view.
+- Open control-flow graphs come back after VS Code restarts.
+- The function filter of the graph view takes the arrow keys. Graph search has previous and next controls, and Enter and Shift+Enter move between matches.
+- An empty listing names the likely causes, such as an unused `static` function, a template without an instantiation, or "Show library code". Artifact Details shows the number of filtered lines.
+- Artifact Details lists each diagnostic with its severity and location.
+- While a source has unsaved changes, the artifact says so on its first line. The line mapping to that source stops until the next save, because the compiler reads the saved file.
+- The editor context menu has a **Cogitator Lens** submenu. The explorer context menu has **Open Artifact** for a source file.
+- The **Get Started with Cogitator Lens** walkthrough shows the first steps.
+- The artifact picker shows the kinds that you opened last at the top.
+- `coglens.OpenArtifact` accepts `{ "kind": "assembly", "preset": "fast" }`, so a key binding can open one kind with one preset.
+- `coglens.listingLineLimit` sets the number of lines in binary disassembly and LLVM IR listings. Before, the limit was always 5000. The status menu of a truncated artifact can raise the limit.
+
+### Changed
+
+- The status bar follows the visible artifact of the focused source. Before, it hid when the focus stayed in the source, which is where Open Artifact leaves it. **Refresh Artifact**, **Cancel Artifact Generation**, and **Save Current Options as Artifact Preset** use the same artifact, and they also work for a focused control-flow graph.
+- The Command Palette no longer shows commands that need a sidebar item.
+- `npm run test:coverage` writes a coverage report to `coverage/lcov.info`. CI uploads the report from the Linux job.
+
 ### Fixed
 
+- Closing the last tab of an artifact stops its compile at once. Before, VS Code kept the document open for a while, and the compile continued. A diff tab now counts as a tab of both of its artifacts.
 - The Problems view shows each compiler diagnostic once. Before, it repeated a diagnostic for each open artifact of the same source.
 - Problems entries name Cogitator Lens as their source and underline the whole word at the position.
 - Cancel Generation stops a compile when a refresh request is pending. Before, the command refused, because the state was stale.
@@ -16,10 +39,6 @@ All notable changes to Cogitator Lens are in this file.
 - MSVC assembly obeys "Show address and opcode columns". Before, the address and code bytes from `/FAcs` were part of each line, so they always showed. They are now columns beside the text, as in binary disassembly. Search, copy, and instruction hovers see only the instruction, and a wrapped long encoding is one line.
 - Exported control-flow graph SVG files keep their colors, fonts, and background.
 - The manifest declares `onFileSystem:coglens-artifact`, so a restored artifact tab can activate the extension.
-
-### Changed
-
-- `npm run test:coverage` writes a coverage report to `coverage/lcov.info`. CI uploads the report from the Linux job.
 
 ## 0.9.1 - 2026-10-30
 

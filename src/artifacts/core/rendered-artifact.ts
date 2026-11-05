@@ -5,6 +5,9 @@ import type {
 	RenderedTextArtifact,
 } from '../../types/index.js';
 
+/** The metric that holds the number of output lines that the display options removed. */
+export const filteredLineCountMetric = 'filteredLineCount';
+
 export function renderedArtifact(
 	raw: RawArtifact,
 	lines: readonly RenderedArtifactLine[],

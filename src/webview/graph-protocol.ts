@@ -15,23 +15,31 @@ import {
  * message envelope around them.
  */
 
+/** The view type of the graph panel. A restored panel of this type activates the extension. */
+export const graphPanelViewType = 'coglens.controlFlowGraph';
+
+/** The generation state that the panel shows. A compile that a refresh request made stale is still compiling. */
+export type GraphArtifactState = 'compiling' | 'stale' | 'cancelled' | 'failed' | 'successful';
+
+const graphArtifactStates: readonly GraphArtifactState[] = ['compiling', 'stale', 'cancelled', 'failed', 'successful'];
+
 export interface SerializedGraphArtifact {
+	/** The graphs of the last successful compile. A later failure keeps them. */
 	readonly graphs: readonly ControlFlowGraph[];
 	readonly metrics: Readonly<Record<string, RenderedArtifactMetric>>;
 	readonly diagnostics: readonly string[];
-	readonly stale: boolean;
+	readonly state: GraphArtifactState;
+	/** The failure message and the compiler output, when the last compile failed. */
 	readonly failure?: string;
 }
 
-export type GraphTheme = 'light' | 'dark' | 'high-contrast';
-
-export type HostMessage =
-	| {
-			readonly type: 'render';
-			readonly artifact: SerializedGraphArtifact;
-			readonly selectedGraphId?: string;
-	  }
-	| { readonly type: 'theme'; readonly theme: GraphTheme };
+export type HostMessage = {
+	readonly type: 'render';
+	/** The artifact document of the panel. The panel keeps it, so a restart can restore the panel. */
+	readonly documentUri: string;
+	readonly artifact: SerializedGraphArtifact;
+	readonly selectedGraphId?: string;
+};
 
 export type WebviewMessage =
 	| { readonly type: 'ready' }
@@ -39,6 +47,7 @@ export type WebviewMessage =
 	| { readonly type: 'highlightSource'; readonly graphId: string; readonly nodeId: string }
 	| { readonly type: 'selectionChanged'; readonly graphId: string }
 	| { readonly type: 'refresh' }
+	| { readonly type: 'cancel' }
 	| { readonly type: 'exportDot'; readonly graphId: string }
 	| { readonly type: 'exportSvg'; readonly graphId: string; readonly svg: string };
 
@@ -50,17 +59,11 @@ export type WebviewMessage =
  * is rejected rather than partially rendered.
  */
 export function parseHostMessage(value: unknown): HostMessage | undefined {
-	if (!isRecord(value) || typeof value.type !== 'string') {
-		return undefined;
-	}
-	if (value.type === 'theme') {
-		return exactKeys(value, ['type', 'theme']) && isGraphTheme(value.theme)
-			? { type: 'theme', theme: value.theme }
-			: undefined;
-	}
 	if (
+		!isRecord(value) ||
 		value.type !== 'render' ||
-		!allowedKeys(value, ['type', 'artifact', 'selectedGraphId']) ||
+		!allowedKeys(value, ['type', 'documentUri', 'artifact', 'selectedGraphId']) ||
+		boundedString(value.documentUri, graphLimits.labelLength) === undefined ||
 		(value.selectedGraphId !== undefined && !validId(value.selectedGraphId))
 	) {
 		return undefined;
@@ -71,6 +74,7 @@ export function parseHostMessage(value: unknown): HostMessage | undefined {
 	}
 	return {
 		type: 'render',
+		documentUri: value.documentUri as string,
 		artifact,
 		...(value.selectedGraphId === undefined ? {} : { selectedGraphId: value.selectedGraphId as string }),
 	};
@@ -98,6 +102,8 @@ export function parseWebviewMessage(value: unknown): WebviewMessage | undefined 
 				: undefined;
 		case 'refresh':
 			return exactKeys(value, ['type']) ? { type: 'refresh' } : undefined;
+		case 'cancel':
+			return exactKeys(value, ['type']) ? { type: 'cancel' } : undefined;
 		case 'exportDot':
 			return exactKeys(value, ['type', 'graphId']) && validId(value.graphId)
 				? { type: 'exportDot', graphId: value.graphId }
@@ -117,8 +123,8 @@ export function parseWebviewMessage(value: unknown): WebviewMessage | undefined 
 function parseSerializedGraphArtifact(value: unknown): SerializedGraphArtifact | undefined {
 	if (
 		!isRecord(value) ||
-		!allowedKeys(value, ['graphs', 'metrics', 'diagnostics', 'stale', 'failure']) ||
-		typeof value.stale !== 'boolean' ||
+		!allowedKeys(value, ['graphs', 'metrics', 'diagnostics', 'state', 'failure']) ||
+		!graphArtifactStates.includes(value.state as GraphArtifactState) ||
 		!isRecord(value.metrics) ||
 		!Array.isArray(value.graphs) ||
 		value.graphs.length > graphLimits.graphs ||
@@ -145,7 +151,7 @@ function parseSerializedGraphArtifact(value: unknown): SerializedGraphArtifact |
 		graphs,
 		metrics: value.metrics as Record<string, RenderedArtifactMetric>,
 		diagnostics: value.diagnostics as string[],
-		stale: value.stale,
+		state: value.state as GraphArtifactState,
 		...(value.failure === undefined ? {} : { failure: value.failure as string }),
 	};
 }
@@ -170,8 +176,4 @@ function validId(value: unknown): value is string {
 
 function exactKeys(value: Record<string, unknown>, keys: readonly string[]): boolean {
 	return Object.keys(value).length === keys.length && allowedKeys(value, keys);
-}
-
-function isGraphTheme(value: unknown): value is GraphTheme {
-	return value === 'light' || value === 'dark' || value === 'high-contrast';
 }

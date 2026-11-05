@@ -1,6 +1,6 @@
 import type { DisplayOptions, RawArtifact, RenderedTextArtifact } from '../../types/index.js';
 import type { ArtifactRenderContext } from '../core/artifact-contracts.js';
-import { renderedArtifact } from '../core/rendered-artifact.js';
+import { filteredLineCountMetric, renderedArtifact } from '../core/rendered-artifact.js';
 import { functionLabelTest, parsedLine, withLabelNavigation } from './assembly-navigation.js';
 
 /** Renders compiler assembly and augments it with navigable labels and source locations. */
@@ -17,6 +17,7 @@ export function renderAssembly(
 	return withLabelNavigation(
 		renderedArtifact(raw, lines, {
 			labelCount: Object.keys(parsed.labelDefinitions ?? {}).length,
+			...(parsed.filteredCount === undefined ? {} : { [filteredLineCountMetric]: parsed.filteredCount }),
 		}),
 		parsed,
 		(instruction) => context.backend.classifyAssemblyInstruction(instruction),
