@@ -1,7 +1,11 @@
 import type { RenderedTextArtifact } from '../types/index.js';
 import type { AssemblyInstructionInfo } from '../vendor/types/assembly-docs.interfaces.js';
 import { instructionSetLabels } from '../artifacts/core/instruction-set-labels.js';
-import { listingSyntaxFor, type NamedProvider } from '../artifacts/core/listing-syntax.js';
+import {
+	listingSyntaxFor,
+	type ListingSyntaxDefinition,
+	type NamedProvider,
+} from '../artifacts/core/listing-syntax.js';
 
 export { instructionSetLabels };
 
@@ -42,18 +46,34 @@ export function documentationForOpcode(
 	if (!providerDeclaration) {
 		return undefined;
 	}
-	let namedProvider: NamedProvider;
-	if ('infer' in providerDeclaration) {
-		const cached = inferredProviders.get(artifact);
-		namedProvider = cached ?? inferAssemblyProvider(artifact, providerDeclaration.infer);
-		if (!cached) {
-			inferredProviders.set(artifact, namedProvider);
-		}
-	} else {
-		namedProvider = providerDeclaration;
-	}
+	const namedProvider = documentationProvider(artifact, providerDeclaration);
 	const information = namedProvider.provider.getInstructionInformation(mnemonic);
 	return information ? documentation(mnemonic, namedProvider, information) : undefined;
+}
+
+/**
+ * The instruction set of a listing, as the label of its documentation set, such as
+ * `instructionSetLabels.amd64`. A native assembly listing gets the set that covers the most of its
+ * mnemonics.
+ */
+export function instructionSetOf(artifact: RenderedTextArtifact): string | undefined {
+	const declaration = listingSyntaxFor(artifact)?.documentation;
+	return declaration && documentationProvider(artifact, declaration).label;
+}
+
+function documentationProvider(
+	artifact: RenderedTextArtifact,
+	declaration: ListingSyntaxDefinition['documentation'],
+): NamedProvider {
+	if (!('infer' in declaration)) {
+		return declaration;
+	}
+	let provider = inferredProviders.get(artifact);
+	if (!provider) {
+		provider = inferAssemblyProvider(artifact, declaration.infer);
+		inferredProviders.set(artifact, provider);
+	}
+	return provider;
 }
 
 export function instructionMnemonic(artifact: RenderedTextArtifact, text: string): string | undefined {

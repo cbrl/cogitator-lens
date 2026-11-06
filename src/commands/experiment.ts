@@ -129,7 +129,7 @@ export function experimentStatusActions(
 		});
 	}
 	if (isText) {
-		if (document.handler.previousArtifact) {
+		if (document.handler.previousText !== undefined) {
 			actions.push({
 				label: '$(diff) Compare With Previous Result',
 				description: 'Show what the last change did',
@@ -211,20 +211,28 @@ async function setOptimizationLevel(
 	}
 	const store = deps.registry.editedArguments;
 	const edited = store.get(document.uri);
-	const current = selectedOptimizationLevel(effectiveArguments(document, deps), levels);
+	// The edited arguments come last, so their level is the one in effect. Only one item says Current.
 	const editedLevel = selectedOptimizationLevel(edited, levels);
+	const defaultLevel = selectedOptimizationLevel(variantAndPresetArguments(document, deps), levels);
 	const choice = await vscode.window.showQuickPick(
 		[
 			{
 				label: 'Variant Default',
-				description: editedLevel ? undefined : 'Current',
+				description: [editedLevel ? undefined : 'Current', defaultLevel?.label].filter(Boolean).join(' · '),
 				detail: 'Use the level of the variant and the preset',
 				level: undefined as OptimizationLevel | undefined,
 			},
 			...levels.map((level) => ({
 				label: level.label,
-				description: level === current ? 'Current' : undefined,
-				detail: level.arguments.join(' '),
+				description: level === editedLevel ? 'Current' : undefined,
+				detail: [
+					level.arguments.join(' '),
+					level.conflictingPrefixes?.length
+						? `Also removes the ${level.conflictingPrefixes[0]} arguments, which the compiler rejects with this level`
+						: undefined,
+				]
+					.filter(Boolean)
+					.join(' · '),
 				level: level as OptimizationLevel | undefined,
 			})),
 		],
@@ -245,14 +253,15 @@ function optimizationLevels(
 
 /** The arguments of the variant, the preset, and the edit, in the order that the compiler reads them. */
 function effectiveArguments(document: ArtifactRegistryDocument, deps: ExperimentCommandDependencies): string[] {
+	return [...variantAndPresetArguments(document, deps), ...deps.registry.editedArguments.get(document.uri)];
+}
+
+/** The arguments of the variant and the preset, without the edit. */
+function variantAndPresetArguments(document: ArtifactRegistryDocument, deps: ExperimentCommandDependencies): string[] {
 	const { parsed } = document;
 	const variant = deps.compilationService.findVariant(parsed.source, parsed.variantId);
 	const preset = deps.compilationService.getArtifactPreset(parsed.artifactKind, parsed.presetId, parsed.source);
-	return [
-		...(variant?.arguments ?? []),
-		...(preset?.extraArguments ?? []),
-		...deps.registry.editedArguments.get(document.uri),
-	];
+	return [...(variant?.arguments ?? []), ...(preset?.extraArguments ?? [])];
 }
 
 /** A toggle for each option that the toolchain supports and that the preset does not set. */
@@ -325,15 +334,15 @@ async function compareWithPrevious(
 		await vscode.window.showInformationMessage(graphComparisonMessage);
 		return;
 	}
-	const previous = document.handler.previousArtifact;
-	if (!previous) {
+	const previous = document.handler.previousText;
+	if (previous === undefined) {
 		await vscode.window.showInformationMessage(
 			'This artifact has no earlier result with different text. Save a change to the source, or change an option, and run the command again.',
 		);
 		return;
 	}
 	const filename = path.posix.basename(document.uri.path);
-	const left = deps.derivedDocuments.create(listingText(previous), filename);
+	const left = deps.derivedDocuments.create(previous, filename);
 	await vscode.commands.executeCommand('vscode.diff', left, document.uri, `${filename} (Previous ↔ Current)`, {
 		preview: false,
 	});

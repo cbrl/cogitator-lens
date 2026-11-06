@@ -47,6 +47,7 @@ export const assemblyArtifact = {
 		dontMaskFilenames: null,
 	},
 	presentation: 'text',
+	generatedCode: true,
 	listingSyntax: 'native-assembly',
 	icon: 'symbol-method',
 	filenameExtension: '.coglens.asm',

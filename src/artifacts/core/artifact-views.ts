@@ -30,24 +30,97 @@ export function applyArtifactView(artifact: RenderedArtifact, view: ArtifactView
 	return result;
 }
 
+/** The ranges of each listing. A listing does not change, so its ranges stay valid. */
+const rangeCache = new WeakMap<RenderedTextArtifact, readonly FunctionRange[]>();
+
 /**
  * The line range of each function symbol. A fold that starts on the symbol line gives the end.
  * Otherwise the function ends before the next symbol, without the blank lines before it.
  */
-export function functionRanges(artifact: RenderedTextArtifact): FunctionRange[] {
+export function functionRanges(artifact: RenderedTextArtifact): readonly FunctionRange[] {
+	const cached = rangeCache.get(artifact);
+	if (cached) {
+		return cached;
+	}
 	const symbols = [...artifact.symbols]
 		.filter((symbol) => symbol.line >= 0 && symbol.line < artifact.lines.length)
 		.sort((left, right) => left.line - right.line);
 	const foldEnds = new Map(artifact.folds.map((fold) => [fold.startLine, fold.endLine]));
-	return symbols.map((symbol, index) => {
-		const nextLine =
-			symbols.slice(index + 1).find((next) => next.line > symbol.line)?.line ?? artifact.lines.length;
-		let endLine = foldEnds.get(symbol.line) ?? nextLine - 1;
-		endLine = Math.min(endLine, artifact.lines.length - 1);
+	// Go from the last symbol to the first, so each symbol knows the next line with another symbol.
+	const ranges: FunctionRange[] = [];
+	let nextLine = artifact.lines.length;
+	for (let index = symbols.length - 1; index >= 0; index--) {
+		const symbol = symbols[index];
+		if (index < symbols.length - 1 && symbols[index + 1].line > symbol.line) {
+			nextLine = symbols[index + 1].line;
+		}
+		let endLine = Math.min(foldEnds.get(symbol.line) ?? nextLine - 1, artifact.lines.length - 1);
 		while (endLine > symbol.line && !artifact.lines[endLine].text.trim()) {
 			endLine--;
 		}
-		return { name: symbol.name, startLine: symbol.line, endLine };
+		ranges.push({ name: symbol.name, startLine: symbol.line, endLine });
+	}
+	const result = Object.freeze(ranges.reverse());
+	rangeCache.set(artifact, result);
+	return result;
+}
+
+/**
+ * The plain name of a function symbol, so one function matches across compilers. It removes MSVC
+ * and Itanium mangling, a parameter list, template arguments, namespaces, a Rust hash, and a GCC
+ * clone suffix, such as `.cold`. The result is for comparison only.
+ */
+export function functionBaseName(symbol: string): string {
+	const name = symbol.replace(/^@/, '').replace(/^"(.*)"$/, '$1');
+	const msvc = /^\?+([^@?]+)@/.exec(name);
+	if (msvc) {
+		return msvc[1];
+	}
+	const itanium = /^_{1,2}Z(N[rVKO]*)?/.exec(name);
+	if (itanium) {
+		// The last length-prefixed part of a nested name is the function name.
+		let position = itanium[0].length;
+		let last: string | undefined;
+		for (let length = /^\d+/.exec(name.slice(position)); length; length = /^\d+/.exec(name.slice(position))) {
+			position += length[0].length;
+			last = name.slice(position, position + Number(length[0]));
+			position += Number(length[0]);
+			if (!itanium[1]) {
+				break;
+			}
+		}
+		if (last) {
+			return last;
+		}
+	}
+	let plain = name.replace(/\(anonymous namespace\)/g, '');
+	const parameters = plain.indexOf('(');
+	if (parameters > 0) {
+		plain = plain.slice(0, parameters);
+	}
+	for (let previous = ''; previous !== plain;) {
+		previous = plain;
+		plain = plain.replace(/<[^<>]*>/g, '');
+	}
+	plain = plain.replace(/::h[0-9a-f]{16}$/, '');
+	// A demangled MSVC name starts with its return type and calling convention.
+	const last = plain.split('::').at(-1)?.trim().split(/\s+/).at(-1) ?? plain;
+	return last.replace(/^([^.]+)\..+$/, '$1') || symbol;
+}
+
+/**
+ * The functions of a listing that can be the given function. An equal name is the best match.
+ * Otherwise the base names must be equal, and a leading underscore of Mach-O names does not count.
+ */
+export function matchingFunctions(name: string, ranges: readonly FunctionRange[]): FunctionRange[] {
+	const equal = ranges.filter((range) => range.name === name);
+	if (equal.length > 0) {
+		return equal;
+	}
+	const base = functionBaseName(name);
+	return ranges.filter((range) => {
+		const candidate = functionBaseName(range.name);
+		return candidate === base || candidate === `_${base}` || `_${candidate}` === base;
 	});
 }
 
@@ -101,26 +174,48 @@ interface Replacement {
 }
 
 /**
- * Renumbers local labels and numbered values in their order of use, and hides addresses. Each
- * function starts its numbers again, so a change in one function does not renumber the others.
- * The line count stays the same, so the line mapping to the source stays correct.
+ * The scope of a local name. A name has one number in its scope, so each use matches its definition.
+ * - LLVM IR metadata, such as `!12`, and GCC constants, such as `.LC0`, belong to the module. Their
+ *   definitions are outside the functions that use them.
+ * - A name with a function number, such as `.LBB0_3` or `.LCPI0_0`, belongs to that function. Clang
+ *   writes a constant pool before the label of its function.
+ * - A name with a function suffix, such as `$LN3@main`, belongs to that function.
+ * - Each other name belongs to the function that holds the line.
+ */
+function nameScope(prefix: string, number: string, suffix: string, functionIndex: number): string {
+	if (prefix === '!' || prefix === '.LC') {
+		return 'module';
+	}
+	if (suffix) {
+		return `suffix ${suffix}`;
+	}
+	const separator = number.indexOf('_');
+	return separator >= 0 ? `number ${number.slice(0, separator)}` : `function ${functionIndex}`;
+}
+
+/**
+ * Renumbers local labels and numbered values in their order of use, and hides addresses. The
+ * numbers of each function start again, so a change in one function does not renumber the others.
+ * Module names are the exception. The line count stays the same, so the line mapping to the source
+ * stays correct.
  */
 export function normalizedListing(artifact: RenderedTextArtifact): RenderedTextArtifact {
 	const functionStarts = new Set(artifact.symbols.map((symbol) => symbol.line));
-	let numbers = new Map<string, number>();
+	let functionIndex = 0;
+	const numbers = new Map<string, number>();
 	const counters = new Map<string, number>();
 	const columnMaps: Array<((column: number) => number) | undefined> = [];
 	const lines = artifact.lines.map((line, index): RenderedArtifactLine => {
 		if (functionStarts.has(index)) {
-			numbers = new Map();
-			counters.clear();
+			functionIndex++;
 		}
-		const replacements = lineReplacements(line.text, (prefix, number) => {
-			const key = `${prefix}\0${number}`;
+		const replacements = lineReplacements(line.text, (prefix, number, suffix) => {
+			const scope = `${nameScope(prefix, number, suffix, functionIndex)}\0${prefix}`;
+			const key = `${scope}\0${number}`;
 			let value = numbers.get(key);
 			if (value === undefined) {
-				value = (counters.get(prefix) ?? 0) + 1;
-				counters.set(prefix, value);
+				value = (counters.get(scope) ?? 0) + 1;
+				counters.set(scope, value);
 				numbers.set(key, value);
 			}
 			return value;
@@ -143,14 +238,17 @@ export function normalizedListing(artifact: RenderedTextArtifact): RenderedTextA
 	};
 }
 
-function lineReplacements(text: string, numberFor: (prefix: string, number: string) => number): Replacement[] {
+function lineReplacements(
+	text: string,
+	numberFor: (prefix: string, number: string, suffix: string) => number,
+): Replacement[] {
 	const replacements: Replacement[] = [];
 	for (const match of text.matchAll(localName)) {
 		const [whole, prefix, number, suffix] = match;
 		replacements.push({
 			start: match.index,
 			end: match.index + whole.length,
-			text: `${prefix}#${numberFor(prefix, number)}${suffix}`,
+			text: `${prefix}#${numberFor(prefix, number, suffix)}${suffix}`,
 		});
 	}
 	for (const match of text.matchAll(symbolAddress)) {

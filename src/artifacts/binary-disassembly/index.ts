@@ -14,6 +14,7 @@ export const binaryDisassemblyArtifact = {
 		dontMaskFilenames: null,
 	},
 	presentation: 'text',
+	generatedCode: true,
 	listingSyntax: 'native-assembly',
 	icon: 'package',
 	filenameExtension: '.coglens.disasm',

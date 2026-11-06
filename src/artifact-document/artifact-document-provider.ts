@@ -21,6 +21,7 @@ import type { ConfigurationService } from '../services/configuration-service.js'
 import { CompilationError, type RenderedTextArtifact } from '../types/index.js';
 import { artifactScheme } from './artifact-uri.js';
 import { ArtifactDecorator } from './artifact-decorator.js';
+import { listingText } from './artifact-generator.js';
 import {
 	ArtifactDocumentRegistry,
 	type ArtifactRegistryDocument,
@@ -249,7 +250,7 @@ function artifactText(artifact: RenderedTextArtifact, document: ArtifactRegistry
 	if (!artifact.lines.some((line) => line.text.trim())) {
 		return emptyArtifactText(artifact, document.identity);
 	}
-	return artifact.lines.map((line) => line.text).join('\n');
+	return listingText(artifact);
 }
 
 function placeholderText({ parsed, identity }: ArtifactRegistryDocument): string {

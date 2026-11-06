@@ -36,6 +36,11 @@ export const artifactDefinitions: typeof artifactDefinitionTable & Record<Artifa
 
 export const supportedArtifactKinds = Object.freeze(Object.keys(artifactDefinitions) as ArtifactKind[]);
 
+/** The kinds whose listings hold generated code. */
+export const generatedCodeKinds: ReadonlySet<ArtifactKind> = new Set(
+	supportedArtifactKinds.filter((kind) => artifactDefinitions[kind].generatedCode),
+);
+
 /** Artifact kind used when a source-focused UI has no artifact identity. */
 export const defaultArtifactKind = 'assembly' satisfies ArtifactKind;
 

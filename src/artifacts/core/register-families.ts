@@ -1,11 +1,15 @@
+/** An instruction set with register families. */
+export type RegisterArchitecture = 'x86' | 'aarch64';
+
 /**
  * Names the register family of a machine register, so `eax`, `ax`, and `al` all find `rax`. A
- * name that is not a register gives nothing. Names are case-insensitive, and an AT&T `%` prefix is
- * removed first.
+ * name that is not a register of the architecture gives nothing. The two sets share names, such as
+ * `sp` and `bl`, so the architecture selects one set. Names are case-insensitive, and an AT&T `%`
+ * prefix is removed first.
  */
-export function registerFamily(name: string): string | undefined {
+export function registerFamily(name: string, architecture: RegisterArchitecture): string | undefined {
 	const register = name.replace(/^%/, '').toLowerCase();
-	return x86Families.get(register) ?? aarch64Family(register);
+	return architecture === 'x86' ? x86Families.get(register) : aarch64Family(register);
 }
 
 const x86Families = new Map<string, string>();

@@ -51,6 +51,7 @@ import { getToolchainDefinition } from '../toolchains/toolchain-map.js';
 import type { ConfigurationOrigin } from '../buildsystems/variant-provider.js';
 import { relativeWithin } from '../services/path-variables.js';
 import { parseToolchainComparisonVariantId, toolchainComparisonVariant } from './comparison-variants.js';
+import { withoutLevelConflicts, type OptimizationLevel } from '../toolchains/optimization-levels.js';
 
 const producerIdentities = new WeakMap<object, number>();
 let nextProducerIdentity = 1;
@@ -274,13 +275,13 @@ export class CompilationService {
 		}
 	}
 
-	async compile(request: ArtifactRequest): Promise<ArtifactProductionResult> {
-		const { variant, artifactKind, options, cancellationToken } = request;
+	async compile(originalRequest: ArtifactRequest): Promise<ArtifactProductionResult> {
+		const { artifactKind, options, cancellationToken } = originalRequest;
 		if (cancellationToken.isCancellationRequested) {
 			throw new CancellationError();
 		}
 
-		const source = await readSourceSnapshot(variant.source);
+		const source = await readSourceSnapshot(originalRequest.variant.source);
 		if (!source.ok) {
 			return {
 				status: 'unavailable',
@@ -288,13 +289,15 @@ export class CompilationService {
 			};
 		}
 
-		const backend = this.toolchainRegistry.getToolchainById(variant.toolchainProfileId);
+		const backend = this.toolchainRegistry.getToolchainById(originalRequest.variant.toolchainProfileId);
 		if (!backend) {
 			return {
 				status: 'unavailable',
-				explanation: `Toolchain profile not found: ${variant.toolchainProfileId}`,
+				explanation: `Toolchain profile not found: ${originalRequest.variant.toolchainProfileId}`,
 			};
 		}
+		const request = withoutRejectedArguments(originalRequest, backend.definition.optimizationLevels);
+		const { variant } = request;
 		const resolved = resolveArtifactImplementation(backend.profile, artifactKind, request.artifactOutputId);
 		if (resolved.status !== 'available') {
 			return resolved;
@@ -720,4 +723,18 @@ function withArtifactOptionValue(options: ArtifactOptions, id: ArtifactOptionId,
 		: options.production;
 	const display = Object.hasOwn(options.display, id) ? { ...options.display, [id]: value } : options.display;
 	return immutableArtifactOptions({ production, display });
+}
+
+/**
+ * Removes the arguments that the compiler rejects with the level that the preset or the edit adds,
+ * such as `/RTC1` of a CMake Debug variant with `/O2`. The cache key then holds the real arguments.
+ */
+function withoutRejectedArguments(
+	request: ArtifactRequest,
+	levels: readonly OptimizationLevel[] | undefined,
+): ArtifactRequest {
+	const { base, added } = withoutLevelConflicts(request.variant.arguments, request.extraArguments, levels);
+	return base === request.variant.arguments && added === request.extraArguments
+		? request
+		: { ...request, variant: { ...request.variant, arguments: [...base] }, extraArguments: added };
 }

@@ -9,6 +9,7 @@ import type { ActiveArtifact } from '../artifact-document/active-artifact.js';
 import { ArtifactGenerator, type ArtifactState } from '../artifact-document/artifact-generator.js';
 import {
 	artifactDefinitions,
+	generatedCodeKinds,
 	getArtifactKind,
 	supportedArtifactKinds,
 } from '../artifacts/core/artifact-definitions.js';
@@ -19,7 +20,12 @@ import {
 	type ArtifactPickerChoice,
 } from '../artifacts/ui/artifact-picker.js';
 import { effectiveArtifactPresets, type ArtifactPreset } from '../artifacts/ui/presets.js';
-import { functionRanges, type ArtifactViewOptions } from '../artifacts/core/artifact-views.js';
+import {
+	functionRanges,
+	matchingFunctions,
+	type ArtifactViewOptions,
+	type FunctionRange,
+} from '../artifacts/core/artifact-views.js';
 import { toolchainComparisonVariant } from '../compilation/comparison-variants.js';
 import { failureDetails } from '../compilation/compilation-service.js';
 import { getToolchainDefinition } from '../toolchains/toolchain-map.js';
@@ -332,14 +338,6 @@ export type ArtifactAvailabilityLookup = Pick<CompilationService['toolchainRegis
 const graphComparisonMessage =
 	'Control-flow graphs cannot be compared in the native text diff. Open each graph separately.';
 
-/** The artifact kinds whose listings have function symbols and local labels, so they have views. */
-const comparisonViewKinds: ReadonlySet<ArtifactKind> = new Set([
-	'assembly',
-	'binary-disassembly',
-	'llvm-ir',
-	'rust-mir',
-]);
-
 async function compareArtifacts(
 	editor: vscode.TextEditor,
 	compilationService: CompilationService,
@@ -418,12 +416,12 @@ async function compareArtifacts(
 	if (!kind) {
 		return;
 	}
-	const view = await pickComparisonView(editor.document.uri, left, kind, compilationService);
-	if (!view) {
+	const views = await pickComparisonViews(editor.document.uri, left, right, kind, compilationService);
+	if (!views) {
 		return;
 	}
-	const leftUri = comparisonUri(editor.document.uri, left, kind, view);
-	const rightUri = comparisonUri(editor.document.uri, right, kind, view);
+	const leftUri = comparisonUri(editor.document.uri, left, kind, views.left);
+	const rightUri = comparisonUri(editor.document.uri, right, kind, views.right);
 	if (leftUri.toString() === rightUri.toString()) {
 		await vscode.window.showInformationMessage(
 			'These selections resolve to the same artifact. Choose a different variant or preset.',
@@ -437,7 +435,10 @@ async function compareArtifacts(
 				`"${selectedVariant.displayLabel}". The comparison does not use the arguments of that variant.`,
 		);
 	}
-	const scope = view.functionName === undefined ? '' : ` · ${view.functionName}`;
+	const leftName = views.left.functionName;
+	const rightName = views.right.functionName;
+	const scope =
+		leftName === undefined ? '' : leftName === rightName ? ` · ${leftName}` : ` · ${leftName} ↔ ${rightName}`;
 	await vscode.commands.executeCommand(
 		'vscode.diff',
 		leftUri,
@@ -447,18 +448,26 @@ async function compareArtifacts(
 	);
 }
 
+/** The view of each side of a comparison. One function can have another name on each side. */
+interface ComparisonViews {
+	readonly left: ArtifactViewOptions;
+	readonly right: ArtifactViewOptions;
+}
+
 /**
  * Asks how to show the two listings: in full or as one function, and with or without normalized
- * labels and addresses. A function list comes from the left listing, so its compile runs first.
+ * labels and addresses. For one function, both listings compile first. Two dialects name one
+ * function in different ways, so the right side can need its own selection.
  */
-async function pickComparisonView(
+async function pickComparisonViews(
 	source: vscode.Uri,
 	left: ComparisonTarget,
+	right: ComparisonTarget,
 	kind: ArtifactKind,
 	compilationService: CompilationService,
-): Promise<ArtifactViewOptions | undefined> {
-	if (!comparisonViewKinds.has(kind)) {
-		return {};
+): Promise<ComparisonViews | undefined> {
+	if (!generatedCodeKinds.has(kind)) {
+		return { left: {}, right: {} };
 	}
 	const choice = await vscode.window.showQuickPick(
 		[
@@ -480,51 +489,115 @@ async function pickComparisonView(
 		{ title: 'Compare the full listing or one function' },
 	);
 	if (!choice || !choice.oneFunction) {
-		return choice?.view;
+		return choice && { left: choice.view, right: choice.view };
 	}
-	const leftUri = comparisonUri(source, left, kind);
-	const parsed = parseArtifactUri(leftUri);
-	if (!parsed) {
+	const listings = await comparisonListings(source, [left, right], kind, compilationService);
+	if (!listings) {
 		return undefined;
 	}
-	const generator = new ArtifactGenerator(
-		source,
-		leftUri,
-		parsed.variantId,
-		kind,
-		parsed.presetId,
-		compilationService,
+	const [leftFunctions, rightFunctions] = listings.map(functionRanges);
+	for (const [target, functions] of [
+		[left, leftFunctions],
+		[right, rightFunctions],
+	] as const) {
+		if (functions.length === 0) {
+			await vscode.window.showInformationMessage(
+				`The ${artifactDefinitions[kind].label} listing of "${target.label}" has no functions.`,
+			);
+			return undefined;
+		}
+	}
+	const selected = await pickFrom(leftFunctions, (range) => ({ label: range.name, description: lineCount(range) }), {
+		title: 'Select the function to compare',
+		matchOnDescription: false,
+	});
+	if (!selected) {
+		return undefined;
+	}
+	const matched = await pickMatchingFunction(selected.name, rightFunctions, right);
+	return (
+		matched && {
+			left: { ...choice.view, functionName: selected.name },
+			right: { ...choice.view, functionName: matched.name },
+		}
 	);
-	let artifact: RenderedTextArtifact | undefined;
+}
+
+/** Compiles the listing of each target, so the user can select its functions. */
+async function comparisonListings(
+	source: vscode.Uri,
+	targets: readonly ComparisonTarget[],
+	kind: ArtifactKind,
+	compilationService: CompilationService,
+): Promise<RenderedTextArtifact[] | undefined> {
+	const generators = targets.flatMap((target) => {
+		const uri = comparisonUri(source, target, kind);
+		const parsed = parseArtifactUri(uri);
+		return parsed
+			? [new ArtifactGenerator(source, uri, parsed.variantId, kind, parsed.presetId, compilationService)]
+			: [];
+	});
 	try {
-		const rendered = await vscode.window.withProgress(
+		if (generators.length !== targets.length) {
+			return undefined;
+		}
+		const results = await vscode.window.withProgress(
 			{
 				location: vscode.ProgressLocation.Notification,
-				title: `Reading the functions of ${left.label}`,
+				title: `Reading the functions of ${targets.map((target) => `"${target.label}"`).join(' and ')}`,
 				cancellable: true,
 			},
-			(_progress, token) => generator.update(token),
+			(_progress, token) => Promise.allSettled(generators.map((generator) => generator.update(token))),
 		);
-		artifact = rendered.presentation === 'text' ? rendered : undefined;
-	} catch (error) {
-		if (!(error instanceof vscode.CancellationError)) {
-			await vscode.window.showErrorMessage(`The left artifact did not compile: ${failureDetails(error)}`);
+		const listings: RenderedTextArtifact[] = [];
+		for (const [index, result] of results.entries()) {
+			if (result.status === 'rejected') {
+				if (!(result.reason instanceof vscode.CancellationError)) {
+					await vscode.window.showErrorMessage(
+						`"${targets[index].label}" did not compile: ${failureDetails(result.reason)}`,
+					);
+				}
+				return undefined;
+			}
+			if (result.value.presentation !== 'text') {
+				return undefined;
+			}
+			listings.push(result.value);
 		}
-		return undefined;
+		return listings;
 	} finally {
-		generator.dispose();
+		generators.forEach((generator) => generator.dispose());
 	}
-	const functions = artifact ? functionRanges(artifact) : [];
-	if (functions.length === 0) {
-		await vscode.window.showInformationMessage(`The ${artifactDefinitions[kind].label} listing has no functions.`);
-		return undefined;
+}
+
+/**
+ * The function of the right listing to compare with a function of the left listing. An equal name
+ * or one function with the same base name needs no selection. Otherwise the user selects one, and
+ * the functions with the same base name come first.
+ */
+async function pickMatchingFunction(
+	name: string,
+	functions: readonly FunctionRange[],
+	target: ComparisonTarget,
+): Promise<FunctionRange | undefined> {
+	const matches = matchingFunctions(name, functions);
+	if (matches.length === 1) {
+		return matches[0];
 	}
-	const selected = await pickFrom(
-		functions,
-		(range) => ({ label: range.name, description: `${range.endLine - range.startLine + 1} lines` }),
-		{ title: 'Select the function to compare', matchOnDescription: false },
+	const others = functions.filter((range) => !matches.includes(range));
+	return pickFrom(
+		[...matches, ...others],
+		(range) => ({
+			label: range.name,
+			description: matches.includes(range) ? `Same name · ${lineCount(range)}` : lineCount(range),
+		}),
+		{ title: `Select the function of "${target.label}" to compare with ${name}`, matchOnDescription: false },
 	);
-	return selected && { ...choice.view, functionName: selected.name };
+}
+
+function lineCount(range: FunctionRange): string {
+	const count = range.endLine - range.startLine + 1;
+	return `${count} line${count === 1 ? '' : 's'}`;
 }
 
 /** The variants of a source, then each configured preset applied to the selected variant. */

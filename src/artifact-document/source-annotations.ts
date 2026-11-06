@@ -3,6 +3,7 @@ import { sourceLineAnnotations, type SourceLineAnnotation } from '../artifacts/c
 import type { ConfigurationService } from '../services/configuration-service.js';
 import type { ArtifactLineAnnotationStyle, ArtifactKind } from '../types/index.js';
 import type { ArtifactDocumentRegistry } from './artifact-document-registry.js';
+import { currentListing } from './artifact-generator.js';
 import { createAnnotationStyleDecorations } from './decorations/decoration-styles.js';
 
 /** The artifact kinds whose lines carry analysis annotations for their source. */
@@ -59,9 +60,9 @@ export class SourceAnnotations implements Disposable {
 				document.isDirty || !this.configuration.getShowAnalysisOnSource(document.uri)
 					? []
 					: this.registry.documentsOf(document.uri).flatMap((artifactDocument) => {
-							const artifact = artifactDocument.handler.status.artifact;
-							return analysisKinds.has(artifactDocument.parsed.artifactKind) &&
-								artifact?.presentation === 'text'
+							// Only a successful compile matches the saved file. An earlier result has the old lines.
+							const artifact = currentListing(artifactDocument.handler.status);
+							return artifact && analysisKinds.has(artifactDocument.parsed.artifactKind)
 								? sourceLineAnnotations(artifact, document.uri.fsPath, categories)
 								: [];
 						});

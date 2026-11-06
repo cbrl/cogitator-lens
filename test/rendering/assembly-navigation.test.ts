@@ -4,6 +4,7 @@ import test from 'node:test';
 import { functionLabelTest } from '../../src/artifacts/assembly/assembly-navigation.js';
 import { unescapeAssemblyString } from '../../src/artifacts/assembly/main-source.js';
 import { renderAssembly } from '../../src/artifacts/assembly/assembly-renderer.js';
+import { functionRanges } from '../../src/artifacts/core/artifact-views.js';
 import { defaultArtifactOptions, type DisplayOptions, type RenderedTextArtifact } from '../../src/types/index.js';
 import { rawArtifact, renderContext } from '../support/artifacts.js';
 import { readFixture } from '../support/environment.js';
@@ -310,6 +311,7 @@ test('MSVC jumps and calls link to their labels, and PROC lines are the outline'
 		'; Function compile flags: /Odtp',
 		`; File ${source}`,
 		'_TEXT\tSEGMENT',
+		'value$ = 8',
 		'?entry@@YAHH@Z PROC\t\t\t\t\t; entry',
 		'$LN4:',
 		'; 5    : int entry(int value) {',
@@ -347,6 +349,21 @@ test('MSVC jumps and calls link to their labels, and PROC lines are the outline'
 			['?entry@@YAHH@Z', entry],
 		],
 		'Local labels are not outline symbols',
+	);
+	// The frame variables of the next function, such as `value$ = 8`, follow ENDP.
+	const helperEnd = lineMatching(/^\?helper@@YAHH@Z ENDP/);
+	const entryEnd = lineMatching(/^\?entry@@YAHH@Z ENDP/);
+	assert.ok(artifact.lines.some((line) => line.text.trim() === 'value$ = 8'));
+	assert.deepEqual(artifact.folds, [
+		{ startLine: helper, endLine: helperEnd },
+		{ startLine: entry, endLine: entryEnd },
+	]);
+	assert.deepEqual(
+		functionRanges(artifact).map((range) => [range.startLine, range.endLine]),
+		[
+			[helper, helperEnd],
+			[entry, entryEnd],
+		],
 	);
 });
 

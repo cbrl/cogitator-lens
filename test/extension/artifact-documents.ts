@@ -7,7 +7,7 @@ import { ActiveArtifact, type GraphPanelFocus } from '../../src/artifact-documen
 import { ArtifactDocumentProvider } from '../../src/artifact-document/artifact-document-provider.js';
 import { ArtifactDocumentRegistry } from '../../src/artifact-document/artifact-document-registry.js';
 import { getArtifactUri, parseArtifactUri } from '../../src/artifact-document/artifact-uri.js';
-import { listingText } from '../../src/artifact-document/artifact-generator.js';
+import { currentListing } from '../../src/artifact-document/artifact-generator.js';
 import { toolchainComparisonVariantId } from '../../src/compilation/comparison-variants.js';
 import type { ArtifactPreset } from '../../src/artifacts/ui/presets.js';
 import {
@@ -451,7 +451,7 @@ export async function verifyArtifactExperiments(repositoryRoot: string): Promise
 			assert.equal(await provide(defaultUri), 'object');
 			const handler = registry.document(defaultUri)?.handler;
 			assert.ok(handler);
-			assert.equal(handler.previousArtifact, undefined);
+			assert.equal(handler.previousText, undefined);
 
 			// An edit refreshes the same document. Its arguments come last.
 			let changed = nextChange(provider, defaultUri);
@@ -461,7 +461,7 @@ export async function verifyArtifactExperiments(repositoryRoot: string): Promise
 			const args = handler.status.invocation?.args ?? [];
 			assert.ok(args.indexOf('--empty') > args.indexOf('--warn'), args.join(' '));
 			assert.equal(handler.status.artifact?.presentation, 'text');
-			assert.equal(handler.previousArtifact && listingText(handler.previousArtifact), 'object');
+			assert.equal(handler.previousText, 'object');
 
 			// Another document of the source keeps its own arguments.
 			const secondUri = uri('second');
@@ -475,14 +475,29 @@ export async function verifyArtifactExperiments(repositoryRoot: string): Promise
 			registry.requestRefresh(defaultUri);
 			await changed;
 			await provide(defaultUri);
-			assert.equal(handler.previousArtifact && listingText(handler.previousArtifact), 'object');
+			assert.equal(handler.previousText, 'object');
 
 			// Removing the edit compiles the full listing again, and the empty listing becomes the earlier one.
 			changed = nextChange(provider, defaultUri);
 			await registry.editedArguments.set(defaultUri, []);
 			await changed;
 			assert.equal(await provide(defaultUri), 'object');
-			assert.equal(handler.previousArtifact && listingText(handler.previousArtifact), '');
+			assert.equal(handler.previousText, '');
+
+			// A failed compile keeps the listing for its own document. The source features do not use it,
+			// because the source can have changed since the listing compiled.
+			changed = nextChange(provider, defaultUri);
+			await registry.editedArguments.set(defaultUri, ['--fail']);
+			await changed;
+			assert.equal(await provide(defaultUri), 'object');
+			assert.equal(handler.status.state, 'failed');
+			assert.equal(handler.status.artifact?.presentation, 'text');
+			assert.equal(currentListing(handler.status), undefined);
+			changed = nextChange(provider, defaultUri);
+			await registry.editedArguments.set(defaultUri, []);
+			await changed;
+			await provide(defaultUri);
+			assert.equal(currentListing(handler.status)?.lines[0]?.text, 'object');
 
 			// A view URI keeps its view, and a function that the listing does not have gives a notice.
 			const viewUri = getArtifactUri(source, { id: 'fake:documents' }, 'assembly', 'default', undefined, {

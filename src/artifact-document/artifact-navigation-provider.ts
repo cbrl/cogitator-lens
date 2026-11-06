@@ -30,10 +30,10 @@ import {
 	type ReferenceProvider,
 } from 'vscode';
 import type { RenderedTextArtifact } from '../types/index.js';
-import { documentationForInstruction } from './instruction-documentation.js';
+import { documentationForInstruction, instructionSetLabels, instructionSetOf } from './instruction-documentation.js';
 import { functionAt, functionCalls, linkAt, linksTo } from '../artifacts/core/artifact-calls.js';
 import { functionRanges, type FunctionRange } from '../artifacts/core/artifact-views.js';
-import { registerFamily } from '../artifacts/core/register-families.js';
+import { registerFamily, type RegisterArchitecture } from '../artifacts/core/register-families.js';
 
 /** A word of a listing: a register, a label, a symbol, or an LLVM IR value. */
 const listingWord = /st\(\d\)|[%@$.]?[A-Za-z_.$][\w.$@]*|[%!]\d+/;
@@ -170,7 +170,8 @@ export class ArtifactNavigationProvider
 			return undefined;
 		}
 		const word = document.getText(wordRange);
-		const family = registerFamily(word);
+		const architecture = registerArchitecture(artifact);
+		const family = architecture && registerFamily(word, architecture);
 		const scope = family ? functionAt(functionRanges(artifact), position.line) : undefined;
 		const firstLine = scope?.startLine ?? 0;
 		const lastLine = Math.min(scope?.endLine ?? document.lineCount - 1, document.lineCount - 1);
@@ -178,7 +179,7 @@ export class ArtifactNavigationProvider
 		const highlights: DocumentHighlight[] = [];
 		for (let line = firstLine; line <= lastLine && highlights.length < highlightLimit; line++) {
 			for (const match of document.lineAt(line).text.matchAll(pattern)) {
-				if (family ? registerFamily(match[0]) === family : match[0] === word) {
+				if (architecture && family ? registerFamily(match[0], architecture) === family : match[0] === word) {
 					highlights.push(
 						new DocumentHighlight(
 							new Range(line, match.index, line, match.index + match[0].length),
@@ -275,6 +276,18 @@ export class ArtifactNavigationProvider
 						),
 					),
 			);
+	}
+}
+
+/** The register set of a listing. A listing without machine registers, such as LLVM IR, has none. */
+function registerArchitecture(artifact: RenderedTextArtifact): RegisterArchitecture | undefined {
+	switch (instructionSetOf(artifact)) {
+		case instructionSetLabels.amd64:
+			return 'x86';
+		case instructionSetLabels.aarch64:
+			return 'aarch64';
+		default:
+			return undefined;
 	}
 }
 

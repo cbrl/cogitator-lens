@@ -20,11 +20,12 @@ All notable changes to Cogitator Lens are in this file.
 - `coglens.OpenArtifact` accepts `{ "kind": "assembly", "preset": "fast" }`, so a key binding can open one kind with one preset.
 - `coglens.listingLineLimit` sets the number of lines in binary disassembly and LLVM IR listings. Before, the limit was always 5000. A new limit applies to the open listings at once, without a compile. The status menu of a truncated artifact can raise the limit.
 - **Edit Compiler Arguments** adds arguments to one artifact, and the tab stays open. **Set Optimization Level** offers the levels of the toolchain, such as `-O2`, `/O2`, or `-C opt-level=2`. **Save as Preset** keeps the edited arguments in a new preset.
+- When a preset or an edit adds `/O1`, `/O2`, or `/Ox`, the compile removes the `/RTC` checks of the variant. cl.exe stops with error D8016 when they come together, and a CMake Debug configuration adds `/RTC1`.
 - The status menu has toggles for the options of the artifact kind, such as Intel syntax and demangling.
 - **Compare With Previous Result** compares an artifact with its listing before the last change. **Snapshot Artifact** and **Compare With Snapshot** keep a listing and compare an artifact with it later.
 - Compare Artifacts offers each other toolchain that compiles the language. It keeps the arguments of the selected variant when the toolchain reads the same arguments, and it warns when it drops them.
-- Compare Artifacts can show one function, and it can renumber local labels and hide addresses, so the diff shows only changed instructions.
-- A source hover shows the lines that the open artifacts generated from the line. **Reveal in Artifact** selects those lines, and it opens the assembly when no artifact is open. `coglens.functionCodeLens` shows the instruction count above each function.
+- Compare Artifacts can show one function, and it can renumber local labels and hide addresses, so the diff shows only changed instructions. When the right listing names the function in another way, such as MSVC and GCC names, you select the function of the right listing too.
+- A source hover shows the lines that the open artifacts generated from the line. **Reveal in Artifact** selects those lines, and it opens the assembly when no artifact is open. `coglens.functionCodeLens` shows the instruction count above each function. These features use only the result of a successful compile, so the line numbers always come from the saved source.
 - In an artifact, a register highlights each use of its family, such as `rax`, `eax`, and `al`. **Find All References** and **Show Call Hierarchy** use the links of the listing.
 - LLVM IR links each label, local value, and global to its definition, and its branches have jump arrows.
 - **Copy With Addresses** copies listing lines with their address and code byte columns.
@@ -48,6 +49,7 @@ All notable changes to Cogitator Lens are in this file.
 - Artifact documents use private file suffixes, such as `main.coglens.asm`. The extension no longer claims your own `.asm`, `.ll`, `.ast`, and `.mir` files.
 - MSVC assembly obeys "Show address and opcode columns". Before, the address and code bytes from `/FAcs` were part of each line, so they always showed. They are now columns beside the text, as in binary disassembly. Search, copy, and instruction hovers see only the instruction, and a wrapped long encoding is one line.
 - Exported control-flow graph SVG files keep their colors, fonts, and background.
+- In an MSVC listing, the fold of a function ends at its `ENDP` line. Before, the fold also held the frame variables of the next function, such as `left$ = 16`.
 - In a narrow control-flow graph view, the toolbar wraps, and the search box stays. Before, the controls at the end of the toolbar were past the edge of the view.
 - The control-flow graph legend stays hidden until you click **Legend**. Before, it always showed.
 - The manifest declares `onFileSystem:coglens-artifact`, so a restored artifact tab can activate the extension.

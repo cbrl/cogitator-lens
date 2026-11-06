@@ -51,6 +51,8 @@ The status menu also changes and compares the artifact:
 - **Edit Compiler Arguments** adds arguments to one artifact. They follow the arguments of the
   variant and the preset, and the tab stays open. **Set Optimization Level** selects a level, such
   as `-O2`, `/O2`, or `-C opt-level=2`. **Save as Preset** keeps the edited arguments as a preset.
+  An MSVC level of `/O1`, `/O2`, or `/Ox` also removes the `/RTC` checks of the variant, because
+  cl.exe does not accept them together.
 - Toggles turn the options of the artifact kind on and off, such as Intel syntax and demangling.
 - **Compare With Previous Result** compares the listing with the listing before the last change.
 - **Snapshot Artifact** keeps the listing until VS Code closes. **Compare With Snapshot** compares an
@@ -60,15 +62,18 @@ The status menu also changes and compares the artifact:
 `Cogitator Lens: Compare Artifacts` also offers each other toolchain that compiles the language. A
 toolchain that reads the same arguments, such as Clang for a GCC variant, keeps the arguments of the
 selected variant. Otherwise, the comparison uses no variant arguments and shows a warning. For
-assembly, binary disassembly, LLVM IR, and Rust MIR, the comparison can show one function. It can
-also renumber local labels and hide addresses, so the diff shows only changed instructions.
+assembly, binary disassembly, LLVM IR, and Rust MIR, the comparison can show one function. When the
+other compiler names the function in another way, you also select the function of the right listing.
+The comparison can also renumber local labels and hide addresses, so the diff shows only changed
+instructions.
 
 ### Navigation
 
 Hover a source line to see the lines that its open artifacts generated from it. `Cogitator Lens:
 Reveal in Artifact` selects those lines in the artifact, and opens the assembly first when no
 artifact is open. Set `coglens.functionCodeLens` to show the instruction count above each function.
-The hover and the counts use open artifacts only, so they never start a compile.
+The hover and the counts use open artifacts only, so they never start a compile. They also use only
+the result of a successful compile. After a save, they wait for the new result.
 
 In an artifact, a register highlights each use of its family in the function: `rax`, `eax`, `ax`,
 and `al` are one family. **Find All References** lists the uses of a label, a value, or a function,

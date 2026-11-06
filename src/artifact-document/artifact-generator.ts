@@ -59,7 +59,9 @@ export class ArtifactGenerator implements Disposable {
 		truncated: false,
 	};
 
-	private earlierArtifact?: RenderedTextArtifact;
+	/** The text of the current listing, so each result compares with it once. */
+	private currentText?: string;
+	private earlierText?: string;
 
 	constructor(
 		sourceUri: Uri,
@@ -134,7 +136,7 @@ export class ArtifactGenerator implements Disposable {
 					`${this.artifactKind} produced a ${rendered.presentation} artifact; expected ${expectedPresentation}.`,
 				);
 			}
-			this.keepEarlierArtifact(rendered);
+			this.keepEarlierText(rendered);
 			this.transition('successful', {
 				artifact: rendered,
 				invocation: this.currentStatus.invocation,
@@ -187,23 +189,21 @@ export class ArtifactGenerator implements Disposable {
 	}
 
 	/**
-	 * Keeps the last successful text listing when a new result has other text. A result with the same
-	 * text, such as a refresh without a change, keeps the earlier listing, so a comparison shows a change.
+	 * Keeps the text of the last successful listing when a new result has other text. A result with
+	 * the same text, such as a refresh without a change, keeps the earlier text, so a comparison shows
+	 * a change. Only the text stays, because a full listing can be large.
 	 */
-	private keepEarlierArtifact(next: RenderedArtifact): void {
-		const current = this.currentStatus.artifact;
-		if (
-			current?.presentation === 'text' &&
-			next.presentation === 'text' &&
-			listingText(current) !== listingText(next)
-		) {
-			this.earlierArtifact = current;
+	private keepEarlierText(next: RenderedArtifact): void {
+		const nextText = next.presentation === 'text' ? listingText(next) : undefined;
+		if (this.currentText !== undefined && nextText !== undefined && this.currentText !== nextText) {
+			this.earlierText = this.currentText;
 		}
+		this.currentText = nextText;
 	}
 
-	/** The successful listing before the current one, when its text is different. */
-	get previousArtifact(): RenderedTextArtifact | undefined {
-		return this.earlierArtifact;
+	/** The text of the successful listing before the current one, when that text is different. */
+	get previousText(): string | undefined {
+		return this.earlierText;
 	}
 
 	get onDidChange(): Event<ArtifactStatus> {
@@ -252,6 +252,14 @@ export class ArtifactGenerator implements Disposable {
 		this.currentStatus = status;
 		this.statusEvent.fire(status);
 	}
+}
+
+/**
+ * The text listing of a successful compile. In each other state, the listing can come from an
+ * earlier version of the source, so its source lines can be wrong for the saved file.
+ */
+export function currentListing(status: ArtifactStatus): RenderedTextArtifact | undefined {
+	return status.state === 'successful' && status.artifact.presentation === 'text' ? status.artifact : undefined;
 }
 
 /** The text that a text listing shows, one line for each artifact line. */

@@ -17,8 +17,9 @@ import {
 	type Event,
 	type HoverProvider,
 	type TextDocument,
+	type TextEditor,
 } from 'vscode';
-import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
+import { artifactDefinitions, generatedCodeKinds } from '../artifacts/core/artifact-definitions.js';
 import {
 	functionSummaries,
 	isExceptionFunclet,
@@ -26,17 +27,10 @@ import {
 	previewText,
 } from '../artifacts/core/source-summary.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
-import type { ArtifactKind, RenderedTextArtifact } from '../types/index.js';
+import type { RenderedTextArtifact } from '../types/index.js';
 import { equalUri } from '../file-identity.js';
 import type { ArtifactDocumentRegistry, ArtifactRegistryDocument } from './artifact-document-registry.js';
-
-/** The artifact kinds whose lines are code generated from the source, so a source line can show them. */
-const generatedCodeKinds: ReadonlySet<ArtifactKind> = new Set([
-	'assembly',
-	'binary-disassembly',
-	'llvm-ir',
-	'rust-mir',
-]);
+import { currentListing } from './artifact-generator.js';
 /** The number of artifact lines that one hover shows for each artifact. */
 const hoverLineLimit = 12;
 /** How long Reveal in Artifact waits for a compile to end. */
@@ -154,13 +148,14 @@ export class SourceNavigation implements HoverProvider, CodeLensProvider, Dispos
 		this.subscriptions.dispose();
 	}
 
-	/** The open text artifacts of a source that hold generated code, with their current listing. */
+	/**
+	 * The open text artifacts of a source that hold generated code, with their listing. Only a
+	 * successful compile gives a listing. After a save, an earlier listing has the old line numbers.
+	 */
 	private listingsOf(source: Uri): OpenListing[] {
 		return this.registry.documentsOf(source).flatMap((document) => {
-			const artifact = document.handler.status.artifact;
-			return artifact?.presentation === 'text' && generatedCodeKinds.has(document.parsed.artifactKind)
-				? [{ document, artifact }]
-				: [];
+			const artifact = currentListing(document.handler.status);
+			return artifact && generatedCodeKinds.has(document.parsed.artifactKind) ? [{ document, artifact }] : [];
 		});
 	}
 
@@ -189,25 +184,33 @@ export class SourceNavigation implements HoverProvider, CodeLensProvider, Dispos
 		const line = editor.selection.active.line;
 		let listing = this.preferredListing(source);
 		if (!listing) {
-			const open = this.registry
-				.documentsOf(source)
-				.find((document) => generatedCodeKinds.has(document.parsed.artifactKind));
-			if (!open) {
-				await commands.executeCommand('coglens.OpenArtifact', { kind: 'assembly' });
-			}
-			const document =
-				open ??
+			const generatedCode = (): ArtifactRegistryDocument | undefined =>
 				this.registry
 					.documentsOf(source)
-					.find((candidate) => generatedCodeKinds.has(candidate.parsed.artifactKind));
+					.find((document) => generatedCodeKinds.has(document.parsed.artifactKind));
+			let document = generatedCode();
+			if (document) {
+				// The tab shows the compile while the command waits.
+				await this.showArtifact(document.uri);
+			} else {
+				await commands.executeCommand('coglens.OpenArtifact', { kind: 'assembly' });
+				document = generatedCode();
+			}
 			if (!document) {
 				return;
 			}
 			await this.compileEnd(document.uri);
 			listing = this.preferredListing(source);
 			if (!listing) {
+				const state = document.handler.status.state;
+				const next =
+					state === 'failed'
+						? 'Hover its first line for the failure.'
+						: state === 'cancelled'
+							? 'Run "Refresh Artifact" to compile it again.'
+							: 'Run the command again when its compile ends.';
 				await window.showInformationMessage(
-					`The ${document.identity.artifactLabel} artifact has no listing. Hover its first line for the failure.`,
+					`The ${document.identity.artifactLabel} artifact has no current listing. ${next}`,
 				);
 				return;
 			}
@@ -235,12 +238,7 @@ export class SourceNavigation implements HoverProvider, CodeLensProvider, Dispos
 
 	/** Shows an artifact beside the source, keeps the focus in the source, and selects the lines. */
 	private async revealLines(uri: Uri, lines: readonly number[]): Promise<void> {
-		const visible = window.visibleTextEditors.find((editor) => equalUri(editor.document.uri, uri));
-		const editor = await window.showTextDocument(uri, {
-			viewColumn: visible?.viewColumn ?? ViewColumn.Beside,
-			preserveFocus: true,
-			preview: false,
-		});
+		const editor = await this.showArtifact(uri);
 		if (lines.length === 0) {
 			return;
 		}
@@ -257,7 +255,20 @@ export class SourceNavigation implements HoverProvider, CodeLensProvider, Dispos
 		editor.revealRange(new Range(ranges[0].start, ranges[0].end), TextEditorRevealType.InCenterIfOutsideViewport);
 	}
 
-	/** Waits until the compile of a document ends, or until the time limit. */
+	/** Shows an artifact in its visible editor, or beside the source, and keeps the focus in the source. */
+	private showArtifact(uri: Uri): Thenable<TextEditor> {
+		const visible = window.visibleTextEditors.find((editor) => equalUri(editor.document.uri, uri));
+		return window.showTextDocument(uri, {
+			viewColumn: visible?.viewColumn ?? ViewColumn.Beside,
+			preserveFocus: true,
+			preview: false,
+		});
+	}
+
+	/**
+	 * Waits until the compile of a document ends, or until the time limit. A compile that ended
+	 * before the call, such as a fast failure, ends the wait at once.
+	 */
 	private compileEnd(uri: Uri): Promise<void> {
 		return new Promise((resolve) => {
 			const ended = (): boolean => {
@@ -275,7 +286,7 @@ export class SourceNavigation implements HoverProvider, CodeLensProvider, Dispos
 				}
 			});
 			const timer = setTimeout(finish, revealWaitMs);
-			if (this.registry.document(uri)?.handler.status.artifact && ended()) {
+			if (ended()) {
 				finish();
 			}
 		});

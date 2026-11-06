@@ -10,6 +10,8 @@ import type { InstructionType } from '../control-flow-graph/parsers/instruction-
 const labelLine = /^("[^"]*"|\S.*?):[ \t]*(?:(?:#|\/\/|@|;).*)?$/;
 /** The first line of a function in a MASM listing, which cl.exe writes. A demangled name holds spaces. */
 export const masmProcedureLine = /^(\S.*?)[ \t]+PROC\b/;
+/** The last line of a function in a MASM listing. The frame variables of the next function follow it. */
+const masmProcedureEndLine = /^(\S.*?)[ \t]+ENDP\b/;
 
 /** The edge kind of a link from a jump, which the artifact draws. A call has none. */
 export function branchEdge(instructionType: InstructionType | undefined): Pick<ArtifactLink, 'edgeKind'> {
@@ -66,10 +68,32 @@ export function withLabelNavigation(
 		.filter((line) => line >= 0 && line < artifact.lines.length)
 		.sort((left, right) => left - right);
 	const folds = boundaryLines.flatMap((startLine, index) => {
-		const endLine = (boundaryLines[index + 1] ?? artifact.lines.length) - 1;
+		const nextStart = boundaryLines[index + 1] ?? artifact.lines.length;
+		const endLine = procedureEndLine(artifact.lines, startLine, nextStart) ?? nextStart - 1;
 		return endLine > startLine ? [{ startLine, endLine }] : [];
 	});
 	return { ...artifact, links, folds, symbols };
+}
+
+/**
+ * The `ENDP` line of a MASM procedure that starts on a line, before the next function starts. The
+ * lines after it, such as `left$ = 16`, describe the frame of the next function.
+ */
+function procedureEndLine(
+	lines: readonly RenderedArtifactLine[],
+	startLine: number,
+	nextStart: number,
+): number | undefined {
+	const name = masmProcedureLine.exec(lines[startLine].text)?.[1];
+	if (name === undefined) {
+		return undefined;
+	}
+	for (let line = startLine + 1; line < nextStart; line++) {
+		if (masmProcedureEndLine.exec(lines[line].text)?.[1] === name) {
+			return line;
+		}
+	}
+	return undefined;
 }
 
 /**

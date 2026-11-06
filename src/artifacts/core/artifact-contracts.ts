@@ -42,6 +42,11 @@ export type ArtifactListingSyntax = 'native-assembly' | 'python-bytecode' | 'dot
 
 export interface ArtifactDefinition {
 	readonly presentation: 'text' | 'graph';
+	/**
+	 * Whether the listing is code that the compiler generated from the source, with function symbols
+	 * and local labels. Source navigation, function views, and normalized views use these kinds.
+	 */
+	readonly generatedCode?: true;
 	/** Whether artifact document identities must select one named toolchain output. */
 	readonly requiresOutputSelection?: true;
 	readonly label: string;

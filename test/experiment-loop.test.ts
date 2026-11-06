@@ -4,9 +4,11 @@ import test from 'node:test';
 import { functionCalls, linkAt, linksTo } from '../src/artifacts/core/artifact-calls.js';
 import {
 	applyArtifactView,
+	functionBaseName,
 	functionListing,
 	functionRanges,
 	listingWithColumns,
+	matchingFunctions,
 	normalizedListing,
 } from '../src/artifacts/core/artifact-views.js';
 import { registerFamily } from '../src/artifacts/core/register-families.js';
@@ -26,11 +28,13 @@ import {
 } from '../src/compilation/comparison-variants.js';
 import { formatCommandLine, tokenizeCommandLine } from '../src/tokenize.js';
 import {
+	clangOptimizationLevels,
 	gccOptimizationLevels,
 	msvcOptimizationLevels,
 	rustOptimizationLevels,
 	selectedOptimizationLevel,
 	withOptimizationLevel,
+	withoutLevelConflicts,
 } from '../src/toolchains/optimization-levels.js';
 import { toolchainDefinitions } from '../src/toolchains/toolchain-map.js';
 import type {
@@ -77,6 +81,35 @@ test('an optimization level replaces the earlier level and keeps the other argum
 		'-C',
 		'debuginfo=2',
 	]);
+});
+
+test('another spelling of a level selects the same level', () => {
+	assert.equal(selectedOptimizationLevel(['-O'], gccOptimizationLevels)?.label, '-O1');
+	assert.equal(selectedOptimizationLevel(['-O'], clangOptimizationLevels)?.label, '-O1');
+	assert.equal(selectedOptimizationLevel(['-O2', '-Od'], msvcOptimizationLevels)?.label, '/Od');
+	const o1 = msvcOptimizationLevels.find((level) => level.label === '/O1');
+	assert.deepEqual(withOptimizationLevel(['-O2', '/Zi'], msvcOptimizationLevels, o1), ['/Zi', '/O1']);
+});
+
+test('an added level removes the arguments that the compiler rejects with it', () => {
+	const level = (label: string) => msvcOptimizationLevels.find((candidate) => candidate.label === label);
+	const debug = ['/Od', '/RTC1', '/Zi'];
+	// cl.exe stops with D8016 for /RTC1 and /O2, so the checks go.
+	assert.deepEqual(withoutLevelConflicts(debug, ['/W4', '/O2'], msvcOptimizationLevels), {
+		base: ['/Od', '/Zi'],
+		added: ['/W4', '/O2'],
+	});
+	assert.deepEqual(withoutLevelConflicts(['-RTCsu'], ['-O1', '/RTCc'], msvcOptimizationLevels), {
+		base: [],
+		added: ['-O1'],
+	});
+	assert.ok(level('/Ox')?.conflictingPrefixes?.includes('/RTC'));
+	// /Od accepts the checks, and a level in the variant alone changes nothing.
+	const unchanged = withoutLevelConflicts(debug, ['/Od'], msvcOptimizationLevels);
+	assert.equal(unchanged.base, debug);
+	assert.equal(withoutLevelConflicts(['/O2', '/RTC1'], [], msvcOptimizationLevels).base.length, 2);
+	assert.equal(withoutLevelConflicts(debug, ['/O2'], undefined).base, debug);
+	assert.equal(withoutLevelConflicts(['-g'], ['-O3'], gccOptimizationLevels).base.length, 1);
 });
 
 test('each toolchain with optimization levels has a dialect that a comparison can use', () => {
@@ -245,6 +278,132 @@ test('a normalized listing renumbers local labels in each function and keeps the
 	assert.deepEqual(ir.links[0], { line: 2, startCharacter: 12, endCharacter: 15, targetLine: 1 });
 });
 
+test('a normalized name keeps one number where it is defined outside its function', () => {
+	// Clang writes a constant pool before its function. GCC and LLVM IR define constants and metadata
+	// for the module.
+	const assembly = normalizedListing({
+		...textArtifact('assembly', [
+			{ text: 'first:' },
+			{ text: '        movsd   xmm0, qword ptr [rip + .LCPI0_0]' },
+			{ text: '        lea     rdi, [rip + .LC3]' },
+			{ text: '.LCPI1_0:' },
+			{ text: '.LCPI1_1:' },
+			{ text: '        .quad   1' },
+			{ text: 'scale:' },
+			{ text: '        movsd   xmm0, qword ptr [rip + .LCPI1_1]' },
+			{ text: '        lea     rdi, [rip + .LC7]' },
+			{ text: '        lea     rsi, [rip + .LC3]' },
+			{ text: '.LC3:' },
+		]),
+		symbols: [
+			{ name: 'first', line: 0 },
+			{ name: 'scale', line: 6 },
+		],
+	});
+	assert.deepEqual(
+		assembly.lines.map((line) => line.text.trim()),
+		[
+			'first:',
+			'movsd   xmm0, qword ptr [rip + .LCPI#1]',
+			'lea     rdi, [rip + .LC#1]',
+			'.LCPI#1:',
+			'.LCPI#2:',
+			'.quad   1',
+			'scale:',
+			'movsd   xmm0, qword ptr [rip + .LCPI#2]',
+			'lea     rdi, [rip + .LC#2]',
+			'lea     rsi, [rip + .LC#1]',
+			'.LC#1:',
+		],
+	);
+
+	const ir = normalizedListing({
+		...textArtifact('llvm-ir', [
+			{ text: 'define void @a() {' },
+			{ text: '  ret void, !dbg !12' },
+			{ text: '}' },
+			{ text: 'define void @b() {' },
+			{ text: '  %1 = load i32, ptr @g, !tbaa !20' },
+			{ text: '  ret void, !dbg !12' },
+			{ text: '}' },
+			{ text: '!12 = !DILocation(line: 3, scope: !20)' },
+		]),
+		symbols: [
+			{ name: 'a', line: 0 },
+			{ name: 'b', line: 3 },
+		],
+	});
+	assert.deepEqual(
+		ir.lines.map((line) => line.text),
+		[
+			'define void @a() {',
+			'  ret void, !dbg !#1',
+			'}',
+			'define void @b() {',
+			'  %#1 = load i32, ptr @g, !tbaa !#2',
+			'  ret void, !dbg !#1',
+			'}',
+			'!#1 = !DILocation(line: 3, scope: !#2)',
+		],
+	);
+});
+
+test('a function of another compiler matches by its base name', () => {
+	assert.equal(functionBaseName('?scale@@YANN@Z'), 'scale');
+	assert.equal(functionBaseName('_Z5scaled'), 'scale');
+	assert.equal(functionBaseName('_ZN6sample5scaleEd'), 'scale');
+	assert.equal(functionBaseName('__Z5scaled'), 'scale');
+	assert.equal(functionBaseName('sample::scale<double>(double)'), 'scale');
+	assert.equal(functionBaseName('double __cdecl sample::scale(double)'), 'scale');
+	assert.equal(functionBaseName('sample::scale::h0123456789abcdef'), 'scale');
+	assert.equal(functionBaseName('scale.cold'), 'scale');
+	assert.equal(functionBaseName('(anonymous namespace)::scale()'), 'scale');
+	assert.equal(functionBaseName('@scale'), 'scale');
+	assert.equal(functionBaseName('main'), 'main');
+
+	const ranges = [
+		{ name: '_scale', startLine: 0, endLine: 3 },
+		{ name: 'main', startLine: 4, endLine: 9 },
+		{ name: '_Z5scalef', startLine: 10, endLine: 12 },
+	];
+	assert.deepEqual(
+		matchingFunctions('?scale@@YANN@Z', ranges).map((range) => range.name),
+		['_scale', '_Z5scalef'],
+	);
+	assert.deepEqual(
+		matchingFunctions('main', ranges).map((range) => range.name),
+		['main'],
+	);
+	assert.deepEqual(matchingFunctions('absent', ranges), []);
+});
+
+test('function ranges skip symbols on the same line and stay with their listing', () => {
+	const artifact = {
+		...textArtifact('assembly', [
+			{ text: 'a:' },
+			{ text: '  ret' },
+			{ text: 'b:' },
+			{ text: '  ret' },
+			{ text: '' },
+		]),
+		symbols: [
+			{ name: 'b', line: 2 },
+			{ name: 'a', line: 0 },
+			{ name: 'a_alias', line: 0 },
+		],
+	};
+	const ranges = functionRanges(artifact);
+	assert.deepEqual(
+		ranges.map((range) => [range.name, range.startLine, range.endLine]),
+		[
+			['a', 0, 1],
+			['a_alias', 0, 1],
+			['b', 2, 3],
+		],
+	);
+	assert.equal(functionRanges(artifact), ranges, 'The second call reads the cache');
+});
+
 test('copied lines carry their address and code byte columns', () => {
 	const artifact = textArtifact('binary-disassembly', [
 		{ text: 'push   rbp', address: 0x401000, opcodes: ['55'] },
@@ -305,14 +464,20 @@ test('the call graph and the references come from the links of the listing', () 
 
 test('register families join the views of one register', () => {
 	for (const name of ['rax', 'eax', 'ax', 'al', 'ah', '%RAX']) {
-		assert.equal(registerFamily(name), 'rax', name);
+		assert.equal(registerFamily(name, 'x86'), 'rax', name);
 	}
-	assert.equal(registerFamily('r9d'), 'r9');
-	assert.equal(registerFamily('ymm3'), 'xmm3');
-	assert.equal(registerFamily('w7'), 'x7');
-	assert.equal(registerFamily('q2'), 'v2');
-	assert.equal(registerFamily('main'), undefined);
-	assert.equal(registerFamily('x31'), undefined);
+	assert.equal(registerFamily('r9d', 'x86'), 'r9');
+	assert.equal(registerFamily('ymm3', 'x86'), 'xmm3');
+	assert.equal(registerFamily('w7', 'aarch64'), 'x7');
+	assert.equal(registerFamily('q2', 'aarch64'), 'v2');
+	assert.equal(registerFamily('main', 'x86'), undefined);
+	assert.equal(registerFamily('x31', 'aarch64'), undefined);
+	// The two sets share some names, so the architecture of the listing selects the set.
+	assert.equal(registerFamily('sp', 'aarch64'), registerFamily('wsp', 'aarch64'));
+	assert.equal(registerFamily('sp', 'x86'), 'rsp');
+	assert.equal(registerFamily('bl', 'aarch64'), undefined);
+	assert.equal(registerFamily('s1', 'x86'), undefined);
+	assert.equal(registerFamily('x2', 'x86'), undefined);
 });
 
 test('LLVM IR links go to labels, local values, and globals', () => {

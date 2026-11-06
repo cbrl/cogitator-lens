@@ -5,6 +5,7 @@ export const llvmIrArtifact = {
 	label: 'LLVM IR',
 	options: [displayOptionDescriptors.sourceLineColorBands],
 	presentation: 'text',
+	generatedCode: true,
 	listingSyntax: 'llvm-ir',
 	icon: 'circuit-board',
 	filenameExtension: '.coglens.ll',
