@@ -73,6 +73,8 @@ let searchMatches: ControlFlowNode[] = [];
 let searchIndex = -1;
 /** The failure that the diagnostics list shows now. */
 let shownFailure: string | undefined;
+/** Set when a failure opened the diagnostics list and the user did not toggle it since. */
+let openedForFailure = false;
 
 selector.addEventListener('change', selectNamedGraph);
 selector.addEventListener('focus', () => {
@@ -145,6 +147,9 @@ requiredElement<HTMLButtonElement>('legend-toggle').addEventListener('click', to
 stateBadge.addEventListener('click', () =>
 	vscode.postMessage({ type: artifact?.state === 'compiling' ? 'cancel' : 'refresh' }),
 );
+diagnostics.querySelector('summary')?.addEventListener('click', () => {
+	openedForFailure = false;
+});
 requiredElement<HTMLButtonElement>('close-node-details').addEventListener('click', () => {
 	nodeDetails.hidden = true;
 });
@@ -522,8 +527,13 @@ function drawGraph(graph: ControlFlowGraph): void {
 
 function renderDiagnostics(value: SerializedGraphArtifact): void {
 	// The failure holds the message and the compiler output. A new failure opens the list once.
+	// When the failure goes, the list closes again, unless the user toggled it.
 	if (value.failure && value.failure !== shownFailure) {
 		diagnostics.open = true;
+		openedForFailure = true;
+	} else if (!value.failure && openedForFailure) {
+		diagnostics.open = false;
+		openedForFailure = false;
 	}
 	shownFailure = value.failure;
 	const messages = [...(value.failure ? [value.failure] : []), ...value.diagnostics];

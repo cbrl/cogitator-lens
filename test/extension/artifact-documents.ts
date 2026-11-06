@@ -76,6 +76,8 @@ interface DocumentEnvironment {
 	uri(preset?: string, kind?: ArtifactKind): vscode.Uri;
 	/** Sets the arguments of the fake variant. */
 	compileWith(args: readonly string[]): void;
+	/** Announces a change to the settings with these keys. */
+	changeSettings(...keys: string[]): void;
 	provide(uri: vscode.Uri): Promise<string>;
 }
 
@@ -141,6 +143,7 @@ async function withDocumentEnvironment(
 						},
 					],
 				}),
+			changeSettings: (...keys) => changes.fire({ affects: (key) => keys.includes(key) }),
 			provide: async (uri) => (await provider.provideTextDocumentContent(uri, cancellation.token)) ?? '',
 		});
 	} finally {
@@ -244,6 +247,28 @@ export async function verifyArtifactDocumentPlaceholder(repositoryRoot: string):
 		const emptyUri = uri('third');
 		assert.match(await provide(emptyUri), /^The compiler made no Assembly output for main\.cpp\./u);
 		assert.equal(provider.getArtifactDocumentState(emptyUri)?.status.state, 'successful');
+	});
+}
+
+/**
+ * The parsers read the listing line limit when they read the raw output. So a new limit renders the
+ * open listings again, and the cached output means that no compile starts.
+ */
+export async function verifyListingLineLimitRefresh(repositoryRoot: string): Promise<void> {
+	await withDocumentEnvironment(repositoryRoot, async ({ provider, uri, compileWith, changeSettings, provide }) => {
+		compileWith([]);
+		const listingUri = uri();
+		assert.equal(await provide(listingUri), 'object');
+		const before = provider.getRenderedArtifact(listingUri);
+		assert.ok(before);
+
+		const changed = nextChange(provider, listingUri);
+		changeSettings('listingLineLimit');
+		await changed;
+		assert.equal(await provide(listingUri), 'object');
+		const after = provider.getRenderedArtifact(listingUri);
+		assert.notEqual(after, before, 'The listing renders again');
+		assert.equal(after?.generatedAt, before.generatedAt, 'The render uses the cached output');
 	});
 }
 

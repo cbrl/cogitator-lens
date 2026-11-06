@@ -14,11 +14,17 @@ body {
 	color: var(--vscode-foreground);
 	background: var(--vscode-editor-background);
 	overflow: hidden;
+	/* The toolbar wraps in a narrow panel. The canvas takes the height that remains. */
+	display: flex;
+	flex-direction: column;
+	height: 100vh;
 }
 
 .toolbar {
 	position: relative;
+	flex: none;
 	display: flex;
+	flex-wrap: wrap;
 	align-items: center;
 	gap: 6px;
 	min-height: 42px;
@@ -145,6 +151,7 @@ button:disabled {
 }
 
 #diagnostics {
+	flex: none;
 	max-height: 20vh;
 	overflow: auto;
 	padding: 5px 10px;
@@ -167,8 +174,9 @@ button:disabled {
 
 #graph-canvas {
 	position: relative;
-	width: 100vw;
-	height: calc(100vh - 42px);
+	flex: 1;
+	min-height: 0;
+	width: 100%;
 	overflow: hidden;
 	cursor: grab;
 	touch-action: none;
@@ -314,6 +322,10 @@ button:disabled {
 	color: var(--vscode-descriptionForeground);
 }
 
+.legend[hidden] {
+	display: none;
+}
+
 .legend-item::before {
 	content: '';
 	display: inline-block;
@@ -343,7 +355,7 @@ button:disabled {
 		max-width: 38vw;
 	}
 	#graph-search {
-		display: none;
+		min-width: 120px;
 	}
 }
 

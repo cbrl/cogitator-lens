@@ -13,12 +13,12 @@ All notable changes to Cogitator Lens are in this file.
 - The function filter of the graph view takes the arrow keys. Graph search has previous and next controls, and Enter and Shift+Enter move between matches.
 - An empty listing names the likely causes, such as an unused `static` function, a template without an instantiation, or "Show library code". Artifact Details shows the number of filtered lines.
 - Artifact Details lists each diagnostic with its severity and location.
-- While a source has unsaved changes, the artifact says so on its first line. The line mapping to that source stops until the next save, because the compiler reads the saved file.
+- While a source has unsaved changes, the status bar shows "Unsaved source", and the artifact says so on its first line. The line mapping to that source stops until the next save, because the compiler reads the saved file.
 - The editor context menu has a **Cogitator Lens** submenu. The explorer context menu has **Open Artifact** for a source file.
 - The **Get Started with Cogitator Lens** walkthrough shows the first steps.
 - The artifact picker shows the kinds that you opened last at the top.
 - `coglens.OpenArtifact` accepts `{ "kind": "assembly", "preset": "fast" }`, so a key binding can open one kind with one preset.
-- `coglens.listingLineLimit` sets the number of lines in binary disassembly and LLVM IR listings. Before, the limit was always 5000. The status menu of a truncated artifact can raise the limit.
+- `coglens.listingLineLimit` sets the number of lines in binary disassembly and LLVM IR listings. Before, the limit was always 5000. A new limit applies to the open listings at once, without a compile. The status menu of a truncated artifact can raise the limit.
 
 ### Changed
 
@@ -38,6 +38,8 @@ All notable changes to Cogitator Lens are in this file.
 - Artifact documents use private file suffixes, such as `main.coglens.asm`. The extension no longer claims your own `.asm`, `.ll`, `.ast`, and `.mir` files.
 - MSVC assembly obeys "Show address and opcode columns". Before, the address and code bytes from `/FAcs` were part of each line, so they always showed. They are now columns beside the text, as in binary disassembly. Search, copy, and instruction hovers see only the instruction, and a wrapped long encoding is one line.
 - Exported control-flow graph SVG files keep their colors, fonts, and background.
+- In a narrow control-flow graph view, the toolbar wraps, and the search box stays. Before, the controls at the end of the toolbar were past the edge of the view.
+- The control-flow graph legend stays hidden until you click **Legend**. Before, it always showed.
 - The manifest declares `onFileSystem:coglens-artifact`, so a restored artifact tab can activate the extension.
 
 ## 0.9.1 - 2026-10-30

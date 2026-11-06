@@ -111,7 +111,13 @@ export class ArtifactDocumentRegistry implements Disposable {
 			// Other settings reach open artifacts through variant, toolchain, and option events.
 			configuration.onDidChange((change) => {
 				this.identityGeneration++;
-				if (change.affects('defaultInvocation') || change.affects('artifactPresets')) {
+				// The listing line limit applies when the parser reads the raw output. A refresh renders
+				// the cached raw output again, so it starts no compile.
+				if (
+					change.affects('defaultInvocation') ||
+					change.affects('artifactPresets') ||
+					change.affects('listingLineLimit')
+				) {
 					this.refreshAll();
 				}
 			}),

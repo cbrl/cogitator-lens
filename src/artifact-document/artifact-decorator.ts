@@ -716,8 +716,7 @@ export class ArtifactDecorator {
 	}
 
 	private stateDecorationText(): string | undefined {
-		const unsaved =
-			this.unsavedSources.size > 0 ? 'Source has unsaved changes. The artifact shows the saved file.' : undefined;
+		const unsaved = this.unsavedSources.size > 0 ? unsavedSourceText : undefined;
 		const state = this.compilationStateText();
 		return state && unsaved ? `${state} ${unsaved}` : (state ?? unsaved);
 	}
@@ -744,6 +743,9 @@ export class ArtifactDecorator {
 }
 
 const maximumHoverLength = 4_000;
+
+/** The note for an artifact whose source has unsaved changes. */
+export const unsavedSourceText = 'Source has unsaved changes. The artifact shows the saved file.';
 
 function clearDecorations(editor: TextEditor, decorations: readonly TextEditorDecorationType[]): void {
 	for (const decoration of decorations) {

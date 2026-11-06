@@ -35,8 +35,9 @@ compiler output. Diagnostics appear in the Problems view, for text artifacts and
 Open artifacts follow edits to their variant and toolchain. An empty listing names the likely
 causes, such as an unused `static` function or a template without an instantiation.
 
-The compiler reads the saved file. While a source has unsaved changes, the artifact says so on its
-first line, and the line mapping to that source stops until you save.
+The compiler reads the saved file. While a source has unsaved changes, the status bar shows
+"Unsaved source", and the artifact says so on its first line. The line mapping to that source stops
+until you save.
 
 The status bar shows the state of the focused artifact. When the focus is in a source, it shows a
 visible artifact of that source. Click it for the artifact actions: refresh, cancel, reveal the
