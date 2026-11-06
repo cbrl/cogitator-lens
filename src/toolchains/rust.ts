@@ -16,6 +16,7 @@ import {
 } from './toolchain-contracts.js';
 import { defaultAsmParser } from './c-family.js';
 import { parseRustDiagnostics } from './rust/diagnostics.js';
+import { rustOptimizationLevels } from './optimization-levels.js';
 
 const rustManagedFlagsWithValues = new Set(['-o', '--emit', '--error-format', '--json', '--out-dir', '--color']);
 const rustManagedFlagAssignments = /^(?:-o.|(?:--emit|--error-format|--json|--out-dir|--color)=)/;
@@ -100,6 +101,7 @@ export const rust: ToolchainDefinition = {
 	executablePattern: /^rustc(?:\.exe)?$/i,
 	parseDiagnostics: parseRustDiagnostics,
 	languageIdentifiers: Object.freeze(['rust']),
+	optimizationLevels: rustOptimizationLevels,
 	intelSyntax: 'selectable',
 	intelArguments: Object.freeze(['-C', 'llvm-args=-x86-asm-syntax=intel']),
 	defineFlag: '--cfg=',

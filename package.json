@@ -577,6 +577,60 @@
         "title": "Show Artifact Status and Actions",
         "category": "Cogitator Lens",
         "enablement": "coglens.activeArtifact"
+      },
+      {
+        "command": "coglens.EditArtifactArguments",
+        "title": "Edit Compiler Arguments",
+        "category": "Cogitator Lens",
+        "enablement": "coglens.activeArtifact",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "coglens.SetOptimizationLevel",
+        "title": "Set Optimization Level",
+        "category": "Cogitator Lens",
+        "enablement": "coglens.activeArtifact",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "coglens.CompareWithPrevious",
+        "title": "Compare With Previous Result",
+        "category": "Cogitator Lens",
+        "enablement": "coglens.activeArtifact",
+        "icon": "$(diff)"
+      },
+      {
+        "command": "coglens.SnapshotArtifact",
+        "title": "Snapshot Artifact",
+        "category": "Cogitator Lens",
+        "enablement": "coglens.activeArtifact",
+        "icon": "$(device-camera)"
+      },
+      {
+        "command": "coglens.CompareWithSnapshot",
+        "title": "Compare With Snapshot",
+        "category": "Cogitator Lens",
+        "enablement": "coglens.activeArtifact",
+        "icon": "$(diff-multiple)"
+      },
+      {
+        "command": "coglens.CopyWithAddresses",
+        "title": "Copy With Addresses",
+        "category": "Cogitator Lens",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "coglens.FilterOptimizationRemarks",
+        "title": "Filter Optimization Remarks",
+        "category": "Cogitator Lens",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "coglens.RevealInArtifact",
+        "title": "Reveal in Artifact",
+        "category": "Cogitator Lens",
+        "enablement": "coglens.supportedSource",
+        "icon": "$(go-to-file)"
       }
     ],
     "configuration": [
@@ -635,6 +689,37 @@
             "default": true,
             "description": "Keep visible source and artifact editors aligned while scrolling",
             "scope": "resource"
+          },
+          "coglens.showAnalysisOnSource": {
+            "type": "boolean",
+            "default": true,
+            "scope": "resource",
+            "description": "Show the optimization remarks and the stack usage of open artifacts at the end of the source lines."
+          },
+          "coglens.optimizationRemarkCategories": {
+            "type": "array",
+            "scope": "window",
+            "items": {
+              "type": "string",
+              "enum": [
+                "passed",
+                "missed",
+                "analysis"
+              ]
+            },
+            "uniqueItems": true,
+            "default": [
+              "passed",
+              "missed",
+              "analysis"
+            ],
+            "description": "The optimization remark categories that the artifact and the source editors show."
+          },
+          "coglens.functionCodeLens": {
+            "type": "boolean",
+            "default": false,
+            "scope": "resource",
+            "description": "Show the instruction count of each function above it in the source. The count comes from open artifacts, so it never starts a compile."
           },
           "coglens.toolchains": {
             "type": "array",
@@ -1132,6 +1217,11 @@
           "submenu": "coglens.editorContext",
           "when": "coglens.supportedSource",
           "group": "1_coglens@1"
+        },
+        {
+          "submenu": "coglens.artifactContext",
+          "when": "resourceScheme == coglens-artifact",
+          "group": "1_coglens@1"
         }
       ],
       "coglens.editorContext": [
@@ -1146,6 +1236,10 @@
         {
           "command": "coglens.CompareArtifacts",
           "group": "1_open@3"
+        },
+        {
+          "command": "coglens.RevealInArtifact",
+          "group": "1_open@4"
         },
         {
           "command": "coglens.PickCompilationVariant",
@@ -1289,6 +1383,44 @@
         {
           "command": "coglens.DeleteArtifactPreset",
           "when": "false"
+        },
+        {
+          "command": "coglens.CopyWithAddresses",
+          "when": "resourceScheme == coglens-artifact"
+        },
+        {
+          "command": "coglens.RevealInArtifact",
+          "when": "coglens.supportedSource"
+        }
+      ],
+      "coglens.artifactContext": [
+        {
+          "command": "coglens.EditArtifactArguments",
+          "group": "1_arguments@1"
+        },
+        {
+          "command": "coglens.SetOptimizationLevel",
+          "group": "1_arguments@2"
+        },
+        {
+          "command": "coglens.CompareWithPrevious",
+          "group": "2_compare@1"
+        },
+        {
+          "command": "coglens.SnapshotArtifact",
+          "group": "2_compare@2"
+        },
+        {
+          "command": "coglens.CompareWithSnapshot",
+          "group": "2_compare@3"
+        },
+        {
+          "command": "coglens.CopyWithAddresses",
+          "group": "3_copy@1"
+        },
+        {
+          "command": "coglens.RevealArtifactSource",
+          "group": "4_source@1"
         }
       ]
     },
@@ -1315,6 +1447,10 @@
     "submenus": [
       {
         "id": "coglens.editorContext",
+        "label": "Cogitator Lens"
+      },
+      {
+        "id": "coglens.artifactContext",
         "label": "Cogitator Lens"
       }
     ],

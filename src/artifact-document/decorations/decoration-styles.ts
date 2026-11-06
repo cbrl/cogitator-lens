@@ -116,22 +116,35 @@ function optimizationRemarkDecoration(category: OptimizationRemarkCategory) {
 
 const stackUsageBackground = new ThemeColor('coglens.stackUsage.background');
 
-const stackUsageDecoration = window.createTextEditorDecorationType({
-	after: {
-		backgroundColor: stackUsageBackground,
-		margin: '0 0 0 1.5em',
-	},
-	overviewRulerColor: stackUsageBackground,
-	overviewRulerLane: OverviewRulerLane.Right,
-});
+function stackUsageDecoration() {
+	return window.createTextEditorDecorationType({
+		after: {
+			backgroundColor: stackUsageBackground,
+			margin: '0 0 0 1.5em',
+		},
+		overviewRulerColor: stackUsageBackground,
+		overviewRulerLane: OverviewRulerLane.Right,
+	});
+}
+
+/**
+ * Makes one decoration for each annotation style. The artifact decorator clears its own types in
+ * source editors, so the source annotations need types of their own.
+ */
+export function createAnnotationStyleDecorations(): Record<
+	ArtifactLineAnnotationStyle,
+	ReturnType<typeof window.createTextEditorDecorationType>
+> {
+	return {
+		'optimization-passed': optimizationRemarkDecoration('passed'),
+		'optimization-missed': optimizationRemarkDecoration('missed'),
+		'optimization-analysis': optimizationRemarkDecoration('analysis'),
+		'stack-usage': stackUsageDecoration(),
+	};
+}
 
 /** Total mapping from renderer-selected annotation styles to editor decorations. */
-export const annotationStyleDecorations = {
-	'optimization-passed': optimizationRemarkDecoration('passed'),
-	'optimization-missed': optimizationRemarkDecoration('missed'),
-	'optimization-analysis': optimizationRemarkDecoration('analysis'),
-	'stack-usage': stackUsageDecoration,
-} as const satisfies Record<ArtifactLineAnnotationStyle, ReturnType<typeof window.createTextEditorDecorationType>>;
+export const annotationStyleDecorations = createAnnotationStyleDecorations();
 
 /** The decorations that connect source lines with artifact lines. */
 export const mappingDecorations = [

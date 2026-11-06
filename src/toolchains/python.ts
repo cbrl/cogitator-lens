@@ -10,6 +10,7 @@ import {
 import { parsePythonControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/python-cfg-parser.js';
 import { controlFlowGraphOutput, type ToolchainDefinition, withoutOwnedArguments } from './toolchain-contracts.js';
 import { parsePythonDiagnostics } from './python/diagnostics.js';
+import { pythonOptimizationLevels } from './optimization-levels.js';
 
 /** Removes interpreter mode switches and the source path owned by Python artifact production. */
 export function stripPythonManagedArguments(
@@ -27,6 +28,7 @@ export const python: ToolchainDefinition = {
 	executablePattern: /^(?:python(?:\d+(?:\.\d+)*)?|py)(?:\.exe)?$/i,
 	parseDiagnostics: parsePythonDiagnostics,
 	languageIdentifiers: Object.freeze(['python']),
+	optimizationLevels: pythonOptimizationLevels,
 	stripOwnedArguments: stripPythonManagedArguments,
 	artifacts: {
 		assembly: {

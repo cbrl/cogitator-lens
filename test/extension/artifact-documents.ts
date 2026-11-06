@@ -6,7 +6,9 @@ import * as vscode from 'vscode';
 import { ActiveArtifact, type GraphPanelFocus } from '../../src/artifact-document/active-artifact.js';
 import { ArtifactDocumentProvider } from '../../src/artifact-document/artifact-document-provider.js';
 import { ArtifactDocumentRegistry } from '../../src/artifact-document/artifact-document-registry.js';
-import { getArtifactUri } from '../../src/artifact-document/artifact-uri.js';
+import { getArtifactUri, parseArtifactUri } from '../../src/artifact-document/artifact-uri.js';
+import { listingText } from '../../src/artifact-document/artifact-generator.js';
+import { toolchainComparisonVariantId } from '../../src/compilation/comparison-variants.js';
 import type { ArtifactPreset } from '../../src/artifacts/ui/presets.js';
 import {
 	commonComparisonKinds,
@@ -114,6 +116,7 @@ async function withDocumentEnvironment(
 		getManualCompilationVariants: () => [],
 		getDimUnusedSourceLines: () => false,
 		getSynchronizeSourceAndArtifactScrolling: () => false,
+		getOptimizationRemarkCategories: () => new Set(['passed', 'missed', 'analysis']),
 	} as unknown as ConfigurationService;
 	const service = new CompilationService(configuration);
 	const registry = new ArtifactDocumentRegistry(service, configuration);
@@ -431,5 +434,79 @@ export function verifyComparisonTargets(): void {
 	assert.notEqual(
 		comparisonUri(source, target('preset:fast'), 'assembly').toString(),
 		comparisonUri(source, target('variant:cmake:gcc'), 'assembly').toString(),
+	);
+}
+
+/**
+ * Edited arguments refresh one document and follow its preset arguments. The document keeps the
+ * listing before the last change, a view URI shows a part of the listing, and a comparison variant
+ * of the same toolchain resolves with the arguments of its base variant.
+ */
+export async function verifyArtifactExperiments(repositoryRoot: string): Promise<void> {
+	await withDocumentEnvironment(
+		repositoryRoot,
+		async ({ provider, registry, service, source, uri, compileWith, provide }) => {
+			compileWith(['--warn']);
+			const defaultUri = uri();
+			assert.equal(await provide(defaultUri), 'object');
+			const handler = registry.document(defaultUri)?.handler;
+			assert.ok(handler);
+			assert.equal(handler.previousArtifact, undefined);
+
+			// An edit refreshes the same document. Its arguments come last.
+			let changed = nextChange(provider, defaultUri);
+			await registry.editedArguments.set(defaultUri, ['--empty']);
+			await changed;
+			await provide(defaultUri);
+			const args = handler.status.invocation?.args ?? [];
+			assert.ok(args.indexOf('--empty') > args.indexOf('--warn'), args.join(' '));
+			assert.equal(handler.status.artifact?.presentation, 'text');
+			assert.equal(handler.previousArtifact && listingText(handler.previousArtifact), 'object');
+
+			// Another document of the source keeps its own arguments.
+			const secondUri = uri('second');
+			assert.equal(await provide(secondUri), 'object');
+			const secondArgs = registry.document(secondUri)?.handler.status.invocation?.args ?? [];
+			assert.equal(secondArgs.includes('--empty'), false);
+			assert.equal(secondArgs.includes('-DSECOND'), true);
+
+			// A refresh with the same text keeps the earlier listing.
+			changed = nextChange(provider, defaultUri);
+			registry.requestRefresh(defaultUri);
+			await changed;
+			await provide(defaultUri);
+			assert.equal(handler.previousArtifact && listingText(handler.previousArtifact), 'object');
+
+			// Removing the edit compiles the full listing again, and the empty listing becomes the earlier one.
+			changed = nextChange(provider, defaultUri);
+			await registry.editedArguments.set(defaultUri, []);
+			await changed;
+			assert.equal(await provide(defaultUri), 'object');
+			assert.equal(handler.previousArtifact && listingText(handler.previousArtifact), '');
+
+			// A view URI keeps its view, and a function that the listing does not have gives a notice.
+			const viewUri = getArtifactUri(source, { id: 'fake:documents' }, 'assembly', 'default', undefined, {
+				normalized: true,
+				functionName: 'main',
+			});
+			assert.deepEqual(parseArtifactUri(viewUri)?.view, { normalized: true, functionName: 'main' });
+			assert.equal(parseArtifactUri(defaultUri)?.view, undefined);
+			assert.equal(await provide(viewUri), 'The function "main" is not in this listing.');
+			assert.throws(() =>
+				getArtifactUri(source, { id: 'fake:documents' }, 'control-flow-graph', 'default', 'assembly', {
+					normalized: true,
+				}),
+			);
+
+			// A comparison variant names its toolchain and the variant whose settings it uses.
+			const toolchainId = registry.document(defaultUri)?.identity.toolchainId ?? '';
+			const comparison = service.findVariant(source, toolchainComparisonVariantId(toolchainId, 'fake:documents'));
+			assert.equal(comparison?.toolchainProfileId, toolchainId);
+			assert.deepEqual(comparison?.arguments, service.findVariant(source, 'fake:documents')?.arguments);
+			assert.equal(
+				service.findVariant(source, toolchainComparisonVariantId('missing', 'fake:documents')),
+				undefined,
+			);
+		},
 	);
 }

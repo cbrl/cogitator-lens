@@ -13,6 +13,7 @@ import {
 	withoutOwnedArguments,
 } from './toolchain-contracts.js';
 import { parseParenthesizedDiagnostics } from './msvc/diagnostics.js';
+import { dotnetOptimizationLevels } from './optimization-levels.js';
 
 export const dotNetIlProducer: ArtifactProducer = (backend, source, options, cancellationToken) =>
 	backend.produceWithTool(
@@ -270,6 +271,7 @@ export const dotnet: ToolchainDefinition = {
 	executablePattern: /^dotnet(?:\.exe)?$/i,
 	parseDiagnostics: parseParenthesizedDiagnostics,
 	languageIdentifiers: Object.freeze(['csharp']),
+	optimizationLevels: dotnetOptimizationLevels,
 	stripOwnedArguments: stripDotNetManagedArguments,
 	assembleArguments: dotNetCompilerCommandLine,
 	discoverTools: discoverDotNetTools,

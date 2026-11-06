@@ -27,6 +27,7 @@ import type {
 } from '../types/index.js';
 import type { ArtifactRenderContext } from '../artifacts/core/artifact-contracts.js';
 import {
+	artifactOptionValue,
 	artifactOptionsEqual,
 	CompilationError,
 	immutableArtifactOptions,
@@ -49,6 +50,7 @@ import { localFileComparisonKey, sourceUriComparisonKey, uriComparisonKey } from
 import { getToolchainDefinition } from '../toolchains/toolchain-map.js';
 import type { ConfigurationOrigin } from '../buildsystems/variant-provider.js';
 import { relativeWithin } from '../services/path-variables.js';
+import { parseToolchainComparisonVariantId, toolchainComparisonVariant } from './comparison-variants.js';
 
 const producerIdentities = new WeakMap<object, number>();
 let nextProducerIdentity = 1;
@@ -166,8 +168,29 @@ export class CompilationService {
 	findVariant(file: Uri, variantId: string): CompilationVariant | undefined {
 		return (
 			this.variants.getVariants(file).find((variant) => variant.id === variantId) ??
-			this.fallbackVariants(file, { forLookup: true }).find((variant) => variant.id === variantId)
+			this.fallbackVariants(file, { forLookup: true }).find((variant) => variant.id === variantId) ??
+			this.findComparisonVariant(file, variantId)
 		);
+	}
+
+	/**
+	 * The workspace and PATH toolchains that compile a language. A PATH toolchain that duplicates a
+	 * workspace toolchain is left out, as it is for fallback variants.
+	 */
+	getLanguageToolchains(languageId: string): ToolchainProfile[] {
+		return this.languageToolchains(languageId, undefined);
+	}
+
+	/** Builds a variant that compiles a source with another toolchain, from the variant that the ID names. */
+	private findComparisonVariant(file: Uri, variantId: string): CompilationVariant | undefined {
+		const parsed = parseToolchainComparisonVariantId(variantId);
+		const base = parsed && this.findVariant(file, parsed.baseVariantId);
+		const profile = parsed && this.toolchainRegistry.getToolchainById(parsed.toolchainProfileId)?.profile;
+		if (!base || !profile) {
+			return undefined;
+		}
+		const baseKind = this.toolchainRegistry.getToolchainById(base.toolchainProfileId)?.profile.kind;
+		return toolchainComparisonVariant(base, baseKind, profile).variant;
 	}
 
 	getAllSources(): readonly Uri[] {
@@ -405,7 +428,8 @@ export class CompilationService {
 		const previous = this.getArtifactOptions(kind);
 		this.currentArtifactOptions.set(kind, options);
 		const changed = artifactDefinitions[kind].options.filter(
-			(descriptor) => optionValue(previous, descriptor.id) !== optionValue(options, descriptor.id),
+			(descriptor) =>
+				artifactOptionValue(previous, descriptor.id) !== artifactOptionValue(options, descriptor.id),
 		);
 		if (changed.every((descriptor) => descriptor.decorationOnly)) {
 			this.artifactDecorationsChangeEmitter.fire(kind);
@@ -598,12 +622,6 @@ export class CompilationService {
 			);
 		}
 	}
-}
-
-function optionValue(options: ArtifactOptions, id: ArtifactOptionId): boolean {
-	return Object.hasOwn(options.production, id)
-		? options.production[id as keyof ArtifactOptions['production']]
-		: options.display[id as keyof ArtifactOptions['display']];
 }
 
 /** The language of the open document for a file, which decides the toolchains that can compile it. */

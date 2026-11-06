@@ -3,7 +3,11 @@ import { ActiveArtifact } from './artifact-document/active-artifact.js';
 import { ArtifactDocumentProvider } from './artifact-document/artifact-document-provider.js';
 import { ArtifactStatusBar } from './artifact-document/artifact-status-bar.js';
 import { ArtifactDocumentRegistry } from './artifact-document/artifact-document-registry.js';
+import { ArtifactArguments } from './artifact-document/artifact-arguments.js';
+import { ArtifactSnapshots, DerivedDocumentProvider, derivedScheme } from './artifact-document/derived-documents.js';
 import { ArtifactNavigationProvider } from './artifact-document/artifact-navigation-provider.js';
+import { SourceAnnotations } from './artifact-document/source-annotations.js';
+import { SourceNavigation } from './artifact-document/source-navigation.js';
 import {
 	ArtifactSemanticTokensProvider,
 	artifactSemanticTokensLegend,
@@ -14,6 +18,7 @@ import { PathToolchainProvider } from './buildsystems/path-toolchains.js';
 import { PythonEnvironmentVariantProvider } from './buildsystems/python-environments.js';
 import type { VariantProvider } from './buildsystems/variant-provider.js';
 import * as artifactCommands from './commands/artifacts.js';
+import * as experimentCommands from './commands/experiment.js';
 import * as presetCommands from './commands/presets.js';
 import * as toolchainCommands from './commands/toolchains.js';
 import * as variantCommands from './commands/variants.js';
@@ -45,12 +50,17 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		}
 	});
 	const compilationService = new CompilationService(configuration, context.workspaceState);
-	const artifactRegistry = new ArtifactDocumentRegistry(compilationService, configuration);
+	const editedArguments = new ArtifactArguments(context.workspaceState);
+	const artifactRegistry = new ArtifactDocumentRegistry(compilationService, configuration, editedArguments);
 	const artifactProvider = new ArtifactDocumentProvider(compilationService, configuration, artifactRegistry);
 	const graphPanels = new GraphPanelManager(context, artifactRegistry);
 	const activeArtifact = new ActiveArtifact(artifactRegistry, graphPanels);
 	const statusBar = new ArtifactStatusBar(activeArtifact);
 	const navigationProvider = new ArtifactNavigationProvider((uri) => artifactProvider.getRenderedArtifact(uri));
+	const sourceNavigation = new SourceNavigation(artifactRegistry, configuration);
+	const sourceAnnotations = new SourceAnnotations(artifactRegistry, configuration);
+	const derivedDocuments = new DerivedDocumentProvider();
+	const snapshots = new ArtifactSnapshots();
 
 	createToolchainTreeView(context, compilationService.toolchainRegistry);
 	createCompilationInfoTreeView(context, compilationService);
@@ -67,8 +77,15 @@ export async function activate(context: ExtensionContext): Promise<void> {
 	};
 	toolchainCommands.register(context, { ...sharedCommandDependencies, pathToolchains });
 	variantCommands.register(context, sharedCommandDependencies);
-	presetCommands.register(context, sharedCommandDependencies);
-	artifactCommands.register(context, { ...sharedCommandDependencies, graphPanels });
+	presetCommands.register(context, { ...sharedCommandDependencies, editedArguments });
+	const experimentDependencies = {
+		...sharedCommandDependencies,
+		registry: artifactRegistry,
+		derivedDocuments,
+		snapshots,
+	};
+	experimentCommands.register(context, experimentDependencies);
+	artifactCommands.register(context, { ...experimentDependencies, graphPanels });
 
 	const variantProviders: VariantProvider[] = [
 		new CmakeVariantProvider(),
@@ -97,11 +114,20 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		ArtifactDocumentProvider.scheme,
 		artifactProvider,
 	);
+	const derivedContentProvider = workspace.registerTextDocumentContentProvider(derivedScheme, derivedDocuments);
 	const definitionRegistration = vscode.languages.registerDefinitionProvider(documentSelector, navigationProvider);
 	const linkRegistration = vscode.languages.registerDocumentLinkProvider(documentSelector, navigationProvider);
 	const foldingRegistration = vscode.languages.registerFoldingRangeProvider(documentSelector, navigationProvider);
 	const hoverRegistration = vscode.languages.registerHoverProvider(documentSelector, navigationProvider);
 	const symbolRegistration = vscode.languages.registerDocumentSymbolProvider(documentSelector, navigationProvider);
+	const navigationRegistrations = vscode.Disposable.from(
+		vscode.languages.registerDocumentHighlightProvider(documentSelector, navigationProvider),
+		vscode.languages.registerReferenceProvider(documentSelector, navigationProvider),
+		vscode.languages.registerCallHierarchyProvider(documentSelector, navigationProvider),
+		// The source providers read open artifacts only, so they cost nothing for a file without one.
+		vscode.languages.registerHoverProvider({ scheme: 'file' }, sourceNavigation),
+		vscode.languages.registerCodeLensProvider({ scheme: 'file' }, sourceNavigation),
+	);
 	const semanticTokensRegistration = vscode.languages.registerDocumentSemanticTokensProvider(
 		documentSelector,
 		new ArtifactSemanticTokensProvider((uri) => artifactProvider.getRenderedArtifact(uri)),
@@ -132,17 +158,23 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		limitsSubscription,
 		configuration,
 		compilationService,
+		editedArguments,
 		artifactRegistry,
 		artifactProvider,
 		graphPanels,
 		activeArtifact,
 		statusBar,
 		contentProvider,
+		derivedContentProvider,
+		derivedDocuments,
 		definitionRegistration,
 		linkRegistration,
 		foldingRegistration,
 		hoverRegistration,
 		symbolRegistration,
+		navigationRegistrations,
+		sourceNavigation,
+		sourceAnnotations,
 		semanticTokensRegistration,
 		activeEditorSubscription,
 		openedDocumentSubscription,

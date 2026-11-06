@@ -9,6 +9,24 @@ export function tokenizeCommandLine(command: string, platform: 'posix' | 'window
 	return platform === 'windows' ? tokenizeWindows(command) : tokenizePosix(command);
 }
 
+/** Writes arguments as one command line that `tokenizeCommandLine` reads back to the same arguments. */
+export function formatCommandLine(args: readonly string[], platform: 'posix' | 'windows'): string {
+	return args.map((argument) => (platform === 'windows' ? quoteWindows(argument) : quotePosix(argument))).join(' ');
+}
+
+function quotePosix(argument: string): string {
+	return /^[\w@%+=:,./-]+$/.test(argument) ? argument : `'${argument.replaceAll("'", `'\\''`)}'`;
+}
+
+function quoteWindows(argument: string): string {
+	if (argument && !/[\s"]/.test(argument)) {
+		return argument;
+	}
+	// Backslashes are literal, except before a quote. Double them there, and before the closing quote.
+	const escaped = argument.replace(/(\\*)"/g, '$1$1\\"').replace(/(\\+)$/, '$1$1');
+	return `"${escaped}"`;
+}
+
 /** Tokenize according to POSIX shell quoting rules without performing expansion. */
 export function tokenizePosix(command: string): string[] {
 	const result: string[] = [];

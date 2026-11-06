@@ -19,6 +19,16 @@ All notable changes to Cogitator Lens are in this file.
 - The artifact picker shows the kinds that you opened last at the top.
 - `coglens.OpenArtifact` accepts `{ "kind": "assembly", "preset": "fast" }`, so a key binding can open one kind with one preset.
 - `coglens.listingLineLimit` sets the number of lines in binary disassembly and LLVM IR listings. Before, the limit was always 5000. A new limit applies to the open listings at once, without a compile. The status menu of a truncated artifact can raise the limit.
+- **Edit Compiler Arguments** adds arguments to one artifact, and the tab stays open. **Set Optimization Level** offers the levels of the toolchain, such as `-O2`, `/O2`, or `-C opt-level=2`. **Save as Preset** keeps the edited arguments in a new preset.
+- The status menu has toggles for the options of the artifact kind, such as Intel syntax and demangling.
+- **Compare With Previous Result** compares an artifact with its listing before the last change. **Snapshot Artifact** and **Compare With Snapshot** keep a listing and compare an artifact with it later.
+- Compare Artifacts offers each other toolchain that compiles the language. It keeps the arguments of the selected variant when the toolchain reads the same arguments, and it warns when it drops them.
+- Compare Artifacts can show one function, and it can renumber local labels and hide addresses, so the diff shows only changed instructions.
+- A source hover shows the lines that the open artifacts generated from the line. **Reveal in Artifact** selects those lines, and it opens the assembly when no artifact is open. `coglens.functionCodeLens` shows the instruction count above each function.
+- In an artifact, a register highlights each use of its family, such as `rax`, `eax`, and `al`. **Find All References** and **Show Call Hierarchy** use the links of the listing.
+- LLVM IR links each label, local value, and global to its definition, and its branches have jump arrows.
+- **Copy With Addresses** copies listing lines with their address and code byte columns.
+- Optimization remarks and stack usage show at the end of the source lines too. `coglens.showAnalysisOnSource` turns this off. `coglens.optimizationRemarkCategories` and **Filter Optimization Remarks** select the remark categories that the editors show.
 
 ### Changed
 

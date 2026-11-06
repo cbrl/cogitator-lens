@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { ActiveArtifact } from '../artifact-document/active-artifact.js';
+import type { ArtifactArguments } from '../artifact-document/artifact-arguments.js';
 import { artifactDefinitions, supportedArtifactKinds } from '../artifacts/core/artifact-definitions.js';
 import type { ArtifactPreset } from '../artifacts/ui/presets.js';
 import type { CompilationService } from '../compilation/index.js';
@@ -12,10 +13,12 @@ export interface PresetCommandDependencies {
 	readonly compilationService: CompilationService;
 	readonly configuration: ConfigurationService;
 	readonly activeArtifact: ActiveArtifact;
+	/** The arguments that the user edited for each artifact document. */
+	readonly editedArguments?: ArtifactArguments;
 }
 
 export function register(context: vscode.ExtensionContext, deps: PresetCommandDependencies): void {
-	const { compilationService, configuration, activeArtifact } = deps;
+	const { compilationService, configuration, activeArtifact, editedArguments } = deps;
 	context.subscriptions.push(
 		vscode.commands.registerCommand('coglens.AddArtifactPreset', async (node?: ArtifactPresetTreeNode) => {
 			await configureArtifactPreset(
@@ -44,7 +47,7 @@ export function register(context: vscode.ExtensionContext, deps: PresetCommandDe
 			}
 		}),
 		vscode.commands.registerCommand('coglens.SaveArtifactOptionsAsPreset', async () =>
-			saveActiveArtifactAsPreset(activeArtifact, compilationService, configuration),
+			saveActiveArtifactAsPreset(activeArtifact, compilationService, configuration, editedArguments),
 		),
 	);
 }
@@ -139,8 +142,10 @@ async function saveActiveArtifactAsPreset(
 	activeArtifact: ActiveArtifact,
 	compilationService: CompilationService,
 	configuration: ConfigurationService,
+	editedArguments: ArtifactArguments | undefined,
 ): Promise<void> {
-	const snapshot = activeArtifact.document?.snapshot;
+	const document = activeArtifact.document;
+	const snapshot = document?.snapshot;
 	if (!snapshot) {
 		await vscode.window.showInformationMessage('Open an artifact to save its options as a preset.');
 		return;
@@ -169,6 +174,8 @@ async function saveActiveArtifactAsPreset(
 			...((inherited && configuration.getSpelledPresetArguments(inherited.id, source)) ??
 				inherited?.extraArguments ??
 				[]),
+			// The edited arguments follow the preset arguments, as they do in a compile.
+			...(document ? (editedArguments?.get(document.uri) ?? []) : []),
 		],
 		productionOptions: {
 			...compilationService.getArtifactOptions(snapshot.identity.artifactKind).production,

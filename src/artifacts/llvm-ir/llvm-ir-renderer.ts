@@ -6,6 +6,7 @@ import { LlvmIrParser } from '../../vendor/lib/llvm-ir.js';
 import { listingPropertyGetter, perListingLineLimit } from '../../compilation/listing-limit.js';
 import { decodeLlvmString } from './llvm-names.js';
 import { renderedArtifact } from '../core/rendered-artifact.js';
+import { llvmIrLinks } from './llvm-ir-links.js';
 
 // The parser reads the listing line limit when it is made, so a new limit makes a new parser.
 const llvmIrParser = perListingLineLimit(() => new LlvmIrParser(listingPropertyGetter, new LLVMIRDemangler()));
@@ -50,6 +51,7 @@ export async function renderLlvmIr(
 		}),
 		symbols,
 		folds,
+		links: llvmIrLinks(lines, symbols, folds),
 	};
 }
 

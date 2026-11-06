@@ -1,12 +1,7 @@
 import vscode from 'vscode';
 import { CompilationService } from '../compilation/index.js';
-import type {
-	ArtifactKind,
-	ArtifactOptionDescriptor,
-	ArtifactOptionId,
-	ArtifactOptions,
-	ToolchainProfile,
-} from '../types/index.js';
+import type { ArtifactKind, ArtifactOptionDescriptor, ArtifactOptions, ToolchainProfile } from '../types/index.js';
+import { artifactOptionValue } from '../types/index.js';
 import { parseArtifactUri } from '../artifact-document/artifact-uri.js';
 import { TreeNode, TreeProvider } from './treedata.js';
 import { resolveArtifactAvailability, resolveArtifactOptionAvailability } from '../toolchains/toolchain-artifacts.js';
@@ -165,7 +160,7 @@ function optionNode(
 		nodeType: 'checkbox',
 		artifactKind: kind,
 		optionId: descriptor.id,
-		checked: optionValue(options, descriptor.id),
+		checked: artifactOptionValue(options, descriptor.id),
 		tooltip: capability.status === 'available' ? descriptor.description : capability.explanation,
 		description:
 			capability.status === 'available'
@@ -177,11 +172,4 @@ function optionNode(
 						: 'Unavailable',
 		disabled: capability.status !== 'available',
 	};
-}
-
-function optionValue(options: ArtifactOptions, id: ArtifactOptionId): boolean {
-	if (Object.hasOwn(options.production, id)) {
-		return options.production[id as keyof ArtifactOptions['production']];
-	}
-	return options.display[id as keyof ArtifactOptions['display']];
 }

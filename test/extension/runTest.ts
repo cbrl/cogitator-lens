@@ -54,6 +54,7 @@ import {
 	verifyArtifactDocumentTabs,
 	verifyComparisonTargets,
 	verifyListingLineLimitRefresh,
+	verifyArtifactExperiments,
 	verifyOpenArtifactArguments,
 } from './artifact-documents.js';
 
@@ -109,6 +110,7 @@ export async function run(): Promise<void> {
 	await verifyArtifactDocumentPlaceholder(workspaceFolder.uri.fsPath);
 	await verifyArtifactDocumentTabs(workspaceFolder.uri.fsPath);
 	await verifyListingLineLimitRefresh(workspaceFolder.uri.fsPath);
+	await verifyArtifactExperiments(workspaceFolder.uri.fsPath);
 	verifyComparisonTargets();
 	verifyOpenArtifactArguments();
 	await verifyArtifactGeneratorFollowsVariant(workspaceFolder);

@@ -1,5 +1,10 @@
 import path from 'path';
 import {
+	CallHierarchyIncomingCall,
+	CallHierarchyItem,
+	CallHierarchyOutgoingCall,
+	DocumentHighlight,
+	DocumentHighlightKind,
 	DocumentLink,
 	DocumentLinkProvider,
 	DocumentSymbol,
@@ -19,15 +24,34 @@ import {
 	SymbolKind,
 	TextDocument,
 	Uri,
+	type CallHierarchyProvider,
 	type CancellationToken,
+	type DocumentHighlightProvider,
+	type ReferenceProvider,
 } from 'vscode';
 import type { RenderedTextArtifact } from '../types/index.js';
 import { documentationForInstruction } from './instruction-documentation.js';
+import { functionAt, functionCalls, linkAt, linksTo } from '../artifacts/core/artifact-calls.js';
+import { functionRanges, type FunctionRange } from '../artifacts/core/artifact-views.js';
+import { registerFamily } from '../artifacts/core/register-families.js';
+
+/** A word of a listing: a register, a label, a symbol, or an LLVM IR value. */
+const listingWord = /st\(\d\)|[%@$.]?[A-Za-z_.$][\w.$@]*|[%!]\d+/;
+/** The number of highlights that one word shows. A larger number slows a long listing. */
+const highlightLimit = 2000;
 
 type ArtifactLookup = (uri: Uri) => RenderedTextArtifact | undefined;
 
 export class ArtifactNavigationProvider
-	implements DefinitionProvider, DocumentLinkProvider, FoldingRangeProvider, HoverProvider, DocumentSymbolProvider
+	implements
+		DefinitionProvider,
+		DocumentLinkProvider,
+		FoldingRangeProvider,
+		HoverProvider,
+		DocumentSymbolProvider,
+		DocumentHighlightProvider,
+		ReferenceProvider,
+		CallHierarchyProvider
 {
 	constructor(private readonly artifactLookup: ArtifactLookup) {}
 
@@ -130,4 +154,139 @@ export class ArtifactNavigationProvider
 			return [new DocumentSymbol(symbol.name, '', SymbolKind.Function, range, range)];
 		});
 	}
+
+	/**
+	 * Highlights each use of a register family, such as `rax`, `eax`, and `al`, in the function
+	 * at the position. Another word is highlighted where it occurs in the listing.
+	 */
+	provideDocumentHighlights(
+		document: TextDocument,
+		position: Position,
+		_token: CancellationToken,
+	): ProviderResult<DocumentHighlight[]> {
+		const artifact = this.artifactLookup(document.uri);
+		const wordRange = document.getWordRangeAtPosition(position, listingWord);
+		if (!artifact || !wordRange) {
+			return undefined;
+		}
+		const word = document.getText(wordRange);
+		const family = registerFamily(word);
+		const scope = family ? functionAt(functionRanges(artifact), position.line) : undefined;
+		const firstLine = scope?.startLine ?? 0;
+		const lastLine = Math.min(scope?.endLine ?? document.lineCount - 1, document.lineCount - 1);
+		const pattern = new RegExp(listingWord.source, 'g');
+		const highlights: DocumentHighlight[] = [];
+		for (let line = firstLine; line <= lastLine && highlights.length < highlightLimit; line++) {
+			for (const match of document.lineAt(line).text.matchAll(pattern)) {
+				if (family ? registerFamily(match[0]) === family : match[0] === word) {
+					highlights.push(
+						new DocumentHighlight(
+							new Range(line, match.index, line, match.index + match[0].length),
+							DocumentHighlightKind.Text,
+						),
+					);
+				}
+			}
+		}
+		return highlights;
+	}
+
+	/** The links to the label or the value at the position, and the line that defines it. */
+	provideReferences(
+		document: TextDocument,
+		position: Position,
+		context: { readonly includeDeclaration: boolean },
+		_token: CancellationToken,
+	): ProviderResult<Location[]> {
+		const artifact = this.artifactLookup(document.uri);
+		if (!artifact) {
+			return undefined;
+		}
+		const targetLine =
+			linkAt(artifact, position.line, position.character)?.targetLine ??
+			(linksTo(artifact, position.line).length > 0 ? position.line : undefined);
+		if (targetLine === undefined) {
+			return undefined;
+		}
+		const references = linksTo(artifact, targetLine).map(
+			(link) =>
+				new Location(document.uri, new Range(link.line, link.startCharacter, link.line, link.endCharacter)),
+		);
+		const definition = artifact.lines[targetLine];
+		return context.includeDeclaration && definition
+			? [new Location(document.uri, new Range(targetLine, 0, targetLine, definition.text.length)), ...references]
+			: references;
+	}
+
+	prepareCallHierarchy(
+		document: TextDocument,
+		position: Position,
+		_token: CancellationToken,
+	): ProviderResult<CallHierarchyItem> {
+		const artifact = this.artifactLookup(document.uri);
+		if (!artifact) {
+			return undefined;
+		}
+		const ranges = functionRanges(artifact);
+		// On a call, the item is the called function. Elsewhere, it is the function that holds the position.
+		const link = linkAt(artifact, position.line, position.character);
+		const called = link && ranges.find((range) => range.startLine === link.targetLine);
+		const range = called ?? functionAt(ranges, position.line);
+		return range && callHierarchyItem(document.uri, artifact, range);
+	}
+
+	provideCallHierarchyIncomingCalls(
+		item: CallHierarchyItem,
+		_token: CancellationToken,
+	): ProviderResult<CallHierarchyIncomingCall[]> {
+		const artifact = this.artifactLookup(item.uri);
+		if (!artifact) {
+			return undefined;
+		}
+		return functionCalls(artifact)
+			.filter((call) => call.callee.startLine === item.range.start.line)
+			.map(
+				(call) =>
+					new CallHierarchyIncomingCall(
+						callHierarchyItem(item.uri, artifact, call.caller),
+						call.links.map(
+							(link) => new Range(link.line, link.startCharacter, link.line, link.endCharacter),
+						),
+					),
+			);
+	}
+
+	provideCallHierarchyOutgoingCalls(
+		item: CallHierarchyItem,
+		_token: CancellationToken,
+	): ProviderResult<CallHierarchyOutgoingCall[]> {
+		const artifact = this.artifactLookup(item.uri);
+		if (!artifact) {
+			return undefined;
+		}
+		return functionCalls(artifact)
+			.filter((call) => call.caller.startLine === item.range.start.line)
+			.map(
+				(call) =>
+					new CallHierarchyOutgoingCall(
+						callHierarchyItem(item.uri, artifact, call.callee),
+						call.links.map(
+							(link) => new Range(link.line, link.startCharacter, link.line, link.endCharacter),
+						),
+					),
+			);
+	}
+}
+
+function callHierarchyItem(uri: Uri, artifact: RenderedTextArtifact, range: FunctionRange): CallHierarchyItem {
+	const endText = artifact.lines[range.endLine]?.text ?? '';
+	const nameLine = artifact.lines[range.startLine]?.text ?? '';
+	return new CallHierarchyItem(
+		SymbolKind.Function,
+		range.name,
+		'',
+		uri,
+		new Range(range.startLine, 0, range.endLine, endText.length),
+		new Range(range.startLine, 0, range.startLine, nameLine.length),
+	);
 }

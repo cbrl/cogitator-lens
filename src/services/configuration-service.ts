@@ -6,9 +6,11 @@ import type {
 	ArtifactKind,
 	DefaultCompilationSettings,
 	ManualCompilationVariantSettings,
+	OptimizationRemarkCategory,
 	ToolchainProfile,
 	ToolchainSettings,
 } from '../types/index.js';
+import { optimizationRemarkCategories } from '../types/index.js';
 import type { ArtifactPreset, ArtifactPresetConfiguration } from '../artifacts/ui/presets.js';
 import * as logger from '../logger.js';
 import {
@@ -168,6 +170,40 @@ export class ConfigurationService implements Disposable {
 			const scopes = this.scopes<unknown>('listingLineLimit');
 			const scope = definingScope(scopes, () => true, windowScopes) ?? 'user';
 			await this.write('listingLineLimit', scope, limit);
+		});
+	}
+
+	/** Whether the remarks and the stack usage of open artifacts show on the source lines. */
+	getShowAnalysisOnSource(uri: Uri): boolean {
+		return workspace.getConfiguration('coglens', uri).get('showAnalysisOnSource', true);
+	}
+
+	/** Whether the source shows the instruction count of each function from its open artifacts. */
+	getFunctionCodeLens(uri: Uri): boolean {
+		return workspace.getConfiguration('coglens', uri).get('functionCodeLens', false);
+	}
+
+	/** The optimization remark categories that the editors show. */
+	getOptimizationRemarkCategories(): ReadonlySet<OptimizationRemarkCategory> {
+		const configured = workspace.getConfiguration('coglens').get<unknown>('optimizationRemarkCategories');
+		const categories = Array.isArray(configured)
+			? configured.filter((value): value is OptimizationRemarkCategory =>
+					optimizationRemarkCategories.includes(value as OptimizationRemarkCategory),
+				)
+			: optimizationRemarkCategories;
+		return new Set(categories);
+	}
+
+	/** Sets the remark categories in the scope that sets them now, or in user settings. */
+	async updateOptimizationRemarkCategories(categories: readonly OptimizationRemarkCategory[]): Promise<void> {
+		await this.serialized(async () => {
+			const scopes = this.scopes<unknown>('optimizationRemarkCategories');
+			const scope = definingScope(scopes, () => true, windowScopes) ?? 'user';
+			await this.write(
+				'optimizationRemarkCategories',
+				scope,
+				optimizationRemarkCategories.filter((category) => categories.includes(category)),
+			);
 		});
 	}
 

@@ -13,6 +13,7 @@ import {
 } from './toolchain-contracts.js';
 import { defaultAsmParser } from './c-family.js';
 import { parseGnuDiagnostics } from './c-family/diagnostics.js';
+import { zigOptimizationLevels } from './optimization-levels.js';
 
 /** Builds Zig \`build-obj\` arguments that emit assembly or an object file into the workspace. */
 export function zigOutputArguments(target: 'assembly' | 'object', outputFile: string): readonly string[] {
@@ -51,6 +52,7 @@ export const zig: ToolchainDefinition = {
 	executablePattern: /^zig(?:\.exe)?$/i,
 	parseDiagnostics: parseGnuDiagnostics,
 	languageIdentifiers: Object.freeze(['zig']),
+	optimizationLevels: zigOptimizationLevels,
 	intelSyntax: 'selectable',
 	intelArguments: Object.freeze(['-mllvm', '--x86-asm-syntax=intel']),
 	includeFlag: '-I',

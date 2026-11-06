@@ -1,8 +1,12 @@
 import path from 'path';
 import * as vscode from 'vscode';
-import { getArtifactUri, type ArtifactDocumentProvider } from '../artifact-document/artifact-document-provider.js';
+import {
+	getArtifactUri,
+	parseArtifactUri,
+	type ArtifactDocumentProvider,
+} from '../artifact-document/artifact-document-provider.js';
 import type { ActiveArtifact } from '../artifact-document/active-artifact.js';
-import type { ArtifactState } from '../artifact-document/artifact-generator.js';
+import { ArtifactGenerator, type ArtifactState } from '../artifact-document/artifact-generator.js';
 import {
 	artifactDefinitions,
 	getArtifactKind,
@@ -15,6 +19,10 @@ import {
 	type ArtifactPickerChoice,
 } from '../artifacts/ui/artifact-picker.js';
 import { effectiveArtifactPresets, type ArtifactPreset } from '../artifacts/ui/presets.js';
+import { functionRanges, type ArtifactViewOptions } from '../artifacts/core/artifact-views.js';
+import { toolchainComparisonVariant } from '../compilation/comparison-variants.js';
+import { failureDetails } from '../compilation/compilation-service.js';
+import { getToolchainDefinition } from '../toolchains/toolchain-map.js';
 import type { CompilationService } from '../compilation/index.js';
 import {
 	maximumListingLineLimit,
@@ -26,13 +34,19 @@ import * as logger from '../logger.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
 import { getArtifactOutputChoices } from '../toolchains/toolchain-artifacts.js';
 import type { TreeNode } from '../tree/treedata.js';
-import type { ArtifactKind, CompilationVariant } from '../types/index.js';
+import type {
+	ArtifactKind,
+	CompilationVariant,
+	RenderedTextArtifact,
+	ToolchainKind,
+	ToolchainProfile,
+} from '../types/index.js';
 import { pickFrom } from '../ui/quick-input.js';
 import type { GraphPanelManager } from '../webview/graph-panel-manager.js';
+import { experimentStatusActions, type ExperimentCommandDependencies, type StatusAction } from './experiment.js';
 import { isSupportedSourceDocument, resolveSourceVariant } from './variants.js';
 
-export interface ArtifactCommandDependencies {
-	readonly compilationService: CompilationService;
+export interface ArtifactCommandDependencies extends ExperimentCommandDependencies {
 	readonly configuration: ConfigurationService;
 	readonly artifacts: ArtifactDocumentProvider;
 	readonly activeArtifact: ActiveArtifact;
@@ -110,9 +124,7 @@ export function register(context: vscode.ExtensionContext, deps: ArtifactCommand
 				});
 			}
 		}),
-		vscode.commands.registerCommand('coglens.ShowArtifactStatus', async () =>
-			showArtifactStatusActions(activeArtifact, configuration),
-		),
+		vscode.commands.registerCommand('coglens.ShowArtifactStatus', async () => showArtifactStatusActions(deps)),
 		...[
 			['coglens.OpenToolchainSettingsJson', 'coglens.toolchains'],
 			['coglens.OpenCompileSettingsJson', 'coglens.compileVariants'],
@@ -310,6 +322,8 @@ export interface ComparisonTarget {
 	readonly description: string;
 	readonly variant: CompilationVariant;
 	readonly preset?: ArtifactPreset;
+	/** Whether the target uses another toolchain without the arguments of the selected variant. */
+	readonly argumentsDropped?: boolean;
 }
 
 /** The part of the toolchain registry that decides which artifact kinds a target supports. */
@@ -317,6 +331,14 @@ export type ArtifactAvailabilityLookup = Pick<CompilationService['toolchainRegis
 
 const graphComparisonMessage =
 	'Control-flow graphs cannot be compared in the native text diff. Open each graph separately.';
+
+/** The artifact kinds whose listings have function symbols and local labels, so they have views. */
+const comparisonViewKinds: ReadonlySet<ArtifactKind> = new Set([
+	'assembly',
+	'binary-disassembly',
+	'llvm-ir',
+	'rust-mir',
+]);
 
 async function compareArtifacts(
 	editor: vscode.TextEditor,
@@ -334,14 +356,24 @@ async function compareArtifacts(
 		return;
 	}
 	const registry = compilationService.toolchainRegistry;
-	const targets = comparisonTargets(
+	const configuredTargets = comparisonTargets(
 		compilationService.getVariants(editor.document.uri),
 		configuration.getArtifactPresets(editor.document.uri),
 		selectedVariant,
 	);
+	const targets = [
+		...configuredTargets,
+		...toolchainComparisonTargets(
+			compilationService.getLanguageToolchains(editor.document.languageId),
+			editor.document.languageId,
+			selectedVariant,
+			registry.getToolchainById(selectedVariant.toolchainProfileId)?.profile.kind,
+			configuredTargets,
+		),
+	];
 	if (targets.length < 2) {
 		await vscode.window.showInformationMessage(
-			'Artifact comparison needs at least two variants or configured presets.',
+			'Artifact comparison needs at least two variants, toolchains, or configured presets.',
 		);
 		return;
 	}
@@ -352,7 +384,7 @@ async function compareArtifacts(
 	const compatibleTargets = compatibleComparisonTargets(left, targets, registry);
 	if (compatibleTargets.length === 0) {
 		await vscode.window.showInformationMessage(
-			`No other configured variant or preset is compatible with "${left.label}".`,
+			`No other variant, toolchain, or preset is compatible with "${left.label}".`,
 		);
 		return;
 	}
@@ -386,21 +418,113 @@ async function compareArtifacts(
 	if (!kind) {
 		return;
 	}
-	const leftUri = comparisonUri(editor.document.uri, left, kind);
-	const rightUri = comparisonUri(editor.document.uri, right, kind);
+	const view = await pickComparisonView(editor.document.uri, left, kind, compilationService);
+	if (!view) {
+		return;
+	}
+	const leftUri = comparisonUri(editor.document.uri, left, kind, view);
+	const rightUri = comparisonUri(editor.document.uri, right, kind, view);
 	if (leftUri.toString() === rightUri.toString()) {
 		await vscode.window.showInformationMessage(
 			'These selections resolve to the same artifact. Choose a different variant or preset.',
 		);
 		return;
 	}
+	const dropped = [left, right].filter((target) => target.argumentsDropped);
+	if (dropped.length > 0) {
+		void vscode.window.showWarningMessage(
+			`${dropped.map((target) => `"${target.label}"`).join(' and ')} reads other compiler arguments than ` +
+				`"${selectedVariant.displayLabel}". The comparison does not use the arguments of that variant.`,
+		);
+	}
+	const scope = view.functionName === undefined ? '' : ` · ${view.functionName}`;
 	await vscode.commands.executeCommand(
 		'vscode.diff',
 		leftUri,
 		rightUri,
-		`${left.label} ↔ ${right.label} — ${artifactDefinitions[kind].label}`,
+		`${left.label} ↔ ${right.label} — ${artifactDefinitions[kind].label}${scope}`,
 		{ preview: false },
 	);
+}
+
+/**
+ * Asks how to show the two listings: in full or as one function, and with or without normalized
+ * labels and addresses. A function list comes from the left listing, so its compile runs first.
+ */
+async function pickComparisonView(
+	source: vscode.Uri,
+	left: ComparisonTarget,
+	kind: ArtifactKind,
+	compilationService: CompilationService,
+): Promise<ArtifactViewOptions | undefined> {
+	if (!comparisonViewKinds.has(kind)) {
+		return {};
+	}
+	const choice = await vscode.window.showQuickPick(
+		[
+			{ label: 'Full Listing', view: {} as ArtifactViewOptions, oneFunction: false },
+			{
+				label: 'Full Listing, Normalized',
+				detail: 'Renumber local labels and hide addresses, so the diff shows the changed instructions',
+				view: { normalized: true },
+				oneFunction: false,
+			},
+			{ label: 'One Function', detail: 'Select a function of the left listing', view: {}, oneFunction: true },
+			{
+				label: 'One Function, Normalized',
+				detail: 'Select a function, and renumber its local labels and hide its addresses',
+				view: { normalized: true },
+				oneFunction: true,
+			},
+		],
+		{ title: 'Compare the full listing or one function' },
+	);
+	if (!choice || !choice.oneFunction) {
+		return choice?.view;
+	}
+	const leftUri = comparisonUri(source, left, kind);
+	const parsed = parseArtifactUri(leftUri);
+	if (!parsed) {
+		return undefined;
+	}
+	const generator = new ArtifactGenerator(
+		source,
+		leftUri,
+		parsed.variantId,
+		kind,
+		parsed.presetId,
+		compilationService,
+	);
+	let artifact: RenderedTextArtifact | undefined;
+	try {
+		const rendered = await vscode.window.withProgress(
+			{
+				location: vscode.ProgressLocation.Notification,
+				title: `Reading the functions of ${left.label}`,
+				cancellable: true,
+			},
+			(_progress, token) => generator.update(token),
+		);
+		artifact = rendered.presentation === 'text' ? rendered : undefined;
+	} catch (error) {
+		if (!(error instanceof vscode.CancellationError)) {
+			await vscode.window.showErrorMessage(`The left artifact did not compile: ${failureDetails(error)}`);
+		}
+		return undefined;
+	} finally {
+		generator.dispose();
+	}
+	const functions = artifact ? functionRanges(artifact) : [];
+	if (functions.length === 0) {
+		await vscode.window.showInformationMessage(`The ${artifactDefinitions[kind].label} listing has no functions.`);
+		return undefined;
+	}
+	const selected = await pickFrom(
+		functions,
+		(range) => ({ label: range.name, description: `${range.endLine - range.startLine + 1} lines` }),
+		{ title: 'Select the function to compare', matchOnDescription: false },
+	);
+	return selected && { ...choice.view, functionName: selected.name };
 }
 
 /** The variants of a source, then each configured preset applied to the selected variant. */
@@ -424,6 +548,37 @@ export function comparisonTargets(
 			preset,
 		})),
 	];
+}
+
+/**
+ * A target for each other toolchain that compiles the language of the source. The target keeps the
+ * settings of the selected variant when the toolchain reads the same arguments.
+ */
+export function toolchainComparisonTargets(
+	profiles: readonly ToolchainProfile[],
+	languageId: string,
+	selectedVariant: CompilationVariant,
+	selectedKind: ToolchainKind | undefined,
+	existing: readonly ComparisonTarget[],
+): ComparisonTarget[] {
+	const used = new Set(existing.map((target) => target.variant.toolchainProfileId));
+	return profiles
+		.filter(
+			(profile) =>
+				!used.has(profile.id) && getToolchainDefinition(profile.kind).languageIdentifiers.includes(languageId),
+		)
+		.map((profile) => {
+			const { variant, argumentsDropped } = toolchainComparisonVariant(selectedVariant, selectedKind, profile);
+			return {
+				id: `toolchain:${profile.id}`,
+				label: profile.displayName,
+				description: argumentsDropped
+					? `Toolchain · without the arguments of ${selectedVariant.displayLabel}`
+					: `Toolchain · settings of ${selectedVariant.displayLabel}`,
+				variant,
+				...(argumentsDropped ? { argumentsDropped } : {}),
+			};
+		});
 }
 
 /** The other targets that share at least one artifact kind with the left target. */
@@ -470,7 +625,11 @@ function pickComparisonTarget(
 			label: target.label,
 			description: target.description,
 			iconPath: new vscode.ThemeIcon(
-				target.preset ? artifactDefinitions[target.preset.artifactKind].icon : 'git-branch',
+				target.preset
+					? artifactDefinitions[target.preset.artifactKind].icon
+					: target.id.startsWith('toolchain:')
+						? 'tools'
+						: 'git-branch',
 			),
 		}),
 		{ title, matchOnDescription: true },
@@ -488,18 +647,17 @@ function targetSupportsKind(
 	);
 }
 
-export function comparisonUri(source: vscode.Uri, target: ComparisonTarget, kind: ArtifactKind): vscode.Uri {
-	return getArtifactUri(source, target.variant, kind, target.preset?.id ?? 'default', undefined);
+export function comparisonUri(
+	source: vscode.Uri,
+	target: ComparisonTarget,
+	kind: ArtifactKind,
+	view: ArtifactViewOptions = {},
+): vscode.Uri {
+	return getArtifactUri(source, target.variant, kind, target.preset?.id ?? 'default', undefined, view);
 }
 
-interface StatusAction extends vscode.QuickPickItem {
-	run(): Thenable<unknown>;
-}
-
-async function showArtifactStatusActions(
-	activeArtifact: ActiveArtifact,
-	configuration: ConfigurationService,
-): Promise<void> {
+async function showArtifactStatusActions(deps: ArtifactCommandDependencies): Promise<void> {
+	const { activeArtifact, configuration } = deps;
 	const document = activeArtifact.document;
 	if (!document) {
 		return;
@@ -522,6 +680,8 @@ async function showArtifactStatusActions(
 				]
 			: []),
 		...truncationActions(status, configuration),
+		...experimentStatusActions(document, deps),
+		{ label: '', kind: vscode.QuickPickItemKind.Separator },
 		{
 			label: '$(go-to-file) Reveal Source',
 			description: path.basename(identity.sourceLabel),
@@ -537,7 +697,7 @@ async function showArtifactStatusActions(
 		title: `${identity.artifactLabel} · ${statusLabel(status.state)}`,
 		matchOnDescription: true,
 	});
-	await choice?.run();
+	await choice?.run?.();
 }
 
 /** The action that raises the limit which cut the output: the process output or the listing lines. */

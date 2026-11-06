@@ -11,6 +11,7 @@ import { parseArtifactUri, type ArtifactUriIdentity } from './artifact-uri.js';
 import { ArtifactGenerator, type ArtifactStatus } from './artifact-generator.js';
 import type { ArtifactDocumentIdentity, ArtifactDocumentSnapshot } from './artifact-identity.js';
 import { ArtifactProblems } from './artifact-problems.js';
+import { ArtifactArguments } from './artifact-arguments.js';
 
 export interface ArtifactRegistryDocument {
 	readonly uri: Uri;
@@ -90,8 +91,11 @@ export class ArtifactDocumentRegistry implements Disposable {
 	constructor(
 		private readonly compilationService: CompilationService,
 		configuration: ConfigurationService,
+		/** The arguments that the user edited for each document. */
+		readonly editedArguments: ArtifactArguments = new ArtifactArguments(),
 	) {
 		this.subscriptions = Disposable.from(
+			editedArguments.onDidChange((uri) => this.requestRefresh(uri)),
 			compilationService.onVariantsChanged((sources) => {
 				this.identityGeneration++;
 				const changed = new Set(sources.map(sourceUriComparisonKey));
@@ -144,6 +148,14 @@ export class ArtifactDocumentRegistry implements Disposable {
 		return this.documents.get(uriComparisonKey(uri));
 	}
 
+	/** Returns the open documents of a source, in the order that they opened. */
+	documentsOf(source: Uri): ArtifactRegistryDocument[] {
+		const key = sourceUriComparisonKey(source);
+		return [...this.documents.values()].filter(
+			(document) => sourceUriComparisonKey(document.parsed.source) === key,
+		);
+	}
+
 	/** Returns the view of an open document when the view has the given class. */
 	view<V extends ArtifactView>(uri: Uri, type: ViewClass<V>): V | undefined {
 		const view = this.documents.get(uriComparisonKey(uri))?.view;
@@ -178,6 +190,7 @@ export class ArtifactDocumentRegistry implements Disposable {
 			parsed.presetId,
 			this.compilationService,
 			parsed.artifactOutputId,
+			{ extraArguments: () => this.editedArguments.get(uri), view: parsed.view },
 		);
 		const watcher = workspace.createFileSystemWatcher(
 			new RelativePattern(Uri.file(path.dirname(parsed.source.fsPath)), path.basename(parsed.source.fsPath)),

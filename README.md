@@ -44,6 +44,41 @@ visible artifact of that source. Click it for the artifact actions: refresh, can
 source, and raise a limit that cut the output. **Refresh Artifact** and **Cancel Artifact
 Generation** use the same artifact.
 
+### Experiments
+
+The status menu also changes and compares the artifact:
+
+- **Edit Compiler Arguments** adds arguments to one artifact. They follow the arguments of the
+  variant and the preset, and the tab stays open. **Set Optimization Level** selects a level, such
+  as `-O2`, `/O2`, or `-C opt-level=2`. **Save as Preset** keeps the edited arguments as a preset.
+- Toggles turn the options of the artifact kind on and off, such as Intel syntax and demangling.
+- **Compare With Previous Result** compares the listing with the listing before the last change.
+- **Snapshot Artifact** keeps the listing until VS Code closes. **Compare With Snapshot** compares an
+  artifact with a snapshot.
+- **Filter Optimization Remarks** selects the remark categories that the editors show.
+
+`Cogitator Lens: Compare Artifacts` also offers each other toolchain that compiles the language. A
+toolchain that reads the same arguments, such as Clang for a GCC variant, keeps the arguments of the
+selected variant. Otherwise, the comparison uses no variant arguments and shows a warning. For
+assembly, binary disassembly, LLVM IR, and Rust MIR, the comparison can show one function. It can
+also renumber local labels and hide addresses, so the diff shows only changed instructions.
+
+### Navigation
+
+Hover a source line to see the lines that its open artifacts generated from it. `Cogitator Lens:
+Reveal in Artifact` selects those lines in the artifact, and opens the assembly first when no
+artifact is open. Set `coglens.functionCodeLens` to show the instruction count above each function.
+The hover and the counts use open artifacts only, so they never start a compile.
+
+In an artifact, a register highlights each use of its family in the function: `rax`, `eax`, `ax`,
+and `al` are one family. **Find All References** lists the uses of a label, a value, or a function,
+and **Show Call Hierarchy** shows the calls in the listing. LLVM IR links each label, local value,
+and global to its definition. **Copy With Addresses** copies the listing with its address and code
+byte columns, which are not part of the text.
+
+The optimization remarks and the stack usage of an open artifact also show at the end of the source
+lines. Set `coglens.showAnalysisOnSource` to `false` to show them only in the artifact.
+
 The control-flow graph view shows its state: compiling, stale, cancelled, or failed. A failure shows
 the compiler output. The function filter takes the arrow keys, and graph search moves between
 matches with Enter and Shift+Enter. Open graphs come back after VS Code restarts.

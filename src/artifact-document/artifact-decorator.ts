@@ -42,11 +42,13 @@ import {
 	sourceScrollAnchor,
 } from './source-bridge.js';
 import { jumpArrows, type JumpArrowDirection } from './jump-arrows.js';
+import { annotationShows } from '../artifacts/core/source-annotations.js';
 
 /*
 Nice-to-have features:
  - Hover line in artifact/source editor highlights corresponding source/artifact line(s) (only on currently visible files, don't open new ones)
-   - VSCode API doesn't appear to expose the line hovered by the mouse
+   - The API does not give the line under the mouse. A source hover (source-navigation.ts) shows the
+     artifact lines of the hovered source line instead.
  - Ctrl-click opens corresponding editor (if not open) then highlights lines
    - VSCode has a 10+ year old issue (#3130) for adding mouse shortcut customization
    - Definition provider seems like the best way to do this for now
@@ -150,7 +152,7 @@ export class ArtifactDecorator {
 				}
 			}),
 			configService.onDidChange((change) => {
-				if (change.affects('dimUnusedSourceLines')) {
+				if (change.affects('dimUnusedSourceLines') || change.affects('optimizationRemarkCategories')) {
 					this.refreshDecorations();
 				}
 			}),
@@ -616,11 +618,15 @@ export class ArtifactDecorator {
 		if (!editor) {
 			return;
 		}
+		const categories = this.configService.getOptimizationRemarkCategories();
 		const options = content.artifact.lines.flatMap((line, index) => {
 			if (index >= editor.document.lineCount) {
 				return [];
 			}
-			const annotations = line.annotations?.filter((annotation) => annotation.style === style) ?? [];
+			const annotations =
+				line.annotations?.filter(
+					(annotation) => annotation.style === style && annotationShows(annotation, categories),
+				) ?? [];
 			if (annotations.length === 0) {
 				return [];
 			}

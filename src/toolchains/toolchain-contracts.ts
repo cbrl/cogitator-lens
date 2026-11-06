@@ -23,6 +23,7 @@ import type { AssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/
 import type { DependencyCollectionSpec, ToolchainBackend } from './toolchain-backend.js';
 import type { DiagnosticParser } from '../diagnostics.js';
 import { sameLocalFile } from '../file-identity.js';
+import type { OptimizationLevel } from './optimization-levels.js';
 
 /**
  * Runs a toolchain and returns its raw output. The compilation service sets
@@ -76,6 +77,13 @@ export interface ToolchainDefinition {
 	readonly intelArguments?: readonly string[];
 	readonly includeFlag?: string;
 	readonly defineFlag?: string;
+	/**
+	 * Toolchains with the same dialect read the same compiler arguments, so a comparison can keep
+	 * the arguments of a variant. Without a dialect, the toolchain kind is the dialect.
+	 */
+	readonly argumentDialect?: string;
+	/** The optimization levels that the status menu offers. Omit when the toolchain has none. */
+	readonly optimizationLevels?: readonly OptimizationLevel[];
 	readonly objectFilename?: string;
 	readonly outputArguments?: (
 		target: 'assembly' | 'object',

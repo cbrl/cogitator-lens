@@ -9,9 +9,16 @@ import {
 } from 'vscode';
 import path from 'path';
 import { CompilationService } from '../compilation/index.js';
-import type { ArtifactKind, CompilationVariant, InvocationDetails, RenderedArtifact } from '../types/index.js';
+import type {
+	ArtifactKind,
+	CompilationVariant,
+	InvocationDetails,
+	RenderedArtifact,
+	RenderedTextArtifact,
+} from '../types/index.js';
 import { CompilationError } from '../types/index.js';
 import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
+import { applyArtifactView, type ArtifactViewOptions } from '../artifacts/core/artifact-views.js';
 import * as logger from '../logger.js';
 
 interface ArtifactStatusBase {
@@ -35,6 +42,13 @@ export type ArtifactStatus =
 
 export type ArtifactState = ArtifactStatus['state'];
 
+/** What a generator adds to its preset: the arguments that the user edited, and the listing view. */
+export interface ArtifactGeneratorSettings {
+	/** Reads the edited arguments for each compile. They follow the preset arguments. */
+	readonly extraArguments?: () => readonly string[];
+	readonly view?: ArtifactViewOptions;
+}
+
 export class ArtifactGenerator implements Disposable {
 	readonly sourceUri: Uri;
 	readonly artifactUri: Uri;
@@ -45,6 +59,8 @@ export class ArtifactGenerator implements Disposable {
 		truncated: false,
 	};
 
+	private earlierArtifact?: RenderedTextArtifact;
+
 	constructor(
 		sourceUri: Uri,
 		artifactUri: Uri,
@@ -53,6 +69,7 @@ export class ArtifactGenerator implements Disposable {
 		private readonly presetId: string,
 		private readonly compilationService: CompilationService,
 		private readonly artifactOutputId?: string,
+		private readonly settings: ArtifactGeneratorSettings = {},
 	) {
 		this.sourceUri = sourceUri;
 		this.artifactUri = artifactUri;
@@ -87,7 +104,7 @@ export class ArtifactGenerator implements Disposable {
 				artifactKind: this.artifactKind,
 				...(this.artifactOutputId ? { artifactOutputId: this.artifactOutputId } : {}),
 				presetId: this.presetId,
-				extraArguments: preset.extraArguments,
+				extraArguments: [...preset.extraArguments, ...(this.settings.extraArguments?.() ?? [])],
 				options: {
 					production: {
 						...baseOptions.production,
@@ -110,13 +127,14 @@ export class ArtifactGenerator implements Disposable {
 				throw new CancellationError();
 			}
 
-			const rendered = artifact.artifact;
+			const rendered = applyArtifactView(artifact.artifact, this.settings.view);
 			const expectedPresentation = artifactDefinitions[this.artifactKind].presentation;
 			if (rendered.presentation !== expectedPresentation) {
 				throw new CompilationError(
 					`${this.artifactKind} produced a ${rendered.presentation} artifact; expected ${expectedPresentation}.`,
 				);
 			}
+			this.keepEarlierArtifact(rendered);
 			this.transition('successful', {
 				artifact: rendered,
 				invocation: this.currentStatus.invocation,
@@ -168,6 +186,26 @@ export class ArtifactGenerator implements Disposable {
 		return variant;
 	}
 
+	/**
+	 * Keeps the last successful text listing when a new result has other text. A result with the same
+	 * text, such as a refresh without a change, keeps the earlier listing, so a comparison shows a change.
+	 */
+	private keepEarlierArtifact(next: RenderedArtifact): void {
+		const current = this.currentStatus.artifact;
+		if (
+			current?.presentation === 'text' &&
+			next.presentation === 'text' &&
+			listingText(current) !== listingText(next)
+		) {
+			this.earlierArtifact = current;
+		}
+	}
+
+	/** The successful listing before the current one, when its text is different. */
+	get previousArtifact(): RenderedTextArtifact | undefined {
+		return this.earlierArtifact;
+	}
+
 	get onDidChange(): Event<ArtifactStatus> {
 		return this.statusEvent.event;
 	}
@@ -214,4 +252,9 @@ export class ArtifactGenerator implements Disposable {
 		this.currentStatus = status;
 		this.statusEvent.fire(status);
 	}
+}
+
+/** The text that a text listing shows, one line for each artifact line. */
+export function listingText(artifact: RenderedTextArtifact): string {
+	return artifact.lines.map((line) => line.text).join('\n');
 }

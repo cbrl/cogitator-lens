@@ -29,6 +29,7 @@ import {
 	stripGnuManagedArguments,
 } from './c-family.js';
 import { parseGnuDiagnostics } from './c-family/diagnostics.js';
+import { clangOptimizationLevels } from './optimization-levels.js';
 
 const artifacts: ToolchainDefinition['artifacts'] = {
 	assembly: compilerAssembly,
@@ -59,6 +60,8 @@ export const clang: ToolchainDefinition = {
 	executablePattern: /^clang(?:\+\+)?(?:-\d+(?:\.\d+)*)?(?:\.exe)?$/i,
 	parseDiagnostics: parseGnuDiagnostics,
 	languageIdentifiers: cFamilyLanguageIdentifiers,
+	argumentDialect: 'gnu',
+	optimizationLevels: clangOptimizationLevels,
 	intelSyntax: 'selectable',
 	intelArguments: gnuIntelArguments,
 	includeFlag: '-I',

@@ -26,11 +26,14 @@ import {
 	stripGnuManagedArguments,
 } from './c-family.js';
 import { parseGnuDiagnostics } from './c-family/diagnostics.js';
+import { gccOptimizationLevels } from './optimization-levels.js';
 
 export const gcc: ToolchainDefinition = {
 	executablePattern: /^(?:gcc|g\+\+)(?:-\d+(?:\.\d+)*)?(?:\.exe)?$/i,
 	parseDiagnostics: parseGnuDiagnostics,
 	languageIdentifiers: cFamilyLanguageIdentifiers,
+	argumentDialect: 'gnu',
+	optimizationLevels: gccOptimizationLevels,
 	intelSyntax: 'selectable',
 	intelArguments: gnuIntelArguments,
 	includeFlag: '-I',

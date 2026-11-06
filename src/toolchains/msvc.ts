@@ -26,6 +26,7 @@ import { readBoundedArtifactBuffer, type DependencyCollectionSpec } from './tool
 import { cFamilyLanguageIdentifiers } from './c-family.js';
 import { parseParenthesizedDiagnostics } from './msvc/diagnostics.js';
 import { readCodeViewLines, withCodeViewSourceLines, type CodeViewLineTable } from './msvc/codeview-lines.js';
+import { msvcOptimizationLevels } from './optimization-levels.js';
 
 export const visualStudioDiscoveryArguments = [
 	'-latest',
@@ -486,6 +487,8 @@ export const msvc: ToolchainDefinition = {
 	executablePattern: /^cl\.exe$/i,
 	parseDiagnostics: parseParenthesizedDiagnostics,
 	languageIdentifiers: cFamilyLanguageIdentifiers,
+	argumentDialect: 'msvc',
+	optimizationLevels: msvcOptimizationLevels,
 	intelSyntax: 'inherent',
 	includeFlag: '/I',
 	defineFlag: '/D',

@@ -51,6 +51,13 @@ export function immutableArtifactOptions(options: ArtifactOptions): ArtifactOpti
 	});
 }
 
+/** The value of one production or display option. */
+export function artifactOptionValue(options: ArtifactOptions, id: ArtifactOptionId): boolean {
+	return Object.hasOwn(options.production, id)
+		? options.production[id as ProductionOptionId]
+		: options.display[id as DisplayOptionId];
+}
+
 export function artifactOptionsEqual(left: ArtifactOptions, right: ArtifactOptions): boolean {
 	return structurallyEqual(left, right);
 }

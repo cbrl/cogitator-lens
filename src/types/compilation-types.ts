@@ -104,6 +104,12 @@ export interface RenderedArtifactLineSource {
 
 export type OptimizationRemarkCategory = 'passed' | 'missed' | 'analysis';
 
+export const optimizationRemarkCategories: readonly OptimizationRemarkCategory[] = Object.freeze([
+	'passed',
+	'missed',
+	'analysis',
+]);
+
 /** Decoration style selected by an artifact renderer for an inline annotation. */
 export type ArtifactLineAnnotationStyle =
 	'optimization-passed' | 'optimization-missed' | 'optimization-analysis' | 'stack-usage';

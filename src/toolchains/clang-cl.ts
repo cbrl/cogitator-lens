@@ -37,6 +37,7 @@ import { withCodeViewSourceLines } from './msvc/codeview-lines.js';
 import { composeDiagnosticParsers } from '../diagnostics.js';
 import { parseGnuDiagnostics } from './c-family/diagnostics.js';
 import { parseParenthesizedDiagnostics } from './msvc/diagnostics.js';
+import { msvcOptimizationLevels } from './optimization-levels.js';
 
 const clangOptionsWithValues = new Set(['/clang:-o', '/clang:-foptimization-record-file']);
 const clangOptionArtifactFlags =
@@ -86,6 +87,8 @@ export const clangCl: ToolchainDefinition = {
 	executablePattern: /^clang-cl(?:\.exe)?$/i,
 	parseDiagnostics: composeDiagnosticParsers(parseGnuDiagnostics, parseParenthesizedDiagnostics),
 	languageIdentifiers: cFamilyLanguageIdentifiers,
+	argumentDialect: 'msvc',
+	optimizationLevels: msvcOptimizationLevels,
 	intelSyntax: 'inherent',
 	includeFlag: '/I',
 	defineFlag: '/D',
