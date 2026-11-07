@@ -4,6 +4,7 @@ import {
 	documentationForInstruction,
 	instructionMnemonic,
 	instructionSetLabels,
+	instructionSetOf,
 	type InstructionDocumentation,
 } from '../src/artifact-document/instruction-documentation.js';
 import {
@@ -67,6 +68,57 @@ test('instruction documentation is chosen from the instruction set the listing i
 		instructionSetLabels.riscv64,
 		'addi',
 	);
+});
+
+test('the target of the compile selects the documentation set over the mnemonics', () => {
+	// The mnemonics look like x86, but the target names AArch64.
+	const targeted = { ...textArtifact('assembly', [{ text: '  push rbp' }, { text: '  add x0, x0, #1' }]) };
+	assertDocuments(documentationForInstruction(targeted, '  push rbp'), instructionSetLabels.amd64, 'push');
+	const aarch64 = { ...targeted, architecture: 'aarch64' as const };
+	assertDocuments(documentationForInstruction(aarch64, '  add x0, x0, #1'), instructionSetLabels.aarch64, 'add');
+	assert.equal(instructionSetOf(aarch64), instructionSetLabels.aarch64);
+
+	const power = {
+		...textArtifact('assembly', [{ text: '\taddi 3,3,1' }, { text: '\tblr' }]),
+		architecture: 'power' as const,
+	};
+	assertDocuments(documentationForInstruction(power, '\taddi 3,3,1'), instructionSetLabels.power, 'addi');
+	assert.equal(instructionSetOf(power), instructionSetLabels.power);
+});
+
+test('PTX and SASS documentation reads the mnemonic without its suffixes and its guard predicate', () => {
+	const ptx = {
+		...textArtifact('assembly', [{ text: '\tld.global.f32 \t%f1, [%rd4];' }, { text: '\t@%p1 bra \t$L__BB0_2;' }]),
+		architecture: 'ptx' as const,
+	};
+	assertDocuments(documentationForInstruction(ptx, ptx.lines[0].text), instructionSetLabels.ptx, 'ld.global.f32');
+	assertDocuments(documentationForInstruction(ptx, ptx.lines[1].text), instructionSetLabels.ptx, 'bra');
+	assert.equal(documentationForInstruction(ptx, '\tnot_an_instruction %r1;'), undefined);
+
+	const sass = {
+		...textArtifact('binary-disassembly', [
+			{
+				text: '/*0000*/ IMAD.MOV.U32 R1, RZ, RZ, c[0x0][0x28] ;',
+				disassembly: 'IMAD.MOV.U32 R1, RZ, RZ, c[0x0][0x28] ',
+			},
+			{ text: '/*0010*/ @!P0 BRA 0x80 ;', disassembly: '@!P0 BRA 0x80 ' },
+		]),
+		architecture: 'sass' as const,
+	};
+	assertDocuments(
+		documentationForInstruction(sass, sass.lines[0].disassembly ?? ''),
+		instructionSetLabels.sass,
+		'imad.mov.u32',
+	);
+	assertDocuments(
+		documentationForInstruction(sass, sass.lines[1].disassembly ?? ''),
+		instructionSetLabels.sass,
+		'bra',
+	);
+	// The suffix rule belongs to PTX and SASS, so an unknown AArch64 suffix does not give the entry of `b`.
+	const aarch64 = { ...textArtifact('assembly', [{ text: '  b.zz label' }]), architecture: 'aarch64' as const };
+	assert.equal(documentationForInstruction(aarch64, '  b.zz label'), undefined);
+	assert.ok(documentationForInstruction(aarch64, '  b label'));
 });
 
 test('LLVM IR and Python bytecode use their artifact-specific documentation tables', () => {

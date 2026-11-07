@@ -5,8 +5,9 @@ import * as logger from '../logger.js';
 import { emptySnapshot, VariantProvider, type VariantSnapshot } from './variant-provider.js';
 
 /**
- * Publishes the compilers and interpreters found on PATH as toolchain profiles. They have no
- * variants of their own; the compilation service uses them for files that have no other variant.
+ * Publishes the detected compilers and interpreters as toolchain profiles: those on PATH, in the
+ * Visual Studio installs, and in the rustup toolchains. They have no variants of their own. The
+ * compilation service uses them for files that have no other variant.
  */
 export class PathToolchainProvider extends VariantProvider {
 	private runningDetections = 0;
@@ -35,8 +36,8 @@ export class PathToolchainProvider extends VariantProvider {
 			const toolchainProfiles = await detectPathToolchains();
 			logger.logChannel.info(
 				toolchainProfiles.length > 0
-					? `Toolchains found on PATH: ${toolchainProfiles.map((profile) => `${profile.displayName} (${profile.executable})`).join(', ')}`
-					: 'No supported toolchains were found on PATH.',
+					? `Toolchains found: ${toolchainProfiles.map((profile) => `${profile.displayName} (${profile.executable})`).join(', ')}`
+					: 'No supported toolchains were found.',
 			);
 			return { toolchainProfiles, variants: [] };
 		} finally {

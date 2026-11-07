@@ -16,6 +16,7 @@ import type {
 	AuxiliaryTool,
 	IntelSyntaxSupport,
 	ProducedArtifact,
+	TargetArchitecture,
 	ToolchainProfile,
 } from '../types/index.js';
 import type { AsmParser } from '../vendor/lib/parsers/asm-parser.js';
@@ -50,6 +51,8 @@ export interface ArtifactImplementation {
 	readonly renderer?: ArtifactRenderer;
 	/** Overrides the default listing syntax of the artifact kind. */
 	readonly listingSyntax?: ArtifactListingSyntax;
+	/** The instruction set of the listing, when it does not depend on the target, such as PTX. */
+	readonly architecture?: TargetArchitecture;
 	readonly requiredTools?: readonly RequiredTool[];
 }
 

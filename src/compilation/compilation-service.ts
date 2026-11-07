@@ -20,8 +20,10 @@ import type {
 	ArtifactProductionResult,
 	ArtifactRequest,
 	CompilationVariant,
+	FolderVariant,
 	ProviderSnapshot,
 	RawArtifact,
+	RenderedArtifact,
 	SourceState,
 	ToolchainProfile,
 } from '../types/index.js';
@@ -52,6 +54,11 @@ import type { ConfigurationOrigin } from '../buildsystems/variant-provider.js';
 import { relativeWithin } from '../services/path-variables.js';
 import { parseToolchainComparisonVariantId, toolchainComparisonVariant } from './comparison-variants.js';
 import { withoutLevelConflicts, type OptimizationLevel } from '../toolchains/optimization-levels.js';
+import { CompileScheduler } from './compile-scheduler.js';
+import type { ArtifactImplementation } from '../toolchains/toolchain-contracts.js';
+import { architectureOfTriple, targetFromArguments, toolchainTarget } from '../toolchains/target-architecture.js';
+import { sourceLanguage } from '../buildsystems/cpptools-configuration.js';
+import { structurallyEqual } from '../utils.js';
 
 const producerIdentities = new WeakMap<object, number>();
 let nextProducerIdentity = 1;
@@ -79,8 +86,12 @@ export class CompilationService {
 	private readonly artifactOptionsChangeEmitter = new EventEmitter<ArtifactKind>();
 	private readonly artifactDecorationsChangeEmitter = new EventEmitter<ArtifactKind>();
 	private readonly variantSelectionEmitter = new EventEmitter<Uri>();
+	private readonly fallbackVariantsEmitter = new EventEmitter<void>();
+	/** The folder variants of each provider, such as the configurations of the C/C++ extension. */
+	private readonly folderVariants = new Map<ConfigurationOrigin, readonly FolderVariant[]>();
 	private readonly subscriptions: Disposable[] = [];
 	private readonly rawArtifactCache = new RawArtifactCache();
+	private readonly scheduler = new CompileScheduler();
 	private readonly inputWatchers = new Map<string, Disposable>();
 	private readonly currentArtifactOptions = new Map<ArtifactKind, ArtifactOptions>();
 	private readonly executableIdentities = new Map<string, string>();
@@ -95,6 +106,8 @@ export class CompilationService {
 	/** Only decoration-only options of a kind changed, so its artifacts need new decorations. */
 	readonly onArtifactDecorationsChanged: Event<ArtifactKind> = this.artifactDecorationsChangeEmitter.event;
 	readonly onVariantSelectionChanged: Event<Uri> = this.variantSelectionEmitter.event;
+	/** The folder variants changed, so the fallback variants of any source can be different. */
+	readonly onFallbackVariantsChanged: Event<void> = this.fallbackVariantsEmitter.event;
 
 	constructor(
 		private readonly configuration: ConfigurationService,
@@ -114,6 +127,7 @@ export class CompilationService {
 			// Outputs are keyed by profile ID, so a changed profile's outputs go; other outputs stay.
 			this.toolchainRegistry.onDidChange(({ changed }) => {
 				this.executableIdentities.clear();
+				this.scheduler.drop((tags) => changed.has(tags.toolchainProfileId));
 				this.rawArtifactCache.evictToolchains(changed);
 				this.syncInputWatchers();
 				this.changeEmitter.fire(
@@ -264,6 +278,14 @@ export class CompilationService {
 				toolchainProfileId: ToolchainRegistry.profileId(snapshot.provider, variant.toolchainProfileId),
 			})),
 		);
+		const folderVariants = (snapshot.folderVariants ?? []).map((variant) => ({
+			...variant,
+			toolchainProfileId: ToolchainRegistry.profileId(snapshot.provider, variant.toolchainProfileId),
+		}));
+		if (!structurallyEqual(this.folderVariants.get(snapshot.provider) ?? [], folderVariants)) {
+			this.folderVariants.set(snapshot.provider, folderVariants);
+			this.fallbackVariantsEmitter.fire();
+		}
 		const sources = new Map(
 			snapshot.variants.map((variant) => [sourceUriComparisonKey(variant.source), variant.source]),
 		);
@@ -312,44 +334,54 @@ export class CompilationService {
 				text: source.value.text,
 			},
 		};
+		// Another artifact kind may have produced the shared output, or started the shared compile.
+		const render = async (raw: RawArtifact): Promise<ArtifactProductionResult> => ({
+			status: 'available',
+			artifact: await withArchitecture(
+				await renderArtifact({ ...raw, kind: artifactKind }, implementation, options, renderContext),
+				implementation,
+				backend.profile,
+				[...variant.arguments, ...request.extraArguments],
+			),
+		});
 		const cached = this.rawArtifactCache.get(key);
 		if (cached && (await validateArtifactInputs(cached.inputs))) {
 			request.onInvocation?.(cached.command);
-			return {
-				status: 'available',
-				// Another artifact kind may have produced the shared output.
-				artifact: await renderArtifact(
-					{ ...cached, kind: artifactKind },
-					implementation,
-					options,
-					renderContext,
-				),
-			};
+			return render(cached);
 		} else if (cached) {
 			this.rawArtifactCache.delete(key);
 			this.syncInputWatchers();
 		}
 
 		try {
-			const produced = await implementation.producer(
-				backend,
-				variant.source,
-				{
-					args: [...variant.arguments, ...request.extraArguments],
-					env: variant.environment,
-					workingDirectory: variant.workingDirectory,
-					productionOptions: options.production,
-					onInvocation: request.onInvocation,
+			// Requests for the same output share one compile, such as the assembly and its graph.
+			const raw = await this.scheduler.run(
+				key,
+				{ source: sourceUriComparisonKey(variant.source), toolchainProfileId: variant.toolchainProfileId },
+				async (flight): Promise<RawArtifact> => {
+					const produced = await implementation.producer(
+						backend,
+						variant.source,
+						{
+							args: [...variant.arguments, ...request.extraArguments],
+							env: variant.environment,
+							workingDirectory: variant.workingDirectory,
+							productionOptions: options.production,
+							onInvocation: flight.onInvocation,
+						},
+						flight.cancellationToken,
+					);
+					const output: RawArtifact = { ...produced, kind: artifactKind };
+					if (flight.isCurrent()) {
+						this.rawArtifactCache.set(key, output, variant.source, variant.toolchainProfileId);
+						this.syncInputWatchers();
+					}
+					return output;
 				},
 				cancellationToken,
+				request.onInvocation,
 			);
-			const raw: RawArtifact = { ...produced, kind: artifactKind };
-			this.rawArtifactCache.set(key, raw, variant.source, variant.toolchainProfileId);
-			this.syncInputWatchers();
-			return {
-				status: 'available',
-				artifact: await renderArtifact(raw, implementation, options, renderContext),
-			};
+			return await render(raw);
 		} catch (error: unknown) {
 			if (error instanceof CancellationError || cancellationToken.isCancellationRequested) {
 				throw new CancellationError();
@@ -387,6 +419,7 @@ export class CompilationService {
 		this.artifactOptionsChangeEmitter.dispose();
 		this.artifactDecorationsChangeEmitter.dispose();
 		this.variantSelectionEmitter.dispose();
+		this.fallbackVariantsEmitter.dispose();
 		this.variants.dispose();
 		this.toolchainRegistry.dispose();
 		this.rawArtifactCache.clear();
@@ -442,7 +475,8 @@ export class CompilationService {
 	}
 
 	/**
-	 * Variants for a file that no provider describes: the configured default invocation, then the
+	 * Variants for a file that no provider describes: the folder variants that contain it, such as
+	 * a configuration of the C/C++ extension, the configured default invocation, and then the
 	 * toolchains that compile the file's language.
 	 *
 	 * `forLookup` includes every workspace and PATH toolchain, so an open artifact still finds its
@@ -462,9 +496,34 @@ export class CompilationService {
 				: configuredDefault;
 		const profiles = forLookup ? this.fallbackToolchains() : this.languageToolchains(languageId, defaultVariant);
 		return [
+			...this.folderVariantsOf(file, sourceKey, languageId),
 			...(defaultVariant ? [defaultVariant] : []),
 			...profiles.map((profile) => this.createToolchainVariant(file, profile, sourceKey)),
 		];
+	}
+
+	/** The variants of a file from the folder variants that contain it, for a toolchain of its language. */
+	private folderVariantsOf(file: Uri, sourceKey: string, languageId: string | undefined): CompilationVariant[] {
+		const language = sourceLanguage(file.fsPath);
+		return [...this.folderVariants].flatMap(([provider, variants]) =>
+			variants
+				.filter(
+					(variant) =>
+						relativeWithin(variant.folder, file.fsPath) !== undefined &&
+						(!languageId || this.compilesLanguage(variant.toolchainProfileId, languageId)),
+				)
+				.map((variant) => ({
+					id: `${provider}:${variant.id}|${sourceKey}`,
+					provider,
+					...(variant.configuration === undefined ? {} : { configuration: variant.configuration }),
+					source: file,
+					toolchainProfileId: variant.toolchainProfileId,
+					workingDirectory: variant.workingDirectory,
+					arguments: language === 'c' ? variant.cArguments : variant.cppArguments,
+					environment: variant.environment,
+					displayLabel: variant.displayLabel,
+				})),
+		);
 	}
 
 	private compilesLanguage(toolchainProfileId: string, languageId: string): boolean {
@@ -539,7 +598,7 @@ export class CompilationService {
 			workingDirectory: workspace.getWorkspaceFolder(file)?.uri.fsPath ?? path.dirname(file.fsPath),
 			arguments: [],
 			environment: {},
-			displayLabel: detected ? `${profile.displayName} (PATH)` : profile.displayName,
+			displayLabel: detected ? `${profile.displayName} (${profile.detectedIn ?? 'PATH'})` : profile.displayName,
 		};
 	}
 
@@ -575,6 +634,10 @@ export class CompilationService {
 
 	private handleInputChange(inputKey: string): void {
 		const affectedSources = this.rawArtifactCache.evictInputKey(inputKey);
+		// The production key holds the state of the source only. A compile that runs now can have read
+		// the old header, so a refresh must not join it.
+		const affectedKeys = new Set(affectedSources.map(sourceUriComparisonKey));
+		this.scheduler.drop((tags) => affectedKeys.has(tags.source));
 		this.syncInputWatchers();
 		if (affectedSources.length > 0) {
 			this.changeEmitter.fire(affectedSources);
@@ -723,6 +786,28 @@ function withArtifactOptionValue(options: ArtifactOptions, id: ArtifactOptionId,
 		: options.production;
 	const display = Object.hasOwn(options.display, id) ? { ...options.display, [id]: value } : options.display;
 	return immutableArtifactOptions({ production, display });
+}
+
+/**
+ * Adds the instruction set to a native assembly listing, so the listing gets the right instruction
+ * documentation. The implementation can name it, as nvcc does for PTX and SASS. Otherwise, a target
+ * in the arguments applies, and then the target of the toolchain. Without one, the listing has none.
+ */
+async function withArchitecture(
+	artifact: RenderedArtifact,
+	implementation: ArtifactImplementation,
+	profile: ToolchainProfile,
+	args: readonly string[],
+): Promise<RenderedArtifact> {
+	if (artifact.presentation !== 'text' || artifact.listingSyntax !== 'native-assembly') {
+		return artifact;
+	}
+	const architecture =
+		implementation.architecture ??
+		architectureOfTriple(
+			targetFromArguments([...profile.defaultArguments, ...args]) ?? (await toolchainTarget(profile)),
+		);
+	return architecture ? { ...artifact, architecture } : artifact;
 }
 
 /**

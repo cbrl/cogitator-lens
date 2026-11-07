@@ -16,8 +16,14 @@ export function gnuOutputArguments(lineTableArguments: readonly string[]) {
 			: ['-c', ...lineTableArguments, '-o', outputFile];
 }
 
+/**
+ * GCC 14 to 16 and Clang 20 and 21 write the file with `-MD` in each mode of the producers: `-S`,
+ * `-c`, `-E`, `-fsyntax-only`, and `-emit-llvm`. The listings and the preprocessed output do not
+ * change.
+ */
 export const gnuDependencyCollection: DependencyCollectionSpec = Object.freeze({
 	outputFilename: 'dependencies.d',
+	inlineArguments: (outputFile: string) => ['-MD', '-MF', outputFile],
 	arguments: (outputFile: string) => ['-M', '-MF', outputFile],
 	parse: parseMakeDepfile,
 });

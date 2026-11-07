@@ -211,6 +211,11 @@ export class ConfigurationService implements Disposable {
 		return workspace.getConfiguration('coglens').get('detectToolchainsOnPath', true);
 	}
 
+	/** Whether the configurations of the C/C++ extension give variants to the sources of a folder. */
+	getReadCppToolsConfiguration(scope?: Uri): boolean {
+		return workspace.getConfiguration('coglens', scope).get('cppToolsConfiguration', true);
+	}
+
 	getCompilationDatabases(scope?: Uri): readonly string[] {
 		return workspace.getConfiguration('coglens', scope).get<string[]>('compilationDatabases', []);
 	}

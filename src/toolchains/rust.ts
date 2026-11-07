@@ -86,8 +86,13 @@ export function stripRustManagedArguments(
 	});
 }
 
+/**
+ * rustc 1.97.1 writes dep-info beside the assembly, LLVM IR, and MIR outputs, also with `-o`. The
+ * outputs do not change.
+ */
 const rustDependencyCollection: DependencyCollectionSpec = Object.freeze({
 	outputFilename: 'dependencies.d',
+	inlineArguments: (outputFile: string) => [`--emit=dep-info=${outputFile}`],
 	arguments: (outputFile: string, _temporaryDirectory: string, providerArguments: readonly string[]) => [
 		...rustDefaults(providerArguments),
 		`--emit=dep-info=${outputFile}`,

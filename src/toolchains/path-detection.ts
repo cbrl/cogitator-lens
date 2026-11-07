@@ -4,20 +4,41 @@ import path from 'node:path';
 import { execute } from '../exec.js';
 import type { ToolchainProfile } from '../types/index.js';
 import { createToolchainProfile, detectToolchainDefinition } from './toolchain-map.js';
+import { localFileComparisonKey } from '../file-identity.js';
+import { detectVisualStudioToolchains } from './visual-studio-detection.js';
+import { targetFromClangBanner } from './target-architecture.js';
 
-/** A compiler or interpreter that is looked up on PATH. Only the first name that runs is used. */
-interface PathCandidate {
+/**
+ * A compiler or interpreter that is looked up on PATH. Each PATH directory can hold one, and the
+ * names of a candidate are the same tool. So a name whose banner equals the banner of an earlier
+ * name is the same tool, such as the `py` launcher and `python.exe`.
+ */
+export interface PathCandidate {
 	readonly names: readonly string[];
 	readonly versionArguments: readonly string[];
 	/** Rejects an executable whose version banner shows it is something else, such as Apple's `gcc` shim. */
 	readonly rejectVersion?: RegExp;
+	/** The names of other versions of the tool in a PATH directory, such as `gcc-14`, without `.exe`. */
+	readonly versionedNames?: RegExp;
 }
 
 /** The candidates in order of preference for languages that several of them compile. */
 export function pathCandidates(platform: NodeJS.Platform = process.platform): readonly PathCandidate[] {
 	return [
-		{ names: ['gcc'], versionArguments: ['--version'], rejectVersion: /clang/i },
-		{ names: ['clang'], versionArguments: ['--version'] },
+		{
+			names: ['gcc'],
+			versionArguments: ['--version'],
+			rejectVersion: /clang/i,
+			versionedNames: /^gcc-\d+(?:\.\d+)*$/,
+		},
+		{ names: ['clang'], versionArguments: ['--version'], versionedNames: /^clang-\d+(?:\.\d+)*$/ },
+		// cl.exe prints its banner to stderr when it runs without arguments, and exits with 0.
+		...(platform === 'win32'
+			? [
+					{ names: ['cl'], versionArguments: [] },
+					{ names: ['clang-cl'], versionArguments: ['--version'] },
+				]
+			: []),
 		{ names: ['rustc'], versionArguments: ['--version'] },
 		{
 			// Windows installs python.exe and the py launcher; python3.exe is usually a Store alias.
@@ -53,39 +74,246 @@ export async function findExecutableOnPath(
 	return undefined;
 }
 
-/** Runs each candidate's version command and returns a profile for every one that works. */
+/** Finds each executable of a name in the absolute PATH entries, in the order of PATH. */
+export async function findExecutablesOnPath(
+	name: string,
+	environment: NodeJS.ProcessEnv = process.env,
+	platform: NodeJS.Platform = process.platform,
+): Promise<string[]> {
+	const filename = platform === 'win32' && !path.extname(name) ? `${name}.exe` : name;
+	const found: string[] = [];
+	for (const directory of pathEntries(environment, platform)) {
+		const candidate = path.join(directory, filename);
+		if (await isExecutableFile(candidate, platform)) {
+			found.push(candidate);
+		}
+	}
+	return found;
+}
+
+/** A tool that detection found, before its profile exists. */
+export interface DetectedExecutable {
+	readonly name: string;
+	readonly executable: string;
+	/** The profile ID, unique within detection. */
+	readonly id: string;
+	/** Where detection found it. The variant label shows it. */
+	readonly detectedIn: string;
+}
+
+/**
+ * Finds the compilers and interpreters on PATH, in the Visual Studio installs, and in the rustup
+ * toolchains, and returns a profile for every one that works. Each PATH directory can give a
+ * profile, and so can each version of a compiler, such as `gcc-14`. A file that two names reach,
+ * such as a symlink, gives one profile.
+ */
 export async function detectPathToolchains(
 	environment: NodeJS.ProcessEnv = process.env,
 	platform: NodeJS.Platform = process.platform,
 ): Promise<ToolchainProfile[]> {
-	const detected = await Promise.all(
-		pathCandidates(platform).map((candidate) => detectCandidate(candidate, environment, platform)),
-	);
-	return detected.filter((profile): profile is ToolchainProfile => profile !== undefined);
+	const candidates = pathCandidates(platform);
+	const [pathGroups, visualStudio] = await Promise.all([
+		Promise.all(candidates.map((candidate) => detectCandidate(candidate, environment, platform))),
+		detectVisualStudioToolchains(environment, platform),
+	]);
+	const rustupIndex = candidates.findIndex((candidate) => candidate.names.includes('rustc'));
+	const pathRustBanners = new Set(pathGroups[rustupIndex]?.map((profile) => profile.banner));
+	const rustup = await detectRustupToolchains(environment, platform, pathRustBanners);
+	// The Visual Studio compilers follow the C and C++ compilers on PATH, and the rustup toolchains follow rustc.
+	const groups = pathGroups.map((group) => group.map((detected) => detected.profile));
+	groups.splice(rustupIndex, 0, visualStudio);
+	groups.splice(rustupIndex + 2, 0, rustup);
+	const seen = new Set<string>();
+	const profiles: ToolchainProfile[] = [];
+	for (const profile of groups.flat()) {
+		const identity = await realPathKey(profile.executable);
+		if (!seen.has(identity)) {
+			seen.add(identity);
+			profiles.push(profile);
+		}
+	}
+	return profiles;
+}
+
+interface DetectedProfile {
+	readonly profile: ToolchainProfile;
+	readonly banner: string;
 }
 
 async function detectCandidate(
 	candidate: PathCandidate,
 	environment: NodeJS.ProcessEnv,
 	platform: NodeJS.Platform,
-): Promise<ToolchainProfile | undefined> {
-	for (const name of candidate.names) {
-		const executable = await findExecutableOnPath(name, environment, platform);
-		if (!executable || !(await canRunWithoutPrompt(executable, platform, environment))) {
+): Promise<DetectedProfile[]> {
+	const executables = await candidateExecutables(candidate, environment, platform);
+	const probed = await Promise.all(
+		executables.map(async (found) => {
+			if (!(await canRunWithoutPrompt(found.executable, platform, environment))) {
+				return undefined;
+			}
+			const banner = await versionBanner(found.executable, candidate.versionArguments, environment);
+			return banner === undefined || candidate.rejectVersion?.test(banner) ? undefined : { found, banner };
+		}),
+	);
+	const detected: DetectedProfile[] = [];
+	const plainBanners = new Set<string>();
+	const seen = new Set<string>();
+	for (const result of probed) {
+		if (!result) {
 			continue;
 		}
-		const banner = await versionBanner(executable, candidate.versionArguments, environment);
-		if (banner === undefined || candidate.rejectVersion?.test(banner)) {
+		const { found, banner } = result;
+		const plainName = candidate.names.includes(found.name);
+		const identity = await realPathKey(found.executable);
+		// Two names of one tool, such as `py` and `python`, give the same banner.
+		if (seen.has(identity) || (plainName && plainBanners.has(banner))) {
 			continue;
 		}
-		const detected = detectToolchainDefinition(executable, banner, platform);
-		if (!detected) {
+		seen.add(identity);
+		if (plainName) {
+			plainBanners.add(banner);
+		}
+		const definition = detectToolchainDefinition(found.executable, banner, platform);
+		if (!definition) {
 			continue;
 		}
 		const version = versionFromBanner(banner);
-		return createToolchainProfile(detected.kind, version ? `${name} ${version}` : name, executable, { id: name });
+		detected.push({
+			banner,
+			profile: createToolchainProfile(
+				definition.kind,
+				version ? `${found.name} ${version}` : found.name,
+				found.executable,
+				// A Clang banner names the default target.
+				{ id: found.id, detectedIn: found.detectedIn, target: targetFromClangBanner(banner) },
+			),
+		});
 	}
-	return undefined;
+	return detected;
+}
+
+/**
+ * The executables of a candidate: each name in each PATH directory, then the versioned names, newest
+ * first. The first executable of a name has the name as its ID, so an earlier selection stays.
+ */
+async function candidateExecutables(
+	candidate: PathCandidate,
+	environment: NodeJS.ProcessEnv,
+	platform: NodeJS.Platform,
+): Promise<DetectedExecutable[]> {
+	const versioned = candidate.versionedNames
+		? await versionedExecutables(candidate.versionedNames, environment, platform)
+		: [];
+	const byName = [
+		...(await Promise.all(
+			candidate.names.map(async (name) =>
+				(await findExecutablesOnPath(name, environment, platform)).map((executable) => ({ name, executable })),
+			),
+		)),
+		...versioned,
+	];
+	return byName.flatMap((executables) =>
+		executables.map(({ name, executable }, index) => ({
+			name,
+			executable,
+			id: index === 0 ? name : `${name}@${localFileComparisonKey(executable)}`,
+			detectedIn: index === 0 ? 'PATH' : path.dirname(executable),
+		})),
+	);
+}
+
+/** The versioned executables in the PATH directories, grouped by name, newest name first. */
+async function versionedExecutables(
+	names: RegExp,
+	environment: NodeJS.ProcessEnv,
+	platform: NodeJS.Platform,
+): Promise<{ readonly name: string; readonly executable: string }[][]> {
+	const byName = new Map<string, { readonly name: string; readonly executable: string }[]>();
+	for (const directory of pathEntries(environment, platform)) {
+		let entries: string[];
+		try {
+			entries = await fs.promises.readdir(directory);
+		} catch {
+			continue;
+		}
+		for (const entry of entries) {
+			const name = platform === 'win32' ? entry.replace(/\.exe$/i, '') : entry;
+			if ((platform === 'win32' && name === entry) || !names.test(name)) {
+				continue;
+			}
+			const executable = path.join(directory, entry);
+			if (await isExecutableFile(executable, platform)) {
+				byName.set(name, [...(byName.get(name) ?? []), { name, executable }]);
+			}
+		}
+	}
+	return [...byName.entries()]
+		.sort(([left], [right]) => right.localeCompare(left, undefined, { numeric: true }))
+		.map(([, executables]) => executables);
+}
+
+/**
+ * The rustc of each rustup toolchain. The rustc on PATH is the rustup proxy, which runs the default
+ * toolchain, so a toolchain with the same banner as a rustc on PATH is left out.
+ */
+async function detectRustupToolchains(
+	environment: NodeJS.ProcessEnv,
+	platform: NodeJS.Platform,
+	pathBanners: ReadonlySet<string>,
+): Promise<ToolchainProfile[]> {
+	const home = environment.HOME ?? environment.USERPROFILE;
+	const rustupHome = environment.RUSTUP_HOME ?? (home ? path.join(home, '.rustup') : undefined);
+	if (!rustupHome) {
+		return [];
+	}
+	let toolchains: string[];
+	try {
+		toolchains = (await fs.promises.readdir(path.join(rustupHome, 'toolchains'))).sort();
+	} catch {
+		return [];
+	}
+	const detected = await Promise.all(
+		toolchains.map(async (toolchain) => {
+			const executable = path.join(
+				rustupHome,
+				'toolchains',
+				toolchain,
+				'bin',
+				platform === 'win32' ? 'rustc.exe' : 'rustc',
+			);
+			if (!(await isExecutableFile(executable, platform))) {
+				return undefined;
+			}
+			const banner = await versionBanner(executable, ['--version'], environment);
+			if (banner === undefined || pathBanners.has(banner)) {
+				return undefined;
+			}
+			return createToolchainProfile('rust', rustupDisplayName(toolchain, banner), executable, {
+				id: `rustc+${toolchain}`,
+				detectedIn: 'rustup',
+			});
+		}),
+	);
+	return detected.filter((profile): profile is ToolchainProfile => profile !== undefined);
+}
+
+/** Names a rustup toolchain without its host triple, such as `rustc 1.99.0 nightly`. */
+export function rustupDisplayName(toolchain: string, banner: string): string {
+	const channel = toolchain.replace(
+		/-(?:x86_64|i686|aarch64|arm64|armv7|riscv64gc|powerpc64le|s390x|loongarch64)-[\w.-]+$/,
+		'',
+	);
+	const version = versionFromBanner(banner);
+	return version && !channel.startsWith(version) ? `rustc ${version} ${channel}` : `rustc ${channel}`;
+}
+
+/** Identifies a file by its real path, so a symlink and its target are one file. */
+async function realPathKey(executable: string): Promise<string> {
+	try {
+		return localFileComparisonKey(await fs.promises.realpath(executable));
+	} catch {
+		return localFileComparisonKey(executable);
+	}
 }
 
 async function versionBanner(

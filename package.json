@@ -396,22 +396,22 @@
     "viewsWelcome": [
       {
         "view": "coglens.toolchains",
-        "contents": "Looking for compilers and interpreters on PATH…",
+        "contents": "Looking for compilers and interpreters…",
         "when": "config.coglens.detectToolchainsOnPath && coglens.toolchainDetection != done"
       },
       {
         "view": "coglens.toolchains",
-        "contents": "No toolchains were found on PATH or in settings. Cogitator Lens looks for gcc, clang, rustc, python, go, zig, dotnet, and nvcc on PATH.\n[Detect Toolchains](command:coglens.DetectToolchains)\n[Add Toolchain](command:coglens.AddToolchain)",
+        "contents": "No toolchains were found or configured. Cogitator Lens looks for gcc, clang, rustc, python, go, zig, dotnet, and nvcc on PATH, for cl and clang-cl in Visual Studio installs, and for rustup toolchains.\n[Detect Toolchains](command:coglens.DetectToolchains)\n[Add Toolchain](command:coglens.AddToolchain)",
         "when": "config.coglens.detectToolchainsOnPath && coglens.toolchainDetection == done"
       },
       {
         "view": "coglens.toolchains",
-        "contents": "No toolchains are configured, and detection on PATH is turned off.\n[Add Toolchain](command:coglens.AddToolchain)\n[Turn On Detection](command:workbench.action.openSettings?%5B%22coglens.detectToolchainsOnPath%22%5D)",
+        "contents": "No toolchains are configured, and toolchain detection is turned off.\n[Add Toolchain](command:coglens.AddToolchain)\n[Turn On Detection](command:workbench.action.openSettings?%5B%22coglens.detectToolchainsOnPath%22%5D)",
         "when": "!config.coglens.detectToolchainsOnPath"
       },
       {
         "view": "coglens.compileInfo",
-        "contents": "No compilation databases or CMake projects were found. Files without a variant use a toolchain from the Toolchains view.\n[Add Variant](command:coglens.AddCompilationVariant)\nCompilation databases are read from the paths in [coglens.compilationDatabases](command:workbench.action.openSettings?%5B%22coglens.compilationDatabases%22%5D)."
+        "contents": "No compilation databases or CMake projects were found. Files without a variant use a C/C++ configuration of their folder, or a toolchain from the Toolchains view.\n[Add Variant](command:coglens.AddCompilationVariant)\nCompilation databases are read from the paths in [coglens.compilationDatabases](command:workbench.action.openSettings?%5B%22coglens.compilationDatabases%22%5D)."
       }
     ],
     "commands": [
@@ -455,7 +455,7 @@
       },
       {
         "command": "coglens.DetectToolchains",
-        "title": "Detect Toolchains on PATH",
+        "title": "Detect Toolchains",
         "category": "Cogitator Lens",
         "icon": "$(search)"
       },
@@ -650,11 +650,17 @@
             },
             "uniqueItems": true
           },
+          "coglens.cppToolsConfiguration": {
+            "type": "boolean",
+            "scope": "resource",
+            "default": true,
+            "description": "Read the configurations of the C/C++ extension in .vscode/c_cpp_properties.json, and the C_Cpp.default settings. A source that no compilation database or CMake project describes gets a variant for each configuration, with its compiler, include paths, defines, and language standards. The compilation database of a configuration gives the variants of its sources."
+          },
           "coglens.detectToolchainsOnPath": {
             "type": "boolean",
             "scope": "window",
             "default": true,
-            "description": "Look for gcc, clang, rustc, python, go, zig, dotnet, and nvcc on PATH, and use them for files that have no other compilation variant."
+            "description": "Look for gcc, clang, rustc, python, go, zig, dotnet, and nvcc on PATH, also versioned compilers such as gcc-14 and clang-18. On Windows, also look for cl and clang-cl in each Visual Studio install. Also look for the rustup toolchains. Use the toolchains for files that have no other compilation variant."
           },
           "coglens.processTimeout": {
             "type": "number",
@@ -769,6 +775,10 @@
                     "type": "string"
                   },
                   "default": []
+                },
+                "target": {
+                  "type": "string",
+                  "description": "The target triple of the compiler, such as aarch64-linux-gnu. It selects the instruction documentation of assembly listings. Without it, the compiler reports its target, and a --target argument of a variant applies first."
                 },
                 "environment": {
                   "type": "object",
@@ -1463,7 +1473,7 @@
           {
             "id": "detectToolchain",
             "title": "Find a toolchain",
-            "description": "Cogitator Lens finds compilers and interpreters on PATH. You can also add one by its path.\n[Detect Toolchains](command:coglens.DetectToolchains)\n[Add Toolchain](command:coglens.AddToolchain)",
+            "description": "Cogitator Lens finds compilers and interpreters on PATH, in Visual Studio installs, and in rustup. You can also add one by its path.\n[Detect Toolchains](command:coglens.DetectToolchains)\n[Add Toolchain](command:coglens.AddToolchain)",
             "media": {
               "markdown": "resources/walkthrough/detect-toolchain.md"
             },

@@ -93,9 +93,10 @@ export const nvcc: ToolchainDefinition = {
 	createBinaryParser: () => new SassAsmParser(listingPropertyGetter),
 	...(process.platform === 'win32' ? { prepareEnvironment: prepareNvccEnvironment } : {}),
 	discoverTools: toolDiscoverer({ disassembler: 'nvdisasm' }),
+	// The assembly listing is PTX, and the disassembly of the cubin is SASS, for each GPU target.
 	artifacts: {
-		assembly: compilerAssembly,
-		'binary-disassembly': binaryDisassembly('nvdisasm', nvdisasm),
+		assembly: { ...compilerAssembly, architecture: 'ptx' },
+		'binary-disassembly': { ...binaryDisassembly('nvdisasm', nvdisasm), architecture: 'sass' },
 		'preprocessed-source': { producer: gnuPreprocessedSourceProducer },
 	},
 };

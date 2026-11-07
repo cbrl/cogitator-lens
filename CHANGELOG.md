@@ -30,9 +30,15 @@ All notable changes to Cogitator Lens are in this file.
 - LLVM IR links each label, local value, and global to its definition, and its branches have jump arrows.
 - **Copy With Addresses** copies listing lines with their address and code byte columns.
 - Optimization remarks and stack usage show at the end of the source lines too. `coglens.showAnalysisOnSource` turns this off. `coglens.optimizationRemarkCategories` and **Filter Optimization Remarks** select the remark categories that the editors show.
+- Detection finds each MSVC toolset and the clang-cl of each Visual Studio install through vswhere, without a developer prompt. It also finds versioned compilers, such as `gcc-14` and `clang-18`, the same compiler in other PATH folders, and the rustup toolchains. On Windows, it finds `cl` and `clang-cl` on PATH.
+- The configurations of the C/C++ extension in `.vscode/c_cpp_properties.json` and the `C_Cpp.default` settings give variants. A configuration gives its compiler, include paths, defines, forced includes, and language standard to each source in its folder without another variant. Its `compileCommands` database gives the variants of its sources. `coglens.cppToolsConfiguration` turns this off.
+- Instruction hovers document POWER, PTX, and SASS. The target of the compile selects the instruction set: a `--target` argument, then the target that the compiler reports. The new `target` property of a toolchain sets it.
 
 ### Changed
 
+- Artifacts that need the same compiler output share one compile, such as the assembly and its control-flow graph. When one of them closes during the compile, the compile continues for the others. Half the processor cores, and at least two, compile at the same time.
+- The main compile lists the headers of the source for GCC, Clang, MSVC, clang-cl, and rustc. Before, a second compile listed them for each artifact.
+- The Toolchains view shows the detected toolchains under **Detected**. The label of a detected variant names where detection found it, such as `(PATH)` or the Visual Studio install. The command is now **Detect Toolchains**.
 - The status bar follows the visible artifact of the focused source. Before, it hid when the focus stayed in the source, which is where Open Artifact leaves it. **Refresh Artifact**, **Cancel Artifact Generation**, and **Save Current Options as Artifact Preset** use the same artifact, and they also work for a focused control-flow graph.
 - The Command Palette no longer shows commands that need a sidebar item.
 - `npm run test:coverage` writes a coverage report to `coverage/lcov.info`. CI uploads the report from the Linux job.
@@ -53,6 +59,7 @@ All notable changes to Cogitator Lens are in this file.
 - In a narrow control-flow graph view, the toolbar wraps, and the search box stays. Before, the controls at the end of the toolbar were past the edge of the view.
 - The control-flow graph legend stays hidden until you click **Legend**. Before, it always showed.
 - The manifest declares `onFileSystem:coglens-artifact`, so a restored artifact tab can activate the extension.
+- A clang-cl artifact refreshes when a header of its source changes. Before, clang-cl ignored `/sourceDependencies` with a warning, so only the source was watched.
 
 ## 0.9.1 - 2026-10-30
 

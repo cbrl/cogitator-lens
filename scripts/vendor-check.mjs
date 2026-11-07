@@ -52,14 +52,20 @@ const assemblyDocumentationFiles = [
 	'lib/asm-docs/amd64.ts',
 	'lib/asm-docs/arm.ts',
 	'lib/asm-docs/llvm.ts',
+	'lib/asm-docs/power.ts',
+	'lib/asm-docs/ptx.ts',
 	'lib/asm-docs/python.ts',
 	'lib/asm-docs/riscv64.ts',
+	'lib/asm-docs/sass.ts',
 	'lib/asm-docs/generated/asm-docs-amd64.ts',
 	'lib/asm-docs/generated/asm-docs-arm32.ts',
 	'lib/asm-docs/generated/asm-docs-aarch64.ts',
 	'lib/asm-docs/generated/asm-docs-riscv64.ts',
 	'lib/asm-docs/generated/asm-docs-llvm.ts',
+	'lib/asm-docs/generated/asm-docs-power.ts',
+	'lib/asm-docs/generated/asm-docs-ptx.ts',
 	'lib/asm-docs/generated/asm-docs-python.ts',
+	'lib/asm-docs/generated/asm-docs-sass.ts',
 	'types/assembly-docs.interfaces.ts',
 ];
 for (const upstreamPath of assemblyDocumentationFiles) {
@@ -106,9 +112,13 @@ for (const name of docenizerFiles) {
 	});
 }
 
-function expectedLocalContent(upstreamPath, upstreamContent) {
+export function expectedLocalContent(upstreamPath, upstreamContent) {
 	if (upstreamPath.startsWith('lib/asm-docs/generated/')) {
-		return upstreamContent.replace(/\n    \}\n\}\s*$/u, '\n    }\n    return undefined;\n}\n');
+		// The generators indent and end the lookup function in three ways. Each gets one final return.
+		return upstreamContent
+			.replace(/\n    \}\n\}\s*$/u, '\n    }\n    return undefined;\n}\n')
+			.replace(/\n    \}\n\};\s*$/u, '\n    }\n    return undefined;\n};\n')
+			.replace(/\n        \}\n    \}\n\s*$/u, '\n        }\n        return undefined;\n    }\n');
 	}
 	if (upstreamPath !== 'lib/llvm-ir.ts') {
 		return upstreamContent;

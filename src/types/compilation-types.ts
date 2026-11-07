@@ -218,9 +218,17 @@ export interface RenderedArtifactBase {
 	readonly truncated: boolean;
 }
 
+/** An instruction set that has its own instruction documentation. */
+export type TargetArchitecture = 'x86' | 'aarch64' | 'arm32' | 'riscv64' | 'power' | 'ptx' | 'sass';
+
 export interface RenderedTextArtifact extends RenderedArtifactBase {
 	readonly presentation: 'text';
 	readonly listingSyntax?: ArtifactListingSyntax;
+	/**
+	 * The instruction set of a native assembly listing, from the target of the compile. Without it,
+	 * the documentation set is the one that covers the most mnemonics.
+	 */
+	readonly architecture?: TargetArchitecture;
 	readonly lines: readonly RenderedArtifactLine[];
 	readonly links: readonly ArtifactLink[];
 	readonly folds: readonly ArtifactFold[];
@@ -296,8 +304,29 @@ export interface DefaultCompilationSettings {
 	workingDirectory?: string;
 }
 
+/**
+ * A variant for each source in a folder that no provider describes, such as a configuration of the
+ * C/C++ extension. The compilation service makes the variant of a source from it.
+ */
+export interface FolderVariant {
+	/** Unique in its provider. The variant ID of a source adds the source. */
+	readonly id: string;
+	readonly folder: string;
+	readonly toolchainProfileId: string;
+	readonly workingDirectory: string;
+	/** The arguments for C and Objective-C sources. */
+	readonly cArguments: readonly string[];
+	/** The arguments for the other sources. */
+	readonly cppArguments: readonly string[];
+	readonly environment: Readonly<Record<string, string>>;
+	readonly displayLabel: string;
+	readonly configuration?: string;
+}
+
 export interface ProviderSnapshot {
 	provider: import('../buildsystems/variant-provider.js').ConfigurationOrigin;
 	toolchainProfiles: readonly import('./toolchain-types.js').ToolchainProfile[];
 	variants: readonly CompilationVariant[];
+	/** Variants for the sources in a folder that no provider describes. */
+	folderVariants?: readonly FolderVariant[];
 }

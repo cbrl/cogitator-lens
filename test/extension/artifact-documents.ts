@@ -76,8 +76,8 @@ interface DocumentEnvironment {
 	readonly provider: ArtifactDocumentProvider;
 	/** The URI of an assembly document of the fake variant with a preset. */
 	uri(preset?: string, kind?: ArtifactKind): vscode.Uri;
-	/** Sets the arguments of the fake variant. */
-	compileWith(args: readonly string[]): void;
+	/** Sets the arguments and the environment of the fake variant. */
+	compileWith(args: readonly string[], environment?: Readonly<Record<string, string>>): void;
 	/** Announces a change to the settings with these keys. */
 	changeSettings(...keys: string[]): void;
 	provide(uri: vscode.Uri): Promise<string>;
@@ -129,7 +129,7 @@ async function withDocumentEnvironment(
 			registry,
 			provider,
 			uri: (preset = 'default', kind = 'assembly') => getArtifactUri(source, { id: variantId }, kind, preset),
-			compileWith: (args) =>
+			compileWith: (args, environment = {}) =>
 				service.reconcileProviderSnapshot({
 					provider: 'cmake',
 					toolchainProfiles: [profile],
@@ -141,7 +141,7 @@ async function withDocumentEnvironment(
 							toolchainProfileId: profile.id,
 							workingDirectory: directory,
 							arguments: args,
-							environment: {},
+							environment,
 							displayLabel: 'Fake documents',
 						},
 					],
@@ -250,6 +250,54 @@ export async function verifyArtifactDocumentPlaceholder(repositoryRoot: string):
 		const emptyUri = uri('third');
 		assert.match(await provide(emptyUri), /^The compiler made no Assembly output for main\.cpp\./u);
 		assert.equal(provider.getArtifactDocumentState(emptyUri)?.status.state, 'successful');
+	});
+}
+
+/**
+ * Two documents that need the same output share one compile, and the main compile lists the
+ * inputs. When one document closes during the compile, the compile continues for the other.
+ */
+export async function verifySharedCompile(repositoryRoot: string): Promise<void> {
+	await withDocumentEnvironment(repositoryRoot, async ({ source, registry, provider, uri, compileWith, provide }) => {
+		const runsFile = path.join(path.dirname(source.fsPath), 'runs.txt');
+		const runs = async (): Promise<string[]> =>
+			(await fs.promises.readFile(runsFile, 'utf8').catch(() => '')).split('\n').filter(Boolean);
+		const plainUri = uri();
+		const normalizedUri = getArtifactUri(source, { id: 'fake:documents' }, 'assembly', 'default', undefined, {
+			normalized: true,
+		});
+
+		compileWith(['--delay=800'], { COGLENS_FAKE_RUNS: runsFile });
+		let plainDone = nextChange(provider, plainUri);
+		let normalizedDone = nextChange(provider, normalizedUri);
+		await Promise.all([provide(plainUri), provide(normalizedUri)]);
+		await Promise.all([plainDone, normalizedDone]);
+		assert.equal(await provide(plainUri), 'object');
+		assert.equal(await provide(normalizedUri), 'object');
+		assert.deepEqual(await runs(), ['compile'], 'One compile, and no second run for the inputs');
+
+		// New arguments start a new compile. The closed document leaves it, and the other one still finishes.
+		plainDone = nextChange(provider, plainUri);
+		normalizedDone = nextChange(provider, normalizedUri);
+		compileWith(['--delay=800', '-DNEXT'], { COGLENS_FAKE_RUNS: runsFile });
+		await Promise.all([plainDone, normalizedDone]);
+		const plainResult = provide(plainUri);
+		const normalizedResult = provide(normalizedUri);
+		const started = Date.now();
+		while ((await runs()).length < 2 && Date.now() - started < 10_000) {
+			await new Promise((resolve) => setTimeout(resolve, 20));
+		}
+		await new Promise((resolve) => setTimeout(resolve, 100));
+		registry.unregister(plainUri);
+		assert.equal(await normalizedResult, 'object');
+		await plainResult;
+		assert.equal(provider.getArtifactDocumentState(normalizedUri)?.status.state, 'successful');
+		assert.match(
+			provider.getRenderedArtifact(normalizedUri)?.command.args.join(' ') ?? '',
+			/-DNEXT/u,
+			'The listing comes from the new arguments',
+		);
+		assert.deepEqual(await runs(), ['compile', 'compile']);
 	});
 }
 

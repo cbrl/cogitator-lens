@@ -18,6 +18,8 @@ import {
 	type ArtifactRequest,
 	type CompilationVariant,
 	type RenderedTextArtifact,
+	type FolderVariant,
+	type ProviderSnapshot,
 	type ToolchainProfile,
 } from '../../src/types/index.js';
 import { SourceUriMap, sourceUriComparisonKey } from '../../src/file-identity.js';
@@ -54,6 +56,7 @@ import {
 	verifyArtifactDocumentTabs,
 	verifyComparisonTargets,
 	verifyListingLineLimitRefresh,
+	verifySharedCompile,
 	verifyArtifactExperiments,
 	verifyOpenArtifactArguments,
 } from './artifact-documents.js';
@@ -110,12 +113,14 @@ export async function run(): Promise<void> {
 	await verifyArtifactDocumentPlaceholder(workspaceFolder.uri.fsPath);
 	await verifyArtifactDocumentTabs(workspaceFolder.uri.fsPath);
 	await verifyListingLineLimitRefresh(workspaceFolder.uri.fsPath);
+	await verifySharedCompile(workspaceFolder.uri.fsPath);
 	await verifyArtifactExperiments(workspaceFolder.uri.fsPath);
 	verifyComparisonTargets();
 	verifyOpenArtifactArguments();
 	await verifyArtifactGeneratorFollowsVariant(workspaceFolder);
 	await verifyFallbackVariants(workspaceFolder);
 	await verifyFallbackLanguagesAndBareNames();
+	await verifyFolderVariants();
 	await verifyToolchainChangeRefreshesItsDocuments();
 	await verifyNativeStackProduction(workspaceFolder);
 	await verifyArtifactDetailsTree(workspaceFolder);
@@ -761,6 +766,92 @@ async function verifyFallbackVariants(workspaceFolder: vscode.WorkspaceFolder): 
 	}
 }
 
+/**
+ * A folder variant, such as a C/C++ configuration, gives each source in its folder a variant ahead
+ * of the other fallbacks. The variant takes the arguments of the language of the source.
+ */
+async function verifyFolderVariants(): Promise<void> {
+	const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'coglens-folder-variant-'));
+	const outside = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'coglens-folder-outside-'));
+	const cSource = vscode.Uri.file(path.join(temporaryDirectory, 'src', 'main.c'));
+	const cppSource = vscode.Uri.file(path.join(temporaryDirectory, 'main.cpp'));
+	const pythonSource = vscode.Uri.file(path.join(temporaryDirectory, 'script.py'));
+	const outsideSource = vscode.Uri.file(path.join(outside, 'other.cpp'));
+	await fs.promises.mkdir(path.dirname(cSource.fsPath));
+	await fs.promises.writeFile(cSource.fsPath, 'int main(void) { return 0; }\n');
+	await fs.promises.writeFile(cppSource.fsPath, 'int main() { return 0; }\n');
+	await fs.promises.writeFile(pythonSource.fsPath, 'print(1)\n');
+	await fs.promises.writeFile(outsideSource.fsPath, 'int main() { return 0; }\n');
+	const configurationChange = new vscode.EventEmitter<void>();
+	const service = new CompilationService(testConfiguration(configurationChange));
+	let changes = 0;
+	const subscription = service.onFallbackVariantsChanged(() => changes++);
+	const snapshot = (folderVariants: readonly FolderVariant[]): ProviderSnapshot => ({
+		provider: 'cpptools',
+		toolchainProfiles: [{ ...toolchainProfile('gcc', '-O0'), displayName: 'gcc' }],
+		variants: [],
+		folderVariants,
+	});
+	const linux: FolderVariant = {
+		id: 'linux',
+		folder: temporaryDirectory,
+		toolchainProfileId: 'gcc',
+		workingDirectory: temporaryDirectory,
+		cArguments: ['-std=c11'],
+		cppArguments: ['-std=c++20'],
+		environment: {},
+		displayLabel: 'Linux · gcc (C/C++ configuration)',
+		configuration: 'Linux',
+	};
+	try {
+		service.reconcileProviderSnapshot({
+			provider: 'path',
+			toolchainProfiles: [{ ...toolchainProfile('clang', '-O0'), kind: 'clang', displayName: 'clang 18' }],
+			variants: [],
+		});
+		service.reconcileProviderSnapshot(snapshot([linux]));
+		service.reconcileProviderSnapshot(snapshot([linux]));
+		assert.equal(changes, 1, 'An equal snapshot announces nothing');
+		for (const source of [cSource, cppSource, pythonSource, outsideSource]) {
+			await vscode.workspace.openTextDocument(source);
+		}
+
+		const cppVariants = service.getVariants(cppSource);
+		assert.deepEqual(
+			cppVariants.map((variant) => [variant.id, variant.toolchainProfileId, variant.displayLabel]),
+			[
+				[`cpptools:linux|${sourceUriComparisonKey(cppSource)}`, 'cpptools:gcc', linux.displayLabel],
+				[`toolchain:path:clang|${sourceUriComparisonKey(cppSource)}`, 'path:clang', 'clang 18 (PATH)'],
+			],
+		);
+		assert.deepEqual(cppVariants[0].arguments, ['-std=c++20']);
+		assert.equal(cppVariants[0].configuration, 'Linux');
+		assert.equal(service.getSelectedVariant(cppSource)?.id, cppVariants[0].id, 'The configuration comes first');
+		assert.deepEqual(service.getVariants(cSource)[0].arguments, ['-std=c11'], 'A C source in a subfolder');
+		assert.equal(
+			service.getVariants(pythonSource).some((variant) => variant.provider === 'cpptools'),
+			false,
+			'gcc does not compile Python',
+		);
+		assert.equal(
+			service.getVariants(outsideSource).some((variant) => variant.provider === 'cpptools'),
+			false,
+			'A source outside the folder',
+		);
+		assert.equal(service.findVariant(cppSource, cppVariants[0].id)?.toolchainProfileId, 'cpptools:gcc');
+
+		service.reconcileProviderSnapshot(snapshot([]));
+		assert.equal(changes, 2);
+		assert.equal(service.findVariant(cppSource, cppVariants[0].id), undefined);
+	} finally {
+		subscription.dispose();
+		service.dispose();
+		configurationChange.dispose();
+		await fs.promises.rm(temporaryDirectory, { recursive: true, force: true });
+		await fs.promises.rm(outside, { recursive: true, force: true });
+	}
+}
+
 async function verifyFallbackLanguagesAndBareNames(): Promise<void> {
 	const temporaryDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'coglens-fallback-language-'));
 	const cppSource = vscode.Uri.file(path.join(temporaryDirectory, 'main.cpp'));
@@ -1395,6 +1486,9 @@ async function verifyNativeStackProduction(workspaceFolder: vscode.WorkspaceFold
 	assert.match(raw.text, /fake_function\(\)\s+16\s+static/);
 	assert.equal(raw.dependencyCoverage, 'complete');
 	assert.equal(raw.inputs.length, 1);
+	// The main compile lists the inputs, so no second compile runs.
+	assert.deepEqual(raw.runs, ['compile']);
+	assert.ok(raw.command.args.includes('-MD'));
 	assert.ok(raw.command.environmentVariableNames.includes('COGLENS_FAKE_TRACE'));
 	assert.deepEqual(raw.command.environmentVariableNames, [...raw.command.environmentVariableNames].sort());
 	const output = raw.command.args[raw.command.args.indexOf('-o') + 1];
@@ -1424,7 +1518,15 @@ async function verifyNativeStackProduction(workspaceFolder: vscode.WorkspaceFold
 		(error: unknown) => error instanceof Error && /exited with code 2/.test(error.message),
 	);
 
-	const dependencyFallback = await runFakeNativeStackProducer(root, ['--dependency-fail']);
+	// A compiler that writes no file from the main compile gets a second run.
+	const secondRun = await runFakeNativeStackProducer(root, ['--no-inline-dependencies']);
+	assert.equal(secondRun.dependencyCoverage, 'complete');
+	assert.deepEqual(secondRun.runs, ['compile', 'dependencies']);
+
+	const dependencyFallback = await runFakeNativeStackProducer(root, [
+		'--no-inline-dependencies',
+		'--dependency-fail',
+	]);
 	assert.equal(dependencyFallback.dependencyCoverage, 'source-only');
 	assert.equal(dependencyFallback.inputs.length, 1);
 
@@ -1532,12 +1634,14 @@ async function waitForFile(filename: string): Promise<void> {
 	}
 }
 
+/** The output of the fake stack compiler, and the runs of the compiler in order: `compile` or `dependencies`. */
 async function runFakeNativeStackProducer(
 	repositoryRoot: string,
 	additionalArguments: readonly string[],
-): Promise<import('../../src/types/index.js').RawArtifact> {
+): Promise<import('../../src/types/index.js').RawArtifact & { readonly runs: readonly string[] }> {
 	const traceDirectory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'coglens-stack-test-'));
 	const trace = path.join(traceDirectory, 'temporary-directory.txt');
+	const runs = path.join(traceDirectory, 'runs.txt');
 	const cancellation = new vscode.CancellationTokenSource();
 	try {
 		const profile: ToolchainProfile = {
@@ -1559,7 +1663,7 @@ async function runFakeNativeStackProducer(
 				vscode.Uri.file(path.join(repositoryRoot, 'test/fixtures/binary/source.cpp')),
 				{
 					args: [],
-					env: { COGLENS_FAKE_TRACE: trace },
+					env: { COGLENS_FAKE_TRACE: trace, COGLENS_FAKE_RUNS: runs },
 					workingDirectory: repositoryRoot,
 					productionOptions: defaultArtifactOptions.production,
 					onInvocation: (details) => {
@@ -1570,7 +1674,8 @@ async function runFakeNativeStackProducer(
 				cancellation.token,
 			);
 			assert.deepEqual(observedInvocation, raw.command);
-			return { ...raw, kind: 'stack-analysis' };
+			const recordedRuns = (await fs.promises.readFile(runs, 'utf8')).split('\n').filter(Boolean);
+			return { ...raw, kind: 'stack-analysis', runs: recordedRuns };
 		} catch (error) {
 			if (error instanceof ToolExitError) {
 				throw new Error(`${error.message}\nstdout: ${error.stdout}\nstderr: ${error.stderr}`, { cause: error });

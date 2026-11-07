@@ -2,8 +2,8 @@
 
 Cogitator Lens compiles your files with the compilers and interpreters on your computer.
 
-- **Detect Toolchains** looks on PATH for gcc, clang, rustc, python, go, zig, dotnet, and nvcc.
-- **Add Toolchain** adds a compiler by its path, such as a cross compiler or MSVC `cl.exe`.
+- **Detect Toolchains** looks on PATH for gcc, clang, rustc, python, go, zig, dotnet, and nvcc. It also finds versioned compilers, such as `gcc-14`, and the rustup toolchains. On Windows, it finds `cl.exe` and `clang-cl` in each Visual Studio install.
+- **Add Toolchain** adds a compiler by its path, such as a cross compiler.
 
 The **Toolchains** view in the Cogitator Lens side bar shows each toolchain that it found.
 

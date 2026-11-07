@@ -60,6 +60,8 @@ export interface ToolchainProfileOverrides {
 	readonly defaultArguments?: readonly string[];
 	readonly environment?: Readonly<Record<string, string>>;
 	readonly tools?: Readonly<Record<string, AuxiliaryTool>>;
+	readonly detectedIn?: string;
+	readonly target?: string;
 }
 
 /** Creates a normalized profile with discovered tools, optionally overridden by persisted settings. */
@@ -82,6 +84,8 @@ export function createToolchainProfile(
 			...definition.discoverTools?.(normalized),
 			...normalizeAuxiliaryTools(overrides.tools),
 		}),
+		...(overrides.detectedIn === undefined ? {} : { detectedIn: overrides.detectedIn }),
+		...(overrides.target ? { target: overrides.target } : {}),
 	};
 }
 

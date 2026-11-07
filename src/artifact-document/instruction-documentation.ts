@@ -21,10 +21,9 @@ const inferredProviders = new WeakMap<RenderedTextArtifact, NamedProvider>();
 /**
  * Looks up documentation emitted by Compiler Explorer's docenizers.
  *
- * The rendered artifact's listing syntax selects its documentation set. Native
- * assembly target architecture is not currently part of a compilation profile,
- * so it is inferred once per rendered listing by scoring its distinct mnemonics
- * against each documentation set.
+ * The listing syntax of the artifact selects its documentation set. For a native assembly listing,
+ * the target of the compile selects the set. Without a target, the distinct mnemonics of the
+ * listing select the set that covers the most of them, once for each listing.
  */
 export function documentationForInstruction(
 	artifact: RenderedTextArtifact,
@@ -47,7 +46,11 @@ export function documentationForOpcode(
 		return undefined;
 	}
 	const namedProvider = documentationProvider(artifact, providerDeclaration);
-	const information = namedProvider.provider.getInstructionInformation(mnemonic);
+	const information =
+		namedProvider.provider.getInstructionInformation(mnemonic) ??
+		(namedProvider.baseMnemonic && mnemonic.includes('.')
+			? namedProvider.provider.getInstructionInformation(mnemonic.slice(0, mnemonic.indexOf('.')))
+			: null);
 	return information ? documentation(mnemonic, namedProvider, information) : undefined;
 }
 
@@ -67,6 +70,10 @@ function documentationProvider(
 ): NamedProvider {
 	if (!('infer' in declaration)) {
 		return declaration;
+	}
+	const known = artifact.architecture && declaration.byArchitecture[artifact.architecture];
+	if (known) {
+		return known;
 	}
 	let provider = inferredProviders.get(artifact);
 	if (!provider) {

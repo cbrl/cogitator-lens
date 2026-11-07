@@ -19,6 +19,7 @@ export interface ToolchainSettings {
 	defaultArguments?: string[];
 	environment?: Record<string, string>;
 	tools?: Record<string, AuxiliaryTool>;
+	target?: string;
 }
 
 /** Strongly typed, canonical toolchain representation used after configuration loading. */
@@ -30,6 +31,13 @@ export interface ToolchainProfile {
 	defaultArguments: readonly string[];
 	environment: Readonly<Record<string, string>>;
 	tools: Readonly<Record<string, AuxiliaryTool>>;
+	/**
+	 * Where detection found the toolchain, such as `PATH`, a PATH directory, a Visual Studio
+	 * install, or `rustup`. The label of a detected variant shows it.
+	 */
+	readonly detectedIn?: string;
+	/** The target triple, such as `aarch64-linux-gnu`. Without it, the compiler reports its target. */
+	readonly target?: string;
 }
 
 export interface CompileOptions {

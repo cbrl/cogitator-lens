@@ -104,8 +104,8 @@ async function explainMissingVariant(document: vscode.TextDocument, deps: Varian
 	const detectionEnabled = configuration.getDetectToolchainsOnPath();
 	const choice = await vscode.window.showWarningMessage(
 		detectionEnabled
-			? `No toolchain that compiles ${name} was found on PATH or in settings.`
-			: `No toolchain that compiles ${name} is configured, and detection on PATH is turned off.`,
+			? `No toolchain that compiles ${name} was detected or configured.`
+			: `No toolchain that compiles ${name} is configured, and toolchain detection is turned off.`,
 		'Add Toolchain…',
 		detectionEnabled ? 'Detect Again' : 'Turn On Detection',
 	);

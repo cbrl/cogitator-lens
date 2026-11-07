@@ -439,12 +439,25 @@ export function normalizeDumpbinOutput(output: string): string {
 }
 
 /**
- * Compiles once more to list the inputs. The object and the program database go to the temporary
- * directory. Without `/Fd`, `/Zi` in the provider arguments writes `vc140.pdb` into the working
- * directory.
+ * Whether cl.exe knows `/sourceDependencies`, which came with toolset 14.27. An older cl.exe
+ * ignores the switch and reads the file name after it as an input, with two warnings. A compiler
+ * outside a Visual Studio install has no version in its path, so it gets the switch.
+ */
+export function supportsSourceDependencies(executable: string): boolean {
+	const version = /[\\/]VC[\\/]Tools[\\/]MSVC[\\/](\d+)\.(\d+)\./i.exec(executable);
+	return !version || Number(version[1]) > 14 || (Number(version[1]) === 14 && Number(version[2]) >= 27);
+}
+
+/**
+ * The main compile lists the inputs. cl.exe 19.52 writes the file with `/c` and with `/E`, and the
+ * preprocessed output does not change. Otherwise, a second compile lists them. Its object and
+ * program database go to the temporary directory. Without `/Fd`, `/Zi` in the provider arguments
+ * writes `vc140.pdb` into the working directory.
  */
 export const msvcDependencyCollection: DependencyCollectionSpec = Object.freeze({
 	outputFilename: 'dependencies.json',
+	inlineArguments: (outputFile: string, profile: ToolchainProfile) =>
+		supportsSourceDependencies(profile.executable) ? ['/sourceDependencies', outputFile] : [],
 	arguments: (outputFile: string, temporaryDirectory: string) => [
 		'/c',
 		'/sourceDependencies',

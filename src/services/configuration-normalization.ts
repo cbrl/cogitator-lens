@@ -81,6 +81,7 @@ export function parseToolchainSettings(
 		defaultArguments: expandedStrings(value.defaultArguments, context),
 		environment: expandedRecord(value.environment, context),
 		tools: parseAuxiliaryTools(value.tools, context),
+		target: asString(value.target).trim() || undefined,
 	});
 }
 

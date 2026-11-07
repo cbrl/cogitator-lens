@@ -1,4 +1,4 @@
-import type { RenderedTextArtifact } from '../../types/index.js';
+import type { RenderedTextArtifact, TargetArchitecture } from '../../types/index.js';
 import type { BaseAssemblyDocumentationProvider } from '../../vendor/lib/asm-docs/base.js';
 import type { ArtifactListingSyntax } from './artifact-contracts.js';
 import { nativeAssemblyListing } from '../assembly/native-assembly-listing.js';
@@ -34,13 +34,25 @@ export interface ListingTokenContext {
 export interface NamedProvider {
 	readonly label: string;
 	readonly provider: BaseAssemblyDocumentationProvider;
+	/**
+	 * The set documents each instruction without its suffixes, so a mnemonic such as
+	 * `ld.global.f32` also looks up `ld`.
+	 */
+	readonly baseMnemonic?: boolean;
+}
+
+/** The documentation sets of a native listing, and the set of each known instruction set. */
+export interface InferredDocumentation {
+	/** The sets that the mnemonics select from when the instruction set is unknown. */
+	readonly infer: readonly NamedProvider[];
+	readonly byArchitecture: Readonly<Partial<Record<TargetArchitecture, NamedProvider>>>;
 }
 
 export interface ListingSyntaxDefinition {
 	readonly label: string;
 	readonly commentMarkers: readonly string[];
 	readonly mnemonic: (text: string) => string | undefined;
-	readonly documentation: NamedProvider | { readonly infer: readonly NamedProvider[] };
+	readonly documentation: NamedProvider | InferredDocumentation;
 	readonly tokens: (text: string, context: ListingTokenContext) => readonly LineToken[];
 }
 

@@ -19,7 +19,7 @@ export function register(context: vscode.ExtensionContext, deps: ToolchainComman
 		vscode.commands.registerCommand('coglens.DetectToolchains', async () => {
 			if (!configuration.getDetectToolchainsOnPath()) {
 				const choice = await vscode.window.showInformationMessage(
-					'Detection on PATH is turned off.',
+					'Toolchain detection is turned off.',
 					'Open Setting',
 				);
 				if (choice) {
@@ -31,14 +31,14 @@ export function register(context: vscode.ExtensionContext, deps: ToolchainComman
 				return;
 			}
 			await vscode.window.withProgress(
-				{ location: vscode.ProgressLocation.Window, title: 'Looking for toolchains on PATH' },
+				{ location: vscode.ProgressLocation.Window, title: 'Looking for toolchains' },
 				() => pathToolchains.refresh(),
 			);
 			const found = compilationService.toolchainRegistry.getProfiles('path');
 			await vscode.window.showInformationMessage(
 				found.length > 0
-					? `Found on PATH: ${found.map((profile) => profile.displayName).join(', ')}.`
-					: 'No supported compilers or interpreters were found on PATH.',
+					? `Found: ${found.map((profile) => profile.displayName).join(', ')}.`
+					: 'No supported compilers or interpreters were found.',
 			);
 		}),
 		vscode.commands.registerCommand('coglens.AddToolchain', async () => {

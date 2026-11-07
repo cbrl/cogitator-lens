@@ -8,14 +8,25 @@ Cogitator Lens is a VS Code extension for inspecting compiler and interpreter ar
 
 Open a source file and run `Cogitator Lens: Open Artifact`. Without any configuration, Cogitator
 Lens uses the compilers and interpreters it finds on `PATH`: `gcc`, `clang`, `rustc`, `python3` (or
-`python`), `go`, `zig`, `dotnet`, and `nvcc`. Run `Cogitator Lens: Detect Toolchains on PATH` after
-installing a new one, or set `coglens.detectToolchainsOnPath` to `false` to turn detection off. When
-several toolchains compile a file, run `Cogitator Lens: Select Compilation Variant` to switch between
-them.
+`python`), `go`, `zig`, `dotnet`, and `nvcc`. It also finds versioned compilers, such as `gcc-14`
+and `clang-18`, and the same compiler in other `PATH` folders. It finds each rustup toolchain that
+differs from the `rustc` on `PATH`. On Windows, it finds `cl` and `clang-cl` on `PATH`. It also finds
+each MSVC toolset and the clang-cl of each Visual Studio install, without a developer prompt. Run
+`Cogitator Lens: Detect Toolchains` after you install a new one. Set `coglens.detectToolchainsOnPath`
+to `false` to turn detection off. When several toolchains compile a file, run `Cogitator Lens: Select
+Compilation Variant` to switch between them.
 
 Cogitator Lens also discovers C and C++ compile settings from `compile_commands.json` and
 `build/compile_commands.json` in each workspace folder. Set `coglens.compilationDatabases` to use
 other paths, or to `[]` to disable compilation-database discovery.
+
+It also reads the configurations of the C/C++ extension in `.vscode/c_cpp_properties.json` and the
+`C_Cpp.default` settings. A configuration with a `compilerPath` gives a variant to each source in
+its folder that has no other variant. The variant uses the include paths, defines, forced includes,
+language standard, and `compilerArgs` of the configuration. A recursive include path, such as
+`${workspaceFolder}/**`, adds only its base folder, because compilers do not search below an include
+folder. The `compileCommands` database of a configuration gives the variants of its sources. Set
+`coglens.cppToolsConfiguration` to `false` to turn this off.
 
 When [CMake Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools) is
 installed, its configured projects are also available. If both sources describe a file, select the
@@ -34,6 +45,12 @@ the editor keeps the last successful output and marks it on the first line; hove
 compiler output. Diagnostics appear in the Problems view, for text artifacts and control-flow graphs.
 Open artifacts follow edits to their variant and toolchain. An empty listing names the likely
 causes, such as an unused `static` function or a template without an instantiation.
+
+Artifacts that need the same compiler output share one compile, such as the assembly and its
+control-flow graph. The same compile also lists the headers that the source reads, and an edit to a
+header then refreshes the artifact. The number of compiles at the same time is half the processor
+cores, and at least two. The other compiles wait. **Cancel Artifact Generation** stops a compile only
+when no other open artifact needs it.
 
 The compiler reads the saved file. While a source has unsaved changes, the status bar shows
 "Unsaved source", and the artifact says so on its first line. The line mapping to that source stops
@@ -81,6 +98,11 @@ and **Show Call Hierarchy** shows the calls in the listing. LLVM IR links each l
 and global to its definition. **Copy With Addresses** copies the listing with its address and code
 byte columns, which are not part of the text.
 
+Hover an instruction to see its documentation. The target of the compile selects the instruction
+set: x86, AArch64, ARM32, RISC-V, POWER, PTX, or SASS. A `--target` argument applies first, then the
+target that the compiler reports. Set `target` on a toolchain when the compiler reports the wrong
+one. Without a target, the instruction set that covers the most mnemonics of the listing applies.
+
 The optimization remarks and the stack usage of an open artifact also show at the end of the source
 lines. Set `coglens.showAnalysisOnSource` to `false` to show them only in the artifact.
 
@@ -114,7 +136,7 @@ toolchain and arguments to try first. You can also add, clone, edit, and delete 
 sidebar.
 
 A toolchain has the form
-`{ displayName, kind, executable, defaultArguments?, environment?, tools? }`. Supported kinds are
+`{ displayName, kind, executable, defaultArguments?, environment?, tools?, target? }`. Supported kinds are
 `gcc`, `clang`, `apple-clang`, `clang-cl`, `msvc`, `rust`, `python`, `dotnet`, `go`, `zig`, and `nvcc`. Use
 `defaultArguments` for include paths and macro definitions. Set auxiliary tools, such as a
 disassembler or demangler, in `tools` when they are not found beside the compiler or on `PATH`.
@@ -291,7 +313,8 @@ The nvcc assembly artifact is line-mapped device PTX, while binary disassembly c
 runs the sibling `nvdisasm` to render SASS. On Windows, the Visual Studio host-compiler environment
 is discovered in the same way as MSVC. A CUDA release accepts only some MSVC toolsets. To use a
 toolset other than the default, add `-ccbin` with the path of its `cl.exe` to the arguments. The
-environment of that toolset is then loaded.
+environment of that toolset is then loaded. The instruction hovers show the PTX documentation in the
+assembly and the SASS documentation in the binary disassembly.
 
 ## Development samples
 

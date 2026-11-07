@@ -4,15 +4,28 @@ const path = require('node:path');
 const args = process.argv.slice(2);
 const source = args.at(-1);
 
+if (process.env.COGLENS_FAKE_RUNS) {
+	fs.appendFileSync(process.env.COGLENS_FAKE_RUNS, `${args.includes('-M') ? 'dependencies' : 'compile'}\n`);
+}
+
+function writeDependencies() {
+	const dependencyOutput = args[args.indexOf('-MF') + 1];
+	const dependencySource = source.replace(/([ #:$\\])/g, '\\$1');
+	fs.writeFileSync(dependencyOutput, `output.o: ${dependencySource}\n`);
+}
+
 if (args.includes('-M')) {
 	if (args.includes('--dependency-fail')) {
 		process.exitCode = 2;
 	} else {
-		const dependencyOutput = args[args.indexOf('-MF') + 1];
-		const dependencySource = source.replace(/([ #:$\\])/g, '\\$1');
-		fs.writeFileSync(dependencyOutput, `output.o: ${dependencySource}\n`);
+		writeDependencies();
 	}
 	return;
+}
+
+// --no-inline-dependencies makes a compiler that ignores -MD, so the second run must list the inputs.
+if (args.includes('-MD') && !args.includes('--no-inline-dependencies')) {
+	writeDependencies();
 }
 
 const sourceDependenciesIndex = args.findIndex((argument) => argument.toLowerCase() === '/sourcedependencies');

@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import test from 'node:test';
 import { gnuObjdump, llvmObjdump } from '../../src/artifacts/binary-disassembly/binary-disassembly-producer.js';
-import { dumpbin } from '../../src/toolchains/msvc.js';
+import { dumpbin, supportsSourceDependencies } from '../../src/toolchains/msvc.js';
+import { toolchainProfile } from '../support/toolchains.js';
 import {
 	clangClLlvmIrOutput,
 	gccControlFlowGraphOutput,
@@ -20,7 +21,7 @@ import { rustArtifactArguments, rustOutputArguments } from '../../src/toolchains
 import { nvccOutputArguments, nvdisasm } from '../../src/toolchains/nvcc.js';
 import { zigLlvmIrOutput, zigOutputArguments } from '../../src/toolchains/zig.js';
 import { intelOutputArguments } from '../../src/toolchains/toolchain-backend.js';
-import { defaultArtifactOptions } from '../../src/types/index.js';
+import { defaultArtifactOptions, type ToolchainKind } from '../../src/types/index.js';
 import {
 	dotNetCompilerCommandLine,
 	dotNetIlDasmArguments,
@@ -282,6 +283,54 @@ test('dependency collection names its own output and keeps the project crate ide
 		'--color=never',
 	]);
 	assert.equal(getToolchainDefinition('python').dependencyCollection, undefined);
+});
+
+test('the main compile lists the inputs when the compiler can do it', () => {
+	const inline = (kind: ToolchainKind, executable = '/usr/bin/compiler') =>
+		getToolchainDefinition(kind).dependencyCollection?.inlineArguments?.(
+			'deps.out',
+			toolchainProfile(kind, { executable }),
+		);
+	assert.deepEqual(inline('gcc'), ['-MD', '-MF', 'deps.out']);
+	assert.deepEqual(inline('clang'), ['-MD', '-MF', 'deps.out']);
+	assert.deepEqual(inline('rust'), ['--emit=dep-info=deps.out']);
+	const visualStudio = 'C:\\VS\\VC\\Tools\\MSVC\\14.52.37025\\bin\\Hostx64\\x64\\cl.exe';
+	assert.deepEqual(inline('msvc', visualStudio), ['/sourceDependencies', 'deps.out']);
+	// Toolset 14.26 does not know the switch, and it would read the file name as an input.
+	assert.deepEqual(inline('msvc', visualStudio.replace('14.52.37025', '14.26.28801')), []);
+	assert.deepEqual(inline('msvc', 'cl.exe'), ['/sourceDependencies', 'deps.out']);
+
+	// clang-cl ignores /sourceDependencies, so it writes the Make format of the Clang driver.
+	const clangCl = getToolchainDefinition('clang-cl').dependencyCollection;
+	assert.deepEqual(inline('clang-cl'), ['/clang:-MD', '/clang:-MF', '/clang:deps.out']);
+	assert.deepEqual(clangCl?.arguments('deps.out', temporary, []), [
+		'/Zs',
+		'/clang:-MD',
+		'/clang:-MF',
+		'/clang:deps.out',
+	]);
+	assert.deepEqual(clangCl?.parse('main.obj: main.c inc/helper.h\n', temporary), [
+		path.resolve(temporary, 'inc', 'helper.h'),
+		path.resolve(temporary, 'main.c'),
+	]);
+});
+
+test('supportsSourceDependencies reads the toolset version of the path', () => {
+	assert.equal(supportsSourceDependencies('C:\\VS\\VC\\Tools\\MSVC\\14.27.29110\\bin\\Hostx64\\x64\\cl.exe'), true);
+	assert.equal(supportsSourceDependencies('C:\\VS\\VC\\Tools\\MSVC\\14.16.27023\\bin\\Hostx64\\x64\\cl.exe'), false);
+	assert.equal(supportsSourceDependencies('C:/VS/VC/Tools/MSVC/15.1.1/bin/Hostx64/x64/cl.exe'), true);
+	assert.equal(supportsSourceDependencies('C:\\tools\\cl.exe'), true);
+});
+
+test('clang-cl owns the dependency switches of the Clang driver', () => {
+	assert.deepEqual(
+		getToolchainDefinition('clang-cl').stripOwnedArguments(
+			['/clang:-MD', '/clang:-MF', '/clang:out.d', '/clang:-MTtarget', '/clang:-MMD', '/O2'],
+			'main.c',
+			temporary,
+		),
+		['/O2'],
+	);
 });
 
 test('Intel syntax arguments appear only where the syntax is selectable', () => {

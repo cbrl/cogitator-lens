@@ -92,6 +92,12 @@ export interface ArtifactOutputSpec {
 export interface DependencyCollectionSpec {
 	/** Name reserved inside the backend's per-invocation temporary directory. */
 	readonly outputFilename: string;
+	/**
+	 * Arguments that make the main compile also write the dependency file, so no second compile
+	 * is necessary. An empty list means that this compiler cannot do it. When the file is missing
+	 * or lists nothing, the companion invocation runs.
+	 */
+	readonly inlineArguments?: (outputFile: string, profile: ToolchainProfile) => readonly string[];
 	/** Builds a bounded companion invocation that writes dependency metadata. */
 	readonly arguments: (
 		outputFile: string,
@@ -215,6 +221,8 @@ interface PreparedInvocation {
 	readonly started: number;
 	/** The Unix epoch time in milliseconds, for comparison with file modification times. */
 	readonly startedAt: number;
+	/** The dependency file that the main compile writes, when the compiler can do it. */
+	readonly inlineDependencyFile?: string;
 }
 
 interface ToolchainRun {
@@ -302,6 +310,7 @@ export class ToolchainBackend {
 				options,
 				(providerArguments) => spec.compilerArguments(files, providerArguments),
 				cancellationToken,
+				temporaryDirectory,
 			);
 			const producerData = await spec.producerData?.(files);
 			const tool = this.profile.tools[spec.tool];
@@ -364,6 +373,7 @@ export class ToolchainBackend {
 				options,
 				(providerArguments) => spec.arguments(outputFile, temporaryDirectory, providerArguments),
 				cancellationToken,
+				temporaryDirectory,
 				spec.acceptOutputOnError,
 				spec.environment?.(temporaryDirectory),
 				spec.stdoutLineFilter,
@@ -427,6 +437,7 @@ export class ToolchainBackend {
 		options: CompileOptions,
 		ownedArguments: (providerArguments: readonly string[]) => readonly string[],
 		cancellationToken: CancellationToken,
+		temporaryDirectory: string,
 		acceptOutputOnError = false,
 		invocationEnvironment: Readonly<Record<string, string>> = {},
 		stdoutLineFilter?: ArtifactOutputSpec['stdoutLineFilter'],
@@ -436,6 +447,7 @@ export class ToolchainBackend {
 			options,
 			ownedArguments,
 			cancellationToken,
+			temporaryDirectory,
 			invocationEnvironment,
 		);
 		this.host.log(`Producing an artifact for ${source.fsPath} with ${this.profile.displayName}`);
@@ -487,6 +499,7 @@ export class ToolchainBackend {
 		options: CompileOptions,
 		ownedArguments: (providerArguments: readonly string[]) => readonly string[],
 		cancellationToken: CancellationToken,
+		temporaryDirectory: string,
 		invocationEnvironment: Readonly<Record<string, string>> = {},
 	): Promise<PreparedInvocation> {
 		const workingDirectory = options.workingDirectory ?? path.dirname(source.fsPath);
@@ -505,7 +518,12 @@ export class ToolchainBackend {
 			? await this.definition.prepareEnvironment(this.profile, environment, cancellationToken, providerArguments)
 			: environment;
 
-		const compilerArguments = ownedArguments(providerArguments);
+		// The main compile also lists its inputs when the compiler can do it.
+		const dependencies = this.definition.dependencyCollection;
+		const inlineDependencyFile = dependencies && path.join(temporaryDirectory, dependencies.outputFilename);
+		const inlineDependencyArguments =
+			(inlineDependencyFile && dependencies.inlineArguments?.(inlineDependencyFile, this.profile)) || [];
+		const compilerArguments = [...ownedArguments(providerArguments), ...inlineDependencyArguments];
 		const argumentsList = this.definition.assembleArguments
 			? this.definition.assembleArguments(compilerArguments, providerArguments, source.fsPath)
 			: [...providerArguments, ...compilerArguments, source.fsPath];
@@ -523,6 +541,7 @@ export class ToolchainBackend {
 			environmentVariableNames: Object.keys(preparedEnvironment).sort(),
 			started: performance.now(),
 			startedAt: Date.now(),
+			...(inlineDependencyArguments.length > 0 ? { inlineDependencyFile } : {}),
 		};
 		this.reportInvocation(options, invocation);
 		return invocation;
@@ -543,18 +562,27 @@ export class ToolchainBackend {
 		temporaryDirectory: string,
 		cancellationToken: CancellationToken,
 	): Promise<ArtifactInputMetadata> {
-		const spec = this.definition.dependencyCollection;
-		if (!spec) {
-			return snapshotArtifactInputs(
+		const snapshot = (dependencies: readonly string[]): Promise<ArtifactInputMetadata> =>
+			snapshotArtifactInputs(
 				source.fsPath,
-				[],
-				'source-only',
+				dependencies,
+				dependencies.length > 0 ? 'complete' : 'source-only',
 				invocation.workingDirectory,
 				invocation.startedAt,
 			);
+		const spec = this.definition.dependencyCollection;
+		if (!spec) {
+			return snapshot([]);
+		}
+		const inlineDependencies = invocation.inlineDependencyFile
+			? await readDependencyFile(spec, invocation.inlineDependencyFile, invocation.workingDirectory)
+			: [];
+		if (inlineDependencies.length > 0) {
+			return snapshot(inlineDependencies);
 		}
 		const dependencyFile = path.join(temporaryDirectory, spec.outputFilename);
 		const dependencyArguments = spec.arguments(dependencyFile, temporaryDirectory, invocation.providerArguments);
+		this.host.log(`The compile listed no inputs, so a second run of ${this.profile.displayName} lists them.`);
 
 		try {
 			const result = await exec.execute(
@@ -566,32 +594,10 @@ export class ToolchainBackend {
 					cancellationToken,
 				},
 			);
-			if (result.returnCode !== 0) {
-				return snapshotArtifactInputs(
-					source.fsPath,
-					[],
-					'source-only',
-					invocation.workingDirectory,
-					invocation.startedAt,
-				);
-			}
-			const dependencyText = await readBoundedArtifactFile(dependencyFile);
-			const dependencies = spec.parse(dependencyText, invocation.workingDirectory);
-			if (dependencies.length === 0) {
-				return snapshotArtifactInputs(
-					source.fsPath,
-					[],
-					'source-only',
-					invocation.workingDirectory,
-					invocation.startedAt,
-				);
-			}
-			return snapshotArtifactInputs(
-				source.fsPath,
-				dependencies,
-				'complete',
-				invocation.workingDirectory,
-				invocation.startedAt,
+			return snapshot(
+				result.returnCode === 0
+					? spec.parse(await readBoundedArtifactFile(dependencyFile), invocation.workingDirectory)
+					: [],
 			);
 		} catch (error) {
 			if (
@@ -600,13 +606,7 @@ export class ToolchainBackend {
 			) {
 				throw error;
 			}
-			return snapshotArtifactInputs(
-				source.fsPath,
-				[],
-				'source-only',
-				invocation.workingDirectory,
-				invocation.startedAt,
-			);
+			return snapshot([]);
 		}
 	}
 
@@ -683,6 +683,19 @@ async function readBoundedArtifactFile(filename: string, optional = false): Prom
 		return Buffer.concat(chunks, position).toString('utf8');
 	} finally {
 		await handle.close();
+	}
+}
+
+/** The inputs in a dependency file that the main compile wrote, or none when it wrote no file. */
+async function readDependencyFile(
+	spec: DependencyCollectionSpec,
+	filename: string,
+	workingDirectory: string,
+): Promise<readonly string[]> {
+	try {
+		return spec.parse(await readBoundedArtifactFile(filename), workingDirectory);
+	} catch {
+		return [];
 	}
 }
 

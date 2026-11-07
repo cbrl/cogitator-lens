@@ -5,8 +5,9 @@ export const variantProviderDefinitions = {
 	user: { label: 'Workspace' },
 	cmake: { label: 'CMake' },
 	'compilation-database': { label: 'Compilation database' },
+	cpptools: { label: 'C/C++ configuration' },
 	'python-environments': { label: 'Python environments' },
-	path: { label: 'Detected on PATH' },
+	path: { label: 'Detected' },
 } as const satisfies Record<string, { readonly label: string }>;
 
 export type ConfigurationOrigin = keyof typeof variantProviderDefinitions;
@@ -19,7 +20,12 @@ export const emptySnapshot: VariantSnapshot = { toolchainProfiles: [], variants:
 /** Joins partial snapshots and keeps one toolchain profile for each ID. */
 export function mergeSnapshots(parts: readonly VariantSnapshot[]): VariantSnapshot {
 	const profiles = new Map(parts.flatMap((part) => part.toolchainProfiles).map((profile) => [profile.id, profile]));
-	return { toolchainProfiles: [...profiles.values()], variants: parts.flatMap((part) => part.variants) };
+	const folderVariants = parts.flatMap((part) => part.folderVariants ?? []);
+	return {
+		toolchainProfiles: [...profiles.values()],
+		variants: parts.flatMap((part) => part.variants),
+		...(folderVariants.length > 0 ? { folderVariants } : {}),
+	};
 }
 
 /** How long a provider waits after a change event for the rest of its burst. */

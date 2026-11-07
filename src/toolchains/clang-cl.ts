@@ -25,10 +25,11 @@ import {
 	type ToolchainDefinition,
 } from './toolchain-contracts.js';
 import { cFamilyLanguageIdentifiers, clangAstDumpPair, clangAstProducer, defaultAsmParser } from './c-family.js';
+import { parseMakeDepfile } from '../compilation/artifact-inputs.js';
+import type { DependencyCollectionSpec } from './toolchain-backend.js';
 import {
 	captureWindowsEnvironment,
 	clangClOutputArguments,
-	msvcDependencyCollection,
 	msvcOwnedArguments,
 	msvcPreprocessedSourceProducer,
 	objectCodeViewLines,
@@ -39,9 +40,27 @@ import { parseGnuDiagnostics } from './c-family/diagnostics.js';
 import { parseParenthesizedDiagnostics } from './msvc/diagnostics.js';
 import { msvcOptimizationLevels } from './optimization-levels.js';
 
-const clangOptionsWithValues = new Set(['/clang:-o', '/clang:-foptimization-record-file']);
+const clangOptionsWithValues = new Set([
+	'/clang:-o',
+	'/clang:-foptimization-record-file',
+	'/clang:-MF',
+	'/clang:-MT',
+	'/clang:-MQ',
+]);
 const clangOptionArtifactFlags =
-	/^\/clang:-(?:emit-llvm|S|gline-tables-only|save-temps(?:=.*)?|f(?:no-)?stack-usage|fsave-optimization-record(?:=.*)?|foptimization-record-file(?:=.*)?)$/;
+	/^\/clang:-(?:emit-llvm|S|gline-tables-only|save-temps(?:=.*)?|f(?:no-)?stack-usage|fsave-optimization-record(?:=.*)?|foptimization-record-file(?:=.*)?|M|MM|MD|MMD|M[FTQ].+)$/;
+
+/**
+ * clang-cl 22.1 ignores `/sourceDependencies` with a warning, so it uses the Make format of the
+ * Clang driver. It writes the file with `/clang:-MD` in each mode of the producers, also with `/E`
+ * and `-fsyntax-only`. The second run checks only the syntax.
+ */
+export const clangClDependencyCollection: DependencyCollectionSpec = Object.freeze({
+	outputFilename: 'dependencies.d',
+	inlineArguments: (outputFile: string) => ['/clang:-MD', '/clang:-MF', `/clang:${outputFile}`],
+	arguments: (outputFile: string) => ['/Zs', '/clang:-MD', '/clang:-MF', `/clang:${outputFile}`],
+	parse: parseMakeDepfile,
+});
 
 /** Clang's colour switches, which clang-cl accepts directly and in their /clang: form. */
 const clangClColorFlags = /^(?:\/clang:)?-f(?:no-)?(?:diagnostics-color(?:=.*)?|color-diagnostics|ansi-escape-codes)$/;
@@ -96,7 +115,7 @@ export const clangCl: ToolchainDefinition = {
 	outputArguments: clangClOutputArguments,
 	assembleArguments: ownedBeforeEndOfOptions,
 	stripOwnedArguments: stripClangClManagedArguments,
-	dependencyCollection: msvcDependencyCollection,
+	dependencyCollection: clangClDependencyCollection,
 	createParser: defaultAsmParser,
 	createCfgParser: () => new ClangAssemblyCfgParser(new InstructionSetInfo()),
 	prepareEnvironment: captureWindowsEnvironment,

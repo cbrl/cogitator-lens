@@ -14,6 +14,7 @@ import {
 } from './artifact-document/artifact-semantic-tokens-provider.js';
 import { CmakeVariantProvider } from './buildsystems/cmake.js';
 import { CompilationDatabaseVariantProvider } from './buildsystems/compilation-database.js';
+import { CppToolsVariantProvider } from './buildsystems/cpptools.js';
 import { PathToolchainProvider } from './buildsystems/path-toolchains.js';
 import { PythonEnvironmentVariantProvider } from './buildsystems/python-environments.js';
 import type { VariantProvider } from './buildsystems/variant-provider.js';
@@ -90,6 +91,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
 	const variantProviders: VariantProvider[] = [
 		new CmakeVariantProvider(),
 		new CompilationDatabaseVariantProvider(configuration),
+		new CppToolsVariantProvider(configuration),
 		new PythonEnvironmentVariantProvider(),
 		pathToolchains,
 	];

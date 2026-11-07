@@ -105,6 +105,11 @@ export class ArtifactDocumentRegistry implements Disposable {
 					}
 				}
 			}),
+			// A folder variant, such as a C/C++ configuration, can give any source a new fallback variant.
+			compilationService.onFallbackVariantsChanged(() => {
+				this.identityGeneration++;
+				this.refreshAll();
+			}),
 			compilationService.onArtifactOptionsChanged((kind) => {
 				for (const document of this.documents.values()) {
 					if (document.parsed.artifactKind === kind) {
