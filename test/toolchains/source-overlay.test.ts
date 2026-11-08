@@ -17,6 +17,7 @@ import {
 } from '../../src/toolchains/source-overlay.js';
 import { ToolExitError } from '../../src/toolchains/toolchain-backend.js';
 import { sameLocalFile } from '../../src/file-identity.js';
+import { validateArtifactInputs } from '../../src/compilation/artifact-inputs.js';
 import { defaultArtifactOptions } from '../../src/types/index.js';
 import { neverCancelled, sourceUri, toolchainBackend } from '../support/toolchains.js';
 
@@ -125,7 +126,7 @@ fs.appendFileSync(process.env.FAKE_LOG, JSON.stringify(args) + '\n');
 const text = fs.readFileSync(input, 'utf8');
 const escape = (file) => file.replace(/([ \\])/g, '\\$1');
 const dependencies = args.indexOf('-MF');
-if (dependencies >= 0) {
+if (dependencies >= 0 && !process.env.FAKE_NO_DEPENDENCIES) {
 	fs.writeFileSync(args[dependencies + 1], 'output.s: ' + escape(input) + ' ' + escape(process.env.FAKE_HEADER) + '\n');
 }
 fs.writeFileSync(args[args.indexOf('-o') + 1], input + '\n' + text);
@@ -149,12 +150,12 @@ test('a compile of unsaved text reads the overlay file and names the source', as
 		await fs.promises.writeFile(script, fakeGcc);
 		const log = path.join(directory, 'runs.log');
 		const backend = toolchainBackend('gcc', { executable: process.execPath, defaultArguments: [script] });
-		const produce = (text: string) =>
+		const produce = (text: string, env: Readonly<Record<string, string>> = {}) =>
 			backend.produceAssembly(
 				sourceUri(source),
 				{
 					args: ['-DPROJECT'],
-					env: { FAKE_LOG: log, FAKE_HEADER: header },
+					env: { FAKE_LOG: log, FAKE_HEADER: header, ...env },
 					workingDirectory: project,
 					productionOptions: defaultArtifactOptions.production,
 					sourceOverlay: { text, byteOrderMark: true },
@@ -189,6 +190,11 @@ test('a compile of unsaved text reads the overlay file and names the source', as
 			[true],
 			'The header is an input, and the source and the overlay file are not',
 		);
+
+		// Without a list of its headers, the output of unsaved text never validates, so no request uses it again.
+		const unlisted = await produce('int unlisted(void) { return 2; }\n', { FAKE_NO_DEPENDENCIES: '1' });
+		assert.equal(await validateArtifactInputs(unlisted.inputs, true), false);
+		assert.equal((await fs.promises.readFile(log, 'utf8')).trim().split('\n').length, 2, 'No second run');
 
 		await assert.rejects(produce('FAIL\n'), (error: unknown) => {
 			assert.ok(error instanceof ToolExitError);

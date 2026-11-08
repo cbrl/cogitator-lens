@@ -17,7 +17,11 @@ import type {
 import * as exec from '../exec.js';
 import { withTemporaryDirectory } from '../temporary-directory.js';
 import type { ToolchainDefinition } from './toolchain-contracts.js';
-import { snapshotArtifactInputs, type ArtifactInputMetadata } from '../compilation/artifact-inputs.js';
+import {
+	snapshotArtifactInputs,
+	unknownArtifactInputs,
+	type ArtifactInputMetadata,
+} from '../compilation/artifact-inputs.js';
 import { parseWithMainSource, type MainSource } from '../artifacts/assembly/main-source.js';
 import { withoutLibraryFunctions } from '../artifacts/binary-disassembly/library-functions.js';
 import { withoutTerminalEscapes } from '../diagnostics.js';
@@ -627,9 +631,13 @@ export class ToolchainBackend {
 		const inlineDependencies = invocation.inlineDependencyFile
 			? await readDependencyFile(spec, invocation.inlineDependencyFile, workingDirectory)
 			: [];
-		// A compile of unsaved text runs often, so it does not start a second run for its inputs.
-		if (inlineDependencies.length > 0 || overlay) {
+		if (inlineDependencies.length > 0) {
 			return snapshot(inlineDependencies);
+		}
+		// A compile of unsaved text runs often, so it does not start a second run for its inputs.
+		// Without a list of its headers, a later request does not use its output again.
+		if (overlay) {
+			return unknownArtifactInputs(source.fsPath);
 		}
 		const dependencyFile = path.join(temporaryDirectory, spec.outputFilename);
 		const dependencyArguments = spec.arguments(dependencyFile, temporaryDirectory, invocation.providerArguments);

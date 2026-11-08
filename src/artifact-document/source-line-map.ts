@@ -1,7 +1,8 @@
 import { Uri } from 'vscode';
 import path from 'path';
-import type { RenderedArtifactLine, RenderedTextArtifact } from '../types/index.js';
+import type { RenderedTextArtifact } from '../types/index.js';
 import { SourceUriMap } from '../file-identity.js';
+import { lineHasSource } from './line-shift.js';
 
 /**
  * Maps each source file that an artifact references to its zero-based source lines,
@@ -9,25 +10,26 @@ import { SourceUriMap } from '../file-identity.js';
  */
 export type SourceLineMap = SourceUriMap<Map<number, number[]>>;
 
-export function lineHasSource(line: RenderedArtifactLine): boolean {
-	// eslint-disable-next-line eqeqeq
-	return line.source?.file != null && line.source?.line != null;
-}
-
 export function buildSourceLineMap(artifact: RenderedTextArtifact): SourceLineMap {
 	const sourceLines: SourceLineMap = new SourceUriMap();
+	// The key of a source file can read the file system, and a listing names a few files on many
+	// lines, so each name of a file finds its line map once.
+	const lineMaps = new Map<string, Map<number, number[]>>();
 	artifact.lines.forEach((line, index) => {
 		if (!lineHasSource(line)) {
 			return;
 		}
 
-		const sourceUri = Uri.file(path.normalize(line.source!.file!));
-		const sourceLine = line.source!.line! - 1;
-
-		let lineMap = sourceLines.get(sourceUri);
+		const sourceLine = line.source.line - 1;
+		let lineMap = lineMaps.get(line.source.file);
 		if (!lineMap) {
-			lineMap = new Map();
-			sourceLines.set(sourceUri, lineMap);
+			const sourceUri = Uri.file(path.normalize(line.source.file));
+			lineMap = sourceLines.get(sourceUri);
+			if (!lineMap) {
+				lineMap = new Map();
+				sourceLines.set(sourceUri, lineMap);
+			}
+			lineMaps.set(line.source.file, lineMap);
 		}
 		const artifactLines = lineMap.get(sourceLine) ?? [];
 		artifactLines.push(index);

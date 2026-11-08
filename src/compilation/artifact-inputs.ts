@@ -96,6 +96,18 @@ export async function snapshotArtifactInputs(
 	};
 }
 
+/**
+ * Records the inputs of an output whose inputs are not known. The record never validates, so a
+ * later request compiles again. A compile of unsaved text that did not list its headers needs this,
+ * because no change of a header could make its output invalid.
+ */
+export function unknownArtifactInputs(sourceFile: string): ArtifactInputMetadata {
+	return {
+		inputs: Object.freeze([unusableInput(path.resolve(sourceFile))]),
+		dependencyCoverage: 'source-only',
+	};
+}
+
 /** Records an input that can never validate as a cache hit, because its state is unknown. */
 function unusableInput(filename: string): ArtifactInputState {
 	return Object.freeze({

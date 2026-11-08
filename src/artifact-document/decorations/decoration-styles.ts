@@ -2,16 +2,32 @@
  * Text editor decoration styles shared by every ArtifactDecorator instance.
  */
 
-import { OverviewRulerLane, Uri, window, ThemeColor } from 'vscode';
+import {
+	DecorationRangeBehavior,
+	OverviewRulerLane,
+	Uri,
+	window,
+	ThemeColor,
+	type DecorationRenderOptions,
+	type TextEditorDecorationType,
+} from 'vscode';
 import type { ArtifactLineAnnotationStyle, OptimizationRemarkCategory } from '../../types/index.js';
 
-export const selectedLineDecoration = window.createTextEditorDecorationType({
+/**
+ * Makes a decoration type whose ranges do not grow when the user types at their start or end. A
+ * whole-line range that grew over a new line would mark that line too.
+ */
+function decorationType(options: DecorationRenderOptions): TextEditorDecorationType {
+	return window.createTextEditorDecorationType({ rangeBehavior: DecorationRangeBehavior.ClosedClosed, ...options });
+}
+
+export const selectedLineDecoration = decorationType({
 	isWholeLine: true,
 	backgroundColor: new ThemeColor('coglens.selection.background'),
 	overviewRulerColor: new ThemeColor('coglens.selection.overviewRuler'),
 });
 
-export const selectedSourceRangeDecoration = window.createTextEditorDecorationType({
+export const selectedSourceRangeDecoration = decorationType({
 	backgroundColor: new ThemeColor('coglens.sourceRange.background'),
 	borderColor: new ThemeColor('coglens.sourceRange.border'),
 	borderStyle: 'solid',
@@ -19,15 +35,15 @@ export const selectedSourceRangeDecoration = window.createTextEditorDecorationTy
 	overviewRulerColor: new ThemeColor('coglens.sourceRange.overviewRuler'),
 });
 
-export const unusedLineDecoration = window.createTextEditorDecorationType({
+export const unusedLineDecoration = decorationType({
 	opacity: '0.5',
 });
 
-export const stateDecoration = window.createTextEditorDecorationType({
+export const stateDecoration = decorationType({
 	after: { color: new ThemeColor('coglens.state.foreground') },
 });
 
-export const binaryColumnsDecoration = window.createTextEditorDecorationType({
+export const binaryColumnsDecoration = decorationType({
 	before: {
 		color: new ThemeColor('coglens.binaryColumns.foreground'),
 		backgroundColor: new ThemeColor('coglens.binaryColumns.background'),
@@ -50,7 +66,7 @@ const backwardJumpSourceIcon = jumpArrowIcon('M14 8H10C7 8 5 6 5 3V1M2 4l3-3 3 3
 const backwardJumpTargetIcon = jumpArrowIcon('M5 15v-3c0-3 2-4 5-4h5m-3-3 3 3-3 3', false);
 
 function gutterDecoration(icon: Uri) {
-	return window.createTextEditorDecorationType({
+	return decorationType({
 		gutterIconPath: icon,
 		gutterIconSize: 'contain',
 	});
@@ -70,7 +86,7 @@ export const jumpArrowDecorations = {
 export const sourceLineBandDecorations = Array.from({ length: 6 }, (_, index) => {
 	const background = new ThemeColor(`coglens.sourceLineBand.${index + 1}Background`);
 	const marker = new ThemeColor(`coglens.sourceLineBand.${index + 1}Marker`);
-	return window.createTextEditorDecorationType({
+	return decorationType({
 		isWholeLine: true,
 		backgroundColor: background,
 		borderColor: marker,
@@ -91,7 +107,7 @@ const densityLevelCount = 5;
 export const sourceDensityDecorations = sourceLineBandDecorations.map((_, bandIndex) => {
 	const color = new ThemeColor(`coglens.sourceLineBand.${bandIndex + 1}Marker`);
 	return Array.from({ length: densityLevelCount }, (_, densityIndex) =>
-		window.createTextEditorDecorationType({
+		decorationType({
 			isWholeLine: true,
 			borderColor: color,
 			borderStyle: 'solid',
@@ -104,7 +120,7 @@ export const sourceDensityDecorations = sourceLineBandDecorations.map((_, bandIn
 
 function optimizationRemarkDecoration(category: OptimizationRemarkCategory) {
 	const background = new ThemeColor(`coglens.optimizationRemarks.${category}Background`);
-	return window.createTextEditorDecorationType({
+	return decorationType({
 		after: {
 			backgroundColor: background,
 			margin: '0 0 0 1.5em',
@@ -117,7 +133,7 @@ function optimizationRemarkDecoration(category: OptimizationRemarkCategory) {
 const stackUsageBackground = new ThemeColor('coglens.stackUsage.background');
 
 function stackUsageDecoration() {
-	return window.createTextEditorDecorationType({
+	return decorationType({
 		after: {
 			backgroundColor: stackUsageBackground,
 			margin: '0 0 0 1.5em',
@@ -131,10 +147,7 @@ function stackUsageDecoration() {
  * Makes one decoration for each annotation style. The artifact decorator clears its own types in
  * source editors, so the source annotations need types of their own.
  */
-export function createAnnotationStyleDecorations(): Record<
-	ArtifactLineAnnotationStyle,
-	ReturnType<typeof window.createTextEditorDecorationType>
-> {
+export function createAnnotationStyleDecorations(): Record<ArtifactLineAnnotationStyle, TextEditorDecorationType> {
 	return {
 		'optimization-passed': optimizationRemarkDecoration('passed'),
 		'optimization-missed': optimizationRemarkDecoration('missed'),

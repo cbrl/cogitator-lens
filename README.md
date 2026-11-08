@@ -69,7 +69,10 @@ Problems view.
 
 Each output still names the source, also in the diagnostics and the file links. GCC, cl.exe, nvcc,
 and Roslyn read a copy of the text that starts with a `#line` directive, and the folder of the
-source is the first include folder. For cl.exe, that folder also applies to `#include <...>`.
+source is the first include folder. For cl.exe and nvcc, that folder also applies to
+`#include <...>`. For GCC and nvcc, it also applies to `#include "..."` in a header in a different
+folder. Then a header there can hide a header with the same name in a later include folder. A
+compile of the saved file does not have this limit.
 Clang and clang-cl read the text through a virtual file system. rustc reads a copy and gets
 `--remap-path-prefix`. Go uses `go build -overlay`, and the Python helpers compile the text with
 the name of the source. Some sources still compile the saved file: each Zig source, a Rust crate

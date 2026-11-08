@@ -204,6 +204,14 @@ export class SourceNavigation implements HoverProvider, CodeLensProvider, Dispos
 			await this.compileEnd(document.uri);
 			listing = this.preferredListing(source, editor.document);
 			if (!listing) {
+				// Some toolchains and sources compile the saved file, also with `coglens.compileOnType`.
+				const savedFileReason = document.handler.status.sourceText?.savedFileReason;
+				if (editor.document.isDirty && savedFileReason !== undefined) {
+					await window.showInformationMessage(
+						`Save the source first. ${savedFileReason} The artifact shows the saved file.`,
+					);
+					return;
+				}
 				const state = document.handler.status.state;
 				const next =
 					state === 'failed'

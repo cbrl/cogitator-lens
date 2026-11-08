@@ -15,7 +15,7 @@ import {
 	window,
 	workspace,
 } from 'vscode';
-import { buildSourceLineMap, lineHasSource, type SourceLineMap } from './source-line-map.js';
+import { buildSourceLineMap, type SourceLineMap } from './source-line-map.js';
 import path from 'path';
 import { equalUri, sourceUriComparisonKey } from '../file-identity.js';
 import {
@@ -50,7 +50,7 @@ import {
 } from './source-bridge.js';
 import { jumpArrows, type JumpArrowDirection } from './jump-arrows.js';
 import { annotationShows } from '../artifacts/core/source-annotations.js';
-import { LineShift, type LineChange } from './line-shift.js';
+import { ChangeLog, LineShift, lineHasSource, movedArtifact } from './line-shift.js';
 
 /*
 Nice-to-have features:
@@ -76,12 +76,6 @@ interface MappedArtifact {
 interface ShownArtifact {
 	readonly artifact: RenderedTextArtifact;
 	readonly sourceText?: ArtifactSourceText;
-}
-
-/** The changes of one event of the main source, and the document version after them. */
-interface SourceChange {
-	readonly version: number;
-	readonly changes: readonly LineChange[];
 }
 
 /** The number of change events of the main source that a decorator keeps. */
@@ -158,7 +152,7 @@ export class ArtifactDecorator {
 	 */
 	private readonly dirtySources = new Set<string>();
 	/** The changes of the main source after the version that the shift starts at. */
-	private readonly sourceChanges: SourceChange[] = [];
+	private readonly sourceChanges = new ChangeLog(maximumSourceChanges);
 	/** Moves the main-source lines of the shown artifact to the current text, when the decorator knows how. */
 	private shift?: LineShift;
 	/** Whether the main source closed after the artifact was shown. Then the version of the artifact means nothing. */
@@ -848,11 +842,7 @@ export class ArtifactDecorator {
 	 */
 	private onMainSourceChanged(event: TextDocumentChangeEvent): void {
 		const mappedBefore = this.mainSourceMapped();
-		// An event without changes, such as a change of the line endings, still has a version.
-		this.sourceChanges.push({ version: event.document.version, changes: event.contentChanges });
-		if (this.sourceChanges.length > maximumSourceChanges) {
-			this.sourceChanges.shift();
-		}
+		this.sourceChanges.record(event.document.version, event.contentChanges);
 		if (this.shift) {
 			this.shift.apply(event.contentChanges);
 			this.mapped = undefined;
@@ -877,7 +867,7 @@ export class ArtifactDecorator {
 
 	/** A closed document loses its versions. A new document of the file starts at version 1 again. */
 	private onMainSourceClosed(): void {
-		this.sourceChanges.length = 0;
+		this.sourceChanges.clear();
 		this.shift = undefined;
 		this.mapped = undefined;
 		this.sourceClosedSinceShown = true;
@@ -907,17 +897,13 @@ export class ArtifactDecorator {
 			if (base === undefined || base > document.version) {
 				continue;
 			}
-			const later = this.sourceChanges.filter((change) => change.version > base);
-			const covered =
-				later.length === document.version - base &&
-				later.every((change, index) => change.version === base + index + 1);
-			if (!covered) {
+			const later = this.sourceChanges.takeChangesAfter(base, document.version);
+			if (!later) {
 				continue;
 			}
-			this.sourceChanges.splice(0, this.sourceChanges.length - later.length);
 			const shift = new LineShift(this.mainSourceLines(shown.artifact));
-			for (const change of later) {
-				shift.apply(change.changes);
+			for (const changes of later) {
+				shift.apply(changes);
 			}
 			this.shift = shift;
 			return;
@@ -933,16 +919,11 @@ export class ArtifactDecorator {
 	/** The zero-based main-source lines that the artifact names, which the shift must follow. */
 	private mainSourceLines(artifact: RenderedTextArtifact): Set<number> {
 		const lines = new Set<number>();
-		for (const { source } of artifact.lines) {
-			if (
-				source?.file &&
-				source.line !== null &&
-				source.line !== undefined &&
-				this.isMainSourceFile(source.file)
-			) {
-				lines.add(source.line - 1);
-				if (source.endLine !== undefined) {
-					lines.add(source.endLine - 1);
+		for (const line of artifact.lines) {
+			if (lineHasSource(line) && this.isMainSourceFile(line.source.file)) {
+				lines.add(line.source.line - 1);
+				if (line.source.endLine !== undefined) {
+					lines.add(line.source.endLine - 1);
 				}
 			}
 		}
@@ -1087,42 +1068,6 @@ function clearDecorations(editor: TextEditor, decorations: readonly TextEditorDe
 	for (const decoration of decorations) {
 		editor.setDecorations(decoration, []);
 	}
-}
-
-/**
- * An artifact whose main-source lines are moved through the shift. A line whose source line an edit
- * removed has no source. A range keeps its end only when the end line still exists.
- */
-function movedArtifact(
-	artifact: RenderedTextArtifact,
-	shift: LineShift,
-	isMainSourceFile: (file: string) => boolean,
-): RenderedTextArtifact {
-	return {
-		...artifact,
-		lines: artifact.lines.map((line): RenderedArtifactLine => {
-			const source = line.source;
-			if (!source?.file || source.line === null || source.line === undefined || !isMainSourceFile(source.file)) {
-				return line;
-			}
-			const moved = shift.lineOf(source.line - 1);
-			if (moved === undefined) {
-				return { ...line, source: null };
-			}
-			const { endLine, endColumn, ...start } = source;
-			const end = endLine === undefined ? undefined : shift.lineOf(endLine - 1);
-			return {
-				...line,
-				source: {
-					...start,
-					line: moved + 1,
-					...(end !== undefined && end >= moved && endColumn !== undefined
-						? { endLine: end + 1, endColumn }
-						: {}),
-				},
-			};
-		}),
-	};
 }
 
 function sourceSelectionRange(document: TextDocument, line: RenderedArtifactLine): Range | undefined {
