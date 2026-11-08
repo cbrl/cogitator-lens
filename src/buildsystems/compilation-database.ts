@@ -1,7 +1,13 @@
 import fs from 'fs';
 import path from 'path';
 import { Disposable, RelativePattern, Uri, WorkspaceFolder, workspace } from 'vscode';
-import { emptySnapshot, mergeSnapshots, VariantProvider, type VariantSnapshot } from './variant-provider.js';
+import {
+	emptySnapshot,
+	mergeSnapshots,
+	VariantProvider,
+	type ConfigurationOrigin,
+	type VariantSnapshot,
+} from './variant-provider.js';
 import { compilationDatabaseProviderId, parseCompilationDatabase } from './compilation-database-parser.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
 import type { CompilationVariant, ToolchainProfile } from '../types/index.js';
@@ -9,7 +15,8 @@ import * as logger from '../logger.js';
 import { canonicalLocalPath, localFileComparisonKey } from '../file-identity.js';
 import { sourceUriComparisonKey } from '../file-identity.js';
 
-interface DatabaseFile {
+/** A compilation database and the workspace folder that it belongs to. */
+export interface DatabaseFile {
 	readonly folder: WorkspaceFolder;
 	readonly filePath: string;
 }
@@ -79,46 +86,60 @@ export class CompilationDatabaseVariantProvider extends VariantProvider {
 		return [...files.values()];
 	}
 
-	private async readDatabase(database: DatabaseFile): Promise<VariantSnapshot> {
-		let contents: string;
-		try {
-			contents = await fs.promises.readFile(database.filePath, 'utf8');
-		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-				logger.logChannel.error(`Failed to read compilation database ${database.filePath}: ${String(error)}`);
-			}
-			return emptySnapshot;
-		}
-
-		const entries = parseCompilationDatabase(contents, database.filePath, process.platform, (message) =>
-			logger.logChannel.warn(`Ignoring malformed compilation database ${database.filePath} ${message}`),
-		);
-		const profiles = new Map<string, ToolchainProfile>();
-		const variants: CompilationVariant[] = [];
-		const databaseLabel = relativeDatabaseLabel(database);
-		const databaseIdentity = localFileComparisonKey(database.filePath);
-
-		for (const entry of entries) {
-			profiles.set(entry.toolchainProfile.id, entry.toolchainProfile);
-			const source = Uri.file(entry.sourceFile);
-			const outputLabel = entry.output ? ` · ${path.basename(entry.output)}` : '';
-			variants.push({
-				id: `${this.providerId}:${databaseIdentity}|${entry.entryIndex}|${sourceUriComparisonKey(source)}`,
-				provider: this.providerId,
-				project: database.folder.name,
-				target: entry.output ? path.basename(entry.output) : undefined,
-				configuration: databaseLabel,
-				source,
-				toolchainProfileId: entry.toolchainProfile.id,
-				workingDirectory: entry.workingDirectory,
-				arguments: entry.arguments,
-				environment: {},
-				displayLabel: `${path.basename(entry.toolchainProfile.executable)} · ${databaseLabel}${outputLabel}`,
-			});
-		}
-
-		return { toolchainProfiles: [...profiles.values()], variants };
+	private readDatabase(database: DatabaseFile): Promise<VariantSnapshot> {
+		return readCompilationDatabase(this.providerId, database);
 	}
+}
+
+/**
+ * Reads a compilation database and gives a variant for each entry. A missing database gives no
+ * variants. The configuration of each variant is the given configuration name, or else the
+ * database path.
+ */
+export async function readCompilationDatabase(
+	providerId: ConfigurationOrigin,
+	database: DatabaseFile,
+	configurationName?: string,
+): Promise<VariantSnapshot> {
+	let contents: string;
+	try {
+		contents = await fs.promises.readFile(database.filePath, 'utf8');
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+			logger.logChannel.error(`Failed to read compilation database ${database.filePath}: ${String(error)}`);
+		}
+		return emptySnapshot;
+	}
+
+	const entries = parseCompilationDatabase(contents, database.filePath, process.platform, (message) =>
+		logger.logChannel.warn(`Ignoring malformed compilation database ${database.filePath} ${message}`),
+	);
+	const profiles = new Map<string, ToolchainProfile>();
+	const variants: CompilationVariant[] = [];
+	const databaseLabel = relativeDatabaseLabel(database);
+	const databaseIdentity = localFileComparisonKey(database.filePath);
+	const configurationLabel = configurationName === undefined ? '' : `${configurationName} · `;
+
+	for (const entry of entries) {
+		profiles.set(entry.toolchainProfile.id, entry.toolchainProfile);
+		const source = Uri.file(entry.sourceFile);
+		const outputLabel = entry.output ? ` · ${path.basename(entry.output)}` : '';
+		variants.push({
+			id: `${providerId}:${databaseIdentity}|${entry.entryIndex}|${sourceUriComparisonKey(source)}`,
+			provider: providerId,
+			project: database.folder.name,
+			target: entry.output ? path.basename(entry.output) : undefined,
+			configuration: configurationName ?? databaseLabel,
+			source,
+			toolchainProfileId: entry.toolchainProfile.id,
+			workingDirectory: entry.workingDirectory,
+			arguments: entry.arguments,
+			environment: {},
+			displayLabel: `${path.basename(entry.toolchainProfile.executable)} · ${configurationLabel}${databaseLabel}${outputLabel}`,
+		});
+	}
+
+	return { toolchainProfiles: [...profiles.values()], variants };
 }
 
 function relativeDatabaseLabel(database: DatabaseFile): string {

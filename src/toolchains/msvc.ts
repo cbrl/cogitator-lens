@@ -449,8 +449,8 @@ export function supportsSourceDependencies(executable: string): boolean {
 }
 
 /**
- * The main compile lists the inputs. cl.exe 19.52 writes the file with `/c` and with `/E`, and the
- * preprocessed output does not change. Otherwise, a second compile lists them. Its object and
+ * The main compile lists the inputs. cl.exe 19.44 and 19.52 write the file with `/c` and with `/E`,
+ * and the listing and the preprocessed output do not change. Otherwise, a second compile lists them. Its object and
  * program database go to the temporary directory. Without `/Fd`, `/Zi` in the provider arguments
  * writes `vc140.pdb` into the working directory.
  */

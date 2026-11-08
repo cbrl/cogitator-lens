@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import os from 'node:os';
 import { execute } from '../exec.js';
 import { localFileComparisonKey } from '../file-identity.js';
@@ -71,21 +72,27 @@ const detectedTargets = new Map<string, Promise<string | undefined>>();
 
 /**
  * The default target of a toolchain: the target of its profile, or the target that the compiler
- * reports. The report runs once for each compiler: `-dumpmachine` for GCC and Clang, `--version` for
- * clang-cl, and `-vV` for rustc. The path of cl.exe names its target.
+ * reports. The report runs once for each compiler file: `-dumpmachine` for GCC and Clang,
+ * `--version` for clang-cl, and `-vV` for rustc. The path of cl.exe names its target.
  */
-export function toolchainTarget(profile: ToolchainProfile): Promise<string | undefined> {
+export async function toolchainTarget(profile: ToolchainProfile): Promise<string | undefined> {
 	if (profile.target) {
-		return Promise.resolve(profile.target);
+		return profile.target;
 	}
 	if (profile.kind === 'msvc') {
-		return Promise.resolve(msvcTarget(profile.executable));
+		return msvcTarget(profile.executable);
 	}
 	const query = targetQueries[profile.kind];
 	if (!query) {
-		return Promise.resolve(undefined);
+		return undefined;
 	}
-	const key = `${profile.kind}\0${localFileComparisonKey(profile.executable)}`;
+	// A replaced compiler has a different size or time, so it gets a new report.
+	const file = await fs.promises.stat(profile.executable).catch(() => undefined);
+	const key = [
+		profile.kind,
+		localFileComparisonKey(profile.executable),
+		...(file ? [file.size, file.mtimeMs] : []),
+	].join('\0');
 	let target = detectedTargets.get(key);
 	if (!target) {
 		target = execute(profile.executable, query.arguments, {
@@ -98,6 +105,13 @@ export function toolchainTarget(profile: ToolchainProfile): Promise<string | und
 			() => undefined,
 		);
 		detectedTargets.set(key, target);
+		// A failed report is not kept, so the next listing asks again.
+		const pending = target;
+		void pending.then((value) => {
+			if (value === undefined && detectedTargets.get(key) === pending) {
+				detectedTargets.delete(key);
+			}
+		});
 	}
 	return target;
 }

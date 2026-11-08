@@ -495,16 +495,21 @@ export class CompilationService {
 				? undefined
 				: configuredDefault;
 		const profiles = forLookup ? this.fallbackToolchains() : this.languageToolchains(languageId, defaultVariant);
+		// The default invocation is a user setting, so it comes before the folder configurations.
 		return [
-			...this.folderVariantsOf(file, sourceKey, languageId),
 			...(defaultVariant ? [defaultVariant] : []),
+			...this.folderVariantsOf(file, sourceKey, languageId),
 			...profiles.map((profile) => this.createToolchainVariant(file, profile, sourceKey)),
 		];
 	}
 
-	/** The variants of a file from the folder variants that contain it, for a toolchain of its language. */
+	/**
+	 * The variants of a file from the folder variants that contain it, for a toolchain of its
+	 * language. The language of the open document selects the C or the C++ arguments, so a C header
+	 * gets the C arguments.
+	 */
 	private folderVariantsOf(file: Uri, sourceKey: string, languageId: string | undefined): CompilationVariant[] {
-		const language = sourceLanguage(file.fsPath);
+		const language = sourceLanguage(file.fsPath, languageId ?? openDocumentLanguage(file));
 		return [...this.folderVariants].flatMap(([provider, variants]) =>
 			variants
 				.filter(

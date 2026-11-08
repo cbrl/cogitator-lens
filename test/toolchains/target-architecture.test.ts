@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 import {
 	architectureOfTriple,
@@ -69,3 +72,31 @@ test('the target of a profile applies without a process', async () => {
 	assert.equal(await toolchainTarget(toolchainProfile('gcc', { executable: '/missing/compiler/gcc' })), undefined);
 	assert.equal(await toolchainTarget(toolchainProfile('python')), undefined);
 });
+
+test(
+	'a failed target report is asked again, and a replaced compiler reports again',
+	{ skip: process.platform === 'win32' ? 'uses a POSIX shell script as a fake compiler' : false },
+	async () => {
+		const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'coglens-target-'));
+		const compiler = path.join(directory, 'gcc');
+		const writeCompiler = (triple: string, time: number) => {
+			fs.writeFileSync(
+				compiler,
+				`#!/bin/sh\nif [ -f "$0.ok" ]; then printf '%s\\n' '${triple}'; exit 0; fi\nexit 1\n`,
+			);
+			fs.chmodSync(compiler, 0o755);
+			fs.utimesSync(compiler, time, time);
+		};
+		const profile = toolchainProfile('gcc', { executable: compiler });
+		try {
+			writeCompiler('aarch64-linux-gnu', 1_000_000);
+			assert.equal(await toolchainTarget(profile), undefined);
+			fs.writeFileSync(`${compiler}.ok`, '');
+			assert.equal(await toolchainTarget(profile), 'aarch64-linux-gnu', 'The failure is not kept');
+			writeCompiler('powerpc64le-linux-gnu', 2_000_000);
+			assert.equal(await toolchainTarget(profile), 'powerpc64le-linux-gnu', 'The new compiler reports');
+		} finally {
+			fs.rmSync(directory, { recursive: true, force: true });
+		}
+	},
+);

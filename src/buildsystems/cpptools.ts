@@ -2,24 +2,30 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Disposable, RelativePattern, Uri, workspace, type WorkspaceFolder } from 'vscode';
 import { mergeSnapshots, VariantProvider, type VariantSnapshot } from './variant-provider.js';
-import { parseCompilationDatabase } from './compilation-database-parser.js';
+import { readCompilationDatabase } from './compilation-database.js';
 import {
 	compilerCommand,
 	configurationArguments,
 	defaultConfiguration,
+	orderedConfigurations,
 	parseCppToolsProperties,
 	type CppToolsConfiguration,
 	type CppToolsContext,
 	type CppToolsDefaults,
 } from './cpptools-configuration.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
-import type { CompilationVariant, FolderVariant, ToolchainProfile } from '../types/index.js';
+import type { FolderVariant, ToolchainKind, ToolchainProfile } from '../types/index.js';
 import { createToolchainProfile, detectToolchainDefinition } from '../toolchains/toolchain-map.js';
-import { findExecutableOnPath } from '../toolchains/path-detection.js';
-import { localFileComparisonKey, sourceUriComparisonKey } from '../file-identity.js';
+import { findExecutableOnPath, probeCompiler } from '../toolchains/path-detection.js';
+import { detectVisualStudioToolchains } from '../toolchains/visual-studio-detection.js';
+import { targetFromClangBanner } from '../toolchains/target-architecture.js';
+import { localFileComparisonKey } from '../file-identity.js';
 import * as logger from '../logger.js';
 
 const propertiesPath = ['.vscode', 'c_cpp_properties.json'] as const;
+
+/** The Visual Studio toolchains, which vswhere finds at most once for each read. */
+type VisualStudioToolchains = () => Promise<readonly ToolchainProfile[]>;
 
 /** What one workspace folder gives. */
 interface FolderResult {
@@ -62,7 +68,10 @@ export class CppToolsVariantProvider extends VariantProvider {
 		const folders = (workspace.workspaceFolders ?? []).filter(
 			(folder) => folder.uri.scheme === 'file' && this.configuration.getReadCppToolsConfiguration(folder.uri),
 		);
-		const results = await Promise.all(folders.map((folder) => this.readFolder(folder)));
+		let visualStudio: Promise<readonly ToolchainProfile[]> | undefined;
+		const visualStudioToolchains: VisualStudioToolchains = () =>
+			(visualStudio ??= detectVisualStudioToolchains(process.env, process.platform));
+		const results = await Promise.all(folders.map((folder) => this.readFolder(folder, visualStudioToolchains)));
 		if (!this.disposed) {
 			this.watch(results.flatMap((result) => result.files));
 		}
@@ -75,7 +84,7 @@ export class CppToolsVariantProvider extends VariantProvider {
 		super.dispose();
 	}
 
-	private async readFolder(folder: WorkspaceFolder): Promise<FolderResult> {
+	private async readFolder(folder: WorkspaceFolder, visualStudio: VisualStudioToolchains): Promise<FolderResult> {
 		const folderPath = folder.uri.fsPath;
 		const context: CppToolsContext = {
 			workspaceFolder: folderPath,
@@ -96,11 +105,11 @@ export class CppToolsVariantProvider extends VariantProvider {
 				.getCompilationDatabases(folder.uri)
 				.map((database) => localFileComparisonKey(path.resolve(folderPath, database))),
 		);
-		const profiles = new Map<string, ToolchainProfile>();
-		const variants: CompilationVariant[] = [];
+		const databaseSnapshots: VariantSnapshot[] = [];
+		const folderProfiles: ToolchainProfile[] = [];
 		const folderVariants: FolderVariant[] = [];
 		const databases = new Map<string, string>();
-		for (const [index, configuration] of configurations.entries()) {
+		for (const { key: configurationKey, configuration } of orderedConfigurations(configurations)) {
 			for (const database of configuration.compileCommands) {
 				const key = localFileComparisonKey(database);
 				if (databases.has(key)) {
@@ -108,53 +117,33 @@ export class CppToolsVariantProvider extends VariantProvider {
 				}
 				databases.set(key, database);
 				if (!coveredDatabases.has(key)) {
-					variants.push(...(await this.readDatabase(database, folder, configuration, profiles)));
+					databaseSnapshots.push(
+						await readCompilationDatabase(
+							this.providerId,
+							{ folder, filePath: database },
+							configuration.name,
+						),
+					);
 				}
 			}
-			const variant = await folderVariant(configuration, index, folder);
+			const variant = await folderVariant(
+				configuration,
+				`${localFileComparisonKey(folderPath)}|${configurationKey}`,
+				folder,
+				visualStudio,
+			);
 			if (variant) {
-				profiles.set(variant.profile.id, variant.profile);
+				folderProfiles.push(variant.profile);
 				folderVariants.push(variant.variant);
 			}
 		}
 		return {
-			snapshot: { toolchainProfiles: [...profiles.values()], variants, folderVariants },
+			snapshot: mergeSnapshots([
+				...databaseSnapshots,
+				{ toolchainProfiles: folderProfiles, variants: [], folderVariants },
+			]),
 			files: [propertiesFile, ...databases.values()],
 		};
-	}
-
-	private async readDatabase(
-		database: string,
-		folder: WorkspaceFolder,
-		configuration: CppToolsConfiguration,
-		profiles: Map<string, ToolchainProfile>,
-	): Promise<CompilationVariant[]> {
-		const contents = await readText(database);
-		if (contents === undefined) {
-			return [];
-		}
-		const entries = parseCompilationDatabase(contents, database, process.platform, (message) =>
-			logger.logChannel.warn(`Ignoring malformed compilation database ${database} ${message}`),
-		);
-		const databaseIdentity = localFileComparisonKey(database);
-		const databaseLabel = path.relative(folder.uri.fsPath, database) || database;
-		return entries.map((entry) => {
-			profiles.set(entry.toolchainProfile.id, entry.toolchainProfile);
-			const source = Uri.file(entry.sourceFile);
-			return {
-				id: `${this.providerId}:${databaseIdentity}|${entry.entryIndex}|${sourceUriComparisonKey(source)}`,
-				provider: this.providerId,
-				project: folder.name,
-				target: entry.output ? path.basename(entry.output) : undefined,
-				configuration: configuration.name,
-				source,
-				toolchainProfileId: entry.toolchainProfile.id,
-				workingDirectory: entry.workingDirectory,
-				arguments: entry.arguments,
-				environment: {},
-				displayLabel: `${path.basename(entry.toolchainProfile.executable)} · ${configuration.name} · ${databaseLabel}`,
-			};
-		});
 	}
 
 	/** Watches each file, so an edit, a new file, or a deleted file refreshes the variants. */
@@ -187,13 +176,15 @@ export class CppToolsVariantProvider extends VariantProvider {
 }
 
 /**
- * The folder variant of a configuration with a C or C++ compiler. A compiler that is a bare name is
- * found on PATH.
+ * The folder variant of a configuration with a C or C++ compiler. The compiler must exist and run,
+ * so a configuration for another platform gives no variant. The version banner gives the kind of
+ * the compiler, because `/usr/bin/gcc` on macOS is Clang.
  */
 async function folderVariant(
 	configuration: CppToolsConfiguration,
-	index: number,
+	id: string,
 	folder: WorkspaceFolder,
+	visualStudio: VisualStudioToolchains,
 ): Promise<{ readonly profile: ToolchainProfile; readonly variant: FolderVariant } | undefined> {
 	const folderPath = folder.uri.fsPath;
 	const command =
@@ -203,29 +194,35 @@ async function folderVariant(
 	if (!command) {
 		return undefined;
 	}
-	const executable = /[\\/]/.test(command.executable)
-		? path.resolve(folderPath, command.executable)
-		: await findExecutableOnPath(command.executable);
+	const executable = await compilerExecutable(command.executable, folderPath, visualStudio);
 	if (!executable) {
-		logger.logChannel.warn(
-			`The C/C++ configuration "${configuration.name}" names ${command.executable}, which is not on PATH.`,
+		logger.logChannel.info(
+			`Ignoring the C/C++ configuration "${configuration.name}": this computer has no compiler ${command.executable}.`,
 		);
 		return undefined;
 	}
-	const detected = detectToolchainDefinition(executable);
-	const languages = detected?.definition.languageIdentifiers ?? [];
-	if (!detected || !(languages.includes('c') || languages.includes('cpp'))) {
+	const languages = detectToolchainDefinition(executable)?.definition.languageIdentifiers ?? [];
+	if (!(languages.includes('c') || languages.includes('cpp'))) {
 		logger.logChannel.warn(
 			`The C/C++ configuration "${configuration.name}" names ${executable}, which is not a supported C or C++ compiler.`,
 		);
 		return undefined;
 	}
-	const dialect = detected.definition.argumentDialect === 'msvc' ? 'msvc' : 'gnu';
-	const profile = createToolchainProfile(detected.kind, path.basename(executable), executable);
+	const probed = await probeCompiler(executable);
+	if (!probed) {
+		logger.logChannel.warn(
+			`Ignoring the C/C++ configuration "${configuration.name}": the compiler ${executable} does not run.`,
+		);
+		return undefined;
+	}
+	const dialect = probed.definition.argumentDialect === 'msvc' ? 'msvc' : 'gnu';
+	const profile = createToolchainProfile(probed.kind, path.basename(executable), executable, {
+		target: targetFromClangBanner(probed.banner),
+	});
 	return {
 		profile,
 		variant: {
-			id: `${localFileComparisonKey(folderPath)}|${index}|${configuration.name}`,
+			id,
 			folder: folderPath,
 			toolchainProfileId: profile.id,
 			workingDirectory: folderPath,
@@ -236,6 +233,32 @@ async function folderVariant(
 			configuration: configuration.name,
 		},
 	};
+}
+
+/** The Visual Studio kinds of the bare compiler names that the C/C++ extension finds without PATH. */
+const visualStudioCompilerKinds: Readonly<Record<string, ToolchainKind>> = { cl: 'msvc', 'clang-cl': 'clang-cl' };
+
+/**
+ * The file of a compiler. A path is relative to the folder, and on Windows it can leave out `.exe`.
+ * A bare name is found on PATH. On Windows, a bare `cl.exe` or `clang-cl.exe` that PATH does not
+ * have comes from the first Visual Studio install, as in the C/C++ extension.
+ */
+async function compilerExecutable(
+	command: string,
+	folderPath: string,
+	visualStudio: VisualStudioToolchains,
+): Promise<string | undefined> {
+	const windows = process.platform === 'win32';
+	if (/[\\/]/.test(command)) {
+		const file = path.resolve(folderPath, command);
+		return [file, ...(windows && !path.extname(file) ? [`${file}.exe`] : [])].find(isFile);
+	}
+	const onPath = await findExecutableOnPath(command);
+	const kind = visualStudioCompilerKinds[path.win32.parse(command).name.toLowerCase()];
+	if (onPath || !windows || !kind) {
+		return onPath;
+	}
+	return (await visualStudio()).find((profile) => profile.kind === kind)?.executable;
 }
 
 /** The `C_Cpp.default` settings of a folder. An empty value counts as no value. */

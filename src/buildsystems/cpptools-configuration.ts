@@ -69,6 +69,35 @@ export function parseCppToolsProperties(text: string, context: CppToolsContext):
 	);
 }
 
+/** The configuration name that the C/C++ extension selects first on each platform. */
+const platformConfigurationNames: Partial<Record<NodeJS.Platform, string>> = {
+	win32: 'Win32',
+	linux: 'Linux',
+	darwin: 'Mac',
+};
+
+/**
+ * Orders the configurations for their variants and gives each one a key. The configuration that
+ * the C/C++ extension selects on the platform comes first, such as "Win32" on Windows. The key is
+ * the name, with a number for a repeated name. Thus the key stays when a configuration moves.
+ */
+export function orderedConfigurations(
+	configurations: readonly CppToolsConfiguration[],
+	platform: NodeJS.Platform = process.platform,
+): { readonly key: string; readonly configuration: CppToolsConfiguration }[] {
+	const counts = new Map<string, number>();
+	const keyed = configurations.map((configuration) => {
+		const count = (counts.get(configuration.name) ?? 0) + 1;
+		counts.set(configuration.name, count);
+		return { key: count > 1 ? `${configuration.name}#${count}` : configuration.name, configuration };
+	});
+	const name = platformConfigurationNames[platform];
+	return [
+		...keyed.filter((entry) => entry.configuration.name === name),
+		...keyed.filter((entry) => entry.configuration.name !== name),
+	];
+}
+
 /** A configuration made from the `C_Cpp.default` settings alone, for a folder without the file. */
 export function defaultConfiguration(context: CppToolsContext): CppToolsConfiguration | undefined {
 	const { compilerPath, compileCommands } = context.defaults;
@@ -199,8 +228,17 @@ export function standardArguments(standard: string, dialect: ArgumentDialect, la
 	return selected ? [`/std:${selected}`] : [];
 }
 
-/** The language of a source for its standard: C for `.c` and Objective-C, C++ for the others. */
-export function sourceLanguage(file: string): 'c' | 'cpp' {
+/**
+ * The language of a source for its standard. The language of the open document applies first.
+ * Without it, `.c` and Objective-C `.m` files are C, and the others are C++.
+ */
+export function sourceLanguage(file: string, languageId?: string): 'c' | 'cpp' {
+	if (languageId === 'c' || languageId === 'objective-c') {
+		return 'c';
+	}
+	if (languageId === 'cpp' || languageId === 'objective-cpp' || languageId === 'cuda') {
+		return 'cpp';
+	}
 	return /\.(?:c|m)$/.test(file) ? 'c' : 'cpp';
 }
 

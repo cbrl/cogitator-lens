@@ -1,12 +1,13 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { execute } from '../exec.js';
-import type { ToolchainProfile } from '../types/index.js';
+import type { ToolchainKind, ToolchainProfile } from '../types/index.js';
+import type { ToolchainDefinition } from './toolchain-contracts.js';
 import { createToolchainProfile, detectToolchainDefinition } from './toolchain-map.js';
 import { localFileComparisonKey } from '../file-identity.js';
 import { detectVisualStudioToolchains } from './visual-studio-detection.js';
 import { targetFromClangBanner } from './target-architecture.js';
+import { environmentValue, versionBanner } from './version-banner.js';
 
 /**
  * A compiler or interpreter that is looked up on PATH. Each PATH directory can hold one, and the
@@ -112,8 +113,12 @@ export async function detectPathToolchains(
 	platform: NodeJS.Platform = process.platform,
 ): Promise<ToolchainProfile[]> {
 	const candidates = pathCandidates(platform);
+	// Each PATH directory is read once for the versioned names of all candidates.
+	const listing = candidates.some((candidate) => candidate.versionedNames)
+		? listPathDirectories(environment, platform)
+		: Promise.resolve([]);
 	const [pathGroups, visualStudio] = await Promise.all([
-		Promise.all(candidates.map((candidate) => detectCandidate(candidate, environment, platform))),
+		Promise.all(candidates.map((candidate) => detectCandidate(candidate, environment, platform, listing))),
 		detectVisualStudioToolchains(environment, platform),
 	]);
 	const rustupIndex = candidates.findIndex((candidate) => candidate.names.includes('rustc'));
@@ -144,8 +149,9 @@ async function detectCandidate(
 	candidate: PathCandidate,
 	environment: NodeJS.ProcessEnv,
 	platform: NodeJS.Platform,
+	listing: Promise<readonly DirectoryListing[]>,
 ): Promise<DetectedProfile[]> {
-	const executables = await candidateExecutables(candidate, environment, platform);
+	const executables = await candidateExecutables(candidate, environment, platform, listing);
 	const probed = await Promise.all(
 		executables.map(async (found) => {
 			if (!(await canRunWithoutPrompt(found.executable, platform, environment))) {
@@ -200,9 +206,10 @@ async function candidateExecutables(
 	candidate: PathCandidate,
 	environment: NodeJS.ProcessEnv,
 	platform: NodeJS.Platform,
+	listing: Promise<readonly DirectoryListing[]>,
 ): Promise<DetectedExecutable[]> {
 	const versioned = candidate.versionedNames
-		? await versionedExecutables(candidate.versionedNames, environment, platform)
+		? await versionedExecutables(candidate.versionedNames, await listing, platform)
 		: [];
 	const byName = [
 		...(await Promise.all(
@@ -222,20 +229,30 @@ async function candidateExecutables(
 	);
 }
 
+/** The file names in one PATH directory. */
+interface DirectoryListing {
+	readonly directory: string;
+	readonly entries: readonly string[];
+}
+
+/** Reads each PATH directory. A directory that cannot be read has no entries. */
+function listPathDirectories(environment: NodeJS.ProcessEnv, platform: NodeJS.Platform): Promise<DirectoryListing[]> {
+	return Promise.all(
+		pathEntries(environment, platform).map(async (directory) => ({
+			directory,
+			entries: await fs.promises.readdir(directory).catch((): string[] => []),
+		})),
+	);
+}
+
 /** The versioned executables in the PATH directories, grouped by name, newest name first. */
 async function versionedExecutables(
 	names: RegExp,
-	environment: NodeJS.ProcessEnv,
+	listing: readonly DirectoryListing[],
 	platform: NodeJS.Platform,
 ): Promise<{ readonly name: string; readonly executable: string }[][]> {
 	const byName = new Map<string, { readonly name: string; readonly executable: string }[]>();
-	for (const directory of pathEntries(environment, platform)) {
-		let entries: string[];
-		try {
-			entries = await fs.promises.readdir(directory);
-		} catch {
-			continue;
-		}
+	for (const { directory, entries } of listing) {
 		for (const entry of entries) {
 			const name = platform === 'win32' ? entry.replace(/\.exe$/i, '') : entry;
 			if ((platform === 'win32' && name === entry) || !names.test(name)) {
@@ -316,24 +333,35 @@ async function realPathKey(executable: string): Promise<string> {
 	}
 }
 
-async function versionBanner(
+/** A compiler that a configuration names, with its version banner. */
+export interface ProbedCompiler {
+	readonly kind: ToolchainKind;
+	readonly definition: ToolchainDefinition;
+	readonly banner: string;
+}
+
+/**
+ * Runs a compiler that a configuration names, and finds its toolchain from the name and the version
+ * banner. A GCC name with a Clang banner is Clang, as `/usr/bin/gcc` is on macOS. A compiler that
+ * does not run, or that has no supported name, gives nothing.
+ */
+export async function probeCompiler(
 	executable: string,
-	args: readonly string[],
-	environment: NodeJS.ProcessEnv,
-): Promise<string | undefined> {
-	try {
-		// The temporary directory has no go.mod or global.json that could switch toolchains.
-		const result = await execute(executable, args, {
-			cwd: os.tmpdir(),
-			env: environment,
-			timeoutMs: 10_000,
-			maxOutputBytes: 64 * 1024,
-		});
-		const banner = `${result.stdout}\n${result.stderr}`.trim();
-		return result.returnCode === 0 && banner ? banner : undefined;
-	} catch {
+	environment: NodeJS.ProcessEnv = process.env,
+	platform: NodeJS.Platform = process.platform,
+): Promise<ProbedCompiler | undefined> {
+	const byName = detectToolchainDefinition(executable, '', platform);
+	if (!byName || !(await canRunWithoutPrompt(executable, platform, environment))) {
 		return undefined;
 	}
+	// cl.exe prints its banner when it runs without arguments.
+	const banner = await versionBanner(executable, byName.kind === 'msvc' ? [] : ['--version'], environment);
+	if (banner === undefined) {
+		return undefined;
+	}
+	const clangDriver = byName.kind === 'gcc' && /clang version/i.test(banner);
+	const detected = detectToolchainDefinition(clangDriver ? 'clang' : executable, banner, platform);
+	return detected && { ...detected, banner };
 }
 
 /** On macOS these /usr/bin stubs open an installer dialog when they run without the Command Line Tools. */
@@ -361,12 +389,9 @@ async function canRunWithoutPrompt(
 }
 
 function pathEntries(environment: NodeJS.ProcessEnv, platform: NodeJS.Platform): string[] {
-	// A copied Windows environment can spell the variable "Path".
-	const key =
-		platform === 'win32'
-			? (Object.keys(environment).find((candidate) => candidate.toUpperCase() === 'PATH') ?? 'PATH')
-			: 'PATH';
-	return (environment[key] ?? '').split(path.delimiter).filter((entry) => entry && path.isAbsolute(entry));
+	return (environmentValue(environment, 'PATH', platform) ?? '')
+		.split(path.delimiter)
+		.filter((entry) => entry && path.isAbsolute(entry));
 }
 
 async function isExecutableFile(candidate: string, platform: NodeJS.Platform): Promise<boolean> {

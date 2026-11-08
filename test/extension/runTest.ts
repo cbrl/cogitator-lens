@@ -18,6 +18,7 @@ import {
 	type ArtifactRequest,
 	type CompilationVariant,
 	type RenderedTextArtifact,
+	type DefaultCompilationSettings,
 	type FolderVariant,
 	type ProviderSnapshot,
 	type ToolchainProfile,
@@ -775,15 +776,20 @@ async function verifyFolderVariants(): Promise<void> {
 	const outside = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'coglens-folder-outside-'));
 	const cSource = vscode.Uri.file(path.join(temporaryDirectory, 'src', 'main.c'));
 	const cppSource = vscode.Uri.file(path.join(temporaryDirectory, 'main.cpp'));
+	const cHeader = vscode.Uri.file(path.join(temporaryDirectory, 'src', 'util.h'));
 	const pythonSource = vscode.Uri.file(path.join(temporaryDirectory, 'script.py'));
 	const outsideSource = vscode.Uri.file(path.join(outside, 'other.cpp'));
 	await fs.promises.mkdir(path.dirname(cSource.fsPath));
 	await fs.promises.writeFile(cSource.fsPath, 'int main(void) { return 0; }\n');
+	await fs.promises.writeFile(cHeader.fsPath, 'int util(void);\n');
 	await fs.promises.writeFile(cppSource.fsPath, 'int main() { return 0; }\n');
 	await fs.promises.writeFile(pythonSource.fsPath, 'print(1)\n');
 	await fs.promises.writeFile(outsideSource.fsPath, 'int main() { return 0; }\n');
 	const configurationChange = new vscode.EventEmitter<void>();
-	const service = new CompilationService(testConfiguration(configurationChange));
+	let defaultInvocation: DefaultCompilationSettings | undefined;
+	const service = new CompilationService(
+		testConfiguration(configurationChange, { getDefaultCompilationSettings: () => defaultInvocation }),
+	);
 	let changes = 0;
 	const subscription = service.onFallbackVariantsChanged(() => changes++);
 	const snapshot = (folderVariants: readonly FolderVariant[]): ProviderSnapshot => ({
@@ -839,6 +845,22 @@ async function verifyFolderVariants(): Promise<void> {
 			'A source outside the folder',
 		);
 		assert.equal(service.findVariant(cppSource, cppVariants[0].id)?.toolchainProfileId, 'cpptools:gcc');
+
+		// VS Code opens a .h file as C++, and the user can select C.
+		const header = await vscode.languages.setTextDocumentLanguage(
+			await vscode.workspace.openTextDocument(cHeader),
+			'c',
+		);
+		assert.equal(header.languageId, 'c');
+		assert.deepEqual(service.getVariants(cHeader)[0].arguments, ['-std=c11'], 'A C header gets the C arguments');
+
+		defaultInvocation = { toolchain: 'clang 18', args: ['-O1'] };
+		assert.deepEqual(
+			service.getVariants(cppSource).map((variant) => variant.provider),
+			['default', 'cpptools'],
+			'The default invocation of the user comes before the configuration',
+		);
+		defaultInvocation = undefined;
 
 		service.reconcileProviderSnapshot(snapshot([]));
 		assert.equal(changes, 2);
@@ -1144,7 +1166,7 @@ async function verifyDisplayFilterCaching(workspaceFolder: vscode.WorkspaceFolde
 	const backend = service.toolchainRegistry.getToolchainById(registered.id);
 	assert.ok(backend);
 	const dependency = vscode.Uri.joinPath(workspaceFolder.uri, 'coglens-cache-dependency.h');
-	fs.writeFileSync(dependency.fsPath, 'one\n');
+	await writeFileAndWaitForEvent(dependency, 'one\n');
 	let toolchainRuns = 0;
 	backend.produceAssembly = async (source) => {
 		toolchainRuns++;
@@ -2010,6 +2032,26 @@ function testConfiguration(
 		updateArtifactOption: async () => undefined,
 		...overrides,
 	} as unknown as ConfigurationService;
+}
+
+/**
+ * Writes a file and waits for its watcher event. The event can arrive late, and then a watcher that
+ * a service makes after the write gets it. One batch of events goes to all watchers at once.
+ */
+async function writeFileAndWaitForEvent(file: vscode.Uri, text: string): Promise<void> {
+	const watcher = vscode.workspace.createFileSystemWatcher(
+		new vscode.RelativePattern(vscode.Uri.file(path.dirname(file.fsPath)), path.basename(file.fsPath)),
+	);
+	try {
+		const event = new Promise<void>((resolve) => {
+			watcher.onDidCreate(() => resolve());
+			watcher.onDidChange(() => resolve());
+		});
+		fs.writeFileSync(file.fsPath, text);
+		await Promise.race([event, delay(3000)]);
+	} finally {
+		watcher.dispose();
+	}
 }
 
 function delay(milliseconds: number): Promise<void> {

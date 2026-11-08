@@ -7,6 +7,7 @@ import {
 	detectPathToolchains,
 	findExecutableOnPath,
 	pathCandidates,
+	probeCompiler,
 	rustupDisplayName,
 	versionFromBanner,
 } from '../../src/toolchains/path-detection.js';
@@ -202,4 +203,28 @@ test('vswhere installs get their product name, and a prerelease gets its milesto
 	assert.deepEqual(hostCompilerFolders('x64'), { msvc: ['Hostx64', 'x64'], llvm: ['x64', 'bin'] });
 	assert.deepEqual(hostCompilerFolders('arm64')?.msvc, ['HostArm64', 'arm64']);
 	assert.equal(hostCompilerFolders('ppc64'), undefined);
+});
+
+test('a configured compiler gets its kind from its name and its banner', posixOnly, async () => {
+	const directory = fakeToolDirectory({
+		gcc: { banner: 'Apple clang version 15.0.0 (clang-1500.3.9.4)' },
+		'gcc-14': { banner: 'gcc-14 (Ubuntu 14.2.0-4ubuntu2) 14.2.0' },
+		'g++': { banner: 'Ubuntu clang version 18.1.3 (1ubuntu1)' },
+		clang: { banner: 'broken', code: 1 },
+	});
+	const kind = async (name: string) => (await probeCompiler(path.join(directory, name), process.env, 'linux'))?.kind;
+	try {
+		assert.equal(await kind('gcc'), 'apple-clang', 'The gcc of macOS is Apple Clang');
+		assert.equal(await kind('gcc-14'), 'gcc');
+		assert.equal(await kind('g++'), 'clang');
+		assert.equal(await kind('clang'), undefined, 'A compiler that fails gives nothing');
+		assert.equal(await kind('gcc-99'), undefined, 'A missing compiler gives nothing');
+		assert.equal(await kind('make'), undefined, 'An unsupported name does not run');
+		assert.match(
+			(await probeCompiler(path.join(directory, 'gcc-14'), process.env, 'linux'))?.banner ?? '',
+			/14\.2\.0/,
+		);
+	} finally {
+		fs.rmSync(directory, { recursive: true, force: true });
+	}
 });

@@ -23,10 +23,14 @@ other paths, or to `[]` to disable compilation-database discovery.
 It also reads the configurations of the C/C++ extension in `.vscode/c_cpp_properties.json` and the
 `C_Cpp.default` settings. A configuration with a `compilerPath` gives a variant to each source in
 its folder that has no other variant. The variant uses the include paths, defines, forced includes,
-language standard, and `compilerArgs` of the configuration. A recursive include path, such as
-`${workspaceFolder}/**`, adds only its base folder, because compilers do not search below an include
-folder. The `compileCommands` database of a configuration gives the variants of its sources. Set
-`coglens.cppToolsConfiguration` to `false` to turn this off.
+language standard, and `compilerArgs` of the configuration. The compiler must exist on this
+computer, so a "Mac" configuration gives no variant on Windows. The configuration for the platform,
+such as "Win32", comes first, and `coglens.defaultInvocation` comes before all of them. On Windows,
+a bare `cl.exe` or `clang-cl.exe` that is not on `PATH` comes from the first Visual Studio install.
+In a C header, the variant uses the C arguments when the language of the editor is C. A recursive
+include path, such as `${workspaceFolder}/**`, adds only its base folder, because compilers do not
+search below an include folder. The `compileCommands` database of a configuration gives the
+variants of its sources. Set `coglens.cppToolsConfiguration` to `false` to turn this off.
 
 When [CMake Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode.cmake-tools) is
 installed, its configured projects are also available. If both sources describe a file, select the

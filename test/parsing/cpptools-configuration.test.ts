@@ -5,6 +5,7 @@ import {
 	compilerCommand,
 	configurationArguments,
 	defaultConfiguration,
+	orderedConfigurations,
 	parseCppToolsProperties,
 	sourceLanguage,
 	standardArguments,
@@ -170,4 +171,44 @@ test('C and Objective-C sources take the C standard', () => {
 	assert.equal(sourceLanguage('/src/main.cpp'), 'cpp');
 	assert.equal(sourceLanguage('/src/kernel.cu'), 'cpp');
 	assert.equal(sourceLanguage('/src/view.mm'), 'cpp');
+});
+
+test('the language of the open document selects the standard before the extension', () => {
+	assert.equal(sourceLanguage('/src/util.h', 'c'), 'c');
+	assert.equal(sourceLanguage('/src/util.h', 'cpp'), 'cpp');
+	assert.equal(sourceLanguage('/src/util.h'), 'cpp');
+	assert.equal(sourceLanguage('/src/main.c', 'cpp'), 'cpp');
+	assert.equal(sourceLanguage('/src/view.m', 'objective-c'), 'c');
+	assert.equal(sourceLanguage('/src/kernel.cu', 'cuda'), 'cpp');
+	assert.equal(sourceLanguage('/src/main.c', 'plaintext'), 'c');
+});
+
+test('the configuration of the platform comes first, and each key stays when the configurations move', () => {
+	const configurations = parseCppToolsProperties(
+		JSON.stringify({
+			configurations: [
+				{ name: 'Mac', compilerPath: '/usr/bin/clang' },
+				{ name: 'Linux', compilerPath: '/usr/bin/gcc' },
+				{ name: 'Win32', compilerPath: 'cl.exe' },
+				{ name: 'Linux', compilerPath: '/usr/bin/clang' },
+			],
+		}),
+		context(),
+	);
+	const keys = (platform: NodeJS.Platform, entries = configurations) =>
+		orderedConfigurations(entries, platform).map((entry) => entry.key);
+	assert.deepEqual(keys('win32'), ['Win32', 'Mac', 'Linux', 'Linux#2']);
+	assert.deepEqual(keys('linux'), ['Linux', 'Linux#2', 'Mac', 'Win32']);
+	assert.deepEqual(keys('darwin'), ['Mac', 'Linux', 'Win32', 'Linux#2']);
+	assert.deepEqual(keys('freebsd'), ['Mac', 'Linux', 'Win32', 'Linux#2']);
+	assert.deepEqual(
+		orderedConfigurations(configurations, 'linux').map((entry) => entry.configuration.compilerPath),
+		['/usr/bin/gcc', '/usr/bin/clang', '/usr/bin/clang', 'cl.exe'],
+	);
+	// A new configuration above the others does not change their keys.
+	const added = parseCppToolsProperties(
+		JSON.stringify({ configurations: [{ name: 'Embedded', compilerPath: '/opt/arm/bin/gcc' }] }),
+		context(),
+	);
+	assert.deepEqual(keys('win32', [...added, ...configurations]), ['Win32', 'Embedded', 'Mac', 'Linux', 'Linux#2']);
 });

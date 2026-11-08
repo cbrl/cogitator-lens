@@ -6,6 +6,7 @@ import { isRecord } from '../common.js';
 import type { ToolchainProfile } from '../types/index.js';
 import { createToolchainProfile } from './toolchain-map.js';
 import { targetFromClangBanner } from './target-architecture.js';
+import { environmentValue, versionBanner } from './version-banner.js';
 
 /** A Visual Studio install that vswhere reports. */
 export interface VisualStudioInstall {
@@ -79,7 +80,7 @@ export async function detectVisualStudioToolchains(
 	architecture: string = os.arch(),
 ): Promise<ToolchainProfile[]> {
 	const folders = hostCompilerFolders(architecture);
-	const programFiles = environmentValue(environment, 'ProgramFiles(x86)');
+	const programFiles = environmentValue(environment, 'ProgramFiles(x86)', 'win32');
 	if (platform !== 'win32' || !folders || !programFiles) {
 		return [];
 	}
@@ -131,7 +132,7 @@ async function installToolchains(
 			: [];
 	});
 	const clangCl = path.join(toolsFolder, 'Llvm', ...folders.llvm, 'clang-cl.exe');
-	const clangBanner = fs.existsSync(clangCl) ? await clangClBanner(clangCl, environment) : undefined;
+	const clangBanner = fs.existsSync(clangCl) ? await versionBanner(clangCl, ['--version'], environment) : undefined;
 	const clang = clangBanner
 		? [
 				createToolchainProfile(
@@ -147,25 +148,4 @@ async function installToolchains(
 			]
 		: [];
 	return [...msvc, ...clang];
-}
-
-/** The version banner of a clang-cl, or nothing when it does not run. */
-async function clangClBanner(executable: string, environment: NodeJS.ProcessEnv): Promise<string | undefined> {
-	try {
-		const result = await execute(executable, ['--version'], {
-			cwd: os.tmpdir(),
-			env: environment,
-			timeoutMs: 10_000,
-			maxOutputBytes: 64 * 1024,
-		});
-		return result.returnCode === 0 ? result.stdout : undefined;
-	} catch {
-		return undefined;
-	}
-}
-
-/** Reads an environment variable by a name in any case, as Windows does. */
-function environmentValue(environment: NodeJS.ProcessEnv, name: string): string | undefined {
-	const key = Object.keys(environment).find((candidate) => candidate.toUpperCase() === name.toUpperCase());
-	return key === undefined ? undefined : environment[key];
 }
