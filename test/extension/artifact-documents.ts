@@ -12,6 +12,7 @@ import {
 import { sameLocalFile } from '../../src/file-identity.js';
 import { getArtifactUri, parseArtifactUri } from '../../src/artifact-document/artifact-uri.js';
 import { currentListing } from '../../src/artifact-document/artifact-generator.js';
+import { ArtifactNavigationProvider } from '../../src/artifact-document/artifact-navigation-provider.js';
 import { toolchainComparisonVariantId } from '../../src/compilation/comparison-variants.js';
 import type { ArtifactPreset } from '../../src/artifacts/ui/presets.js';
 import {
@@ -28,6 +29,7 @@ import {
 	defaultArtifactOptions,
 	type ArtifactKind,
 	type CompilationVariant,
+	type ToolchainKind,
 	type ToolchainProfile,
 } from '../../src/types/index.js';
 
@@ -79,7 +81,7 @@ interface DocumentEnvironment {
 	readonly registry: ArtifactDocumentRegistry;
 	readonly provider: ArtifactDocumentProvider;
 	/** The URI of an assembly document of the fake variant with a preset. */
-	uri(preset?: string, kind?: ArtifactKind): vscode.Uri;
+	uri(preset?: string, kind?: ArtifactKind, functionFilter?: string): vscode.Uri;
 	/** Sets the arguments and the environment of the fake variant. */
 	compileWith(args: readonly string[], environment?: Readonly<Record<string, string>>): void;
 	/** Announces a change to the settings with these keys. */
@@ -92,14 +94,15 @@ interface DocumentEnvironment {
 async function withDocumentEnvironment(
 	repositoryRoot: string,
 	test: (environment: DocumentEnvironment) => Promise<void>,
+	toolchainKind: ToolchainKind = 'gcc',
 ): Promise<void> {
 	const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'coglens-documents-'));
 	const source = vscode.Uri.file(path.join(directory, 'main.cpp'));
 	await fs.promises.writeFile(source.fsPath, 'int main() { return 0; }\n');
 	const profile: ToolchainProfile = {
-		id: 'fake-documents-gcc',
-		displayName: 'Fake documents GCC',
-		kind: 'gcc',
+		id: `fake-documents-${toolchainKind}`,
+		displayName: `Fake documents ${toolchainKind.toUpperCase()}`,
+		kind: toolchainKind,
 		executable: 'node',
 		defaultArguments: [path.join(repositoryRoot, 'test/fixtures/stack-analysis/fake-compiler.cjs')],
 		environment: {},
@@ -136,7 +139,8 @@ async function withDocumentEnvironment(
 			service,
 			registry,
 			provider,
-			uri: (preset = 'default', kind = 'assembly') => getArtifactUri(source, { id: variantId }, kind, preset),
+			uri: (preset = 'default', kind = 'assembly', functionFilter) =>
+				getArtifactUri(source, { id: variantId }, kind, preset, undefined, {}, functionFilter),
 			compileWith: (args, environment = {}) =>
 				service.reconcileProviderSnapshot({
 					provider: 'cmake',
@@ -588,6 +592,61 @@ export function verifyComparisonTargets(): void {
  * listing before the last change, a view URI shows a part of the listing, and a comparison variant
  * of the same toolchain resolves with the arguments of its base variant.
  */
+/**
+ * An optimization pipeline document names one function in its URI, and its compile prints the passes
+ * of that function only. Each pass name is a link that compares the function before and after it.
+ */
+export async function verifyOptimizationPipeline(repositoryRoot: string): Promise<void> {
+	await withDocumentEnvironment(
+		repositoryRoot,
+		async ({ provider, uri, compileWith, provide }) => {
+			compileWith([]);
+			assert.throws(() => uri('default', 'optimization-pipeline'), /require a function/u);
+			assert.throws(() => uri('default', 'assembly', '_Z3fooi'), /do not accept a function filter/u);
+
+			const pipelineUri = uri('default', 'optimization-pipeline', '_Z3fooi');
+			assert.equal(path.posix.basename(pipelineUri.path), 'main._Z3fooi.coglens.passes');
+			assert.equal(parseArtifactUri(pipelineUri)?.functionFilter, '_Z3fooi');
+			const query = new URLSearchParams(pipelineUri.query);
+			query.delete('function-filter');
+			assert.equal(parseArtifactUri(pipelineUri.with({ query: query.toString() })), undefined);
+			const msvcName = uri('default', 'optimization-pipeline', '?foo@@YAHH@Z');
+			assert.equal(path.posix.basename(msvcName.path), 'main._foo_YAHH_Z.coglens.passes');
+			assert.equal(parseArtifactUri(msvcName)?.functionFilter, '?foo@@YAHH@Z');
+
+			const text = await provide(pipelineUri);
+			assert.match(text, /^; Optimization pipeline of _Z3fooi$/mu);
+			assert.match(text, /^1 \* SROAPass on _Z3fooi$/mu);
+			assert.doesNotMatch(text, /EarlyCSEPass/u, 'An unchanged pass is hidden');
+			const artifact = provider.getRenderedArtifact(pipelineUri);
+			assert.equal(artifact?.passes?.length, 1);
+
+			// Another function has a document of its own, so its compile prints its own passes.
+			assert.match(await provide(uri('default', 'optimization-pipeline', '_Z3bari')), /SROAPass on _Z3bari/u);
+
+			// The document of this environment is not open in an editor, so the links read its URI only.
+			const navigation = new ArtifactNavigationProvider((candidate) => provider.getRenderedArtifact(candidate));
+			const cancellation = new vscode.CancellationTokenSource();
+			const links =
+				(await navigation.provideDocumentLinks(
+					{ uri: pipelineUri } as vscode.TextDocument,
+					cancellation.token,
+				)) ?? [];
+			cancellation.dispose();
+			const passLink = links.find((link) => link.target?.scheme === 'command');
+			assert.equal(passLink?.target?.path, 'coglens.ShowPassChange');
+			// VS Code decodes the query of a command link once more before it parses the arguments.
+			assert.deepEqual(JSON.parse(decodeURIComponent(passLink?.target?.query ?? '')), [1]);
+			const range = passLink?.range;
+			assert.equal(
+				range && text.split('\n')[range.start.line].slice(range.start.character, range.end.character),
+				'SROAPass on _Z3fooi',
+			);
+		},
+		'clang',
+	);
+}
+
 export async function verifyArtifactExperiments(repositoryRoot: string): Promise<void> {
 	await withDocumentEnvironment(
 		repositoryRoot,

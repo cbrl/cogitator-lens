@@ -1,4 +1,11 @@
+import path from 'path';
 import { parseMakeDepfile } from '../compilation/artifact-inputs.js';
+import {
+	llvmPassDumpOptions,
+	pipelineProducer,
+	type PipelineArguments,
+} from '../artifacts/optimization-pipeline/pipeline-producer.js';
+import { machineCodeAnalysis } from '../artifacts/machine-code-analysis/analysis-producer.js';
 import { outputProducer } from '../artifacts/core/compiler-output-producer.js';
 import { parseRustMirControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/rust-mir-cfg-parser.js';
 import { parseLlvmControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/llvm-ir-cfg-parser.js';
@@ -75,6 +82,18 @@ export const rustLlvmIrOutput: ArtifactOutputSpec = Object.freeze({
 		rustArtifactArguments('llvm-ir', outputFile, providerArguments),
 });
 
+/**
+ * rustc writes assembly with one codegen unit. With more units, the units run at the same time, and
+ * their pass dumps mix.
+ */
+const rustPipelineArguments: PipelineArguments = (functionFilter, temporaryDirectory, providerArguments) => [
+	...rustOutputArguments('assembly', path.join(temporaryDirectory, 'output.s'), providerArguments),
+	'-C',
+	'codegen-units=1',
+	'-C',
+	`llvm-args=${llvmPassDumpOptions(functionFilter).join(' ')}`,
+];
+
 /** Removes the output, emit, and diagnostic-format flags that the Rust backend owns. */
 export function stripRustManagedArguments(
 	args: readonly string[],
@@ -118,7 +137,7 @@ export const rust: ToolchainDefinition = {
 	sourceOverlay: rustSourceOverlay,
 	createParser: defaultAsmParser,
 	createCfgParser: () => new ClangAssemblyCfgParser(new InstructionSetInfo()),
-	discoverTools: toolDiscoverer({ demangler: 'rustfilt' }),
+	discoverTools: toolDiscoverer({ demangler: 'rustfilt', analyzer: 'llvm-mca' }),
 	artifacts: {
 		assembly: compilerAssembly,
 		'llvm-ir': { producer: outputProducer(rustLlvmIrOutput) },
@@ -142,5 +161,7 @@ export const rust: ToolchainDefinition = {
 				assemblyControlFlowGraphOutput,
 			],
 		},
+		'optimization-pipeline': { producer: pipelineProducer(rustPipelineArguments) },
+		'machine-code-analysis': machineCodeAnalysis,
 	},
 };

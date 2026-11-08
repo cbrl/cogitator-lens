@@ -107,6 +107,40 @@ other compiler names the function in another way, you also select the function o
 The comparison can also renumber local labels and hide addresses, so the diff shows only changed
 instructions.
 
+### Optimization pipeline
+
+The **Optimization pipeline** artifact shows the LLVM passes that ran on one function. Clang,
+clang-cl, and rustc make it. Open Artifact first asks for the function, from the LLVM IR of the
+source. The compile then prints the function before and after each pass. It prints only that
+function, because the output of all functions can reach gigabytes.
+
+The list shows the passes that changed the function. Set the `showUnchangedPasses` option to list
+each pass. Ctrl+Click a pass, or run **Show Pass Change** on its line, to compare the function before
+and after the pass. The list also has the machine code passes after instruction selection. For
+rustc, the compile uses one codegen unit, so the dumps of the units do not mix.
+
+### Machine code analysis
+
+The **Machine code analysis** artifact runs `llvm-mca` on the assembly of the source. It is
+available for GCC, Clang, clang-cl, and rustc when the toolchain finds `llvm-mca` beside its
+compiler or on the PATH. Each function is a code region, so `llvm-mca` analyzes each function on
+its own. The report shows the throughput, the latency of each instruction, and the resource
+pressure. Each row of an instruction table connects to its source line, like a listing.
+
+The target of the compile sets the `-mtriple` of `llvm-mca`. A `-mcpu` argument, an x86 `-march`
+argument, or a rustc `-C target-cpu` argument sets its processor. Without one, `llvm-mca` models a
+generic processor, so the result does not depend on the computer. The Intel syntax option shows
+x86 instructions in Intel syntax.
+
+### Code size
+
+The **Code size** artifact lists the size of each function and each section of the compiled object.
+It uses the disassembler of the binary disassembly, so the two artifacts share one compile. The size
+of a function is the sum of the bytes of its instructions, and the largest function comes first.
+Select a function row to show its first source line. The section table merges the sections that the
+linker merges, such as the `.text` section of each function. It leaves out the debug, symbol, and
+relocation sections. Turn on the demangle option to show the demangled names.
+
 ### Navigation
 
 Hover a source line to see the lines that its open artifacts generated from it. `Cogitator Lens:
@@ -139,17 +173,20 @@ and the metrics.
 
 ### Artifact support
 
-| Artifact             | GCC | Clang / Apple Clang | clang-cl | MSVC | Rust | Python         | .NET     | Go        | Zig | nvcc       |
-| -------------------- | --- | ------------------- | -------- | ---- | ---- | -------------- | -------- | --------- | --- | ---------- |
-| Assembly             | Yes | Yes                 | Yes      | Yes  | Yes  | Yes (bytecode) | Yes (IL) | Yes       | Yes | Yes (PTX)  |
-| Binary disassembly   | Yes | Yes                 | Yes      | Yes  | —    | —              | —        | —         | —   | Yes (SASS) |
-| Preprocessed source  | Yes | Yes                 | Yes      | Yes  | —    | —              | —        | —         | —   | Yes        |
-| AST                  | —   | Yes                 | Yes      | —    | —    | Yes (3.9+)     | —        | —         | —   | —          |
-| LLVM IR              | —   | Yes                 | Yes      | —    | Yes  | —              | —        | —         | Yes | —          |
-| Rust MIR             | —   | —                   | —        | —    | Yes  | —              | —        | —         | —   | —          |
-| Optimization remarks | Yes | Yes                 | Yes      | —    | —    | —              | —        | —         | —   | —          |
-| Stack analysis       | Yes | Yes                 | Yes      | —    | —    | Yes            | —        | —         | —   | —          |
-| Control-flow graph   | Yes | Yes                 | Yes      | —    | Yes  | Yes            | —        | Yes (SSA) | Yes | —          |
+| Artifact              | GCC | Clang / Apple Clang | clang-cl | MSVC | Rust | Python         | .NET     | Go        | Zig | nvcc       |
+| --------------------- | --- | ------------------- | -------- | ---- | ---- | -------------- | -------- | --------- | --- | ---------- |
+| Assembly              | Yes | Yes                 | Yes      | Yes  | Yes  | Yes (bytecode) | Yes (IL) | Yes       | Yes | Yes (PTX)  |
+| Binary disassembly    | Yes | Yes                 | Yes      | Yes  | —    | —              | —        | —         | —   | Yes (SASS) |
+| Preprocessed source   | Yes | Yes                 | Yes      | Yes  | —    | —              | —        | —         | —   | Yes        |
+| AST                   | —   | Yes                 | Yes      | —    | —    | Yes (3.9+)     | —        | —         | —   | —          |
+| LLVM IR               | —   | Yes                 | Yes      | —    | Yes  | —              | —        | —         | Yes | —          |
+| Rust MIR              | —   | —                   | —        | —    | Yes  | —              | —        | —         | —   | —          |
+| Optimization remarks  | Yes | Yes                 | Yes      | —    | —    | —              | —        | —         | —   | —          |
+| Stack analysis        | Yes | Yes                 | Yes      | —    | —    | Yes            | —        | —         | —   | —          |
+| Control-flow graph    | Yes | Yes                 | Yes      | —    | Yes  | Yes            | —        | Yes (SSA) | Yes | —          |
+| Optimization pipeline | —   | Yes                 | Yes      | —    | Yes  | —              | —        | —         | —   | —          |
+| Machine code analysis | Yes | Yes                 | Yes      | —    | Yes  | —              | —        | —         | —   | —          |
+| Code size             | Yes | Yes                 | Yes      | Yes  | —    | —              | —        | —         | —   | Yes        |
 
 ## Configuration
 
@@ -253,6 +290,9 @@ tools and `file-argument` for tools such as MSVC's `undname`.
 
 Install `rustfilt` beside `rustc`, or configure it as the `demangler` tool, to demangle Rust
 symbols.
+
+Machine code analysis uses `llvm-mca`. Configure it as the `analyzer` tool when the toolchain does
+not find it.
 
 ### .NET
 

@@ -6,6 +6,8 @@ import {
 	renderClangOptimizationRemarks,
 } from '../artifacts/optimization-remarks/clang-optimization-remarks.js';
 import { nativeStackAnalysisProducer } from '../artifacts/stack-analysis/native-stack-analysis.js';
+import { clangPipelineArguments, pipelineProducer } from '../artifacts/optimization-pipeline/pipeline-producer.js';
+import { machineCodeAnalysis } from '../artifacts/machine-code-analysis/analysis-producer.js';
 import { parseLlvmControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/llvm-ir-cfg-parser.js';
 import { ClangAssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/assembly-dialects.js';
 import { InstructionSetInfo } from '../artifacts/control-flow-graph/parsers/instruction-sets.js';
@@ -13,6 +15,7 @@ import {
 	compilerAssembly,
 	assemblyControlFlowGraphOutput,
 	binaryDisassembly,
+	codeSize,
 	controlFlowGraphOutput,
 	ownedBeforeEndOfOptions,
 	toolDiscoverer,
@@ -35,6 +38,7 @@ import { virtualFileSystemOverlay } from './source-overlay.js';
 const artifacts: ToolchainDefinition['artifacts'] = {
 	assembly: compilerAssembly,
 	'binary-disassembly': binaryDisassembly('llvm-objdump', llvmObjdump),
+	'code-size': codeSize('llvm-objdump', llvmObjdump),
 	'preprocessed-source': { producer: gnuPreprocessedSourceProducer },
 	ast: { producer: clangAstProducer, renderer: renderClangAst },
 	'llvm-ir': { producer: outputProducer(llvmIrOutput) },
@@ -55,6 +59,8 @@ const artifacts: ToolchainDefinition['artifacts'] = {
 			assemblyControlFlowGraphOutput,
 		],
 	},
+	'optimization-pipeline': { producer: pipelineProducer(clangPipelineArguments) },
+	'machine-code-analysis': machineCodeAnalysis,
 };
 
 export const clang: ToolchainDefinition = {
@@ -75,7 +81,7 @@ export const clang: ToolchainDefinition = {
 	sourceOverlay: virtualFileSystemOverlay((overlayFile) => ['-ivfsoverlay', overlayFile]),
 	createParser: defaultAsmParser,
 	createCfgParser: () => new ClangAssemblyCfgParser(new InstructionSetInfo()),
-	discoverTools: toolDiscoverer({ demangler: 'llvm-cxxfilt', disassembler: 'llvm-objdump' }),
+	discoverTools: toolDiscoverer({ demangler: 'llvm-cxxfilt', disassembler: 'llvm-objdump', analyzer: 'llvm-mca' }),
 	artifacts,
 };
 

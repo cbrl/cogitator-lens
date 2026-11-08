@@ -10,6 +10,8 @@ import {
 	renderClangClOptimizationRemarks,
 } from '../artifacts/optimization-remarks/clang-cl-optimization-remarks.js';
 import { clangClStackAnalysisProducer } from '../artifacts/stack-analysis/native-stack-analysis.js';
+import { clangClPipelineArguments, pipelineProducer } from '../artifacts/optimization-pipeline/pipeline-producer.js';
+import { machineCodeAnalysis } from '../artifacts/machine-code-analysis/analysis-producer.js';
 import { parseLlvmControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/llvm-ir-cfg-parser.js';
 import { ClangAssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/assembly-dialects.js';
 import { InstructionSetInfo } from '../artifacts/control-flow-graph/parsers/instruction-sets.js';
@@ -17,6 +19,7 @@ import {
 	compilerAssembly,
 	assemblyControlFlowGraphOutput,
 	binaryDisassembly,
+	codeSize,
 	controlFlowGraphOutput,
 	ownedBeforeEndOfOptions,
 	toolDiscoverer,
@@ -93,6 +96,7 @@ export const clangClObjdump: BinaryDisassembler = Object.freeze({
 	arguments: llvmObjdump.arguments,
 	normalizeOutput: async (output: string, objectFile: string) =>
 		withCodeViewSourceLines(normalizeLlvmObjdumpOutput(output), await objectCodeViewLines(objectFile)),
+	sections: llvmObjdump.sections,
 });
 
 export function stripClangClManagedArguments(
@@ -122,10 +126,11 @@ export const clangCl: ToolchainDefinition = {
 	createParser: defaultAsmParser,
 	createCfgParser: () => new ClangAssemblyCfgParser(new InstructionSetInfo()),
 	prepareEnvironment: captureWindowsEnvironment,
-	discoverTools: toolDiscoverer({ demangler: 'llvm-cxxfilt', disassembler: 'llvm-objdump' }),
+	discoverTools: toolDiscoverer({ demangler: 'llvm-cxxfilt', disassembler: 'llvm-objdump', analyzer: 'llvm-mca' }),
 	artifacts: {
 		assembly: compilerAssembly,
 		'binary-disassembly': binaryDisassembly('llvm-objdump', clangClObjdump),
+		'code-size': codeSize('llvm-objdump', clangClObjdump),
 		'preprocessed-source': { producer: msvcPreprocessedSourceProducer },
 		ast: { producer: clangAstProducer, renderer: renderClangAst },
 		'llvm-ir': { producer: outputProducer(clangClLlvmIrOutput) },
@@ -146,5 +151,7 @@ export const clangCl: ToolchainDefinition = {
 				assemblyControlFlowGraphOutput,
 			],
 		},
+		'optimization-pipeline': { producer: pipelineProducer(clangClPipelineArguments) },
+		'machine-code-analysis': machineCodeAnalysis,
 	},
 };

@@ -7,6 +7,7 @@ import { SassAsmParser } from '../vendor/lib/parsers/asm-parser-sass.js';
 import {
 	compilerAssembly,
 	binaryDisassembly,
+	codeSize,
 	toolDiscoverer,
 	type ToolchainDefinition,
 	withoutOwnedArguments,
@@ -99,6 +100,7 @@ export const nvcc: ToolchainDefinition = {
 	artifacts: {
 		assembly: { ...compilerAssembly, architecture: 'ptx' },
 		'binary-disassembly': { ...binaryDisassembly('nvdisasm', nvdisasm), architecture: 'sass' },
+		'code-size': { ...codeSize('nvdisasm', nvdisasm), architecture: 'sass' },
 		'preprocessed-source': { producer: gnuPreprocessedSourceProducer },
 	},
 };

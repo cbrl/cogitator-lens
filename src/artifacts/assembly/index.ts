@@ -1,21 +1,15 @@
-import { displayOptionDescriptors, type ArtifactDefinition } from '../core/artifact-contracts.js';
+import {
+	displayOptionDescriptors,
+	productionOptionDescriptors,
+	type ArtifactDefinition,
+} from '../core/artifact-contracts.js';
 import { renderAssembly } from './assembly-renderer.js';
 
 export const assemblyArtifact = {
 	label: 'Assembly',
 	options: [
-		{
-			id: 'intel',
-			group: 'production',
-			label: 'Intel syntax',
-			description: 'Emit Intel syntax when supported by the selected toolchain',
-		},
-		{
-			id: 'demangle',
-			group: 'production',
-			label: 'Demangle symbols',
-			description: 'Run the configured demangler before rendering assembly',
-		},
+		productionOptionDescriptors.intel,
+		productionOptionDescriptors.demangle,
 		displayOptionDescriptors.showUnusedLabels,
 		displayOptionDescriptors.showLibraryCode,
 		{

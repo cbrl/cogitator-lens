@@ -15,6 +15,7 @@ export interface DisplayOptions {
 	readonly showIncludedFiles: boolean;
 	readonly binaryColumns: boolean;
 	readonly sourceLineColorBands: boolean;
+	readonly showUnchangedPasses: boolean;
 }
 
 export interface ArtifactOptions {
@@ -41,6 +42,7 @@ export const defaultArtifactOptions: ArtifactOptions = Object.freeze({
 		showIncludedFiles: true,
 		binaryColumns: true,
 		sourceLineColorBands: true,
+		showUnchangedPasses: false,
 	}),
 });
 

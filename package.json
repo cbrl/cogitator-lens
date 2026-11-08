@@ -600,6 +600,12 @@
         "icon": "$(diff)"
       },
       {
+        "command": "coglens.ShowPassChange",
+        "title": "Show Pass Change",
+        "category": "Cogitator Lens",
+        "icon": "$(diff)"
+      },
+      {
         "command": "coglens.SnapshotArtifact",
         "title": "Snapshot Artifact",
         "category": "Cogitator Lens",
@@ -956,6 +962,17 @@
               },
               "llvm-ir": {
                 "sourceLineColorBands": true
+              },
+              "optimization-pipeline": {
+                "showUnchangedPasses": false
+              },
+              "machine-code-analysis": {
+                "intel": false,
+                "demangle": false
+              },
+              "code-size": {
+                "demangle": false,
+                "showLibraryCode": true
               }
             },
             "additionalProperties": false,
@@ -976,7 +993,7 @@
                     "type": "boolean",
                     "title": "Demangle symbols",
                     "default": false,
-                    "description": "Run the configured demangler before rendering assembly"
+                    "description": "Run the configured demangler on the output before it is shown"
                   },
                   "showUnusedLabels": {
                     "type": "boolean",
@@ -1149,6 +1166,60 @@
                 "description": "Control-flow graph options",
                 "additionalProperties": false,
                 "properties": {}
+              },
+              "optimization-pipeline": {
+                "type": "object",
+                "title": "Optimization pipeline options",
+                "description": "Optimization pipeline options",
+                "additionalProperties": false,
+                "properties": {
+                  "showUnchangedPasses": {
+                    "type": "boolean",
+                    "title": "Show unchanged passes",
+                    "default": false,
+                    "description": "List each pass of the pipeline, also the passes that did not change the function"
+                  }
+                }
+              },
+              "machine-code-analysis": {
+                "type": "object",
+                "title": "Machine code analysis options",
+                "description": "Machine code analysis options",
+                "additionalProperties": false,
+                "properties": {
+                  "intel": {
+                    "type": "boolean",
+                    "title": "Intel syntax",
+                    "default": false,
+                    "description": "Emit Intel syntax when supported by the selected toolchain"
+                  },
+                  "demangle": {
+                    "type": "boolean",
+                    "title": "Demangle symbols",
+                    "default": false,
+                    "description": "Run the configured demangler on the output before it is shown"
+                  }
+                }
+              },
+              "code-size": {
+                "type": "object",
+                "title": "Code size options",
+                "description": "Code size options",
+                "additionalProperties": false,
+                "properties": {
+                  "demangle": {
+                    "type": "boolean",
+                    "title": "Demangle symbols",
+                    "default": false,
+                    "description": "Run the configured demangler on the output before it is shown"
+                  },
+                  "showLibraryCode": {
+                    "type": "boolean",
+                    "title": "Show library code",
+                    "default": true,
+                    "description": "Show functions whose code comes only from headers and libraries"
+                  }
+                }
               }
             }
           },
@@ -1175,7 +1246,10 @@
                     "rust-mir",
                     "optimization-remarks",
                     "stack-analysis",
-                    "control-flow-graph"
+                    "control-flow-graph",
+                    "optimization-pipeline",
+                    "machine-code-analysis",
+                    "code-size"
                   ],
                   "description": "Artifact kind produced by this preset"
                 },
@@ -1200,7 +1274,7 @@
                     "demangle": {
                       "type": "boolean",
                       "title": "Demangle symbols",
-                      "description": "Run the configured demangler before rendering assembly"
+                      "description": "Run the configured demangler on the output before it is shown"
                     },
                     "showSystemDeclarations": {
                       "type": "boolean",
@@ -1405,6 +1479,10 @@
           "when": "resourceScheme == coglens-artifact"
         },
         {
+          "command": "coglens.ShowPassChange",
+          "when": "resourceScheme == coglens-artifact && resourceExtname == .passes"
+        },
+        {
           "command": "coglens.RevealInArtifact",
           "when": "coglens.supportedSource"
         }
@@ -1429,6 +1507,11 @@
         {
           "command": "coglens.CompareWithSnapshot",
           "group": "2_compare@3"
+        },
+        {
+          "command": "coglens.ShowPassChange",
+          "group": "2_compare@4",
+          "when": "resourceExtname == .passes"
         },
         {
           "command": "coglens.CopyWithAddresses",

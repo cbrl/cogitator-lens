@@ -52,6 +52,8 @@ export interface ArtifactRequest {
 	 * saved file.
 	 */
 	unsavedText?: string;
+	/** The function whose output the compile prints, for a kind that requires a function filter. */
+	functionFilter?: string;
 }
 
 /** Whether a compile read the unsaved text of its request, or why it read the saved file. */
@@ -241,6 +243,22 @@ export interface RenderedTextArtifact extends RenderedArtifactBase {
 	readonly links: readonly ArtifactLink[];
 	readonly folds: readonly ArtifactFold[];
 	readonly symbols: readonly ArtifactSymbol[];
+	/** The passes of an optimization pipeline, each with the line that names it. */
+	readonly passes?: readonly PipelinePass[];
+}
+
+/** One pass of an optimization pipeline, and the text of the function before and after it. */
+export interface PipelinePass {
+	/** The zero-based line of the listing that names the pass. */
+	readonly line: number;
+	/** The one-based position of the pass in the pipeline. */
+	readonly number: number;
+	readonly name: string;
+	/** Whether the pass works on machine code, after instruction selection. */
+	readonly machine: boolean;
+	readonly changed: boolean;
+	readonly before: string;
+	readonly after: string;
 }
 
 export interface RenderedGraphArtifact extends RenderedArtifactBase {
@@ -281,9 +299,10 @@ export function productionKey(
 	source: SourceState | UnsavedSourceState,
 	producer: number,
 ): ProductionKey {
-	const { variant, extraArguments, options } = request;
+	const { variant, extraArguments, options, functionFilter } = request;
 	return JSON.stringify({
 		producer,
+		functionFilter,
 		source: localFileUriComparisonKey(variant.source),
 		state: source,
 		toolchain: variant.toolchainProfileId,

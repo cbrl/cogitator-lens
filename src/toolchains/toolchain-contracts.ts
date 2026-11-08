@@ -203,6 +203,15 @@ export const binaryDisassembly = (label: string, disassembler: BinaryDisassemble
 	requiredTools: [{ name: disassembler.tool, label }],
 });
 
+/**
+ * Lists the sizes of the functions and the sections of a compiled object file. It uses the producer
+ * of the binary disassembly, so the two artifacts of a source share one compile.
+ */
+export const codeSize = (label: string, disassembler: BinaryDisassembler): ArtifactImplementation => ({
+	producer: binaryDisassemblyProducer(disassembler),
+	requiredTools: [{ name: disassembler.tool, label }],
+});
+
 /** Describes one selectable CFG source and the parser that turns it into graphs. */
 export const controlFlowGraphOutput = (
 	id: string,
@@ -265,6 +274,8 @@ export const discoveredTools = (
 export interface AuxiliaryToolNames {
 	readonly demangler?: string;
 	readonly disassembler?: string;
+	/** The machine code analyzer, llvm-mca. */
+	readonly analyzer?: string;
 }
 
 /** Creates a sibling-or-PATH auxiliary-tool discovery function for a toolchain definition. */
@@ -277,5 +288,6 @@ export function toolDiscoverer(
 			disassembler: names.disassembler
 				? siblingOrPath(executable, toolExecutableName(names.disassembler))
 				: undefined,
+			analyzer: names.analyzer ? siblingOrPath(executable, toolExecutableName(names.analyzer)) : undefined,
 		});
 }

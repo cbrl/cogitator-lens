@@ -49,6 +49,11 @@ export interface CompileOptions {
 	onInvocation?: (details: InvocationDetails) => void;
 	/** The unsaved text that the compile reads in place of the saved source. */
 	sourceOverlay?: SourceOverlay;
+	/**
+	 * The function whose output the compile prints, for an output that the compiler can limit to
+	 * one function. It is the name in the compiler output, such as a mangled name.
+	 */
+	functionFilter?: string;
 }
 
 /** The unsaved text of a source, which a compile reads from a file in its temporary directory. */

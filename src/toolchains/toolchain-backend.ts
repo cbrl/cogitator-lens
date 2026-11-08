@@ -67,8 +67,17 @@ export interface SecondaryToolSpec {
 	readonly toolArguments: (files: Readonly<Record<string, string>>) => readonly string[];
 	/** Runs while the workspace files still exist. */
 	readonly normalizeOutput?: (output: string, files: Readonly<Record<string, string>>) => string | Promise<string>;
-	/** Runs after the compiler, before the tool; its result becomes RawArtifact.producerData. */
-	readonly producerData?: (files: Readonly<Record<string, string>>) => Promise<unknown>;
+	/**
+	 * Runs after the compiler, before the tool; its result becomes RawArtifact.producerData. It gets
+	 * the environment and the working directory of the compile, so it can run a tool too.
+	 */
+	readonly producerData?: (files: Readonly<Record<string, string>>, run: ToolRunContext) => Promise<unknown>;
+}
+
+/** The environment and the working directory of a compile, for a tool that reads its output. */
+export interface ToolRunContext {
+	readonly environment: NodeJS.ProcessEnv;
+	readonly workingDirectory: string;
 }
 
 export interface ToolchainHost {
@@ -320,7 +329,10 @@ export class ToolchainBackend {
 				cancellationToken,
 				temporaryDirectory,
 			);
-			const producerData = await spec.producerData?.(files);
+			const producerData = await spec.producerData?.(files, {
+				environment: invocation.preparedEnvironment,
+				workingDirectory: invocation.workingDirectory,
+			});
 			const tool = this.profile.tools[spec.tool];
 			if (!tool) {
 				throw new Error(`${this.profile.displayName} has no ${spec.tool} auxiliary tool.`);

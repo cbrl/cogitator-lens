@@ -39,6 +39,7 @@ import { CompilationError } from '../types/index.js';
 import * as logger from '../logger.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
 import { getArtifactOutputChoices } from '../toolchains/toolchain-artifacts.js';
+import { executeTextTool, type ToolchainBackend } from '../toolchains/toolchain-backend.js';
 import type { TreeNode } from '../tree/treedata.js';
 import type {
 	ArtifactKind,
@@ -293,8 +294,30 @@ async function openArtifact(
 	if (!preset) {
 		return;
 	}
+	let functionFilter: string | undefined;
+	if (artifactDefinitions[kind].requiresFunctionFilter) {
+		functionFilter = await pickFilterFunction(
+			sourceDocument.uri,
+			variant,
+			preset,
+			kind,
+			backend,
+			compilationService,
+		);
+		if (functionFilter === undefined) {
+			return;
+		}
+	}
 	void recentKinds.use(kind);
-	const artifactUri = getArtifactUri(sourceDocument.uri, variant, kind, preset.id, artifactOutput?.id);
+	const artifactUri = getArtifactUri(
+		sourceDocument.uri,
+		variant,
+		kind,
+		preset.id,
+		artifactOutput?.id,
+		{},
+		functionFilter,
+	);
 	if (artifactDefinitions[kind].presentation === 'graph') {
 		await graphPanels.open(artifactUri);
 		return;
@@ -305,6 +328,97 @@ async function openArtifact(
 		preserveFocus: true,
 		preview: false,
 	});
+}
+
+/**
+ * Asks for the function of an artifact that shows one function. The functions come from the LLVM IR
+ * of the source, which compiles with the arguments of the preset.
+ */
+async function pickFilterFunction(
+	source: vscode.Uri,
+	variant: CompilationVariant,
+	preset: ArtifactPreset,
+	kind: ArtifactKind,
+	backend: ToolchainBackend,
+	compilationService: CompilationService,
+): Promise<string | undefined> {
+	const options = compilationService.getArtifactOptions('llvm-ir');
+	let listing: RenderedTextArtifact;
+	try {
+		const result = await vscode.window.withProgress(
+			{
+				location: vscode.ProgressLocation.Notification,
+				title: 'Reading the functions of the LLVM IR',
+				cancellable: true,
+			},
+			(_progress, token) =>
+				compilationService.compile({
+					variant,
+					artifactKind: 'llvm-ir',
+					presetId: preset.id,
+					extraArguments: preset.extraArguments,
+					options,
+					cancellationToken: token,
+				}),
+		);
+		if (result.status !== 'available' || result.artifact.presentation !== 'text') {
+			await vscode.window.showInformationMessage(
+				result.status === 'available' ? 'The LLVM IR of the source is not a text listing.' : result.explanation,
+			);
+			return undefined;
+		}
+		listing = result.artifact;
+	} catch (error) {
+		if (!(error instanceof vscode.CancellationError)) {
+			await vscode.window.showErrorMessage(`The LLVM IR of the source did not compile: ${failureDetails(error)}`);
+		}
+		return undefined;
+	}
+	const names = [...new Set(listing.symbols.map((symbol) => symbol.name))];
+	if (names.length === 0) {
+		await vscode.window.showInformationMessage('The LLVM IR of the source has no functions.');
+		return undefined;
+	}
+	const labels = await demangledNames(backend, names, path.dirname(source.fsPath));
+	const choice = await vscode.window.showQuickPick(
+		names.map((name, index) => ({
+			label: labels[index],
+			description: labels[index] === name ? undefined : name,
+			name,
+		})),
+		{ title: `Select the function of the ${artifactDefinitions[kind].label}`, matchOnDescription: true },
+	);
+	return choice?.name;
+}
+
+/** The names that the demangler of the toolchain gives, or the names when it has no demangler or fails. */
+async function demangledNames(
+	backend: ToolchainBackend,
+	names: readonly string[],
+	workingDirectory: string,
+): Promise<readonly string[]> {
+	const demangler = backend.profile.tools.demangler;
+	if (!demangler) {
+		return names;
+	}
+	const cancellation = new vscode.CancellationTokenSource();
+	try {
+		const output = await executeTextTool(
+			`${names.join('\n')}\n`,
+			demangler,
+			{ ...process.env, ...backend.profile.environment },
+			workingDirectory,
+			cancellation.token,
+		);
+		// The demangler writes one line for each line that it reads.
+		const lines = output.split(/\r?\n/u);
+		return names.map((name, index) => lines[index]?.trim() || name);
+	} catch (error) {
+		logger.logChannel.debug(`The demangler did not demangle the function names: ${String(error)}`);
+		return names;
+	} finally {
+		cancellation.dispose();
+	}
 }
 
 type ArtifactQuickPickChoice = vscode.QuickPickItem & Omit<ArtifactPickerChoice, 'label'>;

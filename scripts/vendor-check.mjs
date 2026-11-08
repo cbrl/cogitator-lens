@@ -38,13 +38,16 @@ const vendoredFiles = {
 	'lib/parsers/pdb-parser-dotnet.ts': 'lib/parsers/pdb-parser-dotnet.ts',
 	'lib/parsers/asmregex.ts': 'lib/parsers/asmregex.ts',
 	'lib/parsers/label-processor.ts': 'lib/parsers/label-processor.ts',
+	'lib/parsers/llvm-pass-dump-parser.ts': 'lib/parsers/llvm-pass-dump-parser.ts',
 	'lib/parsers/parsing-state.ts': 'lib/parsers/parsing-state.ts',
 	'lib/parsers/source-line-handler.ts': 'lib/parsers/source-line-handler.ts',
 	'lib/properties.interfaces.ts': 'lib/properties.interfaces.ts',
 	'static/panes/opt-view.interfaces.ts': 'static/panes/opt-view.interfaces.ts',
 	'types/asmresult/asmresult.interfaces.ts': 'types/asmresult/asmresult.interfaces.ts',
 	'types/compilation/ir.interfaces.ts': 'types/compilation/ir.interfaces.ts',
+	'types/compilation/opt-pipeline-output.interfaces.ts': 'types/compilation/opt-pipeline-output.interfaces.ts',
 	'types/features/filters.interfaces.ts': 'types/features/filters.interfaces.ts',
+	'types/resultline/resultline.interfaces.ts': 'types/resultline/resultline.interfaces.ts',
 };
 
 const assemblyDocumentationFiles = [

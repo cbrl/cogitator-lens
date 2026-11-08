@@ -12,6 +12,11 @@ The assembly parsers (including .NET and its portable-PDB parser), their interfa
 `static/panes/opt-view.interfaces.ts`, and the interfaces under `types/` are
 unmodified upstream files.
 
+`lib/parsers/llvm-pass-dump-parser.ts` is the unmodified upstream parser of LLVM
+`-print-before-all` and `-print-after-all` output. Its interfaces are
+`types/compilation/opt-pipeline-output.interfaces.ts` and
+`types/resultline/resultline.interfaces.ts`.
+
 The providers under `lib/asm-docs/`, their generated lookup tables, and
 `types/assembly-docs.interfaces.ts` are also copied from upstream. The
 extension bundles the tables for AMD64, ARM32, AArch64, RISC-V64, POWER, PTX,

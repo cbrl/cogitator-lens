@@ -1,3 +1,4 @@
+import { machineCodeAnalysis } from '../artifacts/machine-code-analysis/analysis-producer.js';
 import { gnuObjdump } from '../artifacts/binary-disassembly/binary-disassembly-producer.js';
 import { outputProducer, gccControlFlowGraphOutput } from '../artifacts/core/compiler-output-producer.js';
 import { nativeStackAnalysisProducer } from '../artifacts/stack-analysis/native-stack-analysis.js';
@@ -12,6 +13,7 @@ import {
 	compilerAssembly,
 	assemblyControlFlowGraphOutput,
 	binaryDisassembly,
+	codeSize,
 	controlFlowGraphOutput,
 	toolDiscoverer,
 	type ToolchainDefinition,
@@ -46,10 +48,11 @@ export const gcc: ToolchainDefinition = {
 	sourceOverlay: gccSourceOverlay,
 	createParser: defaultAsmParser,
 	createCfgParser: () => new GccAssemblyCfgParser(new InstructionSetInfo()),
-	discoverTools: toolDiscoverer({ demangler: 'c++filt', disassembler: 'objdump' }),
+	discoverTools: toolDiscoverer({ demangler: 'c++filt', disassembler: 'objdump', analyzer: 'llvm-mca' }),
 	artifacts: {
 		assembly: compilerAssembly,
 		'binary-disassembly': binaryDisassembly('GNU objdump', gnuObjdump),
+		'code-size': codeSize('GNU objdump', gnuObjdump),
 		'preprocessed-source': { producer: gnuPreprocessedSourceProducer },
 		'optimization-remarks': {
 			producer: outputProducer(gccOptimizationRemarksOutput),
@@ -68,5 +71,6 @@ export const gcc: ToolchainDefinition = {
 				assemblyControlFlowGraphOutput,
 			],
 		},
+		'machine-code-analysis': machineCodeAnalysis,
 	},
 };

@@ -3,6 +3,9 @@ import { astArtifact } from '../ast/index.js';
 import { binaryDisassemblyArtifact } from '../binary-disassembly/index.js';
 import { controlFlowGraphArtifact } from '../control-flow-graph/index.js';
 import { llvmIrArtifact } from '../llvm-ir/index.js';
+import { codeSizeArtifact } from '../code-size/index.js';
+import { machineCodeAnalysisArtifact } from '../machine-code-analysis/index.js';
+import { optimizationPipelineArtifact } from '../optimization-pipeline/index.js';
 import { optimizationRemarksArtifact } from '../optimization-remarks/index.js';
 import { preprocessedSourceArtifact } from '../preprocessed-source/index.js';
 import { rustMirArtifact } from '../rust/index.js';
@@ -29,6 +32,9 @@ const artifactDefinitionTable = {
 	'optimization-remarks': optimizationRemarksArtifact,
 	'stack-analysis': stackAnalysisArtifact,
 	'control-flow-graph': controlFlowGraphArtifact,
+	'optimization-pipeline': optimizationPipelineArtifact,
+	'machine-code-analysis': machineCodeAnalysisArtifact,
+	'code-size': codeSizeArtifact,
 } as const satisfies Record<ArtifactKind, ArtifactDefinition>;
 
 export const artifactDefinitions: typeof artifactDefinitionTable & Record<ArtifactKind, ArtifactDefinition> =

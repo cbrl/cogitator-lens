@@ -27,6 +27,7 @@ import {
 	artifactOptionValue,
 	optimizationRemarkCategories,
 	type OptimizationRemarkCategory,
+	type PipelinePass,
 	type RenderedTextArtifact,
 } from '../types/index.js';
 
@@ -87,6 +88,7 @@ export function register(context: vscode.ExtensionContext, deps: ExperimentComma
 				compareWithSnapshot(document, deps),
 			),
 		),
+		vscode.commands.registerCommand('coglens.ShowPassChange', (target?: unknown) => showPassChange(deps, target)),
 		vscode.commands.registerCommand('coglens.FilterOptimizationRemarks', () =>
 			filterOptimizationRemarks(deps.configuration),
 		),
@@ -156,6 +158,13 @@ export function experimentStatusActions(
 			label: '$(filter) Filter Optimization Remarks',
 			description: `Now ${optimizationRemarkCategories.filter((category) => shown.has(category)).join(', ') || 'none'}`,
 			run: command('coglens.FilterOptimizationRemarks'),
+		});
+	}
+	if (textArtifactOf(document)?.passes) {
+		actions.push({
+			label: '$(diff) Show Pass Change',
+			description: 'Compare the function before and after a pass',
+			run: () => vscode.commands.executeCommand('coglens.ShowPassChange', document.uri.toString()),
 		});
 	}
 	const toggles = optionToggleActions(document, deps.compilationService);
@@ -317,6 +326,64 @@ async function filterOptimizationRemarks(configuration: ConfigurationService): P
 	if (selected) {
 		await configuration.updateOptimizationRemarkCategories(selected.map((item) => item.category));
 	}
+}
+
+/**
+ * Compares the function before and after one pass of an optimization pipeline. The target is the
+ * URI of the artifact, from the status menu, or the number of a pass, from a link. A link gives no
+ * URI, because VS Code decodes the arguments of a command link twice, and that changes each `%`
+ * escape of the URI. The editor of a link has the focus when the user opens the link. Without a
+ * pass number, the command uses the pass on the line of the cursor, or it asks for a pass.
+ */
+async function showPassChange(deps: ExperimentCommandDependencies, target?: unknown): Promise<void> {
+	const editor = vscode.window.activeTextEditor;
+	const uri = typeof target === 'string' ? vscode.Uri.parse(target) : editor?.document.uri;
+	const passNumber = typeof target === 'number' ? target : undefined;
+	const document = uri ? deps.registry.document(uri) : undefined;
+	const passes = document ? textArtifactOf(document)?.passes : undefined;
+	if (!document || !passes) {
+		await vscode.window.showInformationMessage(
+			'Open an optimization pipeline to compare the function around a pass.',
+		);
+		return;
+	}
+	const cursorLine =
+		editor && document.uri.toString() === editor.document.uri.toString() ? editor.selection.active.line : -1;
+	const pass =
+		passNumber !== undefined
+			? passes.find((candidate) => candidate.number === passNumber)
+			: (passes.find((candidate) => candidate.line === cursorLine) ?? (await pickPass(passes)));
+	if (!pass) {
+		return;
+	}
+	// The language of the derived documents comes from their names. Machine code is not LLVM IR.
+	const extension = pass.machine ? '.txt' : '.coglens.ll';
+	const left = deps.derivedDocuments.create(pass.before, `pass-${pass.number}-before${extension}`);
+	const right = deps.derivedDocuments.create(pass.after, `pass-${pass.number}-after${extension}`);
+	await vscode.commands.executeCommand(
+		'vscode.diff',
+		left,
+		right,
+		`Pass ${pass.number}: ${pass.name} (Before ↔ After)`,
+		{
+			preview: true,
+			viewColumn: vscode.ViewColumn.Beside,
+		},
+	);
+}
+
+async function pickPass(passes: readonly PipelinePass[]): Promise<PipelinePass | undefined> {
+	const choice = await vscode.window.showQuickPick(
+		passes.map((pass) => ({
+			label: `${pass.number}. ${pass.name}`,
+			description: [pass.changed ? 'Changed the function' : 'No change', pass.machine ? 'Machine code' : '']
+				.filter(Boolean)
+				.join(' · '),
+			pass,
+		})),
+		{ title: 'Select the pass to compare', matchOnDescription: true },
+	);
+	return choice?.pass;
 }
 
 function textArtifactOf(document: ArtifactRegistryDocument): RenderedTextArtifact | undefined {

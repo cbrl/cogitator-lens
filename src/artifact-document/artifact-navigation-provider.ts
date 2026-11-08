@@ -42,6 +42,28 @@ const highlightLimit = 2000;
 
 type ArtifactLookup = (uri: Uri) => RenderedTextArtifact | undefined;
 
+/**
+ * A link on the name of each pass of a pipeline, which compares the function before and after the
+ * pass. The link gives the number of the pass only: the command reads the document of the focused
+ * editor, because VS Code decodes the arguments of a command link twice.
+ */
+function passLinks(artifact: RenderedTextArtifact): DocumentLink[] {
+	return (artifact.passes ?? []).flatMap((pass) => {
+		const text = artifact.lines[pass.line]?.text ?? '';
+		const start = text.indexOf(pass.name);
+		if (start < 0) {
+			return [];
+		}
+		const argumentsText = encodeURIComponent(JSON.stringify([pass.number]));
+		const link = new DocumentLink(
+			new Range(pass.line, start, pass.line, start + pass.name.length),
+			Uri.parse(`command:coglens.ShowPassChange?${argumentsText}`),
+		);
+		link.tooltip = 'Compare the function before and after this pass';
+		return [link];
+	});
+}
+
 export class ArtifactNavigationProvider
 	implements
 		DefinitionProvider,
@@ -69,13 +91,18 @@ export class ArtifactNavigationProvider
 	}
 
 	provideDocumentLinks(document: TextDocument, _token: CancellationToken): ProviderResult<DocumentLink[]> {
-		return this.artifactLookup(document.uri)?.links.map(
+		const artifact = this.artifactLookup(document.uri);
+		if (!artifact) {
+			return undefined;
+		}
+		const jumps = artifact.links.map(
 			(link) =>
 				new DocumentLink(
 					new Range(link.line, link.startCharacter, link.line, link.endCharacter),
 					document.uri.with({ fragment: `L${link.targetLine + 1}` }),
 				),
 		);
+		return [...jumps, ...passLinks(artifact)];
 	}
 
 	provideFoldingRanges(

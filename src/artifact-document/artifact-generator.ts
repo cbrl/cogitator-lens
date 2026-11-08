@@ -71,6 +71,8 @@ export interface ArtifactGeneratorSettings {
 	/** Reads the edited arguments for each compile. They follow the preset arguments. */
 	readonly extraArguments?: () => readonly string[];
 	readonly view?: ArtifactViewOptions;
+	/** The function whose output the compile prints, for a kind that requires a function filter. */
+	readonly functionFilter?: string;
 	/** Reads the open document of the source for each compile. */
 	readonly sourceDocument?: () => SourceDocumentState | undefined;
 }
@@ -150,6 +152,7 @@ export class ArtifactGenerator implements Disposable {
 					this.transition('compiling', { invocation });
 				},
 				...(unsavedText === undefined ? {} : { unsavedText }),
+				...(this.settings.functionFilter === undefined ? {} : { functionFilter: this.settings.functionFilter }),
 			});
 			if (artifact.status !== 'available') {
 				throw new CompilationError(artifact.explanation);

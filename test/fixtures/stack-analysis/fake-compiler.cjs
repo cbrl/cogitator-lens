@@ -87,6 +87,34 @@ if (args.includes('--echo-version')) {
 	fs.writeFileSync(output, /\bversion_\w+/.exec(text)?.[0] ?? 'no version');
 	return;
 }
+// -filter-print-funcs=<name> prints pass dumps of that function, as LLVM does with -print-before-all and -print-after-all.
+const passFilter = args.find((argument) => argument.startsWith('-filter-print-funcs='));
+if (passFilter) {
+	const name = passFilter.slice('-filter-print-funcs='.length);
+	const define = `define i32 @${name}(i32 %0) {`;
+	process.stderr.write(
+		[
+			`; *** IR Dump Before SROAPass on ${name} ***`,
+			define,
+			'  %2 = alloca i32, align 4',
+			'  ret i32 %0',
+			'}',
+			`; *** IR Dump After SROAPass on ${name} ***`,
+			define,
+			'  ret i32 %0',
+			'}',
+			`; *** IR Dump Before EarlyCSEPass on ${name} ***`,
+			define,
+			'  ret i32 %0',
+			'}',
+			`; *** IR Dump After EarlyCSEPass on ${name} ***`,
+			define,
+			'  ret i32 %0',
+			'}',
+			'',
+		].join('\n'),
+	);
+}
 fs.writeFileSync(output, args.includes('--empty') ? '' : 'object');
 if (args.includes('--missing-stack')) {
 	return;

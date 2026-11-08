@@ -17,6 +17,8 @@ export interface ArtifactUriIdentity {
 	readonly artifactOutputId?: string;
 	/** Present only when the document shows a view of the listing, not the full listing. */
 	readonly view?: ArtifactViewOptions;
+	/** The function whose output the compile prints, for a kind that requires a function filter. */
+	readonly functionFilter?: string;
 }
 
 export function getArtifactUri(
@@ -26,8 +28,16 @@ export function getArtifactUri(
 	presetId: string,
 	artifactOutputId?: string,
 	view: ArtifactViewOptions = {},
+	functionFilter?: string,
 ): Uri {
 	const definition = artifactDefinitions[artifactKind];
+	if (Boolean(definition.requiresFunctionFilter) !== (functionFilter !== undefined)) {
+		throw new Error(
+			definition.requiresFunctionFilter
+				? `${definition.label} URIs require a function.`
+				: `${artifactKind} URIs do not accept a function filter.`,
+		);
+	}
 	if (definition.presentation !== 'text' && hasView(view)) {
 		throw new Error(`${definition.label} documents do not accept a listing view.`);
 	}
@@ -52,9 +62,12 @@ export function getArtifactUri(
 	if (view.functionName !== undefined) {
 		query.set('function', view.functionName);
 	}
+	if (functionFilter !== undefined) {
+		query.set('function-filter', functionFilter);
+	}
 	return source.with({
 		scheme: artifactScheme,
-		path: artifactPath(source.path, artifactKind),
+		path: artifactPath(source.path, artifactKind, functionFilter),
 		query: query.toString(),
 		fragment: '',
 	});
@@ -62,14 +75,24 @@ export function getArtifactUri(
 
 /**
  * Replaces the source extension with the artifact suffix. A URI path always uses forward slashes, so
- * the platform path module must not change it. On Windows, it would write backslashes.
+ * the platform path module must not change it. On Windows, it would write backslashes. A function
+ * filter goes into the name too, so the tabs of two functions have different titles.
  */
-function artifactPath(sourcePath: string, artifactKind: ArtifactKind): string {
+function artifactPath(sourcePath: string, artifactKind: ArtifactKind, functionFilter?: string): string {
 	const definition = artifactDefinitions[artifactKind];
 	const sourceExtension = path.posix.extname(sourcePath);
 	const stem = sourcePath.slice(0, sourcePath.length - sourceExtension.length);
 	const languageExtension = definition.documentLanguage === 'source' ? sourceExtension : '';
-	return `${stem}${definition.filenameExtension}${languageExtension}`;
+	const functionPart = functionFilter === undefined ? '' : `.${functionFileName(functionFilter)}`;
+	return `${stem}${functionPart}${definition.filenameExtension}${languageExtension}`;
+}
+
+/** The longest function name in a document name. */
+const maximumFunctionFileName = 48;
+
+/** A function name that a file name can hold: words, with each other character replaced. */
+function functionFileName(name: string): string {
+	return name.replace(/[^\w$-]+/gu, '_').slice(0, maximumFunctionFileName) || 'function';
 }
 
 export function parseArtifactUri(uri: Uri): ArtifactUriIdentity | undefined {
@@ -85,6 +108,7 @@ export function parseArtifactUri(uri: Uri): ArtifactUriIdentity | undefined {
 	const artifactOutputId = query.get('output') || undefined;
 	const viewName = query.get('view');
 	const functionName = query.get('function') ?? undefined;
+	const functionFilter = query.get('function-filter') || undefined;
 	const requiresOutputSelection = artifactKind
 		? artifactDefinitions[artifactKind].requiresOutputSelection === true
 		: false;
@@ -94,6 +118,7 @@ export function parseArtifactUri(uri: Uri): ArtifactUriIdentity | undefined {
 		!artifactKind ||
 		!presetId ||
 		requiresOutputSelection !== Boolean(artifactOutputId) ||
+		Boolean(artifactDefinitions[artifactKind].requiresFunctionFilter) !== (functionFilter !== undefined) ||
 		(viewName !== null && viewName !== 'normalized')
 	) {
 		return undefined;
@@ -116,6 +141,7 @@ export function parseArtifactUri(uri: Uri): ArtifactUriIdentity | undefined {
 		presetId,
 		...(artifactOutputId ? { artifactOutputId } : {}),
 		...(hasView(view) ? { view } : {}),
+		...(functionFilter !== undefined ? { functionFilter } : {}),
 	};
 }
 

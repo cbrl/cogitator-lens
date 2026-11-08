@@ -8,6 +8,8 @@ export interface ArtifactDocumentIdentity {
 	readonly artifactKind: ArtifactKind;
 	readonly artifactLabel: string;
 	readonly artifactOutputId?: string;
+	/** The function whose output the compile prints, for a kind that requires a function filter. */
+	readonly functionFilter?: string;
 	readonly presetId: string;
 	readonly variantId: string;
 	readonly variantLabel: string;

@@ -60,6 +60,7 @@ import {
 	verifySharedCompile,
 	verifyCompileOnType,
 	verifyArtifactExperiments,
+	verifyOptimizationPipeline,
 	verifyOpenArtifactArguments,
 } from './artifact-documents.js';
 
@@ -118,6 +119,7 @@ export async function run(): Promise<void> {
 	await verifySharedCompile(workspaceFolder.uri.fsPath);
 	await verifyCompileOnType(workspaceFolder.uri.fsPath);
 	await verifyArtifactExperiments(workspaceFolder.uri.fsPath);
+	await verifyOptimizationPipeline(workspaceFolder.uri.fsPath);
 	verifyComparisonTargets();
 	verifyOpenArtifactArguments();
 	await verifyArtifactGeneratorFollowsVariant(workspaceFolder);

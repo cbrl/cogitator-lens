@@ -35,7 +35,10 @@ export type ArtifactKind =
 	| 'rust-mir'
 	| 'optimization-remarks'
 	| 'stack-analysis'
-	| 'control-flow-graph';
+	| 'control-flow-graph'
+	| 'optimization-pipeline'
+	| 'machine-code-analysis'
+	| 'code-size';
 
 /** How a rendered text listing is written, for mnemonic and token analysis. */
 export type ArtifactListingSyntax = 'native-assembly' | 'python-bytecode' | 'dotnet-il' | 'llvm-ir';
@@ -49,6 +52,11 @@ export interface ArtifactDefinition {
 	readonly generatedCode?: true;
 	/** Whether artifact document identities must select one named toolchain output. */
 	readonly requiresOutputSelection?: true;
+	/**
+	 * Whether artifact document identities must name one function. The compile then prints its
+	 * output for that function only, because the output of each function can be very large.
+	 */
+	readonly requiresFunctionFilter?: true;
 	readonly label: string;
 	readonly icon: string;
 	/**
@@ -72,6 +80,21 @@ export interface ArtifactDefinition {
 	readonly listingSyntax?: ArtifactListingSyntax;
 	readonly metricLabels?: Readonly<Record<string, string>>;
 }
+
+export const productionOptionDescriptors = {
+	intel: {
+		id: 'intel',
+		group: 'production',
+		label: 'Intel syntax',
+		description: 'Emit Intel syntax when supported by the selected toolchain',
+	},
+	demangle: {
+		id: 'demangle',
+		group: 'production',
+		label: 'Demangle symbols',
+		description: 'Run the configured demangler on the output before it is shown',
+	},
+} as const satisfies Record<string, ArtifactOptionDescriptor>;
 
 export const displayOptionDescriptors = {
 	binaryColumns: {
@@ -105,6 +128,12 @@ export const displayOptionDescriptors = {
 		group: 'display',
 		label: 'Show included files',
 		description: 'Include content originating from headers in preprocessed output',
+	},
+	showUnchangedPasses: {
+		id: 'showUnchangedPasses',
+		group: 'display',
+		label: 'Show unchanged passes',
+		description: 'List each pass of the pipeline, also the passes that did not change the function',
 	},
 	showSystemDeclarations: {
 		id: 'showSystemDeclarations',

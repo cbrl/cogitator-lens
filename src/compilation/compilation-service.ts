@@ -406,6 +406,7 @@ export class CompilationService {
 							productionOptions: options.production,
 							onInvocation: flight.onInvocation,
 							...(overlay ? { sourceOverlay: overlay } : {}),
+							...(request.functionFilter === undefined ? {} : { functionFilter: request.functionFilter }),
 						},
 						flight.cancellationToken,
 					);

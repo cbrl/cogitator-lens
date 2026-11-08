@@ -76,6 +76,7 @@ export function buildArtifactIdentity(
 		artifactKind: parsed.artifactKind,
 		artifactLabel,
 		...(parsed.artifactOutputId ? { artifactOutputId: parsed.artifactOutputId } : {}),
+		...(parsed.functionFilter === undefined ? {} : { functionFilter: parsed.functionFilter }),
 		presetId: parsed.presetId,
 		variantId: parsed.variantId,
 		variantLabel: variant?.displayLabel ?? 'Unavailable variant',
@@ -231,6 +232,7 @@ export class ArtifactDocumentRegistry implements Disposable {
 			{
 				extraArguments: () => this.editedArguments.get(uri),
 				view: parsed.view,
+				...(parsed.functionFilter === undefined ? {} : { functionFilter: parsed.functionFilter }),
 				sourceDocument: () => this.sourceDocumentState(parsed.source, sourceKey),
 			},
 		);

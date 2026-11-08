@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import type { CancellationToken } from 'vscode';
+import { parseDumpbinSections } from '../artifacts/code-size/object-sections.js';
 import { localFileComparisonKey } from '../file-identity.js';
 import { VcAsmParser } from '../vendor/lib/parsers/asm-parser-vc.js';
 import { noopPropertyGetter } from '../vendor/compiler-props.js';
@@ -17,6 +18,7 @@ import {
 	compilerAssembly,
 	assemblyControlFlowGraphOutput,
 	binaryDisassembly,
+	codeSize,
 	toolDiscoverer,
 	withoutOwnedArguments,
 	type OwnedArguments,
@@ -375,6 +377,10 @@ export const dumpbin: BinaryDisassembler = Object.freeze({
 	arguments: (objectFile: string) => ['/nologo', '/disasm:bytes', objectFile],
 	normalizeOutput: async (output: string, objectFile: string) =>
 		withCodeViewSourceLines(normalizeDumpbinOutput(output), await objectCodeViewLines(objectFile)),
+	sections: {
+		arguments: (objectFile: string) => ['/nologo', '/HEADERS', objectFile],
+		parse: parseDumpbinSections,
+	},
 });
 
 /** Reads the line table of an object file. Without one, the listing has no line information. */
@@ -526,6 +532,7 @@ export const msvc: ToolchainDefinition = {
 	artifacts: {
 		assembly: compilerAssembly,
 		'binary-disassembly': binaryDisassembly('dumpbin', dumpbin),
+		'code-size': codeSize('dumpbin', dumpbin),
 		'preprocessed-source': { producer: msvcPreprocessedSourceProducer },
 		'control-flow-graph': { outputs: [assemblyControlFlowGraphOutput] },
 	},
