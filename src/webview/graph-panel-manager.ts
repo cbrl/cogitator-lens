@@ -305,7 +305,9 @@ export class GraphPanelManager implements Disposable, GraphPanelFocus {
 			metrics: retained?.metrics ?? {},
 			diagnostics: diagnosticMessages(status, retained),
 			state: panelState(status, view.document.handler.generating),
-			...(status.state === 'failed'
+			// A failure opens the diagnostics list. A compile of unsaved text fails often while the user
+			// types, so its failure does not open the list. Its diagnostics are still in the list.
+			...(status.state === 'failed' && !status.readUnsavedText
 				? { failure: failureDetails(status.error).slice(0, graphLimits.labelLength) }
 				: {}),
 		};

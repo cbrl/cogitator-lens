@@ -25,6 +25,7 @@ import type { DependencyCollectionSpec, ToolchainBackend } from './toolchain-bac
 import type { DiagnosticParser } from '../diagnostics.js';
 import { sameLocalFile } from '../file-identity.js';
 import type { OptimizationLevel } from './optimization-levels.js';
+import type { SourceOverlaySpec } from './source-overlay.js';
 
 /**
  * Runs a toolchain and returns its raw output. The compilation service sets
@@ -116,6 +117,8 @@ export interface ToolchainDefinition {
 	) => Promise<NodeJS.ProcessEnv>;
 	/** Omit when the toolchain cannot enumerate inputs beyond the main source. */
 	readonly dependencyCollection?: DependencyCollectionSpec;
+	/** How the toolchain compiles unsaved text in place of the saved source. Omit when it cannot. */
+	readonly sourceOverlay?: SourceOverlaySpec;
 	/** Omit when the toolchain has no auxiliary tools. */
 	readonly discoverTools?: (executable: string) => Readonly<Record<string, AuxiliaryTool>>;
 	/** The artifact kinds this toolchain supports. A missing kind is unsupported. */

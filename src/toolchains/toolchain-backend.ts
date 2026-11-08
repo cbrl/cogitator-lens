@@ -25,6 +25,8 @@ import type { InstructionType } from '../artifacts/control-flow-graph/parsers/in
 import type { AssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/assembly-cfg-parser.js';
 import type { AssemblyLine } from '../artifacts/control-flow-graph/parsers/assembly-line.js';
 import type { GraphParseResult } from '../artifacts/control-flow-graph/control-flow-graph-model.js';
+import { withSourcePaths, writeSourceOverlay, type PreparedOverlay } from './source-overlay.js';
+import { sameLocalFile } from '../file-identity.js';
 
 export class ToolExitError extends Error {
 	constructor(
@@ -223,6 +225,8 @@ interface PreparedInvocation {
 	readonly startedAt: number;
 	/** The dependency file that the main compile writes, when the compiler can do it. */
 	readonly inlineDependencyFile?: string;
+	/** The file with the unsaved text, when the compile reads it in place of the saved source. */
+	readonly overlay?: PreparedOverlay;
 }
 
 interface ToolchainRun {
@@ -321,11 +325,14 @@ export class ToolchainBackend {
 			const toolArguments = spec.toolArguments(files);
 			this.reportInvocation(options, invocation, tool.executable, toolArguments);
 			this.host.log(`Command: ${tool.executable} ${toolArguments.join(' ')}`);
-			const toolResult = await executeChecked('Auxiliary tool', tool.executable, toolArguments, {
-				cwd: invocation.workingDirectory,
-				env: invocation.preparedEnvironment,
-				cancellationToken,
-			});
+			const toolResult = await withOverlayFailurePaths(
+				invocation,
+				executeChecked('Auxiliary tool', tool.executable, toolArguments, {
+					cwd: invocation.workingDirectory,
+					env: invocation.preparedEnvironment,
+					cancellationToken,
+				}),
+			);
 
 			const inputMetadata = await this.collectDependencyInputs(
 				source,
@@ -450,23 +457,27 @@ export class ToolchainBackend {
 			temporaryDirectory,
 			invocationEnvironment,
 		);
-		this.host.log(`Producing an artifact for ${source.fsPath} with ${this.profile.displayName}`);
+		const unsaved = invocation.overlay ? ' from its unsaved text' : '';
+		this.host.log(`Producing an artifact for ${source.fsPath}${unsaved} with ${this.profile.displayName}`);
 		this.host.log(`Command: ${this.profile.executable} ${invocation.argumentsList.join(' ')}`);
 		this.host.log(`Environment overrides: ${invocation.overriddenNames.join(', ') || '(none)'}`, 'debug');
 
-		const result = await executeChecked(
-			'Toolchain',
-			this.profile.executable,
-			invocation.argumentsList,
-			{
-				cwd: invocation.workingDirectory,
-				env: invocation.preparedEnvironment,
-				cancellationToken,
-				...(stdoutLineFilter
-					? { stdoutLineFilter: stdoutLineFilter(source.fsPath, invocation.workingDirectory) }
-					: {}),
-			},
-			acceptOutputOnError,
+		const result = await withOverlayFailurePaths(
+			invocation,
+			executeChecked(
+				'Toolchain',
+				this.profile.executable,
+				invocation.argumentsList,
+				{
+					cwd: invocation.workingDirectory,
+					env: invocation.preparedEnvironment,
+					cancellationToken,
+					...(stdoutLineFilter
+						? { stdoutLineFilter: stdoutLineFilter(source.fsPath, invocation.workingDirectory) }
+						: {}),
+				},
+				acceptOutputOnError,
+			),
 		);
 		return { invocation, result };
 	}
@@ -481,9 +492,9 @@ export class ToolchainBackend {
 		args: readonly string[] = invocation.argumentsList,
 	): ProducedArtifact {
 		return {
-			text,
+			text: overlayToSourcePaths(invocation, text),
 			diagnostics: this.definition.parseDiagnostics(
-				withoutTerminalEscapes(diagnosticOutput),
+				withoutTerminalEscapes(overlayToSourcePaths(invocation, diagnosticOutput)),
 				source,
 				invocation.workingDirectory,
 			),
@@ -518,15 +529,46 @@ export class ToolchainBackend {
 			? await this.definition.prepareEnvironment(this.profile, environment, cancellationToken, providerArguments)
 			: environment;
 
+		// Unsaved text goes into a file of its own. The compiler reads that file in place of the source.
+		const overlaySpec = this.definition.sourceOverlay;
+		const overlay =
+			options.sourceOverlay && overlaySpec
+				? await writeSourceOverlay(overlaySpec, source.fsPath, options.sourceOverlay, temporaryDirectory)
+				: undefined;
+
 		// The main compile also lists its inputs when the compiler can do it.
 		const dependencies = this.definition.dependencyCollection;
 		const inlineDependencyFile = dependencies && path.join(temporaryDirectory, dependencies.outputFilename);
 		const inlineDependencyArguments =
 			(inlineDependencyFile && dependencies.inlineArguments?.(inlineDependencyFile, this.profile)) || [];
-		const compilerArguments = [...ownedArguments(providerArguments), ...inlineDependencyArguments];
-		const argumentsList = this.definition.assembleArguments
-			? this.definition.assembleArguments(compilerArguments, providerArguments, source.fsPath)
-			: [...providerArguments, ...compilerArguments, source.fsPath];
+		const artifactArguments = ownedArguments(providerArguments);
+		const compilerArguments = [
+			...(overlay && overlaySpec?.rewriteArguments
+				? overlaySpec.rewriteArguments(artifactArguments)
+				: artifactArguments),
+			...(overlay?.invocation.arguments ?? []),
+			...inlineDependencyArguments,
+		];
+		const inputPath = overlay?.invocation.inputPath ?? source.fsPath;
+		// The folder of the source comes after the default arguments of the toolchain, and before the
+		// arguments of the project, so it is the first include folder of the project.
+		const leading = overlay?.invocation.leadingArguments ?? [];
+		const toolchainArgumentCount =
+			leading.length > 0
+				? this.definition.stripOwnedArguments(this.profile.defaultArguments, source.fsPath, workingDirectory)
+						.length
+				: 0;
+		const leadingProviderArguments = [
+			...providerArguments.slice(0, toolchainArgumentCount),
+			...leading,
+			...providerArguments.slice(toolchainArgumentCount),
+		];
+		const argumentsList = [
+			...(this.definition.assembleArguments
+				? this.definition.assembleArguments(compilerArguments, leadingProviderArguments, inputPath)
+				: [...leadingProviderArguments, ...compilerArguments, inputPath]),
+			...(overlay?.invocation.trailingArguments ?? []),
+		];
 
 		const invocation = {
 			workingDirectory,
@@ -542,6 +584,7 @@ export class ToolchainBackend {
 			started: performance.now(),
 			startedAt: Date.now(),
 			...(inlineDependencyArguments.length > 0 ? { inlineDependencyFile } : {}),
+			...(overlay ? { overlay } : {}),
 		};
 		this.reportInvocation(options, invocation);
 		return invocation;
@@ -562,22 +605,30 @@ export class ToolchainBackend {
 		temporaryDirectory: string,
 		cancellationToken: CancellationToken,
 	): Promise<ArtifactInputMetadata> {
+		const { overlay, workingDirectory } = invocation;
+		// The hash of unsaved text is in the cache key, so the source and its overlay file are no inputs.
+		const isSource = (input: string): boolean =>
+			overlay !== undefined &&
+			(sameLocalFile(input, overlay.files.overlayPath, workingDirectory) ||
+				sameLocalFile(input, source.fsPath, workingDirectory));
 		const snapshot = (dependencies: readonly string[]): Promise<ArtifactInputMetadata> =>
 			snapshotArtifactInputs(
 				source.fsPath,
-				dependencies,
+				dependencies.filter((input) => !isSource(input)),
 				dependencies.length > 0 ? 'complete' : 'source-only',
-				invocation.workingDirectory,
+				workingDirectory,
 				invocation.startedAt,
+				{ includeSource: overlay === undefined },
 			);
 		const spec = this.definition.dependencyCollection;
 		if (!spec) {
 			return snapshot([]);
 		}
 		const inlineDependencies = invocation.inlineDependencyFile
-			? await readDependencyFile(spec, invocation.inlineDependencyFile, invocation.workingDirectory)
+			? await readDependencyFile(spec, invocation.inlineDependencyFile, workingDirectory)
 			: [];
-		if (inlineDependencies.length > 0) {
+		// A compile of unsaved text runs often, so it does not start a second run for its inputs.
+		if (inlineDependencies.length > 0 || overlay) {
 			return snapshot(inlineDependencies);
 		}
 		const dependencyFile = path.join(temporaryDirectory, spec.outputFilename);
@@ -631,6 +682,30 @@ export class ToolchainBackend {
 			workingDirectory,
 			cancellationToken,
 		);
+	}
+}
+
+/** Output of a compile of unsaved text, with the source in place of the overlay file. */
+function overlayToSourcePaths(invocation: PreparedInvocation, text: string): string {
+	return invocation.overlay ? withSourcePaths(text, invocation.overlay.files, invocation.workingDirectory) : text;
+}
+
+/** Waits for a tool. Its failure output names the source in place of the overlay file. */
+async function withOverlayFailurePaths<T>(invocation: PreparedInvocation, run: Promise<T>): Promise<T> {
+	try {
+		return await run;
+	} catch (error) {
+		if (!invocation.overlay) {
+			throw error;
+		}
+		const map = (text: string): string => overlayToSourcePaths(invocation, text);
+		if (error instanceof ToolExitError) {
+			throw new ToolExitError(error.message, error.returnCode, map(error.stdout), map(error.stderr));
+		}
+		if (error instanceof exec.ExecError) {
+			throw new exec.ExecError(error.kind, error.message, map(error.stdout), map(error.stderr));
+		}
+		throw error;
 	}
 }
 

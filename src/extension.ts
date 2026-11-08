@@ -56,7 +56,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
 	const artifactProvider = new ArtifactDocumentProvider(compilationService, configuration, artifactRegistry);
 	const graphPanels = new GraphPanelManager(context, artifactRegistry);
 	const activeArtifact = new ActiveArtifact(artifactRegistry, graphPanels);
-	const statusBar = new ArtifactStatusBar(activeArtifact);
+	const statusBar = new ArtifactStatusBar(activeArtifact, (source) => configuration.getCompileOnType(source));
 	const navigationProvider = new ArtifactNavigationProvider((uri) => artifactProvider.getRenderedArtifact(uri));
 	const sourceNavigation = new SourceNavigation(artifactRegistry, configuration);
 	const sourceAnnotations = new SourceAnnotations(artifactRegistry, configuration);

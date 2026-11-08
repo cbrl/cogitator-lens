@@ -7,11 +7,13 @@ import {
 	workspace,
 	type StatusBarItem,
 	type TextDocument,
+	type Uri,
 } from 'vscode';
 import { sourceUriComparisonKey } from '../file-identity.js';
 import type { ActiveArtifact } from './active-artifact.js';
-import { unsavedSourceText } from './artifact-decorator.js';
+import { unsavedSourceNote } from './artifact-decorator.js';
 import type { ArtifactRegistryDocument } from './artifact-document-registry.js';
+import { showsSavedFileOnly } from './artifact-generator.js';
 
 /** The context key that enables the commands that act on the active artifact. */
 export const activeArtifactContextKey = 'coglens.activeArtifact';
@@ -24,14 +26,18 @@ export class ArtifactStatusBar implements Disposable {
 	/** Whether the source of the shown artifact had unsaved changes at the last refresh. */
 	private shownUnsaved = false;
 
-	constructor(private readonly active: ActiveArtifact) {
+	constructor(
+		private readonly active: ActiveArtifact,
+		/** Whether the open artifacts of a source compile its unsaved text. */
+		private readonly compileOnType: (source: Uri) => boolean = () => false,
+	) {
 		this.item.name = 'Cogitator Lens Artifact Status';
 		this.item.command = 'coglens.ShowArtifactStatus';
 		// The dirty state of the source changes the text, so a change refreshes only when it
 		// changes that state. A keystroke in a source that is already unsaved does nothing.
 		const sourceChanged = (source: TextDocument): void => {
 			const document = this.active.document;
-			if (document && isSourceOf(document, source) && sourceIsUnsaved(document) !== this.shownUnsaved) {
+			if (document && isSourceOf(document, source) && this.sourceIsUnsaved(document) !== this.shownUnsaved) {
 				this.refresh();
 			}
 		};
@@ -59,10 +65,22 @@ export class ArtifactStatusBar implements Disposable {
 		}
 		// The note at the end of the first artifact line is often past the right edge, so the
 		// status bar also shows the unsaved state.
-		this.shownUnsaved = sourceIsUnsaved(document);
+		this.shownUnsaved = this.sourceIsUnsaved(document);
 		this.item.text = this.shownUnsaved ? `${statusText(document)} · Unsaved source` : statusText(document);
 		this.item.tooltip = statusTooltip(document, this.shownUnsaved);
 		this.item.show();
+	}
+
+	/**
+	 * Whether the source has unsaved edits that the artifact does not show. With
+	 * `coglens.compileOnType`, a compile of the unsaved text follows each pause, so the edits are not
+	 * unsaved in this sense, unless the toolchain reads only the saved file.
+	 */
+	private sourceIsUnsaved(document: ArtifactRegistryDocument): boolean {
+		return (
+			showsSavedFileOnly(document.handler.status.sourceText, this.compileOnType(document.parsed.source)) &&
+			workspace.textDocuments.some((source) => !source.isClosed && source.isDirty && isSourceOf(document, source))
+		);
 	}
 
 	private setContext(hasActiveArtifact: boolean): void {
@@ -97,7 +115,7 @@ function statusTooltip({ identity, handler }: ArtifactRegistryDocument, unsaved:
 		`${identity.artifactLabel} · ${path.basename(identity.sourceLabel)}`,
 		`${identity.variantLabel} · ${identity.toolchainLabel}`,
 		status.state === 'failed' ? status.error.message : `State: ${status.state}`,
-		...(unsaved ? [unsavedSourceText] : []),
+		...(unsaved ? [unsavedSourceNote(status.sourceText?.savedFileReason)] : []),
 		'Click for artifact actions',
 	].join('\n');
 }
@@ -107,9 +125,4 @@ function isSourceOf(document: ArtifactRegistryDocument, source: TextDocument): b
 		source.uri.scheme === 'file' &&
 		sourceUriComparisonKey(source.uri) === sourceUriComparisonKey(document.parsed.source)
 	);
-}
-
-/** The compiler reads the saved file, so an unsaved source edit is not in the artifact. */
-function sourceIsUnsaved(document: ArtifactRegistryDocument): boolean {
-	return workspace.textDocuments.some((source) => !source.isClosed && source.isDirty && isSourceOf(document, source));
 }

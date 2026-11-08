@@ -47,4 +47,13 @@ export interface CompileOptions {
 	productionOptions: import('./artifact-options.js').ProductionOptions;
 	/** Internal observer; environment values must never cross this boundary. */
 	onInvocation?: (details: InvocationDetails) => void;
+	/** The unsaved text that the compile reads in place of the saved source. */
+	sourceOverlay?: SourceOverlay;
+}
+
+/** The unsaved text of a source, which a compile reads from a file in its temporary directory. */
+export interface SourceOverlay {
+	readonly text: string;
+	/** Whether the saved file starts with a UTF-8 byte order mark. The overlay file copies it. */
+	readonly byteOrderMark: boolean;
 }

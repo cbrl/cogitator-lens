@@ -5,7 +5,11 @@ import path from 'node:path';
 import * as vscode from 'vscode';
 import { ActiveArtifact, type GraphPanelFocus } from '../../src/artifact-document/active-artifact.js';
 import { ArtifactDocumentProvider } from '../../src/artifact-document/artifact-document-provider.js';
-import { ArtifactDocumentRegistry } from '../../src/artifact-document/artifact-document-registry.js';
+import {
+	ArtifactDocumentRegistry,
+	compileOnTypeDelayMs,
+} from '../../src/artifact-document/artifact-document-registry.js';
+import { sameLocalFile } from '../../src/file-identity.js';
 import { getArtifactUri, parseArtifactUri } from '../../src/artifact-document/artifact-uri.js';
 import { currentListing } from '../../src/artifact-document/artifact-generator.js';
 import { toolchainComparisonVariantId } from '../../src/compilation/comparison-variants.js';
@@ -80,6 +84,8 @@ interface DocumentEnvironment {
 	compileWith(args: readonly string[], environment?: Readonly<Record<string, string>>): void;
 	/** Announces a change to the settings with these keys. */
 	changeSettings(...keys: string[]): void;
+	/** Sets `coglens.compileOnType` and announces the change. */
+	setCompileOnType(enabled: boolean): void;
 	provide(uri: vscode.Uri): Promise<string>;
 }
 
@@ -107,6 +113,7 @@ async function withDocumentEnvironment(
 		productionOptions: {},
 	}));
 	const changes = new vscode.EventEmitter<SettingsChange>();
+	let compileOnType = false;
 	const configuration = {
 		onDidChange: changes.event,
 		getToolchains: () => [],
@@ -117,6 +124,7 @@ async function withDocumentEnvironment(
 		getDimUnusedSourceLines: () => false,
 		getSynchronizeSourceAndArtifactScrolling: () => false,
 		getOptimizationRemarkCategories: () => new Set(['passed', 'missed', 'analysis']),
+		getCompileOnType: () => compileOnType,
 	} as unknown as ConfigurationService;
 	const service = new CompilationService(configuration);
 	const registry = new ArtifactDocumentRegistry(service, configuration);
@@ -147,6 +155,10 @@ async function withDocumentEnvironment(
 					],
 				}),
 			changeSettings: (...keys) => changes.fire({ affects: (key) => keys.includes(key) }),
+			setCompileOnType: (enabled) => {
+				compileOnType = enabled;
+				changes.fire({ affects: (key) => key === 'compileOnType' });
+			},
 			provide: async (uri) => (await provider.provideTextDocumentContent(uri, cancellation.token)) ?? '',
 		});
 	} finally {
@@ -299,6 +311,92 @@ export async function verifySharedCompile(repositoryRoot: string): Promise<void>
 		);
 		assert.deepEqual(await runs(), ['compile', 'compile']);
 	});
+}
+
+/**
+ * With `coglens.compileOnType`, a pause in typing compiles the unsaved text. The output names the
+ * source, and the Problems view keeps the diagnostics of the saved file. Text that an earlier pause
+ * compiled starts no compile, and a save compiles the saved file once.
+ */
+export async function verifyCompileOnType(repositoryRoot: string): Promise<void> {
+	await withDocumentEnvironment(
+		repositoryRoot,
+		async ({ source, provider, uri, compileWith, setCompileOnType, provide }) => {
+			await fs.promises.writeFile(source.fsPath, 'int version_saved;\n');
+			const runsFile = path.join(path.dirname(source.fsPath), 'runs.txt');
+			const runs = async (): Promise<number> =>
+				(await fs.promises.readFile(runsFile, 'utf8').catch(() => '')).split('\n').filter(Boolean).length;
+			compileWith(['--echo-version', '--warn'], { COGLENS_FAKE_RUNS: runsFile });
+			const artifactUri = uri();
+			const status = () => provider.getArtifactDocumentState(artifactUri)?.status;
+			const problems = (): vscode.Diagnostic[] =>
+				vscode.languages.getDiagnostics(source).filter((diagnostic) => diagnostic.source === 'Cogitator Lens');
+			const document = await vscode.workspace.openTextDocument(source);
+			const edit = async (from: string, to: string): Promise<void> => {
+				const start = document.getText().indexOf(from);
+				assert.ok(start >= 0, from);
+				const change = new vscode.WorkspaceEdit();
+				change.replace(
+					source,
+					new vscode.Range(document.positionAt(start), document.positionAt(start + from.length)),
+					to,
+				);
+				assert.ok(await vscode.workspace.applyEdit(change));
+			};
+
+			assert.equal(await provide(artifactUri), 'version_saved');
+			assert.equal(status()?.sourceText?.unsaved, false);
+			assert.equal(status()?.sourceText?.version, document.version);
+			assert.equal(problems().length, 1);
+
+			await edit('saved', 'first');
+			await new Promise((resolve) => setTimeout(resolve, compileOnTypeDelayMs + 300));
+			assert.equal(await runs(), 1, 'Without the setting, typing compiles nothing');
+
+			// The setting refreshes the artifact of a source with unsaved text, and the compile reads that text.
+			let changed = nextChange(provider, artifactUri);
+			setCompileOnType(true);
+			await changed;
+			assert.equal(await provide(artifactUri), 'version_first');
+			assert.equal(status()?.sourceText?.unsaved, true);
+			assert.equal(status()?.sourceText?.version, document.version);
+			const warning = status()?.artifact?.diagnostics[0];
+			assert.ok(warning && sameLocalFile(warning.uri.fsPath, source.fsPath), 'The warning names the source');
+			assert.equal(problems().length, 1, 'The Problems view keeps the diagnostics of the saved file');
+
+			// A pause in typing compiles the new text.
+			changed = nextChange(provider, artifactUri);
+			await edit('first', 'typed');
+			await changed;
+			assert.equal(await provide(artifactUri), 'version_typed');
+			assert.equal(await runs(), 3);
+
+			// A failure of unsaved text keeps the listing, and the Problems view does not show it.
+			changed = nextChange(provider, artifactUri);
+			await edit('version_typed;', 'version_typed; FAIL');
+			await changed;
+			assert.equal(await provide(artifactUri), 'version_typed');
+			const failed = status();
+			assert.equal(failed?.state === 'failed' && failed.readUnsavedText, true);
+			assert.ok(problems().every((diagnostic) => diagnostic.severity !== vscode.DiagnosticSeverity.Error));
+
+			// Text that an earlier pause compiled has its output in the cache.
+			changed = nextChange(provider, artifactUri);
+			await edit(' FAIL', '');
+			await changed;
+			assert.equal(await provide(artifactUri), 'version_typed');
+			assert.equal(await runs(), 4, 'The text of an earlier pause starts no compile');
+
+			// A save compiles the saved file once.
+			changed = nextChange(provider, artifactUri);
+			assert.ok(await document.save());
+			await changed;
+			assert.equal(await provide(artifactUri), 'version_typed');
+			assert.equal(status()?.sourceText?.unsaved, false);
+			assert.equal(await runs(), 5);
+			assert.equal(problems().length, 1);
+		},
+	);
 }
 
 /**

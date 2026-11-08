@@ -30,7 +30,7 @@ import type { ConfigurationService } from '../services/configuration-service.js'
 import type { RenderedTextArtifact } from '../types/index.js';
 import { equalUri } from '../file-identity.js';
 import type { ArtifactDocumentRegistry, ArtifactRegistryDocument } from './artifact-document-registry.js';
-import { currentListing } from './artifact-generator.js';
+import { currentListing, listingMatchesDocument } from './artifact-generator.js';
 /** The number of artifact lines that one hover shows for each artifact. */
 const hoverLineLimit = 12;
 /** How long Reveal in Artifact waits for a compile to end. */
@@ -80,12 +80,11 @@ export class SourceNavigation implements HoverProvider, CodeLensProvider, Dispos
 	}
 
 	provideHover(document: TextDocument, position: Position, _token: CancellationToken): Hover | undefined {
-		// The compiler reads the saved file, so the lines of an edited source do not match.
-		if (document.uri.scheme !== 'file' || document.isDirty) {
+		if (document.uri.scheme !== 'file') {
 			return undefined;
 		}
 		const contents = new MarkdownString();
-		for (const { document: artifactDocument, artifact } of this.listingsOf(document.uri)) {
+		for (const { document: artifactDocument, artifact } of this.listingsOf(document.uri, document)) {
 			const lines = linesFromSource(artifact, document.uri.fsPath, position.line);
 			if (lines.length === 0) {
 				continue;
@@ -101,15 +100,11 @@ export class SourceNavigation implements HoverProvider, CodeLensProvider, Dispos
 	}
 
 	provideCodeLenses(document: TextDocument, _token: CancellationToken): CodeLens[] {
-		if (
-			document.uri.scheme !== 'file' ||
-			document.isDirty ||
-			!this.configuration.getFunctionCodeLens(document.uri)
-		) {
+		if (document.uri.scheme !== 'file' || !this.configuration.getFunctionCodeLens(document.uri)) {
 			return [];
 		}
 		const lenses: CodeLens[] = [];
-		for (const { document: artifactDocument, artifact } of this.listingsOf(document.uri)) {
+		for (const { document: artifactDocument, artifact } of this.listingsOf(document.uri, document)) {
 			// Template instances and clones can start at the same source line, so they share one lens.
 			const bySourceLine = new Map<number, { functions: number; instructions: number; artifactLine: number }>();
 			for (const summary of functionSummaries(artifact, document.uri.fsPath)) {
@@ -151,11 +146,18 @@ export class SourceNavigation implements HoverProvider, CodeLensProvider, Dispos
 	/**
 	 * The open text artifacts of a source that hold generated code, with their listing. Only a
 	 * successful compile gives a listing. After a save, an earlier listing has the old line numbers.
+	 * The listing must also have the lines of the text that the source document holds now. With
+	 * `coglens.compileOnType`, a listing of unsaved text has them.
 	 */
-	private listingsOf(source: Uri): OpenListing[] {
+	private listingsOf(source: Uri, sourceDocument: TextDocument): OpenListing[] {
 		return this.registry.documentsOf(source).flatMap((document) => {
-			const artifact = currentListing(document.handler.status);
-			return artifact && generatedCodeKinds.has(document.parsed.artifactKind) ? [{ document, artifact }] : [];
+			const { status } = document.handler;
+			const artifact = currentListing(status);
+			return artifact &&
+				generatedCodeKinds.has(document.parsed.artifactKind) &&
+				listingMatchesDocument(status, sourceDocument)
+				? [{ document, artifact }]
+				: [];
 		});
 	}
 
@@ -174,7 +176,7 @@ export class SourceNavigation implements HoverProvider, CodeLensProvider, Dispos
 			await window.showInformationMessage('Open a source file to reveal its lines in an artifact.');
 			return;
 		}
-		if (editor.document.isDirty) {
+		if (editor.document.isDirty && !this.configuration.getCompileOnType(editor.document.uri)) {
 			await window.showInformationMessage(
 				'Save the source first. The artifact shows the saved file, so its lines do not match the edits.',
 			);
@@ -182,7 +184,7 @@ export class SourceNavigation implements HoverProvider, CodeLensProvider, Dispos
 		}
 		const source = editor.document.uri;
 		const line = editor.selection.active.line;
-		let listing = this.preferredListing(source);
+		let listing = this.preferredListing(source, editor.document);
 		if (!listing) {
 			const generatedCode = (): ArtifactRegistryDocument | undefined =>
 				this.registry
@@ -200,7 +202,7 @@ export class SourceNavigation implements HoverProvider, CodeLensProvider, Dispos
 				return;
 			}
 			await this.compileEnd(document.uri);
-			listing = this.preferredListing(source);
+			listing = this.preferredListing(source, editor.document);
 			if (!listing) {
 				const state = document.handler.status.state;
 				const next =
@@ -227,8 +229,8 @@ export class SourceNavigation implements HoverProvider, CodeLensProvider, Dispos
 	}
 
 	/** An open listing of the source. A visible one comes first. */
-	private preferredListing(source: Uri): OpenListing | undefined {
-		const listings = this.listingsOf(source);
+	private preferredListing(source: Uri, sourceDocument: TextDocument): OpenListing | undefined {
+		const listings = this.listingsOf(source, sourceDocument);
 		return (
 			listings.find((listing) =>
 				window.visibleTextEditors.some((editor) => equalUri(editor.document.uri, listing.document.uri)),

@@ -27,6 +27,7 @@ import {
 } from './c-family.js';
 import { parseGnuDiagnostics } from './c-family/diagnostics.js';
 import { gccOptimizationLevels } from './optimization-levels.js';
+import { gccSourceOverlay } from './source-overlay.js';
 
 export const gcc: ToolchainDefinition = {
 	executablePattern: /^(?:gcc|g\+\+)(?:-\d+(?:\.\d+)*)?(?:\.exe)?$/i,
@@ -42,6 +43,7 @@ export const gcc: ToolchainDefinition = {
 	outputArguments: gnuOutputArguments(['-g1']),
 	stripOwnedArguments: stripGnuManagedArguments,
 	dependencyCollection: gnuDependencyCollection,
+	sourceOverlay: gccSourceOverlay,
 	createParser: defaultAsmParser,
 	createCfgParser: () => new GccAssemblyCfgParser(new InstructionSetInfo()),
 	discoverTools: toolDiscoverer({ demangler: 'c++filt', disassembler: 'objdump' }),

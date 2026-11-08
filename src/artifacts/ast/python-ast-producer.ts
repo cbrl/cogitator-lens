@@ -8,7 +8,8 @@ const pythonAstHelper = [
 	'import ast,sys,tokenize',
 	`sys.version_info < (3,9) and sys.exit("${pythonVersionMarker}"+".".join(map(str,sys.version_info[:3])))`,
 	'filename=sys.argv[1]',
-	'f=tokenize.open(filename)',
+	// A second argument names a file with unsaved text. The tree gets the name of the source.
+	'f=tokenize.open(sys.argv[2] if len(sys.argv)>2 else filename)',
 	'source=f.read()',
 	'f.close()',
 	'tree=ast.parse(source,filename=filename)',

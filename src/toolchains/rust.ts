@@ -17,6 +17,7 @@ import {
 import { defaultAsmParser } from './c-family.js';
 import { parseRustDiagnostics } from './rust/diagnostics.js';
 import { rustOptimizationLevels } from './optimization-levels.js';
+import { rustSourceOverlay } from './source-overlay.js';
 
 const rustManagedFlagsWithValues = new Set(['-o', '--emit', '--error-format', '--json', '--out-dir', '--color']);
 const rustManagedFlagAssignments = /^(?:-o.|(?:--emit|--error-format|--json|--out-dir|--color)=)/;
@@ -114,6 +115,7 @@ export const rust: ToolchainDefinition = {
 	outputArguments: rustOutputArguments,
 	stripOwnedArguments: stripRustManagedArguments,
 	dependencyCollection: rustDependencyCollection,
+	sourceOverlay: rustSourceOverlay,
 	createParser: defaultAsmParser,
 	createCfgParser: () => new ClangAssemblyCfgParser(new InstructionSetInfo()),
 	discoverTools: toolDiscoverer({ demangler: 'rustfilt' }),

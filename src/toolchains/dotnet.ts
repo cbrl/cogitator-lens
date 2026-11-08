@@ -14,6 +14,7 @@ import {
 } from './toolchain-contracts.js';
 import { parseParenthesizedDiagnostics } from './msvc/diagnostics.js';
 import { dotnetOptimizationLevels } from './optimization-levels.js';
+import { csharpSourceOverlay } from './source-overlay.js';
 
 export const dotNetIlProducer: ArtifactProducer = (backend, source, options, cancellationToken) =>
 	backend.produceWithTool(
@@ -274,6 +275,7 @@ export const dotnet: ToolchainDefinition = {
 	optimizationLevels: dotnetOptimizationLevels,
 	stripOwnedArguments: stripDotNetManagedArguments,
 	assembleArguments: dotNetCompilerCommandLine,
+	sourceOverlay: csharpSourceOverlay,
 	discoverTools: discoverDotNetTools,
 	artifacts: {
 		assembly: {

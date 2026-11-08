@@ -68,13 +68,17 @@ export class ArtifactProblems implements Disposable {
 	}
 }
 
-/** The compiler diagnostics of a finished compile, or nothing while no compile has finished. */
+/**
+ * The compiler diagnostics of a finished compile, or nothing while no compile has finished. A
+ * compile of unsaved text also gives nothing. Its errors come and go as the user types, and the
+ * language server of the source already reports them. The next compile of the saved file reports.
+ */
 function statusDiagnostics(status: ArtifactStatus): readonly CompileDiagnostic[] | undefined {
 	switch (status.state) {
 		case 'successful':
-			return status.artifact.diagnostics;
+			return status.sourceText?.unsaved ? undefined : status.artifact.diagnostics;
 		case 'failed':
-			return status.diagnostics;
+			return status.readUnsavedText ? undefined : status.diagnostics;
 		default:
 			return undefined;
 	}

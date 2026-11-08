@@ -11,6 +11,7 @@ import {
 } from 'vscode';
 import fs from 'fs';
 import path from 'path';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import type { ConfigurationService, SettingsChange } from '../services/configuration-service.js';
 import type {
@@ -24,8 +25,10 @@ import type {
 	ProviderSnapshot,
 	RawArtifact,
 	RenderedArtifact,
+	SourceOverlay,
 	SourceState,
 	ToolchainProfile,
+	UnsavedTextUse,
 } from '../types/index.js';
 import type { ArtifactRenderContext } from '../artifacts/core/artifact-contracts.js';
 import {
@@ -55,7 +58,8 @@ import { relativeWithin } from '../services/path-variables.js';
 import { parseToolchainComparisonVariantId, toolchainComparisonVariant } from './comparison-variants.js';
 import { withoutLevelConflicts, type OptimizationLevel } from '../toolchains/optimization-levels.js';
 import { CompileScheduler } from './compile-scheduler.js';
-import type { ArtifactImplementation } from '../toolchains/toolchain-contracts.js';
+import type { ArtifactImplementation, ToolchainDefinition } from '../toolchains/toolchain-contracts.js';
+import { overlayEncoding } from '../toolchains/source-overlay.js';
 import { architectureOfTriple, targetFromArguments, toolchainTarget } from '../toolchains/target-architecture.js';
 import { sourceLanguage } from '../buildsystems/cpptools-configuration.js';
 import { structurallyEqual } from '../utils.js';
@@ -79,6 +83,13 @@ const fallbackToolchainOrigins: readonly ConfigurationOrigin[] = ['user', 'path'
 /** How long a request waits for the first provider results before it uses what is known. */
 const providerReadyTimeoutMs = 10_000;
 
+/**
+ * Outputs of unsaved text have a cache of their own. Each pause in typing can add one, and they
+ * must not push the outputs of saved files out of the main cache.
+ */
+const unsavedOutputCharacters = 32 * 1024 * 1024;
+const unsavedOutputEntries = 32;
+
 export class CompilationService {
 	readonly toolchainRegistry: ToolchainRegistry;
 	private readonly variants = new CompilationConfigDatabase();
@@ -91,6 +102,7 @@ export class CompilationService {
 	private readonly folderVariants = new Map<ConfigurationOrigin, readonly FolderVariant[]>();
 	private readonly subscriptions: Disposable[] = [];
 	private readonly rawArtifactCache = new RawArtifactCache();
+	private readonly unsavedArtifactCache = new RawArtifactCache(unsavedOutputCharacters, unsavedOutputEntries);
 	private readonly scheduler = new CompileScheduler();
 	private readonly inputWatchers = new Map<string, Disposable>();
 	private readonly currentArtifactOptions = new Map<ArtifactKind, ArtifactOptions>();
@@ -129,6 +141,7 @@ export class CompilationService {
 				this.executableIdentities.clear();
 				this.scheduler.drop((tags) => changed.has(tags.toolchainProfileId));
 				this.rawArtifactCache.evictToolchains(changed);
+				this.unsavedArtifactCache.evictToolchains(changed);
 				this.syncInputWatchers();
 				this.changeEmitter.fire(
 					this.variantsSources().filter((source) =>
@@ -326,12 +339,35 @@ export class CompilationService {
 		}
 		const { implementation } = resolved;
 
-		const key = productionKey(request, source.value.state, producerIdentity(implementation.producer));
+		// Unsaved text has its own key and cache. Its key holds a hash of the text, not a file state.
+		const unsaved =
+			request.unsavedText === undefined
+				? undefined
+				: unsavedTextPlan(
+						backend.definition,
+						backend.profile,
+						variant.source.fsPath,
+						request.unsavedText,
+						source.value.bytes,
+					);
+		const overlay = unsaved?.overlay;
+		const unsavedText: UnsavedTextUse | undefined =
+			unsaved === undefined
+				? undefined
+				: unsaved.reason === undefined
+					? { read: true }
+					: { read: false, reason: unsaved.reason };
+		const key = productionKey(
+			request,
+			overlay ? { unsavedTextHash: overlayHash(overlay) } : source.value.state,
+			producerIdentity(implementation.producer),
+		);
+		const cache = overlay ? this.unsavedArtifactCache : this.rawArtifactCache;
 		const renderContext: ArtifactRenderContext = {
 			backend,
 			source: {
 				uri: variant.source,
-				text: source.value.text,
+				text: overlay?.text ?? source.value.text,
 			},
 		};
 		// Another artifact kind may have produced the shared output, or started the shared compile.
@@ -343,13 +379,14 @@ export class CompilationService {
 				backend.profile,
 				[...variant.arguments, ...request.extraArguments],
 			),
+			...(unsavedText ? { unsavedText } : {}),
 		});
-		const cached = this.rawArtifactCache.get(key);
-		if (cached && (await validateArtifactInputs(cached.inputs))) {
+		const cached = cache.get(key);
+		if (cached && (await validateArtifactInputs(cached.inputs, overlay !== undefined))) {
 			request.onInvocation?.(cached.command);
 			return render(cached);
 		} else if (cached) {
-			this.rawArtifactCache.delete(key);
+			cache.delete(key);
 			this.syncInputWatchers();
 		}
 
@@ -368,12 +405,13 @@ export class CompilationService {
 							workingDirectory: variant.workingDirectory,
 							productionOptions: options.production,
 							onInvocation: flight.onInvocation,
+							...(overlay ? { sourceOverlay: overlay } : {}),
 						},
 						flight.cancellationToken,
 					);
 					const output: RawArtifact = { ...produced, kind: artifactKind };
 					if (flight.isCurrent()) {
-						this.rawArtifactCache.set(key, output, variant.source, variant.toolchainProfileId);
+						cache.set(key, output, variant.source, variant.toolchainProfileId);
 						this.syncInputWatchers();
 					}
 					return output;
@@ -387,7 +425,12 @@ export class CompilationService {
 				throw new CancellationError();
 			}
 			if (error instanceof CompilationError) {
-				throw error;
+				throw unsavedText && !error.unsavedText
+					? new CompilationError(error.message, error.diagnostics, error.truncated, {
+							cause: error.cause,
+							unsavedText,
+						})
+					: error;
 			}
 			if (error instanceof UnsupportedToolVersionError) {
 				return {
@@ -406,7 +449,7 @@ export class CompilationService {
 				message,
 				diagnostics,
 				error instanceof ExecError && error.kind === 'output-limit',
-				{ cause: error instanceof Error ? error : undefined },
+				{ cause: error instanceof Error ? error : undefined, ...(unsavedText ? { unsavedText } : {}) },
 			);
 		}
 	}
@@ -423,6 +466,7 @@ export class CompilationService {
 		this.variants.dispose();
 		this.toolchainRegistry.dispose();
 		this.rawArtifactCache.clear();
+		this.unsavedArtifactCache.clear();
 	}
 
 	/** Reads the settings a change affects, or every setting without a change. */
@@ -638,7 +682,14 @@ export class CompilationService {
 	}
 
 	private handleInputChange(inputKey: string): void {
-		const affectedSources = this.rawArtifactCache.evictInputKey(inputKey);
+		const affectedSources = [
+			...new Map(
+				[
+					...this.rawArtifactCache.evictInputKey(inputKey),
+					...this.unsavedArtifactCache.evictInputKey(inputKey),
+				].map((source) => [sourceUriComparisonKey(source), source]),
+			).values(),
+		];
 		// The production key holds the state of the source only. A compile that runs now can have read
 		// the old header, so a refresh must not join it.
 		const affectedKeys = new Set(affectedSources.map(sourceUriComparisonKey));
@@ -662,7 +713,11 @@ export class CompilationService {
 	}
 
 	private syncInputWatchers(): void {
-		const inputs = this.rawArtifactCache.getInputs((inputPath, source) => this.isWatchedInput(inputPath, source));
+		const watched = (inputPath: string, source: Uri): boolean => this.isWatchedInput(inputPath, source);
+		const inputs = new Map([
+			...this.rawArtifactCache.getInputs(watched),
+			...this.unsavedArtifactCache.getInputs(watched),
+		]);
 		for (const [key, watcher] of this.inputWatchers) {
 			if (!inputs.has(key)) {
 				watcher.dispose();
@@ -714,15 +769,15 @@ async function readSourceSnapshot(source: Uri): Promise<
 			readonly value: {
 				readonly state: SourceState;
 				readonly text: string;
+				/** The bytes of the saved file, which decide the encoding of an overlay file. */
+				readonly bytes: Buffer;
 			};
 	  }
 	| { readonly ok: false; readonly explanation: string }
 > {
 	try {
-		const [stat, text] = await Promise.all([
-			fs.promises.stat(source.fsPath),
-			fs.promises.readFile(source.fsPath, 'utf8'),
-		]);
+		const [stat, bytes] = await Promise.all([fs.promises.stat(source.fsPath), fs.promises.readFile(source.fsPath)]);
+		const text = bytes.toString('utf8');
 		if (!stat.isFile()) {
 			return {
 				ok: false,
@@ -734,6 +789,7 @@ async function readSourceSnapshot(source: Uri): Promise<
 			value: {
 				state: { size: stat.size, mtimeMs: stat.mtimeMs },
 				text,
+				bytes,
 			},
 		};
 	} catch (error) {
@@ -743,6 +799,39 @@ async function readSourceSnapshot(source: Uri): Promise<
 			explanation: `Source is unavailable or unreadable: ${source.fsPath} (${reason})`,
 		};
 	}
+}
+
+/**
+ * The overlay of unsaved text, or why the compile reads the saved file. The toolchain must know how
+ * to read an overlay file, and the saved file must be UTF-8 text, as the overlay file is.
+ */
+function unsavedTextPlan(
+	definition: ToolchainDefinition,
+	profile: ToolchainProfile,
+	sourcePath: string,
+	text: string,
+	savedFile: Buffer,
+):
+	| { readonly overlay: SourceOverlay; readonly reason?: never }
+	| { readonly overlay?: never; readonly reason: string } {
+	const spec = definition.sourceOverlay;
+	if (!spec) {
+		return { reason: `${profile.displayName} cannot compile unsaved text.` };
+	}
+	const encoding = overlayEncoding(savedFile);
+	if (!encoding) {
+		return { reason: 'The saved file is not UTF-8 text.' };
+	}
+	const unsupported = spec.unsupported?.(text, sourcePath);
+	return unsupported ? { reason: unsupported } : { overlay: { text, byteOrderMark: encoding.byteOrderMark } };
+}
+
+/** A hash of the text and the byte order mark of an overlay file, for the cache key. */
+function overlayHash(overlay: SourceOverlay): string {
+	return createHash('sha256')
+		.update(overlay.byteOrderMark ? '﻿' : '')
+		.update(overlay.text)
+		.digest('base64url');
 }
 
 const maximumFailureOutputLength = 20_000;

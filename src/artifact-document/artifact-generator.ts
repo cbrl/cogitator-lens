@@ -21,8 +21,20 @@ import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
 import { applyArtifactView, type ArtifactViewOptions } from '../artifacts/core/artifact-views.js';
 import * as logger from '../logger.js';
 
+/** The text of the source that an artifact comes from. */
+export interface ArtifactSourceText {
+	/** The version of the open source document that has this text, when it is known. */
+	readonly version?: number;
+	/** Whether the compile read the unsaved text of the document, not the saved file. */
+	readonly unsaved: boolean;
+	/** Why the compile read the saved file although the setting asked for the unsaved text. */
+	readonly savedFileReason?: string;
+}
+
 interface ArtifactStatusBase {
 	readonly artifact?: RenderedArtifact;
+	/** The source text of the artifact. It changes together with the artifact. */
+	readonly sourceText?: ArtifactSourceText;
 	readonly invocation?: InvocationDetails;
 	readonly truncated: boolean;
 }
@@ -33,6 +45,8 @@ export type ArtifactStatus =
 			readonly state: 'failed';
 			readonly error: Error;
 			readonly diagnostics: readonly import('../types/index.js').CompileDiagnostic[];
+			/** Whether the failed compile read unsaved text. The listing, if any, is from an earlier compile. */
+			readonly readUnsavedText: boolean;
 	  } & ArtifactStatusBase)
 	| ({
 			readonly state: 'successful';
@@ -42,11 +56,23 @@ export type ArtifactStatus =
 
 export type ArtifactState = ArtifactStatus['state'];
 
+/** The open document of a source when a compile starts. */
+export interface SourceDocumentState {
+	/** The version of the document now. */
+	readonly version: number;
+	/** The version that has the text of the saved file, when it is known. */
+	readonly savedVersion?: number;
+	/** The unsaved text, when the compile must read it in place of the saved file. */
+	readonly unsavedText?: string;
+}
+
 /** What a generator adds to its preset: the arguments that the user edited, and the listing view. */
 export interface ArtifactGeneratorSettings {
 	/** Reads the edited arguments for each compile. They follow the preset arguments. */
 	readonly extraArguments?: () => readonly string[];
 	readonly view?: ArtifactViewOptions;
+	/** Reads the open document of the source for each compile. */
+	readonly sourceDocument?: () => SourceDocumentState | undefined;
 }
 
 export class ArtifactGenerator implements Disposable {
@@ -88,6 +114,8 @@ export class ArtifactGenerator implements Disposable {
 		const isCurrent = (): boolean => this.cancellation === cancellation;
 		const externalSubscription = externalToken.onCancellationRequested(() => cancellation.cancel());
 		this.transition('compiling');
+		const document = this.settings.sourceDocument?.();
+		const unsavedText = document?.unsavedText;
 
 		try {
 			const variant = await this.resolveVariant();
@@ -121,10 +149,19 @@ export class ArtifactGenerator implements Disposable {
 					}
 					this.transition('compiling', { invocation });
 				},
+				...(unsavedText === undefined ? {} : { unsavedText }),
 			});
 			if (artifact.status !== 'available') {
 				throw new CompilationError(artifact.explanation);
 			}
+			const use = artifact.unsavedText;
+			const sourceText: ArtifactSourceText = use?.read
+				? { version: document?.version, unsaved: true }
+				: {
+						version: document?.savedVersion,
+						unsaved: false,
+						...(use ? { savedFileReason: use.reason } : {}),
+					};
 			if (!isCurrent() || cancellation.token.isCancellationRequested) {
 				throw new CancellationError();
 			}
@@ -139,6 +176,7 @@ export class ArtifactGenerator implements Disposable {
 			this.keepEarlierText(rendered);
 			this.transition('successful', {
 				artifact: rendered,
+				sourceText,
 				invocation: this.currentStatus.invocation,
 				truncated: rendered.truncated,
 			});
@@ -147,13 +185,19 @@ export class ArtifactGenerator implements Disposable {
 		} catch (error) {
 			if (isCurrent() && !(error instanceof CancellationError)) {
 				const normalized = error instanceof Error ? error : new Error(String(error));
-				logger.logChannel.error(
-					`Compilation failed for ${this.sourceUri.fsPath}: ${normalized.stack ?? normalized.message}`,
-				);
+				const readUnsavedText = error instanceof CompilationError && error.unsavedText?.read === true;
+				// A compile of unsaved text fails often while the user types, so it goes to the log as a debug line.
+				const message = `Compilation failed for ${this.sourceUri.fsPath}: ${normalized.stack ?? normalized.message}`;
+				if (readUnsavedText) {
+					logger.logChannel.debug(message);
+				} else {
+					logger.logChannel.error(message);
+				}
 				this.transition('failed', {
 					error: normalized,
 					diagnostics: error instanceof CompilationError ? error.diagnostics : [],
 					truncated: (error instanceof CompilationError && error.truncated) || this.currentStatus.truncated,
+					readUnsavedText,
 				});
 			} else if (isCurrent()) {
 				this.transition('cancelled');
@@ -214,7 +258,19 @@ export class ArtifactGenerator implements Disposable {
 		return this.currentStatus;
 	}
 
-	markStale(): void {
+	/**
+	 * Marks the artifact stale. With `cancel`, a running compile stops at once, and it reports no
+	 * cancelled state, because a new compile follows. A compile of text that the user has since
+	 * changed is of no use.
+	 */
+	markStale({ cancel = false }: { readonly cancel?: boolean } = {}): void {
+		const running = cancel ? this.cancellation : undefined;
+		if (running) {
+			// The running update is no longer current, so it reports nothing.
+			this.cancellation = undefined;
+			running.cancel();
+			running.dispose();
+		}
 		if (this.currentStatus.state !== 'stale') {
 			this.transition('stale');
 		}
@@ -245,6 +301,7 @@ export class ArtifactGenerator implements Disposable {
 		const status = {
 			state,
 			artifact: this.currentStatus.artifact,
+			sourceText: this.currentStatus.sourceText,
 			invocation: this.currentStatus.invocation,
 			truncated: this.currentStatus.truncated,
 			...overrides,
@@ -260,6 +317,28 @@ export class ArtifactGenerator implements Disposable {
  */
 export function currentListing(status: ArtifactStatus): RenderedTextArtifact | undefined {
 	return status.state === 'successful' && status.artifact.presentation === 'text' ? status.artifact : undefined;
+}
+
+/**
+ * Whether an artifact shows the saved file while its source has unsaved edits, and no compile of
+ * those edits follows. With `coglens.compileOnType`, each pause in typing compiles the unsaved text,
+ * unless the toolchain reads only the saved file. Then the source text gives the reason.
+ */
+export function showsSavedFileOnly(sourceText: ArtifactSourceText | undefined, compileOnType: boolean): boolean {
+	return !sourceText?.unsaved && (!compileOnType || sourceText?.savedFileReason !== undefined);
+}
+
+/**
+ * Whether the listing of a status has the lines of the text that a source document holds now. A
+ * listing of a known version matches that version. A listing of the saved file also matches each
+ * version without unsaved changes.
+ */
+export function listingMatchesDocument(
+	status: ArtifactStatus,
+	document: { readonly version: number; readonly isDirty: boolean },
+): boolean {
+	const { sourceText } = status;
+	return sourceText?.version === document.version || (!document.isDirty && !sourceText?.unsaved);
 }
 
 /** The text that a text listing shows, one line for each artifact line. */

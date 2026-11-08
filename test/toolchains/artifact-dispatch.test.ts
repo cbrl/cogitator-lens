@@ -6,6 +6,7 @@ import { rustLlvmIrOutput, rustMirOutput } from '../../src/toolchains/rust.js';
 import { clangClOptimizationRemarksOutput } from '../../src/artifacts/optimization-remarks/clang-cl-optimization-remarks.js';
 import { pythonCfgHelper, pythonControlFlowGraphProducer } from '../../src/artifacts/python/python-cfg-producer.js';
 import { pythonAstHelper } from '../../src/artifacts/ast/python-ast-producer.js';
+import { pythonDisassemblyHelper } from '../../src/artifacts/python/python-bytecode-producer.js';
 import { pythonStackAnalysisHelper } from '../../src/artifacts/stack-analysis/python-stack-analysis.js';
 import { supportedToolchainKinds, toolchainDefinitions } from '../../src/toolchains/toolchain-map.js';
 import { rawArtifact, renderContext, renderGraphs } from '../support/artifacts.js';
@@ -99,7 +100,7 @@ test('stdout-backed producers pass execution modes rather than an output file', 
 	for (const [toolchain, artifact, expected] of [
 		['gcc', 'preprocessed-source', ['-E']],
 		['msvc', 'preprocessed-source', ['/E']],
-		['python', 'assembly', ['-I', '-m', 'dis']],
+		['python', 'assembly', ['-I', '-c', pythonDisassemblyHelper]],
 	] as const) {
 		const recorded = await recordProduction(declaredImplementation(toolchain, artifact).producer, {
 			profileKind: toolchain,
@@ -114,11 +115,12 @@ test('stdout-backed producers pass execution modes rather than an output file', 
 });
 
 test('the Python helpers compile the source instead of importing or executing it', () => {
+	assert.match(pythonDisassemblyHelper, /dis\.dis\(compile\(source,name,"exec"\)\)/u);
 	assert.match(pythonCfgHelper, /compile\(source,filename,"exec"/u);
 	assert.match(pythonAstHelper, /tokenize\.open/u);
 	assert.match(pythonAstHelper, /ast\.parse/u);
 	assert.match(pythonStackAnalysisHelper, /compile\(source,filename,'exec'\)/u);
-	for (const helper of [pythonCfgHelper, pythonAstHelper, pythonStackAnalysisHelper]) {
+	for (const helper of [pythonDisassemblyHelper, pythonCfgHelper, pythonAstHelper, pythonStackAnalysisHelper]) {
 		assert.doesNotMatch(helper, /\bimport_module\b|\bexecfile\b|\bexec\s*\(/u);
 	}
 });

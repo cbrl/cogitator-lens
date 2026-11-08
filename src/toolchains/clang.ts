@@ -30,6 +30,7 @@ import {
 } from './c-family.js';
 import { parseGnuDiagnostics } from './c-family/diagnostics.js';
 import { clangOptimizationLevels } from './optimization-levels.js';
+import { virtualFileSystemOverlay } from './source-overlay.js';
 
 const artifacts: ToolchainDefinition['artifacts'] = {
 	assembly: compilerAssembly,
@@ -71,6 +72,7 @@ export const clang: ToolchainDefinition = {
 	assembleArguments: ownedBeforeEndOfOptions,
 	stripOwnedArguments: stripGnuManagedArguments,
 	dependencyCollection: gnuDependencyCollection,
+	sourceOverlay: virtualFileSystemOverlay((overlayFile) => ['-ivfsoverlay', overlayFile]),
 	createParser: defaultAsmParser,
 	createCfgParser: () => new ClangAssemblyCfgParser(new InstructionSetInfo()),
 	discoverTools: toolDiscoverer({ demangler: 'llvm-cxxfilt', disassembler: 'llvm-objdump' }),

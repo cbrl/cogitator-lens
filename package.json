@@ -727,6 +727,12 @@
             "scope": "resource",
             "description": "Show the instruction count of each function above it in the source. The count comes from open artifacts, so it never starts a compile."
           },
+          "coglens.compileOnType": {
+            "type": "boolean",
+            "default": false,
+            "scope": "resource",
+            "description": "Compile the unsaved text of a source when typing pauses for half a second, so its open artifacts update without a save. Zig, and a Rust crate with module files, compile the saved file. The Problems view shows the diagnostics of saved files only."
+          },
           "coglens.toolchains": {
             "type": "array",
             "scope": "window",

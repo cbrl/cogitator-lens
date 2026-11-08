@@ -183,6 +183,11 @@ export class ConfigurationService implements Disposable {
 		return workspace.getConfiguration('coglens', uri).get('functionCodeLens', false);
 	}
 
+	/** Whether the open artifacts of a source compile its unsaved text when typing pauses. */
+	getCompileOnType(uri: Uri): boolean {
+		return workspace.getConfiguration('coglens', uri).get('compileOnType', false);
+	}
+
 	/** The optimization remark categories that the editors show. */
 	getOptimizationRemarkCategories(): ReadonlySet<OptimizationRemarkCategory> {
 		const configured = workspace.getConfiguration('coglens').get<unknown>('optimizationRemarkCategories');

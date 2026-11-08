@@ -3,7 +3,7 @@ import { sourceLineAnnotations, type SourceLineAnnotation } from '../artifacts/c
 import type { ConfigurationService } from '../services/configuration-service.js';
 import type { ArtifactLineAnnotationStyle, ArtifactKind } from '../types/index.js';
 import type { ArtifactDocumentRegistry } from './artifact-document-registry.js';
-import { currentListing } from './artifact-generator.js';
+import { currentListing, listingMatchesDocument } from './artifact-generator.js';
 import { createAnnotationStyleDecorations } from './decorations/decoration-styles.js';
 
 /** The artifact kinds whose lines carry analysis annotations for their source. */
@@ -11,7 +11,8 @@ const analysisKinds: ReadonlySet<ArtifactKind> = new Set(['optimization-remarks'
 
 /**
  * Shows the optimization remarks and the stack usage of open artifacts at the end of the source
- * lines. A source with unsaved edits shows none, because the compiler read the saved file.
+ * lines. A source with unsaved edits shows only the analyses of its current text. Without
+ * `coglens.compileOnType`, the compiler reads the saved file, so the source shows none.
  */
 export class SourceAnnotations implements Disposable {
 	private readonly decorations = createAnnotationStyleDecorations();
@@ -56,16 +57,18 @@ export class SourceAnnotations implements Disposable {
 		const categories = this.configuration.getOptimizationRemarkCategories();
 		for (const editor of editors) {
 			const document = editor.document;
-			const annotations =
-				document.isDirty || !this.configuration.getShowAnalysisOnSource(document.uri)
-					? []
-					: this.registry.documentsOf(document.uri).flatMap((artifactDocument) => {
-							// Only a successful compile matches the saved file. An earlier result has the old lines.
-							const artifact = currentListing(artifactDocument.handler.status);
-							return artifact && analysisKinds.has(artifactDocument.parsed.artifactKind)
-								? sourceLineAnnotations(artifact, document.uri.fsPath, categories)
-								: [];
-						});
+			const annotations = !this.configuration.getShowAnalysisOnSource(document.uri)
+				? []
+				: this.registry.documentsOf(document.uri).flatMap((artifactDocument) => {
+						// Only a successful compile of the current text has the right lines.
+						const { status } = artifactDocument.handler;
+						const artifact = currentListing(status);
+						return artifact &&
+							analysisKinds.has(artifactDocument.parsed.artifactKind) &&
+							listingMatchesDocument(status, document)
+							? sourceLineAnnotations(artifact, document.uri.fsPath, categories)
+							: [];
+					});
 			const byStyle = new Map<ArtifactLineAnnotationStyle, SourceLineAnnotation[]>();
 			for (const annotation of annotations) {
 				if (annotation.line < document.lineCount) {

@@ -56,9 +56,25 @@ header then refreshes the artifact. The number of compiles at the same time is h
 cores, and at least two. The other compiles wait. **Cancel Artifact Generation** stops a compile only
 when no other open artifact needs it.
 
-The compiler reads the saved file. While a source has unsaved changes, the status bar shows
-"Unsaved source", and the artifact says so on its first line. The line mapping to that source stops
-until you save.
+By default, the compiler reads the saved file. While a source has unsaved changes, the status bar
+shows "Unsaved source", and the artifact says so on its first line. The highlights between the
+source and the artifact move with your edits.
+
+Set `coglens.compileOnType` to compile the unsaved text. When typing pauses for half a second, the
+open artifacts of the source compile the text of the editor, and they update without a save. Until
+the compile ends, the highlights move with your edits. A compile of unsaved text adds nothing to the
+Problems view, because its errors come and go while you type. A failure keeps the last listing and
+says so on its first line. A save compiles the saved file once, and its diagnostics go to the
+Problems view.
+
+Each output still names the source, also in the diagnostics and the file links. GCC, cl.exe, nvcc,
+and Roslyn read a copy of the text that starts with a `#line` directive, and the folder of the
+source is the first include folder. For cl.exe, that folder also applies to `#include <...>`.
+Clang and clang-cl read the text through a virtual file system. rustc reads a copy and gets
+`--remap-path-prefix`. Go uses `go build -overlay`, and the Python helpers compile the text with
+the name of the source. Some sources still compile the saved file: each Zig source, a Rust crate
+with module files, `#[path]`, or `include!`, and a saved file that is not UTF-8 text. The first line
+of the artifact then gives the reason.
 
 The status bar shows the state of the focused artifact. When the focus is in a source, it shows a
 visible artifact of that source. Click it for the artifact actions: refresh, cancel, reveal the
@@ -94,7 +110,8 @@ Hover a source line to see the lines that its open artifacts generated from it. 
 Reveal in Artifact` selects those lines in the artifact, and opens the assembly first when no
 artifact is open. Set `coglens.functionCodeLens` to show the instruction count above each function.
 The hover and the counts use open artifacts only, so they never start a compile. They also use only
-the result of a successful compile. After a save, they wait for the new result.
+the result of a successful compile of the text that the editor holds. After an edit or a save, they
+wait for the new result.
 
 In an artifact, a register highlights each use of its family in the function: `rax`, `eax`, `ax`,
 and `al` are one family. **Find All References** lists the uses of a label, a value, or a function,

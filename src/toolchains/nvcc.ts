@@ -16,6 +16,7 @@ import { captureWindowsEnvironment } from './msvc.js';
 import { composeDiagnosticParsers } from '../diagnostics.js';
 import { parseGnuDiagnostics } from './c-family/diagnostics.js';
 import { parseParenthesizedDiagnostics } from './msvc/diagnostics.js';
+import { nvccSourceOverlay } from './source-overlay.js';
 
 // Managed arguments that do not have a separate value (i.e. have no value or use the --arg=xyz form).
 const managedArgsUnitary =
@@ -89,6 +90,7 @@ export const nvcc: ToolchainDefinition = {
 	objectFilename: process.platform === 'win32' ? 'output.obj' : 'output.o',
 	outputArguments: nvccOutputArguments,
 	stripOwnedArguments: stripNvccManagedArguments,
+	sourceOverlay: nvccSourceOverlay,
 	createParser: () => new PTXAsmParser(noopPropertyGetter),
 	createBinaryParser: () => new SassAsmParser(listingPropertyGetter),
 	...(process.platform === 'win32' ? { prepareEnvironment: prepareNvccEnvironment } : {}),

@@ -27,6 +27,7 @@ import { cFamilyLanguageIdentifiers } from './c-family.js';
 import { parseParenthesizedDiagnostics } from './msvc/diagnostics.js';
 import { readCodeViewLines, withCodeViewSourceLines, type CodeViewLineTable } from './msvc/codeview-lines.js';
 import { msvcOptimizationLevels } from './optimization-levels.js';
+import { msvcSourceOverlay } from './source-overlay.js';
 
 export const visualStudioDiscoveryArguments = [
 	'-latest',
@@ -509,6 +510,7 @@ export const msvc: ToolchainDefinition = {
 	outputArguments: msvcOutputArguments,
 	stripOwnedArguments: stripMsvcManagedArguments,
 	dependencyCollection: msvcDependencyCollection,
+	sourceOverlay: msvcSourceOverlay,
 	createParser: createMsvcAsmParser,
 	createCfgParser: () => new MsvcAssemblyCfgParser(),
 	prepareEnvironment: captureWindowsEnvironment,

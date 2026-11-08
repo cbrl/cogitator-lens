@@ -57,6 +57,8 @@ export function parseMsvcSourceDependencies(text: string, workingDirectory: stri
  * `startedAt` is the Unix epoch time in milliseconds when the tool started. An input that changed
  * after that time can be newer than the output, so its record never validates. A modification
  * time later than the current time is clock skew, not a change during the run.
+ *
+ * A compile of unsaved text leaves out the source, because the cache key holds a hash of the text.
  */
 export async function snapshotArtifactInputs(
 	sourceFile: string,
@@ -64,9 +66,10 @@ export async function snapshotArtifactInputs(
 	coverage: ArtifactInputMetadata['dependencyCoverage'],
 	workingDirectory: string,
 	startedAt?: number,
+	{ includeSource = true }: { readonly includeSource?: boolean } = {},
 ): Promise<ArtifactInputMetadata> {
 	const paths = normalizeDependencyPaths(
-		[sourceFile, ...(coverage === 'complete' ? dependencies : [])],
+		[...(includeSource ? [sourceFile] : []), ...(coverage === 'complete' ? dependencies : [])],
 		workingDirectory,
 	);
 	const inputs = await Promise.all(
@@ -102,9 +105,17 @@ function unusableInput(filename: string): ArtifactInputState {
 	});
 }
 
-export async function validateArtifactInputs(inputs: readonly ArtifactInputState[]): Promise<boolean> {
+/**
+ * Whether each input still has its recorded state. An output of saved text has at least its
+ * source as an input. An output of unsaved text can have no inputs, because its key holds a hash
+ * of the text, so `allowEmpty` accepts it.
+ */
+export async function validateArtifactInputs(
+	inputs: readonly ArtifactInputState[],
+	allowEmpty = false,
+): Promise<boolean> {
 	if (inputs.length === 0) {
-		return false;
+		return allowEmpty;
 	}
 	return (
 		await Promise.all(

@@ -11,6 +11,7 @@ import {
 	withoutOwnedArguments,
 } from './toolchain-contracts.js';
 import { parseGoDiagnostics } from './go/diagnostics.js';
+import { goSourceOverlay } from './source-overlay.js';
 
 const goFunctionPattern =
 	/^\s*func\s+(?:\(\s*(?:[\p{L}_][\p{L}\p{N}_]*\s+)?(\*?\s*[\p{L}_][\p{L}\p{N}_]*)\s*\)\s*)?([\p{L}_][\p{L}\p{N}_]*)\s*\(/gmu;
@@ -63,7 +64,10 @@ export const goAssemblyProducer: ArtifactProducer = (backend, source, options, c
 
 export const goSsaControlFlowGraphProducer: ArtifactProducer = async (backend, source, options, cancellationToken) => {
 	const configured = options.env?.GOSSAFUNC ?? backend.profile.environment.GOSSAFUNC;
-	const functionName = configured?.replace(/\+$/u, '') || (await inferGoSsaFunction(source.fsPath));
+	// Unsaved text names the functions that the compile sees.
+	const functionName =
+		configured?.replace(/\+$/u, '') ||
+		(options.sourceOverlay ? goSsaFunctionOf(options.sourceOverlay.text) : await inferGoSsaFunction(source.fsPath));
 	if (!functionName) {
 		throw new Error(
 			'No Go function could be selected for GOSSAFUNC. Configure GOSSAFUNC in the toolchain or invocation environment.',
@@ -94,7 +98,11 @@ export const goSsaControlFlowGraphProducer: ArtifactProducer = async (backend, s
 
 /** Selects a stable source function name suitable for \`GOSSAFUNC\` when none is configured. */
 export async function inferGoSsaFunction(filename: string): Promise<string | undefined> {
-	const source = await fs.readFile(filename, 'utf8');
+	return goSsaFunctionOf(await fs.readFile(filename, 'utf8'));
+}
+
+/** Selects the \`GOSSAFUNC\` function of a Go source text. */
+export function goSsaFunctionOf(source: string): string | undefined {
 	const functions = [...source.matchAll(goFunctionPattern)].map((match) => ({
 		receiver: match[1]?.replaceAll(/\s+/gu, ''),
 		name: match[2],
@@ -121,6 +129,7 @@ export const go: ToolchainDefinition = {
 	languageIdentifiers: Object.freeze(['go']),
 	stripOwnedArguments: stripGoManagedArguments,
 	assembleArguments: subcommandFirst,
+	sourceOverlay: goSourceOverlay,
 	createParser: () => new GoAsmParser(noopPropertyGetter),
 	artifacts: {
 		assembly: { producer: goAssemblyProducer },

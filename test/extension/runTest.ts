@@ -58,6 +58,7 @@ import {
 	verifyComparisonTargets,
 	verifyListingLineLimitRefresh,
 	verifySharedCompile,
+	verifyCompileOnType,
 	verifyArtifactExperiments,
 	verifyOpenArtifactArguments,
 } from './artifact-documents.js';
@@ -115,6 +116,7 @@ export async function run(): Promise<void> {
 	await verifyArtifactDocumentTabs(workspaceFolder.uri.fsPath);
 	await verifyListingLineLimitRefresh(workspaceFolder.uri.fsPath);
 	await verifySharedCompile(workspaceFolder.uri.fsPath);
+	await verifyCompileOnType(workspaceFolder.uri.fsPath);
 	await verifyArtifactExperiments(workspaceFolder.uri.fsPath);
 	verifyComparisonTargets();
 	verifyOpenArtifactArguments();
@@ -2028,6 +2030,7 @@ function testConfiguration(
 		getDefaultCompilationSettings: () => undefined,
 		getManualCompilationVariants: () => [],
 		getDimUnusedSourceLines: () => true,
+		getCompileOnType: () => false,
 		upsertToolchain: async () => undefined,
 		updateArtifactOption: async () => undefined,
 		...overrides,

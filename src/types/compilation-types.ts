@@ -47,7 +47,15 @@ export interface ArtifactRequest {
 	cancellationToken: CancellationToken;
 	/** Receives sanitized invocation metadata as soon as a tool is about to run. */
 	onInvocation?: (details: InvocationDetails) => void;
+	/**
+	 * The unsaved text of the source. When the toolchain can, the compile reads it in place of the
+	 * saved file.
+	 */
+	unsavedText?: string;
 }
+
+/** Whether a compile read the unsaved text of its request, or why it read the saved file. */
+export type UnsavedTextUse = { readonly read: true } | { readonly read: false; readonly reason: string };
 
 export interface CompileDiagnostic {
 	uri: Uri;
@@ -243,7 +251,12 @@ export interface RenderedGraphArtifact extends RenderedArtifactBase {
 export type RenderedArtifact = RenderedTextArtifact | RenderedGraphArtifact;
 
 export type ArtifactProductionResult =
-	| { readonly status: 'available'; readonly artifact: RenderedArtifact }
+	| {
+			readonly status: 'available';
+			readonly artifact: RenderedArtifact;
+			/** Present when the request gave unsaved text. */
+			readonly unsavedText?: UnsavedTextUse;
+	  }
 	| { readonly status: 'unavailable' | 'unsupported'; readonly explanation: string };
 
 export interface SourceState {
@@ -251,14 +264,23 @@ export interface SourceState {
 	readonly mtimeMs: number;
 }
 
+/** The state of unsaved text: a hash of the text and of the byte order mark that the overlay file gets. */
+export interface UnsavedSourceState {
+	readonly unsavedTextHash: string;
+}
+
 export type ProductionKey = string & { readonly brand: unique symbol };
 
 /**
  * Identifies raw tool output by what produces it: the producer, the compiled source and its
  * state, and the invocation. Artifact kinds, outputs, and presets that run the same producer
- * with the same invocation share one output.
+ * with the same invocation share one output. The state of unsaved text is a hash of the text.
  */
-export function productionKey(request: ArtifactRequest, source: SourceState, producer: number): ProductionKey {
+export function productionKey(
+	request: ArtifactRequest,
+	source: SourceState | UnsavedSourceState,
+	producer: number,
+): ProductionKey {
 	const { variant, extraArguments, options } = request;
 	return JSON.stringify({
 		producer,
@@ -273,14 +295,20 @@ export function productionKey(request: ArtifactRequest, source: SourceState, pro
 }
 
 export class CompilationError extends Error {
+	/** Present when the request gave unsaved text. */
+	readonly unsavedText?: UnsavedTextUse;
+
 	constructor(
 		message: string,
 		public readonly diagnostics: readonly CompileDiagnostic[] = [],
 		public readonly truncated = false,
-		options?: ErrorOptions,
+		options?: ErrorOptions & { readonly unsavedText?: UnsavedTextUse },
 	) {
 		super(message, options);
 		this.name = 'CompilationError';
+		if (options?.unsavedText) {
+			this.unsavedText = options.unsavedText;
+		}
 	}
 }
 

@@ -14,7 +14,8 @@ export interface PythonStackUsageRecord {
 export const pythonStackAnalysisHelper = [
 	'import json,sys,tokenize,types',
 	'filename=sys.argv[1]',
-	'with tokenize.open(filename) as source_file:',
+	// A second argument names a file with unsaved text, which compiles with the name of the source.
+	'with tokenize.open(sys.argv[2] if len(sys.argv)>2 else filename) as source_file:',
 	'    source=source_file.read()',
 	"root=compile(source,filename,'exec')",
 	'entries=[]',

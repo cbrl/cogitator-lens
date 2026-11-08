@@ -76,6 +76,17 @@ if (args.includes('--fail')) {
 if (args.includes('--warn')) {
 	process.stderr.write(`${source}:1:5: warning: expected fake warning\n`);
 }
+// --echo-version writes the first version_<name> of the input, so a test sees which text the compile read.
+if (args.includes('--echo-version')) {
+	const text = fs.readFileSync(source, 'utf8');
+	if (text.includes('FAIL')) {
+		process.stderr.write(`${source}:2:1: error: expected fake failure of the text\n`);
+		process.exitCode = 2;
+		return;
+	}
+	fs.writeFileSync(output, /\bversion_\w+/.exec(text)?.[0] ?? 'no version');
+	return;
+}
 fs.writeFileSync(output, args.includes('--empty') ? '' : 'object');
 if (args.includes('--missing-stack')) {
 	return;

@@ -1,5 +1,14 @@
 import path from 'node:path';
-import { Disposable, Event, EventEmitter, RelativePattern, Uri, workspace } from 'vscode';
+import {
+	Disposable,
+	Event,
+	EventEmitter,
+	RelativePattern,
+	Uri,
+	workspace,
+	type TextDocument,
+	type TextDocumentChangeEvent,
+} from 'vscode';
 import { artifactDefinitions } from '../artifacts/core/artifact-definitions.js';
 import type { CompilationService } from '../compilation/index.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
@@ -8,7 +17,7 @@ import type { CompilationVariant, ToolchainProfile } from '../types/index.js';
 import { CompilationError } from '../types/index.js';
 import { sourceUriComparisonKey, uriComparisonKey } from '../file-identity.js';
 import { parseArtifactUri, type ArtifactUriIdentity } from './artifact-uri.js';
-import { ArtifactGenerator, type ArtifactStatus } from './artifact-generator.js';
+import { ArtifactGenerator, type ArtifactStatus, type SourceDocumentState } from './artifact-generator.js';
 import type { ArtifactDocumentIdentity, ArtifactDocumentSnapshot } from './artifact-identity.js';
 import { ArtifactProblems } from './artifact-problems.js';
 import { ArtifactArguments } from './artifact-arguments.js';
@@ -35,10 +44,15 @@ type ViewClass<V extends ArtifactView> = abstract new (...args: never[]) => V;
 interface RegisteredArtifactDocument extends ArtifactRegistryDocument {
 	/** The variant the identity describes, or nothing when it is not available. */
 	readonly variant: CompilationVariant | undefined;
+	/** The comparison key of the source. */
+	readonly sourceKey: string;
 	view?: ArtifactView;
 	subscriptions: Disposable;
 	pendingRefresh?: ReturnType<typeof setTimeout>;
 }
+
+/** How long typing must pause before the artifacts of a source compile its unsaved text. */
+export const compileOnTypeDelayMs = 500;
 
 /** Describes an artifact document. The variant is missing when it is no longer available. */
 export function buildArtifactIdentity(
@@ -78,6 +92,10 @@ export class ArtifactDocumentRegistry implements Disposable {
 	private readonly documentsEmitter = new EventEmitter<void>();
 	private readonly problems = new ArtifactProblems();
 	private readonly subscriptions: Disposable;
+	/** The last version of each open source document that had the text of the saved file, by source key. */
+	private readonly savedVersions = new Map<string, number>();
+	/** The pending compile of the unsaved text of each source, by source key. */
+	private readonly typingTimers = new Map<string, ReturnType<typeof setTimeout>>();
 	/**
 	 * Advanced by every change that can alter a variant or a toolchain. Resolving a variant
 	 * rebuilds the fallback variants, so each document resolves its own once per change.
@@ -90,11 +108,18 @@ export class ArtifactDocumentRegistry implements Disposable {
 
 	constructor(
 		private readonly compilationService: CompilationService,
-		configuration: ConfigurationService,
+		private readonly configuration: ConfigurationService,
 		/** The arguments that the user edited for each document. */
 		readonly editedArguments: ArtifactArguments = new ArtifactArguments(),
 	) {
+		for (const document of workspace.textDocuments) {
+			this.recordSavedVersion(document);
+		}
 		this.subscriptions = Disposable.from(
+			workspace.onDidOpenTextDocument((document) => this.recordSavedVersion(document)),
+			workspace.onDidSaveTextDocument((document) => this.recordSavedVersion(document)),
+			workspace.onDidChangeTextDocument((event) => this.onSourceTextChanged(event)),
+			workspace.onDidCloseTextDocument((document) => this.onSourceClosed(document)),
 			editedArguments.onDidChange((uri) => this.requestRefresh(uri)),
 			compilationService.onVariantsChanged((sources) => {
 				this.identityGeneration++;
@@ -128,6 +153,13 @@ export class ArtifactDocumentRegistry implements Disposable {
 					change.affects('listingLineLimit')
 				) {
 					this.refreshAll();
+				} else if (change.affects('compileOnType')) {
+					// A source with unsaved text now compiles the other text.
+					for (const document of this.documents.values()) {
+						if (openSourceDocument(document.parsed.source, document.sourceKey)?.isDirty) {
+							this.requestRefresh(document.uri);
+						}
+					}
 				}
 			}),
 			workspace.onDidChangeWorkspaceFolders(() => this.identityGeneration++),
@@ -187,6 +219,7 @@ export class ArtifactDocumentRegistry implements Disposable {
 		}
 		// The generator resolves the variant for each update, so a document whose variant is not
 		// known yet, such as a restored tab, opens and recovers when its provider reports it.
+		const sourceKey = sourceUriComparisonKey(parsed.source);
 		const handler = new ArtifactGenerator(
 			parsed.source,
 			uri,
@@ -195,7 +228,11 @@ export class ArtifactDocumentRegistry implements Disposable {
 			parsed.presetId,
 			this.compilationService,
 			parsed.artifactOutputId,
-			{ extraArguments: () => this.editedArguments.get(uri), view: parsed.view },
+			{
+				extraArguments: () => this.editedArguments.get(uri),
+				view: parsed.view,
+				sourceDocument: () => this.sourceDocumentState(parsed.source, sourceKey),
+			},
 		);
 		const watcher = workspace.createFileSystemWatcher(
 			new RelativePattern(Uri.file(path.dirname(parsed.source.fsPath)), path.basename(parsed.source.fsPath)),
@@ -226,6 +263,7 @@ export class ArtifactDocumentRegistry implements Disposable {
 			get variant() {
 				return resolve().variant;
 			},
+			sourceKey,
 			handler,
 			get snapshot() {
 				return { identity: this.identity, status: this.handler.status };
@@ -291,8 +329,104 @@ export class ArtifactDocumentRegistry implements Disposable {
 		for (const document of [...this.documents.values()]) {
 			this.unregister(document.uri);
 		}
+		this.typingTimers.forEach((timer) => clearTimeout(timer));
+		this.typingTimers.clear();
 		this.subscriptions.dispose();
 	}
+
+	/**
+	 * The open document of a source when a compile starts. With `coglens.compileOnType`, the compile
+	 * reads its unsaved text.
+	 */
+	private sourceDocumentState(source: Uri, sourceKey: string): SourceDocumentState | undefined {
+		const document = openSourceDocument(source, sourceKey);
+		if (!document) {
+			return undefined;
+		}
+		const unsaved = document.isDirty && this.configuration.getCompileOnType(source);
+		return {
+			version: document.version,
+			savedVersion: document.isDirty ? this.savedVersions.get(sourceKey) : document.version,
+			...(unsaved ? { unsavedText: document.getText() } : {}),
+		};
+	}
+
+	/** Records the version of a document while it has the text of the saved file. */
+	private recordSavedVersion(document: TextDocument): void {
+		if (document.uri.scheme === 'file' && !document.isDirty) {
+			this.savedVersions.set(sourceUriComparisonKey(document.uri), document.version);
+		}
+	}
+
+	/**
+	 * Compiles the unsaved text of a source when typing pauses. The compile of earlier text stops at
+	 * once, because its result is of no use. A change that undoes each edit compiles the saved file.
+	 */
+	private onSourceTextChanged(event: TextDocumentChangeEvent): void {
+		const source = event.document;
+		// A change of the dirty state alone has no content changes.
+		if (source.uri.scheme !== 'file' || event.contentChanges.length === 0) {
+			return;
+		}
+		this.recordSavedVersion(source);
+		if (this.documents.size === 0) {
+			return;
+		}
+		const sourceKey = sourceUriComparisonKey(source.uri);
+		const documents = [...this.documents.values()].filter((document) => document.sourceKey === sourceKey);
+		if (documents.length === 0 || !this.configuration.getCompileOnType(source.uri)) {
+			return;
+		}
+		clearTimeout(this.typingTimers.get(sourceKey));
+		this.typingTimers.set(
+			sourceKey,
+			setTimeout(() => {
+				this.typingTimers.delete(sourceKey);
+				for (const document of this.documents.values()) {
+					if (document.sourceKey === sourceKey) {
+						this.refreshNow(document, { cancel: true });
+					}
+				}
+			}, compileOnTypeDelayMs),
+		);
+	}
+
+	/**
+	 * An artifact of unsaved text shows text that no longer exists after the source closes without a
+	 * save, so it compiles the saved file.
+	 */
+	private onSourceClosed(document: TextDocument): void {
+		if (document.uri.scheme !== 'file') {
+			return;
+		}
+		const sourceKey = sourceUriComparisonKey(document.uri);
+		this.savedVersions.delete(sourceKey);
+		clearTimeout(this.typingTimers.get(sourceKey));
+		this.typingTimers.delete(sourceKey);
+		for (const artifact of this.documents.values()) {
+			if (artifact.sourceKey === sourceKey && artifact.handler.status.sourceText?.unsaved) {
+				this.requestRefresh(artifact.uri);
+			}
+		}
+	}
+
+	/** Refreshes a document without the short wait of `requestRefresh`. */
+	private refreshNow(document: RegisteredArtifactDocument, { cancel }: { readonly cancel: boolean }): void {
+		if (document.pendingRefresh) {
+			clearTimeout(document.pendingRefresh);
+			document.pendingRefresh = undefined;
+		}
+		document.handler.markStale({ cancel });
+		document.view?.refresh();
+	}
+}
+
+/** The open text document of a source, also through another path to the same file. */
+function openSourceDocument(source: Uri, sourceKey: string): TextDocument | undefined {
+	return workspace.textDocuments.find(
+		(document) =>
+			!document.isClosed && document.uri.scheme === 'file' && sourceUriComparisonKey(document.uri) === sourceKey,
+	);
 }
 
 /** Whether a variant is the configured default invocation, which finds its toolchain by display name. */

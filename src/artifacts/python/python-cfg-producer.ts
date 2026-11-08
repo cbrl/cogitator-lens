@@ -1,11 +1,14 @@
 import type { ArtifactProducer } from '../../toolchains/toolchain-contracts.js';
 import { outputProducer } from '../core/compiler-output-producer.js';
 
-/** Python inspects compiled code objects but never imports or executes the source module. */
+/**
+ * Python inspects compiled code objects but never imports or executes the source module. A second
+ * argument names a file with unsaved text, which compiles with the name of the source.
+ */
 export const pythonCfgHelper = String.raw`
 import dis,json,sys,tokenize,types
 filename=sys.argv[1]
-with tokenize.open(filename) as source_file:
+with tokenize.open(sys.argv[2] if len(sys.argv)>2 else filename) as source_file:
     source=source_file.read()
 root=compile(source,filename,"exec",dont_inherit=True)
 jump_opcodes=set(dis.hasjabs)|set(dis.hasjrel)

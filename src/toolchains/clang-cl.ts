@@ -39,6 +39,7 @@ import { composeDiagnosticParsers } from '../diagnostics.js';
 import { parseGnuDiagnostics } from './c-family/diagnostics.js';
 import { parseParenthesizedDiagnostics } from './msvc/diagnostics.js';
 import { msvcOptimizationLevels } from './optimization-levels.js';
+import { virtualFileSystemOverlay } from './source-overlay.js';
 
 const clangOptionsWithValues = new Set([
 	'/clang:-o',
@@ -116,6 +117,8 @@ export const clangCl: ToolchainDefinition = {
 	assembleArguments: ownedBeforeEndOfOptions,
 	stripOwnedArguments: stripClangClManagedArguments,
 	dependencyCollection: clangClDependencyCollection,
+	// clang-cl 22.1 also accepts -vfsoverlay, but not /vfsoverlay:.
+	sourceOverlay: virtualFileSystemOverlay((overlayFile) => ['/clang:-ivfsoverlay', `/clang:${overlayFile}`]),
 	createParser: defaultAsmParser,
 	createCfgParser: () => new ClangAssemblyCfgParser(new InstructionSetInfo()),
 	prepareEnvironment: captureWindowsEnvironment,

@@ -11,6 +11,7 @@ import { parsePythonControlFlowGraphs } from '../artifacts/control-flow-graph/pa
 import { controlFlowGraphOutput, type ToolchainDefinition, withoutOwnedArguments } from './toolchain-contracts.js';
 import { parsePythonDiagnostics } from './python/diagnostics.js';
 import { pythonOptimizationLevels } from './optimization-levels.js';
+import { pythonSourceOverlay } from './source-overlay.js';
 
 /** Removes interpreter mode switches and the source path owned by Python artifact production. */
 export function stripPythonManagedArguments(
@@ -30,6 +31,7 @@ export const python: ToolchainDefinition = {
 	languageIdentifiers: Object.freeze(['python']),
 	optimizationLevels: pythonOptimizationLevels,
 	stripOwnedArguments: stripPythonManagedArguments,
+	sourceOverlay: pythonSourceOverlay,
 	artifacts: {
 		assembly: {
 			producer: pythonBytecodeProducer,
