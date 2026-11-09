@@ -28,6 +28,7 @@ import {
 	stripGnuManagedArguments,
 } from './c-family.js';
 import { parseGnuDiagnostics } from './c-family/diagnostics.js';
+import { gccPipelineProducer, renderGccOptimizationPipeline } from '../artifacts/optimization-pipeline/gcc-pipeline.js';
 import { gccOptimizationLevels } from './optimization-levels.js';
 import { gccSourceOverlay } from './source-overlay.js';
 
@@ -58,6 +59,7 @@ export const gcc: ToolchainDefinition = {
 			producer: outputProducer(gccOptimizationRemarksOutput),
 			renderer: renderGccOptimizationRemarks,
 		},
+		'optimization-pipeline': { producer: gccPipelineProducer, renderer: renderGccOptimizationPipeline },
 		'stack-analysis': { producer: nativeStackAnalysisProducer },
 		'control-flow-graph': {
 			outputs: [

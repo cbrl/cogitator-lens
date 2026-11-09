@@ -1,0 +1,150 @@
+IPA function summary for clamp/3 inlinable
+  global time:     4.660000
+  self size:       6
+  global size:     6
+  min size:       0
+  self stack:      0
+  global stack:    0
+    size:0.000000, time:0.000000
+    size:3.000000, time:2.000000,  executed if:(not inlined)
+    size:2.000000, time:2.000000,  nonconst if:(op0 changed || op1 changed)
+    size:1.000000, time:0.660000,  nonconst if:(op0 changed || op2 changed)
+  calls:
+
+IPA function summary for sum_of_squares/2 inlinable
+  global time:     68.727273
+  self size:       11
+  global size:     11
+  min size:       8
+  self stack:      0
+  global stack:    0
+    size:8.000000, time:66.727273
+    size:3.000000, time:2.000000,  executed if:(not inlined)
+  loop iterations:  1.00 for (op1 changed)
+  calls:
+
+
+Flattening functions:
+Overall time estimate: 73.387273 weighted by profile: 0.000000
+
+Deciding on inlining of small functions.  Starting with size 17.
+Enqueueing calls in clamp/3.
+Enqueueing calls in sum_of_squares/2.
+node context cache: 0 hits, 0 misses, 0 initializations
+
+Reclaiming functions:
+Reclaiming variables:
+Clearing address taken flags:
+
+Deciding on functions to be inlined into all callers and removing useless speculations:
+Overall time estimate: 73.387273 weighted by profile: 0.000000
+
+Why inlining failed?
+IPA function summary for clamp/3 inlinable
+  global time:     4.660000
+  self size:       6
+  global size:     6
+  min size:       0
+  self stack:      0
+  global stack:    0
+    size:0.000000, time:0.000000
+    size:3.000000, time:2.000000,  executed if:(not inlined)
+    size:2.000000, time:2.000000,  nonconst if:(op0 changed || op1 changed)
+    size:1.000000, time:0.660000,  nonconst if:(op0 changed || op2 changed)
+  calls:
+
+IPA function summary for sum_of_squares/2 inlinable
+  global time:     68.727273
+  self size:       11
+  global size:     11
+  min size:       8
+  self stack:      0
+  global stack:    0
+    size:8.000000, time:66.727273
+    size:3.000000, time:2.000000,  executed if:(not inlined)
+  loop iterations:  1.00 for (op1 changed)
+  calls:
+
+Symbol table:
+
+clamp/3 (clamp)
+  Type: function definition analyzed
+  Visibility: externally_visible semantic_interposition public
+  References: 
+  Referring: 
+  Availability: available
+  Function flags: count:1073741824 (estimated locally) body
+  Called by: 
+  Calls: 
+sum_of_squares/2 (sum_of_squares)
+  Type: function definition analyzed
+  Visibility: externally_visible semantic_interposition public
+  References: 
+  Referring: 
+  Availability: available
+  Function flags: count:118111600 (estimated locally) body
+  Called by: 
+  Calls: 
+
+;; Function sum_of_squares (sum_of_squares, funcdef_no=1, decl_uid=2836, cgraph_uid=2, symbol_order=1)
+
+int sum_of_squares (const int * values, int count)
+{
+  int index;
+  int total;
+  long unsigned int _1;
+  long unsigned int _2;
+  const int * _3;
+  int _4;
+  int _10;
+
+  <bb 2> [local count: 118111600]:
+  goto <bb 4>; [100.00%]
+
+  <bb 3> [local count: 955630224]:
+  _1 = (long unsigned int) index_6;
+  _2 = _1 * 4;
+  _3 = values_9(D) + _2;
+  _4 = *_3;
+  _10 = _4 * _4;
+  total_11 = total_5 + _10;
+  index_12 = index_6 + 1;
+
+  <bb 4> [local count: 1073741824]:
+  # total_5 = PHI <0(2), total_11(3)>
+  # index_6 = PHI <0(2), index_12(3)>
+  if (index_6 < count_8(D))
+    goto <bb 3>; [89.00%]
+  else
+    goto <bb 5>; [11.00%]
+
+  <bb 5> [local count: 118111600]:
+  return total_5;
+
+}
+
+
+
+;; Function clamp (clamp, funcdef_no=2, decl_uid=2847, cgraph_uid=3, symbol_order=2)
+
+int clamp (int value, int low, int high)
+{
+  int _1;
+  int _5;
+
+  <bb 2> [local count: 1073741824]:
+  if (value_2(D) < low_3(D))
+    goto <bb 4>; [34.00%]
+  else
+    goto <bb 3>; [66.00%]
+
+  <bb 3> [local count: 708669600]:
+  _5 = MIN_EXPR <value_2(D), high_4(D)>;
+
+  <bb 4> [local count: 1073741824]:
+  # _1 = PHI <low_3(D)(2), _5(3)>
+  return _1;
+
+}
+
+

@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import childProcess from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { PassThrough } from 'node:stream';
 import test from 'node:test';
 import { execute, ExecError, untilCancelled, type CancellationLike } from '../../src/exec.js';
@@ -48,6 +51,43 @@ test('measures output limits in bytes', async () => {
 		execute(process.execPath, ['-e', `process.stdout.write('é'.repeat(100))`], { maxOutputBytes: 150 }),
 		(error: unknown) => error instanceof ExecError && error.kind === 'output-limit',
 	);
+});
+
+test('the files in an output directory have a size limit while the process runs and when it ends', async (t) => {
+	const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'coglens-exec-'));
+	t.after(() => fs.promises.rm(directory, { recursive: true, force: true }));
+	const write = (name: string, bytes: number, then: string) =>
+		`require('node:fs').writeFileSync(${JSON.stringify(path.join(directory, name))}, 'x'.repeat(${bytes})); ${then}`;
+	const isDirectoryLimit = (error: unknown) =>
+		error instanceof ExecError && error.kind === 'output-limit' && /of output files/u.test(error.message);
+
+	// A process that writes past the limit and then waits stops at the next check, not at its timeout.
+	const started = performance.now();
+	await assert.rejects(
+		execute(process.execPath, ['-e', write('a.dump', 4_000, 'setInterval(() => {}, 1000)')], {
+			outputDirectory: directory,
+			maxOutputDirectoryBytes: 3_000,
+			timeoutMs: 10_000,
+		}),
+		isDirectoryLimit,
+	);
+	assert.ok(performance.now() - started < 5_000, 'The check stops the process');
+
+	// A process that ends before the next check fails too.
+	await assert.rejects(
+		execute(process.execPath, ['-e', write('b.dump', 4_000, '')], {
+			outputDirectory: directory,
+			maxOutputDirectoryBytes: 7_000,
+		}),
+		isDirectoryLimit,
+	);
+
+	// The files of a process within the limit are no failure.
+	const result = await execute(process.execPath, ['-e', 'process.stdout.write("done")'], {
+		outputDirectory: directory,
+		maxOutputDirectoryBytes: 9_000,
+	});
+	assert.equal(result.stdout, 'done');
 });
 
 test('distinguishes timeout and cancellation', async () => {

@@ -356,10 +356,9 @@ async function showPassChange(deps: ExperimentCommandDependencies, target?: unkn
 	if (!pass) {
 		return;
 	}
-	// The language of the derived documents comes from their names. Machine code is not LLVM IR.
-	const extension = pass.machine ? '.txt' : '.coglens.ll';
-	const left = deps.derivedDocuments.create(pass.before, `pass-${pass.number}-before${extension}`);
-	const right = deps.derivedDocuments.create(pass.after, `pass-${pass.number}-after${extension}`);
+	// The language of the derived documents comes from their names.
+	const left = deps.derivedDocuments.create(pass.before, `pass-${pass.number}-before${pass.extension}`);
+	const right = deps.derivedDocuments.create(pass.after, `pass-${pass.number}-after${pass.extension}`);
 	await vscode.commands.executeCommand(
 		'vscode.diff',
 		left,

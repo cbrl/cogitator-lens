@@ -94,6 +94,8 @@ test('the pipeline lists the passes that changed the function, and each keeps it
 
 	const [sroa, isel] = rendered.passes ?? [];
 	assert.deepEqual([sroa.line, sroa.number, sroa.machine, sroa.changed], [4, 2, false, true]);
+	// The comparison of an IR pass has the LLVM IR language, and machine code is plain text.
+	assert.deepEqual([sroa.extension, isel.extension], ['.coglens.ll', '.txt']);
 	assert.match(sroa.before, /alloca/u);
 	assert.doesNotMatch(sroa.after, /alloca/u);
 	// The first machine pass compares with the IR after the last IR pass, so it shows the instruction selection.

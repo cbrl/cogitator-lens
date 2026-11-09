@@ -259,6 +259,8 @@ export interface PipelinePass {
 	readonly changed: boolean;
 	readonly before: string;
 	readonly after: string;
+	/** The filename extension of the documents that compare the pass, which selects their language. */
+	readonly extension: string;
 }
 
 export interface RenderedGraphArtifact extends RenderedArtifactBase {

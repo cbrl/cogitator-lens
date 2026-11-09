@@ -1,0 +1,50 @@
+
+;; Function square (null)
+;; enabled by -tree-original
+
+
+{
+  return value * value;
+}
+
+
+;; Function sum_of_squares (null)
+;; enabled by -tree-original
+
+
+{
+  int total = 0;
+
+    int total = 0;
+  {
+    int index = 0;
+
+        int index = 0;
+    goto <D.2843>;
+    <D.2842>:;
+    SAVE_EXPR <square ((int) *(values + (sizetype) ((long unsigned int) index * 4)))>, total = SAVE_EXPR <square ((int) *(values + (sizetype) ((long unsigned int) index * 4)))> + total;
+     ++index;
+    <D.2843>:;
+    if (index < count) goto <D.2842>; else goto <D.2840>;
+    <D.2840>:;
+  }
+  return total;
+}
+
+
+;; Function clamp (null)
+;; enabled by -tree-original
+
+
+{
+  if (value < low)
+    {
+      return low;
+    }
+  if (value > high)
+    {
+      return high;
+    }
+  return value;
+}
+

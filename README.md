@@ -128,15 +128,24 @@ library line, so the artifact does not show it. Artifact Details counts these re
 
 ### Optimization pipeline
 
-The **Optimization pipeline** artifact shows the LLVM passes that ran on one function. Clang,
-clang-cl, and rustc make it. Open Artifact first asks for the function, from the LLVM IR of the
-source. The compile then prints the function before and after each pass. It prints only that
-function, because the output of all functions can reach gigabytes.
+The **Optimization pipeline** artifact shows the compiler passes that ran on one function. Clang,
+clang-cl, and rustc show their LLVM passes. GCC shows its tree, IPA, and RTL passes. Open Artifact
+first asks for the function, from the LLVM IR of the source, or from the assembly for GCC. The LLVM
+compile then prints the function before and after each pass. It prints only that function, because
+the output of all functions can reach gigabytes.
 
 The list shows the passes that changed the function. Set the `showUnchangedPasses` option to list
 each pass. Ctrl+Click a pass, or run **Show Pass Change** on its line, to compare the function before
 and after the pass. The list also has the machine code passes after instruction selection. For
 rustc, the compile uses one codegen unit, so the dumps of the units do not mix.
+
+GCC has no option that dumps one function. The compile writes the dumps of all functions and each
+pass to files with `-fdump-tree-all`, `-fdump-ipa-all`, and `-fdump-rtl-all`, and the artifact keeps
+the selected function. The dumps of a C++ source are large: a source of 100 lines with standard
+library containers gave 200 MB of dumps, and the compile took 4 seconds instead of 1. The files can
+use 20 times `coglens.processOutputLimit`, and the kept code can use the limit itself. The code after
+a pass is the code at the end of its dump, so the notes and the data flow of the pass do not show.
+The `original` and `gimple` dumps do not name their functions, so the list starts after them.
 
 ### Machine code analysis
 
@@ -203,7 +212,7 @@ and the metrics.
 | Optimization remarks  | Yes | Yes                 | Yes      | Yes  | Yes  | —              | —        | Yes       | —   | —          |
 | Stack analysis        | Yes | Yes                 | Yes      | —    | —    | Yes            | —        | —         | —   | —          |
 | Control-flow graph    | Yes | Yes                 | Yes      | —    | Yes  | Yes            | —        | Yes (SSA) | Yes | —          |
-| Optimization pipeline | —   | Yes                 | Yes      | —    | Yes  | —              | —        | —         | —   | —          |
+| Optimization pipeline | Yes | Yes                 | Yes      | —    | Yes  | —              | —        | —         | —   | —          |
 | Machine code analysis | Yes | Yes                 | Yes      | —    | Yes  | —              | —        | —         | —   | —          |
 | Code size             | Yes | Yes                 | Yes      | Yes  | —    | —              | —        | —         | —   | Yes        |
 
@@ -275,7 +284,8 @@ for one when the kind has more than one:
 ```
 
 Each compiler or tool run may take up to `coglens.processTimeout` seconds and write up to
-`coglens.processOutputLimit` megabytes. The Clang AST leaves out declarations from system headers
+`coglens.processOutputLimit` megabytes. The GCC pass dumps can use 20 times that limit in files. The
+Clang AST leaves out declarations from system headers
 while it is produced, unless `ast.showSystemDeclarations` is set, so a file that includes the
 standard library stays within the limit. Binary disassembly and LLVM IR listings stop at
 `coglens.listingLineLimit` lines, 5000 by default.

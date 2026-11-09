@@ -1,0 +1,213 @@
+
+;; Function sum_of_squares (sum_of_squares, funcdef_no=1, decl_uid=2836, cgraph_uid=2, symbol_order=1)
+
+
+;; Generating RTL for gimple basic block 2
+
+;; Generating RTL for gimple basic block 3
+
+;; Generating RTL for gimple basic block 4
+
+;; Generating RTL for gimple basic block 5
+Edge 2->5 redirected to 9
+
+
+try_optimize_cfg iteration 1
+
+Merging block 3 into block 2...
+Merged blocks 2 and 3.
+Merged 2 and 3 without moving.
+Forwarding edge 5->6 to 9 failed.
+Redirecting jump 35 from 8 to 9.
+Merging block 8 into block 7...
+Merged blocks 7 and 8.
+Merged 7 and 8 without moving.
+Removing jump 28.
+
+
+try_optimize_cfg iteration 2
+
+Forwarding edge 5->6 to 9 failed.
+
+
+;;
+;; Full RTL generated for this function:
+;;
+(note 1 0 7 NOTE_INSN_DELETED)
+(note 7 1 2 2 [bb 2] NOTE_INSN_BASIC_BLOCK)
+(insn 2 7 3 2 (set (reg/v/f:DI 106 [ values ])
+        (reg:DI 5 di [ values ])) "pipeline.c":5:50 -1
+     (nil))
+(insn 3 2 4 2 (set (reg/v:SI 107 [ count ])
+        (reg:SI 4 si [ count ])) "pipeline.c":5:50 -1
+     (nil))
+(note 4 3 11 2 NOTE_INSN_FUNCTION_BEG)
+(insn 11 4 12 2 (set (reg:CCNO 17 flags)
+        (compare:CCNO (reg/v:SI 107 [ count ])
+            (const_int 0 [0]))) "pipeline.c":7:28 discrim 1 -1
+     (nil))
+(jump_insn 12 11 13 2 (set (pc)
+        (if_then_else (le (reg:CCNO 17 flags)
+                (const_int 0 [0]))
+            (label_ref:DI 38)
+            (pc))) "pipeline.c":7:28 discrim 1 1458 {*jcc}
+     (int_list:REG_BR_PROB 118111604 (nil))
+ -> 38)
+(note 13 12 14 4 [bb 4] NOTE_INSN_BASIC_BLOCK)
+(insn 14 13 15 4 (set (reg:DI 103 [ ivtmp.9 ])
+        (reg/v/f:DI 106 [ values ])) -1
+     (nil))
+(insn 15 14 16 4 (set (reg:DI 108 [ _6 ])
+        (sign_extend:DI (reg/v:SI 107 [ count ]))) -1
+     (nil))
+(insn 16 15 17 4 (parallel [
+            (set (reg:DI 109 [ _5 ])
+                (ashift:DI (reg:DI 108 [ _6 ])
+                    (const_int 2 [0x2])))
+            (clobber (reg:CC 17 flags))
+        ]) -1
+     (nil))
+(insn 17 16 5 4 (parallel [
+            (set (reg:DI 104 [ _22 ])
+                (plus:DI (reg:DI 109 [ _5 ])
+                    (reg:DI 103 [ ivtmp.9 ])))
+            (clobber (reg:CC 17 flags))
+        ]) -1
+     (nil))
+(insn 5 17 23 4 (set (reg/v:SI 105 [ <retval> ])
+        (const_int 0 [0])) "pipeline.c":6:6 -1
+     (nil))
+(code_label 23 5 18 5 3 (nil) [1 uses])
+(note 18 23 19 5 [bb 5] NOTE_INSN_BASIC_BLOCK)
+(insn 19 18 20 5 (set (reg:SI 98 [ _4 ])
+        (mem:SI (reg:DI 103 [ ivtmp.9 ]) [1 MEM[(const int *)_13]+0 S4 A32])) "pipeline.c":8:12 -1
+     (nil))
+(insn 20 19 21 5 (parallel [
+            (set (reg:SI 110 [ _10 ])
+                (mult:SI (reg:SI 98 [ _4 ])
+                    (reg:SI 98 [ _4 ])))
+            (clobber (reg:CC 17 flags))
+        ]) "pipeline.c":2:15 -1
+     (nil))
+(insn 21 20 22 5 (parallel [
+            (set (reg/v:SI 105 [ <retval> ])
+                (plus:SI (reg/v:SI 105 [ <retval> ])
+                    (reg:SI 110 [ _10 ])))
+            (clobber (reg:CC 17 flags))
+        ]) "pipeline.c":8:9 discrim 1 -1
+     (nil))
+(insn 22 21 24 5 (parallel [
+            (set (reg:DI 103 [ ivtmp.9 ])
+                (plus:DI (reg:DI 103 [ ivtmp.9 ])
+                    (const_int 4 [0x4])))
+            (clobber (reg:CC 17 flags))
+        ]) "pipeline.c":7:28 discrim 1 -1
+     (nil))
+(insn 24 22 25 5 (set (reg:CCZ 17 flags)
+        (compare:CCZ (reg:DI 103 [ ivtmp.9 ])
+            (reg:DI 104 [ _22 ]))) "pipeline.c":7:28 discrim 1 -1
+     (nil))
+(jump_insn 25 24 34 5 (set (pc)
+        (if_then_else (ne (reg:CCZ 17 flags)
+                (const_int 0 [0]))
+            (label_ref 23)
+            (pc))) "pipeline.c":7:28 discrim 1 -1
+     (int_list:REG_BR_PROB 955630228 (nil))
+ -> 23)
+(note 34 25 35 6 [bb 6] NOTE_INSN_BASIC_BLOCK)
+(jump_insn 35 34 36 6 (set (pc)
+        (label_ref:DI 30)) 1459 {jump}
+     (nil)
+ -> 30)
+(barrier 36 35 38)
+(code_label 38 36 37 7 4 (nil) [1 uses])
+(note 37 38 6 7 [bb 7] NOTE_INSN_BASIC_BLOCK)
+(insn 6 37 30 7 (set (reg/v:SI 105 [ <retval> ])
+        (const_int 0 [0])) "pipeline.c":6:6 -1
+     (nil))
+(code_label 30 6 33 9 1 (nil) [1 uses])
+(note 33 30 31 9 [bb 9] NOTE_INSN_BASIC_BLOCK)
+(insn 31 33 32 9 (set (reg/i:SI 0 ax)
+        (reg/v:SI 105 [ <retval> ])) "pipeline.c":11:1 -1
+     (nil))
+(insn 32 31 0 9 (use (reg/i:SI 0 ax)) "pipeline.c":11:1 -1
+     (nil))
+
+;; Function clamp (clamp, funcdef_no=2, decl_uid=2847, cgraph_uid=3, symbol_order=2)
+
+
+;; Generating RTL for gimple basic block 2
+
+;; Generating RTL for gimple basic block 3
+
+;; Generating RTL for gimple basic block 4
+Edge 2->4 redirected to 7
+
+
+try_optimize_cfg iteration 1
+
+Merging block 3 into block 2...
+Merged blocks 2 and 3.
+Merged 2 and 3 without moving.
+Redirecting jump 21 from 6 to 7.
+Merging block 6 into block 5...
+Merged blocks 5 and 6.
+Merged 5 and 6 without moving.
+Removing jump 15.
+
+
+try_optimize_cfg iteration 2
+
+
+
+;;
+;; Full RTL generated for this function:
+;;
+(note 1 0 7 NOTE_INSN_DELETED)
+(note 7 1 2 2 [bb 2] NOTE_INSN_BASIC_BLOCK)
+(insn 2 7 3 2 (set (reg/v:SI 99 [ value ])
+        (reg:SI 5 di [ value ])) "pipeline.c":13:41 -1
+     (nil))
+(insn 3 2 4 2 (set (reg/v:SI 100 [ low ])
+        (reg:SI 4 si [ low ])) "pipeline.c":13:41 -1
+     (nil))
+(insn 4 3 5 2 (set (reg/v:SI 101 [ high ])
+        (reg:SI 1 dx [ high ])) "pipeline.c":13:41 -1
+     (nil))
+(note 5 4 9 2 NOTE_INSN_FUNCTION_BEG)
+(insn 9 5 10 2 (set (reg:CCGC 17 flags)
+        (compare:CCGC (reg/v:SI 99 [ value ])
+            (reg/v:SI 100 [ low ]))) "pipeline.c":14:5 -1
+     (nil))
+(jump_insn 10 9 11 2 (set (pc)
+        (if_then_else (lt (reg:CCGC 17 flags)
+                (const_int 0 [0]))
+            (label_ref:DI 24)
+            (pc))) "pipeline.c":14:5 1458 {*jcc}
+     (int_list:REG_BR_PROB 365072228 (nil))
+ -> 24)
+(note 11 10 12 4 [bb 4] NOTE_INSN_BASIC_BLOCK)
+(insn 12 11 21 4 (parallel [
+            (set (reg:SI 98 [ <retval> ])
+                (smin:SI (reg/v:SI 99 [ value ])
+                    (reg/v:SI 101 [ high ])))
+            (clobber (reg:CC 17 flags))
+        ]) "pipeline.c":17:5 -1
+     (nil))
+(jump_insn 21 12 22 4 (set (pc)
+        (label_ref:DI 17)) 1459 {jump}
+     (nil)
+ -> 17)
+(barrier 22 21 24)
+(code_label 24 22 23 5 9 (nil) [1 uses])
+(note 23 24 6 5 [bb 5] NOTE_INSN_BASIC_BLOCK)
+(insn 6 23 17 5 (set (reg:SI 98 [ <retval> ])
+        (reg/v:SI 100 [ low ])) "pipeline.c":15:10 -1
+     (nil))
+(code_label 17 6 20 7 7 (nil) [1 uses])
+(note 20 17 18 7 [bb 7] NOTE_INSN_BASIC_BLOCK)
+(insn 18 20 19 7 (set (reg/i:SI 0 ax)
+        (reg:SI 98 [ <retval> ])) "pipeline.c":21:1 -1
+     (nil))
+(insn 19 18 0 7 (use (reg/i:SI 0 ax)) "pipeline.c":21:1 -1
+     (nil))

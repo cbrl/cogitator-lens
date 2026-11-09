@@ -1,0 +1,490 @@
+
+;; Function sum_of_squares (sum_of_squares, funcdef_no=1, decl_uid=2836, cgraph_uid=2, symbol_order=1)
+
+scanning new insn with uid = 42.
+rescanning insn with uid = 2.
+scanning new insn with uid = 43.
+rescanning insn with uid = 3.
+starting the processing of deferred insns
+ending the processing of deferred insns
+df_analyze called
+df_worklist_dataflow_doublequeue: n_basic_blocks 7 n_edges 8 count 7 (    1)
+
+
+sum_of_squares
+
+Dataflow summary:
+def_info->table_size = 39, use_info->table_size = 0
+;;  fully invalidated by EH 	 0 [ax] 1 [dx] 2 [cx] 4 [si] 5 [di] 8 [st] 9 [st(1)] 10 [st(2)] 11 [st(3)] 12 [st(4)] 13 [st(5)] 14 [st(6)] 15 [st(7)] 17 [flags] 18 [fpsr] 20 [xmm0] 21 [xmm1] 22 [xmm2] 23 [xmm3] 24 [xmm4] 25 [xmm5] 26 [xmm6] 27 [xmm7] 28 [mm0] 29 [mm1] 30 [mm2] 31 [mm3] 32 [mm4] 33 [mm5] 34 [mm6] 35 [mm7] 36 [r8] 37 [r9] 38 [r10] 39 [r11] 44 [xmm8] 45 [xmm9] 46 [xmm10] 47 [xmm11] 48 [xmm12] 49 [xmm13] 50 [xmm14] 51 [xmm15] 52 [xmm16] 53 [xmm17] 54 [xmm18] 55 [xmm19] 56 [xmm20] 57 [xmm21] 58 [xmm22] 59 [xmm23] 60 [xmm24] 61 [xmm25] 62 [xmm26] 63 [xmm27] 64 [xmm28] 65 [xmm29] 66 [xmm30] 67 [xmm31] 68 [k0] 69 [k1] 70 [k2] 71 [k3] 72 [k4] 73 [k5] 74 [k6] 75 [k7] 76 [r16] 77 [r17] 78 [r18] 79 [r19] 80 [r20] 81 [r21] 82 [r22] 83 [r23] 84 [r24] 85 [r25] 86 [r26] 87 [r27] 88 [r28] 89 [r29] 90 [r30] 91 [r31]
+;;  hardware regs used 	 7 [sp] 16 [argp] 19 [frame]
+;;  regular block artificial uses 	 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+;;  eh block artificial uses 	 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+;;  entry block defs 	 0 [ax] 1 [dx] 2 [cx] 4 [si] 5 [di] 6 [bp] 7 [sp] 16 [argp] 19 [frame] 20 [xmm0] 21 [xmm1] 22 [xmm2] 23 [xmm3] 24 [xmm4] 25 [xmm5] 26 [xmm6] 27 [xmm7] 36 [r8] 37 [r9]
+;;  exit block uses 	 0 [ax] 6 [bp] 7 [sp] 19 [frame]
+;;  regs ever live 	 0 [ax] 4 [si] 5 [di] 17 [flags]
+;;  ref usage 	r0={2d,2u} r1={1d} r2={1d} r4={1d,1u} r5={1d,1u} r6={1d,6u} r7={1d,6u} r16={1d,5u} r17={7d,2u} r19={1d,6u} r20={1d} r21={1d} r22={1d} r23={1d} r24={1d} r25={1d} r26={1d} r27={1d} r36={1d} r37={1d} r98={1d,2u} r103={2d,4u} r104={1d,1u} r105={3d,2u} r106={1d,1u} r107={1d,2u} r108={1d,1u} r109={1d,1u} r110={1d,1u} r112={1d,1u} r113={1d,1u} 
+;;    total ref usage 87{41d,46u,0e} in 20{20 regular + 0 call} insns.
+
+( )->[0]->( 2 )
+;; bb 0 artificial_defs: { d1(0){ }d2(1){ }d3(2){ }d4(4){ }d5(5){ }d6(6){ }d7(7){ }d8(16){ }d16(19){ }d17(20){ }d18(21){ }d19(22){ }d20(23){ }d21(24){ }d22(25){ }d23(26){ }d24(27){ }d25(36){ }d26(37){ }}
+;; bb 0 artificial_uses: { }
+;; lr  in  	
+;; lr  use 	
+;; lr  def 	 0 [ax] 1 [dx] 2 [cx] 4 [si] 5 [di] 6 [bp] 7 [sp] 16 [argp] 19 [frame] 20 [xmm0] 21 [xmm1] 22 [xmm2] 23 [xmm3] 24 [xmm4] 25 [xmm5] 26 [xmm6] 27 [xmm7] 36 [r8] 37 [r9]
+;; live  in  	
+;; live  gen 	 0 [ax] 1 [dx] 2 [cx] 4 [si] 5 [di] 6 [bp] 7 [sp] 16 [argp] 19 [frame] 20 [xmm0] 21 [xmm1] 22 [xmm2] 23 [xmm3] 24 [xmm4] 25 [xmm5] 26 [xmm6] 27 [xmm7] 36 [r8] 37 [r9]
+;; live  kill	
+;; lr  out 	 4 [si] 5 [di] 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+;; live  out 	 4 [si] 5 [di] 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+
+( 0 )->[2]->( 3 5 )
+;; bb 2 artificial_defs: { }
+;; bb 2 artificial_uses: { u-1(6){ }u-1(7){ }u-1(16){ }u-1(19){ }}
+;; lr  in  	 4 [si] 5 [di] 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+;; lr  use 	 4 [si] 5 [di] 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+;; lr  def 	 17 [flags] 106 107 112 113
+;; live  in  	 4 [si] 5 [di] 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+;; live  gen 	 17 [flags] 106 107
+;; live  kill	
+;; lr  out 	 6 [bp] 7 [sp] 16 [argp] 19 [frame] 106 107
+;; live  out 	 6 [bp] 7 [sp] 16 [argp] 19 [frame] 106 107
+
+( 2 )->[3]->( 4 )
+;; bb 3 artificial_defs: { }
+;; bb 3 artificial_uses: { u-1(6){ }u-1(7){ }u-1(16){ }u-1(19){ }}
+;; lr  in  	 6 [bp] 7 [sp] 16 [argp] 19 [frame] 106 107
+;; lr  use 	 6 [bp] 7 [sp] 16 [argp] 19 [frame] 106 107
+;; lr  def 	 17 [flags] 103 104 105 108 109
+;; live  in  	 6 [bp] 7 [sp] 16 [argp] 19 [frame] 106 107
+;; live  gen 	 103 104 105 108 109
+;; live  kill	 17 [flags]
+;; lr  out 	 6 [bp] 7 [sp] 16 [argp] 19 [frame] 103 104 105
+;; live  out 	 6 [bp] 7 [sp] 16 [argp] 19 [frame] 103 104 105
+
+( 4 3 )->[4]->( 4 6 )
+;; bb 4 artificial_defs: { }
+;; bb 4 artificial_uses: { u-1(6){ }u-1(7){ }u-1(16){ }u-1(19){ }}
+;; lr  in  	 6 [bp] 7 [sp] 16 [argp] 19 [frame] 103 104 105
+;; lr  use 	 6 [bp] 7 [sp] 16 [argp] 19 [frame] 103 104 105
+;; lr  def 	 17 [flags] 98 103 105 110
+;; live  in  	 6 [bp] 7 [sp] 16 [argp] 19 [frame] 103 104 105
+;; live  gen 	 17 [flags] 98 103 105 110
+;; live  kill	 17 [flags]
+;; lr  out 	 6 [bp] 7 [sp] 16 [argp] 19 [frame] 103 104 105
+;; live  out 	 6 [bp] 7 [sp] 16 [argp] 19 [frame] 103 104 105
+
+( 2 )->[5]->( 6 )
+;; bb 5 artificial_defs: { }
+;; bb 5 artificial_uses: { u-1(6){ }u-1(7){ }u-1(16){ }u-1(19){ }}
+;; lr  in  	 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+;; lr  use 	 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+;; lr  def 	 105
+;; live  in  	 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+;; live  gen 	 105
+;; live  kill	
+;; lr  out 	 6 [bp] 7 [sp] 16 [argp] 19 [frame] 105
+;; live  out 	 6 [bp] 7 [sp] 16 [argp] 19 [frame] 105
+
+( 5 4 )->[6]->( 1 )
+;; bb 6 artificial_defs: { }
+;; bb 6 artificial_uses: { u-1(6){ }u-1(7){ }u-1(16){ }u-1(19){ }}
+;; lr  in  	 6 [bp] 7 [sp] 16 [argp] 19 [frame] 105
+;; lr  use 	 6 [bp] 7 [sp] 16 [argp] 19 [frame] 105
+;; lr  def 	 0 [ax]
+;; live  in  	 6 [bp] 7 [sp] 16 [argp] 19 [frame] 105
+;; live  gen 	 0 [ax]
+;; live  kill	
+;; lr  out 	 0 [ax] 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+;; live  out 	 0 [ax] 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+
+( 6 )->[1]->( )
+;; bb 1 artificial_defs: { }
+;; bb 1 artificial_uses: { u-1(0){ }u-1(6){ }u-1(7){ }u-1(19){ }}
+;; lr  in  	 0 [ax] 6 [bp] 7 [sp] 19 [frame]
+;; lr  use 	 0 [ax] 6 [bp] 7 [sp] 19 [frame]
+;; lr  def 	
+;; live  in  	 0 [ax] 6 [bp] 7 [sp] 19 [frame]
+;; live  gen 	
+;; live  kill	
+;; lr  out 	
+;; live  out 	
+
+Finding needed instructions:
+  Adding insn 12 to worklist
+  Adding insn 25 to worklist
+  Adding insn 32 to worklist
+Finished finding needed instructions:
+processing block 6 lr out =  0 [ax] 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+  Adding insn 31 to worklist
+processing block 4 lr out =  6 [bp] 7 [sp] 16 [argp] 19 [frame] 103 104 105
+  Adding insn 24 to worklist
+  Adding insn 22 to worklist
+  Adding insn 21 to worklist
+  Adding insn 20 to worklist
+  Adding insn 19 to worklist
+processing block 3 lr out =  6 [bp] 7 [sp] 16 [argp] 19 [frame] 103 104 105
+  Adding insn 5 to worklist
+  Adding insn 17 to worklist
+  Adding insn 16 to worklist
+  Adding insn 15 to worklist
+  Adding insn 14 to worklist
+processing block 5 lr out =  6 [bp] 7 [sp] 16 [argp] 19 [frame] 105
+  Adding insn 6 to worklist
+processing block 2 lr out =  6 [bp] 7 [sp] 16 [argp] 19 [frame] 106 107
+  Adding insn 11 to worklist
+  Adding insn 3 to worklist
+  Adding insn 43 to worklist
+  Adding insn 2 to worklist
+  Adding insn 42 to worklist
+df_worklist_dataflow_doublequeue: n_basic_blocks 7 n_edges 8 count 8 (  1.1)
+insn_cost 4 for    42: r112:DI=di:DI
+      REG_DEAD di:DI
+insn_cost 4 for     2: r106:DI=r112:DI
+      REG_DEAD r112:DI
+insn_cost 4 for    43: r113:SI=si:SI
+      REG_DEAD si:SI
+insn_cost 4 for     3: r107:SI=r113:SI
+      REG_DEAD r113:SI
+insn_cost 4 for    11: flags:CCNO=cmp(r107:SI,0)
+insn_cost 17 for    12: pc={(flags:CCNO<=0)?L38:pc}
+      REG_DEAD flags:CCNO
+      REG_BR_PROB 118111604
+insn_cost 4 for    14: r103:DI=r106:DI
+      REG_DEAD r106:DI
+insn_cost 4 for    15: r108:DI=sign_extend(r107:SI)
+      REG_DEAD r107:SI
+insn_cost 4 for    16: {r109:DI=r108:DI<<0x2;clobber flags:CC;}
+      REG_DEAD r108:DI
+      REG_UNUSED flags:CC
+insn_cost 4 for    17: {r104:DI=r103:DI+r109:DI;clobber flags:CC;}
+      REG_DEAD r109:DI
+      REG_UNUSED flags:CC
+insn_cost 4 for     5: r105:SI=0
+insn_cost 5 for    19: r98:SI=[r103:DI]
+insn_cost 12 for    20: {r110:SI=r98:SI*r98:SI;clobber flags:CC;}
+      REG_DEAD r98:SI
+      REG_UNUSED flags:CC
+insn_cost 4 for    21: {r105:SI=r105:SI+r110:SI;clobber flags:CC;}
+      REG_DEAD r110:SI
+      REG_UNUSED flags:CC
+insn_cost 4 for    22: {r103:DI=r103:DI+0x4;clobber flags:CC;}
+      REG_UNUSED flags:CC
+insn_cost 4 for    24: flags:CCZ=cmp(r103:DI,r104:DI)
+insn_cost 17 for    25: pc={(flags:CCZ!=0)?L23:pc}
+      REG_DEAD flags:CCZ
+      REG_BR_PROB 955630228
+insn_cost 4 for     6: r105:SI=0
+insn_cost 4 for    31: ax:SI=r105:SI
+      REG_DEAD r105:SI
+insn_cost 0 for    32: use ax:SI
+allowing combination of insns 16 and 17
+original costs 4 + 4 = 8
+replacement cost 8
+deferring deletion of insn with uid = 16.
+modifying insn i3    17: r104:DI=r108:DI<<0x2+r103:DI
+      REG_DEAD r108:DI
+deferring rescan insn with uid = 17.
+starting the processing of deferred insns
+rescanning insn with uid = 17.
+ending the processing of deferred insns
+
+
+sum_of_squares
+
+Dataflow summary:
+;;  fully invalidated by EH 	 0 [ax] 1 [dx] 2 [cx] 4 [si] 5 [di] 8 [st] 9 [st(1)] 10 [st(2)] 11 [st(3)] 12 [st(4)] 13 [st(5)] 14 [st(6)] 15 [st(7)] 17 [flags] 18 [fpsr] 20 [xmm0] 21 [xmm1] 22 [xmm2] 23 [xmm3] 24 [xmm4] 25 [xmm5] 26 [xmm6] 27 [xmm7] 28 [mm0] 29 [mm1] 30 [mm2] 31 [mm3] 32 [mm4] 33 [mm5] 34 [mm6] 35 [mm7] 36 [r8] 37 [r9] 38 [r10] 39 [r11] 44 [xmm8] 45 [xmm9] 46 [xmm10] 47 [xmm11] 48 [xmm12] 49 [xmm13] 50 [xmm14] 51 [xmm15] 52 [xmm16] 53 [xmm17] 54 [xmm18] 55 [xmm19] 56 [xmm20] 57 [xmm21] 58 [xmm22] 59 [xmm23] 60 [xmm24] 61 [xmm25] 62 [xmm26] 63 [xmm27] 64 [xmm28] 65 [xmm29] 66 [xmm30] 67 [xmm31] 68 [k0] 69 [k1] 70 [k2] 71 [k3] 72 [k4] 73 [k5] 74 [k6] 75 [k7] 76 [r16] 77 [r17] 78 [r18] 79 [r19] 80 [r20] 81 [r21] 82 [r22] 83 [r23] 84 [r24] 85 [r25] 86 [r26] 87 [r27] 88 [r28] 89 [r29] 90 [r30] 91 [r31]
+;;  hardware regs used 	 7 [sp] 16 [argp] 19 [frame]
+;;  regular block artificial uses 	 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+;;  eh block artificial uses 	 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+;;  entry block defs 	 0 [ax] 1 [dx] 2 [cx] 4 [si] 5 [di] 6 [bp] 7 [sp] 16 [argp] 19 [frame] 20 [xmm0] 21 [xmm1] 22 [xmm2] 23 [xmm3] 24 [xmm4] 25 [xmm5] 26 [xmm6] 27 [xmm7] 36 [r8] 37 [r9]
+;;  exit block uses 	 0 [ax] 6 [bp] 7 [sp] 19 [frame]
+;;  regs ever live 	 0 [ax] 4 [si] 5 [di] 17 [flags]
+;;  ref usage 	r0={2d,2u} r1={1d} r2={1d} r4={1d,1u} r5={1d,1u} r6={1d,6u} r7={1d,6u} r16={1d,5u} r17={5d,2u} r19={1d,6u} r20={1d} r21={1d} r22={1d} r23={1d} r24={1d} r25={1d} r26={1d} r27={1d} r36={1d} r37={1d} r98={1d,2u} r103={2d,4u} r104={1d,1u} r105={3d,2u} r106={1d,1u} r107={1d,2u} r108={1d,1u} r110={1d,1u} r112={1d,1u} r113={1d,1u} 
+;;    total ref usage 83{38d,45u,0e} in 19{19 regular + 0 call} insns.
+(note 7 0 42 2 [bb 2] NOTE_INSN_BASIC_BLOCK)
+(insn 42 7 2 2 (set (reg/f:DI 112 [ values ])
+        (reg:DI 5 di [ values ])) "pipeline.c":5:50 -1
+     (expr_list:REG_DEAD (reg:DI 5 di [ values ])
+        (nil)))
+(insn 2 42 43 2 (set (reg/v/f:DI 106 [ values ])
+        (reg/f:DI 112 [ values ])) "pipeline.c":5:50 95 {*movdi_internal}
+     (expr_list:REG_DEAD (reg/f:DI 112 [ values ])
+        (nil)))
+(insn 43 2 3 2 (set (reg:SI 113 [ count ])
+        (reg:SI 4 si [ count ])) "pipeline.c":5:50 -1
+     (expr_list:REG_DEAD (reg:SI 4 si [ count ])
+        (nil)))
+(insn 3 43 4 2 (set (reg/v:SI 107 [ count ])
+        (reg:SI 113 [ count ])) "pipeline.c":5:50 96 {*movsi_internal}
+     (expr_list:REG_DEAD (reg:SI 113 [ count ])
+        (nil)))
+(note 4 3 11 2 NOTE_INSN_FUNCTION_BEG)
+(insn 11 4 12 2 (set (reg:CCNO 17 flags)
+        (compare:CCNO (reg/v:SI 107 [ count ])
+            (const_int 0 [0]))) "pipeline.c":7:28 discrim 1 11 {*cmpsi_ccno_1}
+     (nil))
+(jump_insn 12 11 13 2 (set (pc)
+        (if_then_else (le (reg:CCNO 17 flags)
+                (const_int 0 [0]))
+            (label_ref:DI 38)
+            (pc))) "pipeline.c":7:28 discrim 1 1458 {*jcc}
+     (expr_list:REG_DEAD (reg:CCNO 17 flags)
+        (int_list:REG_BR_PROB 118111604 (nil)))
+ -> 38)
+(note 13 12 14 3 [bb 3] NOTE_INSN_BASIC_BLOCK)
+(insn 14 13 15 3 (set (reg:DI 103 [ ivtmp.9 ])
+        (reg/v/f:DI 106 [ values ])) 95 {*movdi_internal}
+     (expr_list:REG_DEAD (reg/v/f:DI 106 [ values ])
+        (nil)))
+(insn 15 14 16 3 (set (reg:DI 108 [ _6 ])
+        (sign_extend:DI (reg/v:SI 107 [ count ]))) 184 {*extendsidi2_rex64}
+     (expr_list:REG_DEAD (reg/v:SI 107 [ count ])
+        (nil)))
+(note 16 15 17 3 NOTE_INSN_DELETED)
+(insn 17 16 5 3 (set (reg:DI 104 [ _22 ])
+        (plus:DI (ashift:DI (reg:DI 108 [ _6 ])
+                (const_int 2 [0x2]))
+            (reg:DI 103 [ ivtmp.9 ]))) 265 {*leadi}
+     (expr_list:REG_DEAD (reg:DI 108 [ _6 ])
+        (nil)))
+(insn 5 17 23 3 (set (reg/v:SI 105 [ <retval> ])
+        (const_int 0 [0])) "pipeline.c":6:6 96 {*movsi_internal}
+     (nil))
+(code_label 23 5 18 4 3 (nil) [1 uses])
+(note 18 23 19 4 [bb 4] NOTE_INSN_BASIC_BLOCK)
+(insn 19 18 20 4 (set (reg:SI 98 [ _4 ])
+        (mem:SI (reg:DI 103 [ ivtmp.9 ]) [1 MEM[(const int *)_13]+0 S4 A32])) "pipeline.c":8:12 96 {*movsi_internal}
+     (nil))
+(insn 20 19 21 4 (parallel [
+            (set (reg:SI 110 [ _10 ])
+                (mult:SI (reg:SI 98 [ _4 ])
+                    (reg:SI 98 [ _4 ])))
+            (clobber (reg:CC 17 flags))
+        ]) "pipeline.c":2:15 593 {*mulsi3_1}
+     (expr_list:REG_DEAD (reg:SI 98 [ _4 ])
+        (expr_list:REG_UNUSED (reg:CC 17 flags)
+            (nil))))
+(insn 21 20 22 4 (parallel [
+            (set (reg/v:SI 105 [ <retval> ])
+                (plus:SI (reg/v:SI 105 [ <retval> ])
+                    (reg:SI 110 [ _10 ])))
+            (clobber (reg:CC 17 flags))
+        ]) "pipeline.c":8:9 discrim 1 283 {*addsi_1}
+     (expr_list:REG_DEAD (reg:SI 110 [ _10 ])
+        (expr_list:REG_UNUSED (reg:CC 17 flags)
+            (nil))))
+(insn 22 21 24 4 (parallel [
+            (set (reg:DI 103 [ ivtmp.9 ])
+                (plus:DI (reg:DI 103 [ ivtmp.9 ])
+                    (const_int 4 [0x4])))
+            (clobber (reg:CC 17 flags))
+        ]) "pipeline.c":7:28 discrim 1 285 {*adddi_1}
+     (expr_list:REG_UNUSED (reg:CC 17 flags)
+        (nil)))
+(insn 24 22 25 4 (set (reg:CCZ 17 flags)
+        (compare:CCZ (reg:DI 103 [ ivtmp.9 ])
+            (reg:DI 104 [ _22 ]))) "pipeline.c":7:28 discrim 1 16 {*cmpdi_1}
+     (nil))
+(jump_insn 25 24 38 4 (set (pc)
+        (if_then_else (ne (reg:CCZ 17 flags)
+                (const_int 0 [0]))
+            (label_ref:DI 23)
+            (pc))) "pipeline.c":7:28 discrim 1 1458 {*jcc}
+     (expr_list:REG_DEAD (reg:CCZ 17 flags)
+        (int_list:REG_BR_PROB 955630228 (nil)))
+ -> 23)
+      ; pc falls through to BB 6
+(code_label 38 25 37 5 4 (nil) [1 uses])
+(note 37 38 6 5 [bb 5] NOTE_INSN_BASIC_BLOCK)
+(insn 6 37 30 5 (set (reg/v:SI 105 [ <retval> ])
+        (const_int 0 [0])) "pipeline.c":6:6 96 {*movsi_internal}
+     (nil))
+(code_label 30 6 33 6 1 (nil) [0 uses])
+(note 33 30 31 6 [bb 6] NOTE_INSN_BASIC_BLOCK)
+(insn 31 33 32 6 (set (reg/i:SI 0 ax)
+        (reg/v:SI 105 [ <retval> ])) "pipeline.c":11:1 96 {*movsi_internal}
+     (expr_list:REG_DEAD (reg/v:SI 105 [ <retval> ])
+        (nil)))
+(insn 32 31 0 6 (use (reg/i:SI 0 ax)) "pipeline.c":11:1 -1
+     (nil))
+
+;; Function clamp (clamp, funcdef_no=2, decl_uid=2847, cgraph_uid=3, symbol_order=2)
+
+scanning new insn with uid = 29.
+rescanning insn with uid = 2.
+scanning new insn with uid = 30.
+rescanning insn with uid = 3.
+scanning new insn with uid = 31.
+rescanning insn with uid = 4.
+starting the processing of deferred insns
+ending the processing of deferred insns
+df_analyze called
+df_worklist_dataflow_doublequeue: n_basic_blocks 3 n_edges 2 count 3 (    1)
+
+
+clamp
+
+Dataflow summary:
+def_info->table_size = 27, use_info->table_size = 0
+;;  fully invalidated by EH 	 0 [ax] 1 [dx] 2 [cx] 4 [si] 5 [di] 8 [st] 9 [st(1)] 10 [st(2)] 11 [st(3)] 12 [st(4)] 13 [st(5)] 14 [st(6)] 15 [st(7)] 17 [flags] 18 [fpsr] 20 [xmm0] 21 [xmm1] 22 [xmm2] 23 [xmm3] 24 [xmm4] 25 [xmm5] 26 [xmm6] 27 [xmm7] 28 [mm0] 29 [mm1] 30 [mm2] 31 [mm3] 32 [mm4] 33 [mm5] 34 [mm6] 35 [mm7] 36 [r8] 37 [r9] 38 [r10] 39 [r11] 44 [xmm8] 45 [xmm9] 46 [xmm10] 47 [xmm11] 48 [xmm12] 49 [xmm13] 50 [xmm14] 51 [xmm15] 52 [xmm16] 53 [xmm17] 54 [xmm18] 55 [xmm19] 56 [xmm20] 57 [xmm21] 58 [xmm22] 59 [xmm23] 60 [xmm24] 61 [xmm25] 62 [xmm26] 63 [xmm27] 64 [xmm28] 65 [xmm29] 66 [xmm30] 67 [xmm31] 68 [k0] 69 [k1] 70 [k2] 71 [k3] 72 [k4] 73 [k5] 74 [k6] 75 [k7] 76 [r16] 77 [r17] 78 [r18] 79 [r19] 80 [r20] 81 [r21] 82 [r22] 83 [r23] 84 [r24] 85 [r25] 86 [r26] 87 [r27] 88 [r28] 89 [r29] 90 [r30] 91 [r31]
+;;  hardware regs used 	 7 [sp] 16 [argp] 19 [frame]
+;;  regular block artificial uses 	 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+;;  eh block artificial uses 	 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+;;  entry block defs 	 0 [ax] 1 [dx] 2 [cx] 4 [si] 5 [di] 6 [bp] 7 [sp] 16 [argp] 19 [frame] 20 [xmm0] 21 [xmm1] 22 [xmm2] 23 [xmm3] 24 [xmm4] 25 [xmm5] 26 [xmm6] 27 [xmm7] 36 [r8] 37 [r9]
+;;  exit block uses 	 0 [ax] 6 [bp] 7 [sp] 19 [frame]
+;;  regs ever live 	 0 [ax] 1 [dx] 4 [si] 5 [di] 17 [flags]
+;;  ref usage 	r0={2d,2u} r1={1d,1u} r2={1d} r4={1d,1u} r5={1d,1u} r6={1d,2u} r7={1d,2u} r16={1d,1u} r17={2d,1u} r19={1d,2u} r20={1d} r21={1d} r22={1d} r23={1d} r24={1d} r25={1d} r26={1d} r27={1d} r36={1d} r37={1d} r98={1d,1u} r99={1d,2u} r100={1d,2u} r101={1d,1u} r103={1d,1u} r105={1d,1u} r106={1d,1u} r107={1d,1u} 
+;;    total ref usage 53{30d,23u,0e} in 11{11 regular + 0 call} insns.
+
+( )->[0]->( 2 )
+;; bb 0 artificial_defs: { d1(0){ }d2(1){ }d3(2){ }d4(4){ }d5(5){ }d6(6){ }d7(7){ }d8(16){ }d11(19){ }d12(20){ }d13(21){ }d14(22){ }d15(23){ }d16(24){ }d17(25){ }d18(26){ }d19(27){ }d20(36){ }d21(37){ }}
+;; bb 0 artificial_uses: { }
+;; lr  in  	
+;; lr  use 	
+;; lr  def 	 0 [ax] 1 [dx] 2 [cx] 4 [si] 5 [di] 6 [bp] 7 [sp] 16 [argp] 19 [frame] 20 [xmm0] 21 [xmm1] 22 [xmm2] 23 [xmm3] 24 [xmm4] 25 [xmm5] 26 [xmm6] 27 [xmm7] 36 [r8] 37 [r9]
+;; live  in  	
+;; live  gen 	 0 [ax] 1 [dx] 2 [cx] 4 [si] 5 [di] 6 [bp] 7 [sp] 16 [argp] 19 [frame] 20 [xmm0] 21 [xmm1] 22 [xmm2] 23 [xmm3] 24 [xmm4] 25 [xmm5] 26 [xmm6] 27 [xmm7] 36 [r8] 37 [r9]
+;; live  kill	
+;; lr  out 	 1 [dx] 4 [si] 5 [di] 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+;; live  out 	 1 [dx] 4 [si] 5 [di] 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+
+( 0 )->[2]->( 1 )
+;; bb 2 artificial_defs: { }
+;; bb 2 artificial_uses: { u-1(6){ }u-1(7){ }u-1(16){ }u-1(19){ }}
+;; lr  in  	 1 [dx] 4 [si] 5 [di] 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+;; lr  use 	 1 [dx] 4 [si] 5 [di] 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+;; lr  def 	 0 [ax] 17 [flags] 98 99 100 101 103 105 106 107
+;; live  in  	 1 [dx] 4 [si] 5 [di] 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+;; live  gen 	 0 [ax] 17 [flags] 98 99 100 101 103
+;; live  kill	 17 [flags]
+;; lr  out 	 0 [ax] 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+;; live  out 	 0 [ax] 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+
+( 2 )->[1]->( )
+;; bb 1 artificial_defs: { }
+;; bb 1 artificial_uses: { u-1(0){ }u-1(6){ }u-1(7){ }u-1(19){ }}
+;; lr  in  	 0 [ax] 6 [bp] 7 [sp] 19 [frame]
+;; lr  use 	 0 [ax] 6 [bp] 7 [sp] 19 [frame]
+;; lr  def 	
+;; live  in  	 0 [ax] 6 [bp] 7 [sp] 19 [frame]
+;; live  gen 	
+;; live  kill	
+;; lr  out 	
+;; live  out 	
+
+Finding needed instructions:
+  Adding insn 19 to worklist
+Finished finding needed instructions:
+processing block 2 lr out =  0 [ax] 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+  Adding insn 18 to worklist
+  Adding insn 28 to worklist
+  Adding insn 27 to worklist
+  Adding insn 26 to worklist
+  Adding insn 4 to worklist
+  Adding insn 31 to worklist
+  Adding insn 3 to worklist
+  Adding insn 30 to worklist
+  Adding insn 2 to worklist
+  Adding insn 29 to worklist
+df_worklist_dataflow_doublequeue: n_basic_blocks 3 n_edges 2 count 3 (    1)
+insn_cost 4 for    29: r105:SI=di:SI
+      REG_DEAD di:SI
+insn_cost 4 for     2: r99:SI=r105:SI
+      REG_DEAD r105:SI
+insn_cost 4 for    30: r106:SI=si:SI
+      REG_DEAD si:SI
+insn_cost 4 for     3: r100:SI=r106:SI
+      REG_DEAD r106:SI
+insn_cost 4 for    31: r107:SI=dx:SI
+      REG_DEAD dx:SI
+insn_cost 4 for     4: r101:SI=r107:SI
+      REG_DEAD r107:SI
+insn_cost 4 for    26: {r103:SI=smin(r99:SI,r101:SI);clobber flags:CC;}
+      REG_DEAD r101:SI
+      REG_UNUSED flags:CC
+insn_cost 4 for    27: flags:CCGC=cmp(r99:SI,r100:SI)
+      REG_DEAD r99:SI
+insn_cost 4 for    28: r98:SI={(flags:CCGC>=0)?r103:SI:r100:SI}
+      REG_DEAD r103:SI
+      REG_DEAD r100:SI
+      REG_DEAD flags:CCGC
+insn_cost 4 for    18: ax:SI=r98:SI
+      REG_DEAD r98:SI
+insn_cost 0 for    19: use ax:SI
+allowing combination of insns 4 and 26
+original costs 4 + 4 = 8
+replacement cost 4
+deferring deletion of insn with uid = 4.
+modifying insn i3    26: {r103:SI=smin(r99:SI,r107:SI);clobber flags:CC;}
+      REG_DEAD r107:SI
+      REG_UNUSED flags:CC
+deferring rescan insn with uid = 26.
+starting the processing of deferred insns
+rescanning insn with uid = 26.
+ending the processing of deferred insns
+
+
+clamp
+
+Dataflow summary:
+;;  fully invalidated by EH 	 0 [ax] 1 [dx] 2 [cx] 4 [si] 5 [di] 8 [st] 9 [st(1)] 10 [st(2)] 11 [st(3)] 12 [st(4)] 13 [st(5)] 14 [st(6)] 15 [st(7)] 17 [flags] 18 [fpsr] 20 [xmm0] 21 [xmm1] 22 [xmm2] 23 [xmm3] 24 [xmm4] 25 [xmm5] 26 [xmm6] 27 [xmm7] 28 [mm0] 29 [mm1] 30 [mm2] 31 [mm3] 32 [mm4] 33 [mm5] 34 [mm6] 35 [mm7] 36 [r8] 37 [r9] 38 [r10] 39 [r11] 44 [xmm8] 45 [xmm9] 46 [xmm10] 47 [xmm11] 48 [xmm12] 49 [xmm13] 50 [xmm14] 51 [xmm15] 52 [xmm16] 53 [xmm17] 54 [xmm18] 55 [xmm19] 56 [xmm20] 57 [xmm21] 58 [xmm22] 59 [xmm23] 60 [xmm24] 61 [xmm25] 62 [xmm26] 63 [xmm27] 64 [xmm28] 65 [xmm29] 66 [xmm30] 67 [xmm31] 68 [k0] 69 [k1] 70 [k2] 71 [k3] 72 [k4] 73 [k5] 74 [k6] 75 [k7] 76 [r16] 77 [r17] 78 [r18] 79 [r19] 80 [r20] 81 [r21] 82 [r22] 83 [r23] 84 [r24] 85 [r25] 86 [r26] 87 [r27] 88 [r28] 89 [r29] 90 [r30] 91 [r31]
+;;  hardware regs used 	 7 [sp] 16 [argp] 19 [frame]
+;;  regular block artificial uses 	 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+;;  eh block artificial uses 	 6 [bp] 7 [sp] 16 [argp] 19 [frame]
+;;  entry block defs 	 0 [ax] 1 [dx] 2 [cx] 4 [si] 5 [di] 6 [bp] 7 [sp] 16 [argp] 19 [frame] 20 [xmm0] 21 [xmm1] 22 [xmm2] 23 [xmm3] 24 [xmm4] 25 [xmm5] 26 [xmm6] 27 [xmm7] 36 [r8] 37 [r9]
+;;  exit block uses 	 0 [ax] 6 [bp] 7 [sp] 19 [frame]
+;;  regs ever live 	 0 [ax] 1 [dx] 4 [si] 5 [di] 17 [flags]
+;;  ref usage 	r0={2d,2u} r1={1d,1u} r2={1d} r4={1d,1u} r5={1d,1u} r6={1d,2u} r7={1d,2u} r16={1d,1u} r17={2d,1u} r19={1d,2u} r20={1d} r21={1d} r22={1d} r23={1d} r24={1d} r25={1d} r26={1d} r27={1d} r36={1d} r37={1d} r98={1d,1u} r99={1d,2u} r100={1d,2u} r103={1d,1u} r105={1d,1u} r106={1d,1u} r107={1d,1u} 
+;;    total ref usage 51{29d,22u,0e} in 10{10 regular + 0 call} insns.
+(note 7 0 29 2 [bb 2] NOTE_INSN_BASIC_BLOCK)
+(insn 29 7 2 2 (set (reg:SI 105 [ value ])
+        (reg:SI 5 di [ value ])) "pipeline.c":13:41 -1
+     (expr_list:REG_DEAD (reg:SI 5 di [ value ])
+        (nil)))
+(insn 2 29 30 2 (set (reg/v:SI 99 [ value ])
+        (reg:SI 105 [ value ])) "pipeline.c":13:41 96 {*movsi_internal}
+     (expr_list:REG_DEAD (reg:SI 105 [ value ])
+        (nil)))
+(insn 30 2 3 2 (set (reg:SI 106 [ low ])
+        (reg:SI 4 si [ low ])) "pipeline.c":13:41 -1
+     (expr_list:REG_DEAD (reg:SI 4 si [ low ])
+        (nil)))
+(insn 3 30 31 2 (set (reg/v:SI 100 [ low ])
+        (reg:SI 106 [ low ])) "pipeline.c":13:41 96 {*movsi_internal}
+     (expr_list:REG_DEAD (reg:SI 106 [ low ])
+        (nil)))
+(insn 31 3 4 2 (set (reg:SI 107 [ high ])
+        (reg:SI 1 dx [ high ])) "pipeline.c":13:41 -1
+     (expr_list:REG_DEAD (reg:SI 1 dx [ high ])
+        (nil)))
+(note 4 31 5 2 NOTE_INSN_DELETED)
+(note 5 4 26 2 NOTE_INSN_FUNCTION_BEG)
+(insn 26 5 27 2 (parallel [
+            (set (reg:SI 103)
+                (smin:SI (reg/v:SI 99 [ value ])
+                    (reg:SI 107 [ high ])))
+            (clobber (reg:CC 17 flags))
+        ]) "pipeline.c":17:5 1848 {*sminsi3_1}
+     (expr_list:REG_DEAD (reg:SI 107 [ high ])
+        (expr_list:REG_UNUSED (reg:CC 17 flags)
+            (nil))))
+(insn 27 26 28 2 (set (reg:CCGC 17 flags)
+        (compare:CCGC (reg/v:SI 99 [ value ])
+            (reg/v:SI 100 [ low ]))) "pipeline.c":17:5 15 {*cmpsi_1}
+     (expr_list:REG_DEAD (reg/v:SI 99 [ value ])
+        (nil)))
+(insn 28 27 18 2 (set (reg:SI 98 [ <retval> ])
+        (if_then_else:SI (ge (reg:CCGC 17 flags)
+                (const_int 0 [0]))
+            (reg:SI 103)
+            (reg/v:SI 100 [ low ]))) "pipeline.c":17:5 1804 {*movsicc_noc}
+     (expr_list:REG_DEAD (reg:SI 103)
+        (expr_list:REG_DEAD (reg/v:SI 100 [ low ])
+            (expr_list:REG_DEAD (reg:CCGC 17 flags)
+                (nil)))))
+(insn 18 28 19 2 (set (reg/i:SI 0 ax)
+        (reg:SI 98 [ <retval> ])) "pipeline.c":21:1 96 {*movsi_internal}
+     (expr_list:REG_DEAD (reg:SI 98 [ <retval> ])
+        (nil)))
+(insn 19 18 0 2 (use (reg/i:SI 0 ax)) "pipeline.c":21:1 -1
+     (nil))

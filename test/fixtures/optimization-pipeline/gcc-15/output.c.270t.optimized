@@ -1,0 +1,74 @@
+
+;; Function sum_of_squares (sum_of_squares, funcdef_no=1, decl_uid=2836, cgraph_uid=2, symbol_order=1)
+
+Removing basic block 6
+Removing basic block 7
+Removing basic block 8
+int sum_of_squares (const int * values, int count)
+{
+  unsigned long ivtmp.9;
+  int total;
+  int _4;
+  unsigned long _5;
+  unsigned long _6;
+  int _10;
+  void * _13;
+  unsigned long _22;
+
+  <bb 2> [local count: 118111600]:
+  if (count_8(D) > 0)
+    goto <bb 3>; [89.00%]
+  else
+    goto <bb 5>; [11.00%]
+
+  <bb 3> [local count: 105119324]:
+  ivtmp.9_14 = (unsigned long) values_9(D);
+  _6 = (unsigned long) count_8(D);
+  _5 = _6 * 4;
+  _22 = _5 + ivtmp.9_14;
+
+  <bb 4> [local count: 955630224]:
+  # total_15 = PHI <total_11(4), 0(3)>
+  # ivtmp.9_19 = PHI <ivtmp.9_18(4), ivtmp.9_14(3)>
+  _13 = (void *) ivtmp.9_19;
+  _4 = MEM[(const int *)_13];
+  _10 = _4 * _4;
+  total_11 = _10 + total_15;
+  ivtmp.9_18 = ivtmp.9_19 + 4;
+  if (ivtmp.9_18 != _22)
+    goto <bb 4>; [89.00%]
+  else
+    goto <bb 5>; [11.00%]
+
+  <bb 5> [local count: 118111600]:
+  # total_16 = PHI <total_11(4), 0(2)>
+  return total_16;
+
+}
+
+
+
+;; Function clamp (clamp, funcdef_no=2, decl_uid=2847, cgraph_uid=3, symbol_order=2)
+
+Removing basic block 5
+int clamp (int value, int low, int high)
+{
+  int _1;
+  int _5;
+
+  <bb 2> [local count: 1073741824]:
+  if (value_2(D) < low_3(D))
+    goto <bb 4>; [34.00%]
+  else
+    goto <bb 3>; [66.00%]
+
+  <bb 3> [local count: 708669600]:
+  _5 = MIN_EXPR <value_2(D), high_4(D)>;
+
+  <bb 4> [local count: 1073741824]:
+  # _1 = PHI <low_3(D)(2), _5(3)>
+  return _1;
+
+}
+
+

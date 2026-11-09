@@ -1,0 +1,96 @@
+
+;; Function square (square, funcdef_no=0, decl_uid=2832, cgraph_uid=1, symbol_order=0)
+
+Global Exported: _2 = [irange] int [-INF, +INF] MASK 0xfffffffd VALUE 0x0
+int square (int value)
+{
+  int _2;
+
+  <bb 2> :
+  _2 = value_1(D) * value_1(D);
+  return _2;
+
+}
+
+
+
+;; Function sum_of_squares (sum_of_squares, funcdef_no=1, decl_uid=2836, cgraph_uid=2, symbol_order=1)
+
+Global Exported: _2 = [irange] long unsigned int [0, 0][4, +INF] MASK 0xfffffffffffffffc VALUE 0x0
+Global Exported: _15 = [irange] int [-INF, +INF] MASK 0x7ffffffd VALUE 0x0
+Global Exported: _18 = [irange] int [-INF, +INF] MASK 0x7ffffffd VALUE 0x0
+int sum_of_squares (const int * values, int count)
+{
+  int D.2866;
+  int index;
+  int total;
+  long unsigned int _1;
+  long unsigned int _2;
+  const int * _3;
+  int _4;
+  int _14;
+  int _15;
+  int _18;
+
+  <bb 2> :
+  goto <bb 4>; [INV]
+
+  <bb 3> :
+  _1 = (long unsigned int) index_6;
+  _2 = _1 * 4;
+  _3 = values_13(D) + _2;
+  _4 = *_3;
+  _14 = _4 * _4;
+  _18 = _14;
+  _15 = _18;
+  total_16 = _15 + total_5;
+  index_17 = index_6 + 1;
+
+  <bb 4> :
+  # total_5 = PHI <0(2), total_16(3)>
+  # index_6 = PHI <0(2), index_17(3)>
+  if (index_6 < count_11(D))
+    goto <bb 3>; [INV]
+  else
+    goto <bb 5>; [INV]
+
+  <bb 5> :
+  return total_5;
+
+}
+
+
+
+;; Function clamp (clamp, funcdef_no=2, decl_uid=2847, cgraph_uid=3, symbol_order=2)
+
+Removing basic block 6
+int clamp (int value, int low, int high)
+{
+  int _1;
+
+  <bb 2> :
+  if (value_2(D) < low_3(D))
+    goto <bb 3>; [INV]
+  else
+    goto <bb 4>; [INV]
+
+  <bb 3> :
+  // predicted unlikely by early return (on trees) predictor.
+  goto <bb 6>; [INV]
+
+  <bb 4> :
+  if (value_2(D) > high_4(D))
+    goto <bb 5>; [INV]
+  else
+    goto <bb 6>; [INV]
+
+  <bb 5> :
+  // predicted unlikely by early return (on trees) predictor.
+
+  <bb 6> :
+  # _1 = PHI <low_3(D)(3), high_4(D)(5), value_2(D)(4)>
+  return _1;
+
+}
+
+

@@ -1,0 +1,198 @@
+
+;; Function sum_of_squares (sum_of_squares, funcdef_no=1, decl_uid=2836, cgraph_uid=2, symbol_order=1)
+
+
+
+sum_of_squares
+
+Dataflow summary:
+;;  fully invalidated by EH 	 0 [ax] 1 [dx] 2 [cx] 4 [si] 5 [di] 8 [st] 9 [st(1)] 10 [st(2)] 11 [st(3)] 12 [st(4)] 13 [st(5)] 14 [st(6)] 15 [st(7)] 17 [flags] 18 [fpsr] 20 [xmm0] 21 [xmm1] 22 [xmm2] 23 [xmm3] 24 [xmm4] 25 [xmm5] 26 [xmm6] 27 [xmm7] 28 [mm0] 29 [mm1] 30 [mm2] 31 [mm3] 32 [mm4] 33 [mm5] 34 [mm6] 35 [mm7] 36 [r8] 37 [r9] 38 [r10] 39 [r11] 44 [xmm8] 45 [xmm9] 46 [xmm10] 47 [xmm11] 48 [xmm12] 49 [xmm13] 50 [xmm14] 51 [xmm15] 52 [xmm16] 53 [xmm17] 54 [xmm18] 55 [xmm19] 56 [xmm20] 57 [xmm21] 58 [xmm22] 59 [xmm23] 60 [xmm24] 61 [xmm25] 62 [xmm26] 63 [xmm27] 64 [xmm28] 65 [xmm29] 66 [xmm30] 67 [xmm31] 68 [k0] 69 [k1] 70 [k2] 71 [k3] 72 [k4] 73 [k5] 74 [k6] 75 [k7] 76 [r16] 77 [r17] 78 [r18] 79 [r19] 80 [r20] 81 [r21] 82 [r22] 83 [r23] 84 [r24] 85 [r25] 86 [r26] 87 [r27] 88 [r28] 89 [r29] 90 [r30] 91 [r31]
+;;  hardware regs used 	 7 [sp]
+;;  regular block artificial uses 	 7 [sp]
+;;  eh block artificial uses 	 7 [sp] 16 [argp]
+;;  entry block defs 	 0 [ax] 1 [dx] 2 [cx] 4 [si] 5 [di] 7 [sp] 20 [xmm0] 21 [xmm1] 22 [xmm2] 23 [xmm3] 24 [xmm4] 25 [xmm5] 26 [xmm6] 27 [xmm7] 36 [r8] 37 [r9]
+;;  exit block uses 	 0 [ax] 7 [sp]
+;;  regs ever live 	 0 [ax] 1 [dx] 2 [cx] 4 [si] 5 [di] 17 [flags]
+;;  ref usage 	r0={5d,6u} r1={4d,3u} r2={2d,1u} r4={2d,3u} r5={2d,4u,1e} r7={1d,6u} r17={7d,2u} r20={1d} r21={1d} r22={1d} r23={1d} r24={1d} r25={1d} r26={1d} r27={1d} r36={1d} r37={1d} 
+;;    total ref usage 59{33d,25u,1e} in 18{18 regular + 0 call} insns.
+(note 1 0 66 NOTE_INSN_DELETED)
+(insn 66 1 7 2 (unspec_volatile [
+            (const_int 0 [0])
+        ] UNSPECV_NOP_ENDBR) 1968 {nop_endbr}
+     (nil))
+(note 7 66 48 2 [bb 2] NOTE_INSN_BASIC_BLOCK)
+(note 48 7 4 2 NOTE_INSN_PROLOGUE_END)
+(note 4 48 11 2 NOTE_INSN_FUNCTION_BEG)
+(insn:TI 11 4 12 2 (set (reg:CCNO 17 flags)
+        (compare:CCNO (reg:SI 4 si [orig:113 count ] [113])
+            (const_int 0 [0]))) "pipeline.c":7:28 discrim 1 11 {*cmpsi_ccno_1}
+     (nil))
+(jump_insn 12 11 13 2 (set (pc)
+        (if_then_else (le (reg:CCNO 17 flags)
+                (const_int 0 [0]))
+            (label_ref:DI 38)
+            (pc))) "pipeline.c":7:28 discrim 1 1458 {*jcc}
+     (expr_list:REG_DEAD (reg:CCNO 17 flags)
+        (int_list:REG_BR_PROB 118111604 (nil)))
+ -> 38)
+(note 13 12 16 3 [bb 3] NOTE_INSN_BASIC_BLOCK)
+(note 16 13 15 3 NOTE_INSN_DELETED)
+(insn:TI 15 16 55 3 (set (reg:DI 4 si [orig:108 _6 ] [108])
+        (sign_extend:DI (reg:SI 4 si [orig:113 count ] [113]))) 184 {*extendsidi2_rex64}
+     (nil))
+(insn 55 15 17 3 (parallel [
+            (set (reg:DI 1 dx [orig:105 <retval> ] [105])
+                (const_int 0 [0]))
+            (clobber (reg:CC 17 flags))
+        ]) "pipeline.c":6:6 85 {*movdi_xor}
+     (expr_list:REG_UNUSED (reg:CC 17 flags)
+        (nil)))
+(insn:TI 17 55 67 3 (set (reg:DI 2 cx [orig:104 _22 ] [104])
+        (plus:DI (ashift:DI (reg:DI 4 si [orig:108 _6 ] [108])
+                (const_int 2 [0x2]))
+            (reg:DI 5 di [orig:103 ivtmp.9 ] [103]))) 265 {*leadi}
+     (expr_list:REG_DEAD (reg:DI 4 si [orig:108 _6 ] [108])
+        (nil)))
+(insn 67 17 23 4 (unspec_volatile [
+            (const_int 4 [0x4])
+            (const_int 0 [0])
+        ] UNSPECV_ALIGN) 1497 {max_skip_align}
+     (nil))
+(code_label 23 67 18 4 3 (nil) [1 uses])
+(note 18 23 19 4 [bb 4] NOTE_INSN_BASIC_BLOCK)
+(insn:TI 19 18 22 4 (set (reg:SI 0 ax [orig:98 _4 ] [98])
+        (mem:SI (reg:DI 5 di [orig:103 ivtmp.9 ] [103]) [1 MEM[(const int *)_13]+0 S4 A32])) "pipeline.c":8:12 96 {*movsi_internal}
+     (expr_list:REG_EQUIV (mem:SI (reg:DI 5 di [orig:103 ivtmp.9 ] [103]) [1 MEM[(const int *)_13]+0 S4 A32])
+        (nil)))
+(insn 22 19 20 4 (parallel [
+            (set (reg:DI 5 di [orig:103 ivtmp.9 ] [103])
+                (plus:DI (reg:DI 5 di [orig:103 ivtmp.9 ] [103])
+                    (const_int 4 [0x4])))
+            (clobber (reg:CC 17 flags))
+        ]) "pipeline.c":7:28 discrim 1 285 {*adddi_1}
+     (expr_list:REG_UNUSED (reg:CC 17 flags)
+        (nil)))
+(insn:TI 20 22 21 4 (parallel [
+            (set (reg:SI 0 ax [orig:110 _10 ] [110])
+                (mult:SI (reg:SI 0 ax [orig:98 _4 ] [98])
+                    (reg:SI 0 ax [orig:98 _4 ] [98])))
+            (clobber (reg:CC 17 flags))
+        ]) "pipeline.c":2:15 593 {*mulsi3_1}
+     (expr_list:REG_UNUSED (reg:CC 17 flags)
+        (nil)))
+(insn:TI 21 20 24 4 (parallel [
+            (set (reg/v:SI 1 dx [orig:105 <retval> ] [105])
+                (plus:SI (reg/v:SI 1 dx [orig:105 <retval> ] [105])
+                    (reg:SI 0 ax [orig:110 _10 ] [110])))
+            (clobber (reg:CC 17 flags))
+        ]) "pipeline.c":8:9 discrim 1 283 {*addsi_1}
+     (expr_list:REG_DEAD (reg:SI 0 ax [orig:110 _10 ] [110])
+        (expr_list:REG_UNUSED (reg:CC 17 flags)
+            (nil))))
+(insn 24 21 25 4 (set (reg:CCZ 17 flags)
+        (compare:CCZ (reg:DI 5 di [orig:103 ivtmp.9 ] [103])
+            (reg:DI 2 cx [orig:104 _22 ] [104]))) "pipeline.c":7:28 discrim 1 16 {*cmpdi_1}
+     (nil))
+(jump_insn 25 24 33 4 (set (pc)
+        (if_then_else (ne (reg:CCZ 17 flags)
+                (const_int 0 [0]))
+            (label_ref:DI 23)
+            (pc))) "pipeline.c":7:28 discrim 1 1458 {*jcc}
+     (expr_list:REG_DEAD (reg:CCZ 17 flags)
+        (int_list:REG_BR_PROB 955630228 (nil)))
+ -> 23)
+(note 33 25 31 5 [bb 5] NOTE_INSN_BASIC_BLOCK)
+(insn:TI 31 33 32 5 (set (reg/i:SI 0 ax)
+        (reg/v:SI 1 dx [orig:105 <retval> ] [105])) "pipeline.c":11:1 96 {*movsi_internal}
+     (expr_list:REG_DEAD (reg/v:SI 1 dx [orig:105 <retval> ] [105])
+        (nil)))
+(insn 32 31 64 5 (use (reg/i:SI 0 ax)) "pipeline.c":11:1 -1
+     (nil))
+(note 64 32 50 5 NOTE_INSN_EPILOGUE_BEG)
+(jump_insn:TI 50 64 51 5 (simple_return) "pipeline.c":11:1 1489 {simple_return_internal}
+     (nil)
+ -> simple_return)
+(barrier 51 50 38)
+(code_label 38 51 37 6 4 (nil) [1 uses])
+(note 37 38 54 6 [bb 6] NOTE_INSN_BASIC_BLOCK)
+(insn:TI 54 37 57 6 (parallel [
+            (set (reg:DI 1 dx [orig:105 <retval> ] [105])
+                (const_int 0 [0]))
+            (clobber (reg:CC 17 flags))
+        ]) "pipeline.c":6:6 85 {*movdi_xor}
+     (expr_list:REG_UNUSED (reg:CC 17 flags)
+        (nil)))
+(insn:TI 57 54 58 6 (set (reg/i:SI 0 ax)
+        (reg/v:SI 1 dx [orig:105 <retval> ] [105])) "pipeline.c":11:1 96 {*movsi_internal}
+     (expr_list:REG_DEAD (reg/v:SI 1 dx [orig:105 <retval> ] [105])
+        (nil)))
+(insn 58 57 65 6 (use (reg/i:SI 0 ax)) "pipeline.c":11:1 -1
+     (nil))
+(note 65 58 60 6 NOTE_INSN_EPILOGUE_BEG)
+(jump_insn:TI 60 65 63 6 (simple_return) "pipeline.c":11:1 1489 {simple_return_internal}
+     (nil)
+ -> simple_return)
+(barrier 63 60 47)
+(note 47 63 0 NOTE_INSN_DELETED)
+
+;; Function clamp (clamp, funcdef_no=2, decl_uid=2847, cgraph_uid=3, symbol_order=2)
+
+
+
+clamp
+
+Dataflow summary:
+;;  fully invalidated by EH 	 0 [ax] 1 [dx] 2 [cx] 4 [si] 5 [di] 8 [st] 9 [st(1)] 10 [st(2)] 11 [st(3)] 12 [st(4)] 13 [st(5)] 14 [st(6)] 15 [st(7)] 17 [flags] 18 [fpsr] 20 [xmm0] 21 [xmm1] 22 [xmm2] 23 [xmm3] 24 [xmm4] 25 [xmm5] 26 [xmm6] 27 [xmm7] 28 [mm0] 29 [mm1] 30 [mm2] 31 [mm3] 32 [mm4] 33 [mm5] 34 [mm6] 35 [mm7] 36 [r8] 37 [r9] 38 [r10] 39 [r11] 44 [xmm8] 45 [xmm9] 46 [xmm10] 47 [xmm11] 48 [xmm12] 49 [xmm13] 50 [xmm14] 51 [xmm15] 52 [xmm16] 53 [xmm17] 54 [xmm18] 55 [xmm19] 56 [xmm20] 57 [xmm21] 58 [xmm22] 59 [xmm23] 60 [xmm24] 61 [xmm25] 62 [xmm26] 63 [xmm27] 64 [xmm28] 65 [xmm29] 66 [xmm30] 67 [xmm31] 68 [k0] 69 [k1] 70 [k2] 71 [k3] 72 [k4] 73 [k5] 74 [k6] 75 [k7] 76 [r16] 77 [r17] 78 [r18] 79 [r19] 80 [r20] 81 [r21] 82 [r22] 83 [r23] 84 [r24] 85 [r25] 86 [r26] 87 [r27] 88 [r28] 89 [r29] 90 [r30] 91 [r31]
+;;  hardware regs used 	 7 [sp]
+;;  regular block artificial uses 	 7 [sp]
+;;  eh block artificial uses 	 7 [sp] 16 [argp]
+;;  entry block defs 	 0 [ax] 1 [dx] 2 [cx] 4 [si] 5 [di] 7 [sp] 20 [xmm0] 21 [xmm1] 22 [xmm2] 23 [xmm3] 24 [xmm4] 25 [xmm5] 26 [xmm6] 27 [xmm7] 36 [r8] 37 [r9]
+;;  exit block uses 	 0 [ax] 7 [sp]
+;;  regs ever live 	 0 [ax] 1 [dx] 4 [si] 5 [di] 17 [flags]
+;;  ref usage 	r0={3d,3u} r1={2d,3u} r2={1d} r4={1d,2u} r5={1d,3u} r7={1d,2u} r17={2d,2u} r20={1d} r21={1d} r22={1d} r23={1d} r24={1d} r25={1d} r26={1d} r27={1d} r36={1d} r37={1d} 
+;;    total ref usage 36{21d,15u,0e} in 7{7 regular + 0 call} insns.
+(note 1 0 42 NOTE_INSN_DELETED)
+(insn 42 1 7 2 (unspec_volatile [
+            (const_int 0 [0])
+        ] UNSPECV_NOP_ENDBR) 1968 {nop_endbr}
+     (nil))
+(note 7 42 37 2 [bb 2] NOTE_INSN_BASIC_BLOCK)
+(note 37 7 4 2 NOTE_INSN_PROLOGUE_END)
+(note 4 37 5 2 NOTE_INSN_DELETED)
+(note 5 4 32 2 NOTE_INSN_FUNCTION_BEG)
+(insn:TI 32 5 35 2 (set (reg:CCGC 17 flags)
+        (compare:CCGC (reg:SI 5 di [orig:105 value ] [105])
+            (reg:SI 1 dx [orig:107 high ] [107]))) "pipeline.c":17:5 15 {*cmpsi_1}
+     (nil))
+(insn 35 32 33 2 (set (reg:SI 0 ax [orig:106 low ] [106])
+        (reg:SI 4 si [orig:106 low ] [106])) "pipeline.c":17:5 96 {*movsi_internal}
+     (expr_list:REG_DEAD (reg:SI 4 si [orig:106 low ] [106])
+        (nil)))
+(insn:TI 33 35 27 2 (set (reg:SI 1 dx [103])
+        (if_then_else:SI (le (reg:CCGC 17 flags)
+                (const_int 0 [0]))
+            (reg:SI 5 di [orig:105 value ] [105])
+            (reg:SI 1 dx [orig:107 high ] [107]))) "pipeline.c":17:5 1804 {*movsicc_noc}
+     (expr_list:REG_DEAD (reg:CCGC 17 flags)
+        (nil)))
+(insn 27 33 28 2 (set (reg:CCGC 17 flags)
+        (compare:CCGC (reg:SI 5 di [orig:105 value ] [105])
+            (reg:SI 4 si [orig:106 low ] [106]))) "pipeline.c":17:5 15 {*cmpsi_1}
+     (expr_list:REG_DEAD (reg:SI 5 di [orig:105 value ] [105])
+        (nil)))
+(insn:TI 28 27 19 2 (set (reg:SI 0 ax [orig:106 low ] [106])
+        (if_then_else:SI (ge (reg:CCGC 17 flags)
+                (const_int 0 [0]))
+            (reg:SI 1 dx [103])
+            (reg:SI 0 ax [orig:106 low ] [106]))) "pipeline.c":17:5 1804 {*movsicc_noc}
+     (expr_list:REG_DEAD (reg:CCGC 17 flags)
+        (expr_list:REG_DEAD (reg:SI 1 dx [103])
+            (nil))))
+(insn 19 28 41 2 (use (reg/i:SI 0 ax)) "pipeline.c":21:1 -1
+     (nil))
+(note 41 19 39 2 NOTE_INSN_EPILOGUE_BEG)
+(jump_insn:TI 39 41 40 2 (simple_return) "pipeline.c":21:1 1489 {simple_return_internal}
+     (nil)
+ -> simple_return)
+(barrier 40 39 34)
+(note 34 40 0 NOTE_INSN_DELETED)

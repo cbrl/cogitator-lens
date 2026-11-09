@@ -1,0 +1,68 @@
+
+;; Function sum_of_squares (sum_of_squares, funcdef_no=1, decl_uid=2836, cgraph_uid=2, symbol_order=1)
+
+int sum_of_squares (const int * values, int count)
+{
+  int D.2850;
+  int D.2851;
+  int total;
+
+  total = 0;
+  {
+    int index;
+
+    index = 0;
+    goto <D.2843>;
+    <D.2842>:
+    _1 = (long unsigned int) index;
+    _2 = _1 * 4;
+    _3 = values + _2;
+    _4 = *_3;
+    D.2850 = square (_4);
+    total = D.2850 + total;
+    index = index + 1;
+    <D.2843>:
+    if (index < count) goto <D.2842>; else goto <D.2840>;
+    <D.2840>:
+  }
+  D.2851 = total;
+  return D.2851;
+}
+
+
+
+;; Function square (square, funcdef_no=0, decl_uid=2832, cgraph_uid=1, symbol_order=0)
+
+int square (int value)
+{
+  int D.2853;
+
+  D.2853 = value * value;
+  return D.2853;
+}
+
+
+
+;; Function clamp (clamp, funcdef_no=2, decl_uid=2847, cgraph_uid=3, symbol_order=2)
+
+int clamp (int value, int low, int high)
+{
+  int D.2857;
+
+  if (value < low) goto <D.2855>; else goto <D.2856>;
+  <D.2855>:
+  D.2857 = low;
+  // predicted unlikely by early return (on trees) predictor.
+  return D.2857;
+  <D.2856>:
+  if (value > high) goto <D.2858>; else goto <D.2859>;
+  <D.2858>:
+  D.2857 = high;
+  // predicted unlikely by early return (on trees) predictor.
+  return D.2857;
+  <D.2859>:
+  D.2857 = value;
+  return D.2857;
+}
+
+

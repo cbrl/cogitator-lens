@@ -84,6 +84,20 @@ export interface ToolchainHost {
 	log(message: string, level?: 'info' | 'debug'): void;
 }
 
+/**
+ * The compiler writes the artifact to several files in a directory, such as the GCC pass dumps.
+ * The backend makes the directory in the temporary directory, and gives its path to `arguments` as
+ * the output file. The files have a size limit while the compiler runs.
+ */
+export interface ArtifactDirectoryOutput {
+	readonly directory: string;
+	/**
+	 * Makes the artifact text from the names of the files in the directory. `read` gives the text of
+	 * one file. The artifact text has the size limit of one artifact file.
+	 */
+	readonly collect: (files: readonly string[], read: (file: string) => Promise<string>) => Promise<string>;
+}
+
 export interface ArtifactOutputSpec {
 	readonly output:
 		| 'stdout'
@@ -91,7 +105,8 @@ export interface ArtifactOutputSpec {
 		| {
 				readonly filename: string;
 				readonly optional?: boolean;
-		  };
+		  }
+		| ArtifactDirectoryOutput;
 	readonly arguments: (
 		outputFile: string,
 		temporaryDirectory: string,
@@ -394,8 +409,15 @@ export class ToolchainBackend {
 		transform: (text: string, invocation: PreparedInvocation) => Promise<string> | string,
 	): Promise<ProducedArtifact> {
 		return withTemporaryDirectory('coglens-', async (temporaryDirectory) => {
+			const { output } = spec;
 			const outputFile =
-				typeof spec.output === 'object' ? path.join(temporaryDirectory, spec.output.filename) : '';
+				typeof output === 'object'
+					? path.join(temporaryDirectory, 'directory' in output ? output.directory : output.filename)
+					: '';
+			const outputDirectory = typeof output === 'object' && 'directory' in output ? outputFile : undefined;
+			if (outputDirectory) {
+				await fs.promises.mkdir(outputDirectory);
+			}
 			const { invocation, result } = await this.run(
 				source,
 				options,
@@ -405,16 +427,19 @@ export class ToolchainBackend {
 				spec.acceptOutputOnError,
 				spec.environment?.(temporaryDirectory),
 				spec.stdoutLineFilter,
+				outputDirectory,
 			);
 			// The selected output holds the artifact text. The other streams hold diagnostics. A
 			// selected stream can also hold diagnostics.
 			const [rawText, otherOutput] =
-				spec.output === 'stdout'
+				output === 'stdout'
 					? [result.stdout, result.stderr]
-					: spec.output === 'stderr'
+					: output === 'stderr'
 						? [result.stderr, result.stdout]
 						: [
-								await readBoundedArtifactFile(outputFile, spec.output.optional),
+								'directory' in output
+									? await readArtifactDirectory(outputFile, output)
+									: await readBoundedArtifactFile(outputFile, output.optional),
 								`${result.stderr}\n${result.stdout}`,
 							];
 			const diagnosticOutput = spec.outputDiagnostics
@@ -473,6 +498,7 @@ export class ToolchainBackend {
 		acceptOutputOnError = false,
 		invocationEnvironment: Readonly<Record<string, string>> = {},
 		stdoutLineFilter?: ArtifactOutputSpec['stdoutLineFilter'],
+		outputDirectory?: string,
 	): Promise<ToolchainRun> {
 		const invocation = await this.prepareInvocation(
 			source,
@@ -500,6 +526,7 @@ export class ToolchainBackend {
 					...(stdoutLineFilter
 						? { stdoutLineFilter: stdoutLineFilter(source.fsPath, invocation.workingDirectory) }
 						: {}),
+					...(outputDirectory === undefined ? {} : { outputDirectory }),
 				},
 				acceptOutputOnError,
 			),
@@ -788,6 +815,16 @@ async function readBoundedArtifactFile(filename: string, optional = false): Prom
 	} finally {
 		await handle.close();
 	}
+}
+
+/** The artifact text that a directory output makes from its files, within the artifact file limit. */
+async function readArtifactDirectory(directory: string, output: ArtifactDirectoryOutput): Promise<string> {
+	const files = (await fs.promises.readdir(directory)).sort();
+	const text = await output.collect(files, (file) => readBoundedArtifactFile(path.join(directory, file)));
+	if (Buffer.byteLength(text) > exec.currentProcessLimits().maxOutputBytes) {
+		throw artifactFileLimitError();
+	}
+	return text;
 }
 
 /** The inputs in a dependency file that the main compile wrote, or none when it wrote no file. */

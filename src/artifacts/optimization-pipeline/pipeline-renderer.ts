@@ -40,51 +40,73 @@ export function parsePipelinePasses(text: string): readonly Pass[] {
 	}
 }
 
-/**
- * Lists the passes of the pipeline, one pass on each line. By default, the list shows only the
- * passes that changed the function. Each listed pass keeps the text of the function before and
- * after it, for the comparison.
- */
-export function renderOptimizationPipeline(
-	raw: RawArtifact,
-	options: DisplayOptions,
-	_context: ArtifactRenderContext,
-): RenderedTextArtifact {
-	// A dump can end with a blank line, such as the last dump of the output. The comparison ignores
-	// blank lines at the end, so the last pass does not seem to change the function.
-	const parsed = parsePipelinePasses(raw.text).map((pass) => {
-		const before = dumpText(pass.before);
-		const after = dumpText(pass.after);
-		return { name: pass.name, machine: pass.machine, before, after, changed: before !== after };
-	});
-	const functionName = functionFilterArgument.exec(raw.command.args.join(' '))?.[1] ?? 'the function';
-	const changedCount = parsed.filter((pass) => pass.changed).length;
-	const machineCount = parsed.filter((pass) => pass.machine).length;
-	const header = pipelineHeader(functionName, parsed.length, changedCount, options.showUnchangedPasses);
-	const numberWidth = String(parsed.length).length;
-	const passes: PipelinePass[] = [];
-	const lines = header.map((text) => ({ text }));
-	parsed.forEach((pass, index) => {
-		if (!pass.changed && !options.showUnchangedPasses) {
-			return;
-		}
-		const number = index + 1;
-		passes.push({ ...pass, line: lines.length, number });
-		const marker = pass.changed ? '*' : ' ';
-		const machine = pass.machine ? ' (machine code)' : '';
-		lines.push({ text: `${String(number).padStart(numberWidth)} ${marker} ${pass.name}${machine}` });
-	});
+/** The passes of a pipeline, with the text of the function before and after each pass. */
+export interface ParsedPipeline {
+	/** The name of the function, when the compiler output gives it. */
+	readonly functionName?: string;
+	readonly passes: readonly Omit<PipelinePass, 'line' | 'number' | 'changed'>[];
+}
+
+/** Reads the pipeline of a Clang, clang-cl, or rustc compile from its LLVM pass dumps. */
+function parseLlvmPipeline(raw: RawArtifact): ParsedPipeline {
 	return {
-		...renderedArtifact(raw, lines, {
-			passCount: parsed.length,
-			changedPassCount: changedCount,
-			machinePassCount: machineCount,
-		}),
-		passes,
+		functionName: functionFilterArgument.exec(raw.command.args.join(' '))?.[1],
+		passes: parsePipelinePasses(raw.text).map((pass) => ({
+			name: pass.name,
+			machine: pass.machine,
+			before: dumpText(pass.before),
+			after: dumpText(pass.after),
+			extension: pass.machine ? '.txt' : '.coglens.ll',
+		})),
 	};
 }
 
-/** The text of one dump, without blank lines at its end. */
+/**
+ * Makes a renderer that lists the passes of the pipeline, one pass on each line. By default, the
+ * list shows only the passes that changed the function. Each listed pass keeps the text of the
+ * function before and after it, for the comparison. The suffix follows each machine code pass.
+ */
+export function pipelineRenderer(
+	parse: (raw: RawArtifact) => ParsedPipeline,
+	machineSuffix: string,
+): (raw: RawArtifact, options: DisplayOptions, context: ArtifactRenderContext) => RenderedTextArtifact {
+	return (raw, options) => {
+		const pipeline = parse(raw);
+		const parsed = pipeline.passes.map((pass) => ({ ...pass, changed: pass.before !== pass.after }));
+		const changedCount = parsed.filter((pass) => pass.changed).length;
+		const machineCount = parsed.filter((pass) => pass.machine).length;
+		const functionName = pipeline.functionName ?? 'the function';
+		const header = pipelineHeader(functionName, parsed.length, changedCount, options.showUnchangedPasses);
+		const numberWidth = String(parsed.length).length;
+		const passes: PipelinePass[] = [];
+		const lines = header.map((text) => ({ text }));
+		parsed.forEach((pass, index) => {
+			if (!pass.changed && !options.showUnchangedPasses) {
+				return;
+			}
+			const number = index + 1;
+			passes.push({ ...pass, line: lines.length, number });
+			const marker = pass.changed ? '*' : ' ';
+			const suffix = pass.machine ? machineSuffix : '';
+			lines.push({ text: `${String(number).padStart(numberWidth)} ${marker} ${pass.name}${suffix}` });
+		});
+		return {
+			...renderedArtifact(raw, lines, {
+				passCount: parsed.length,
+				changedPassCount: changedCount,
+				machinePassCount: machineCount,
+			}),
+			passes,
+		};
+	};
+}
+
+export const renderOptimizationPipeline = pipelineRenderer(parseLlvmPipeline, ' (machine code)');
+
+/**
+ * The text of one dump, without blank lines at its end. The last dump of the output can end with a
+ * blank line, and then the last pass does not seem to change the function.
+ */
 function dumpText(lines: readonly { readonly text: string }[]): string {
 	return lines
 		.map((line) => line.text)

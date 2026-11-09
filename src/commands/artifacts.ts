@@ -332,7 +332,8 @@ async function openArtifact(
 
 /**
  * Asks for the function of an artifact that shows one function. The functions come from the LLVM IR
- * of the source, which compiles with the arguments of the preset.
+ * of the source, or from the assembly when the toolchain has no LLVM IR, such as GCC. The source
+ * compiles with the arguments of the preset.
  */
 async function pickFilterFunction(
 	source: vscode.Uri,
@@ -342,19 +343,26 @@ async function pickFilterFunction(
 	backend: ToolchainBackend,
 	compilationService: CompilationService,
 ): Promise<string | undefined> {
-	const options = compilationService.getArtifactOptions('llvm-ir');
+	const listingKind = backend.definition.artifacts['llvm-ir'] ? 'llvm-ir' : 'assembly';
+	const listingName = listingKind === 'llvm-ir' ? 'LLVM IR' : 'assembly';
+	const listingOptions = compilationService.getArtifactOptions(listingKind);
+	// The GCC dumps name each function with its assembler name, so the assembly names stay mangled.
+	const options =
+		listingKind === 'assembly'
+			? { ...listingOptions, production: { ...listingOptions.production, demangle: false } }
+			: listingOptions;
 	let listing: RenderedTextArtifact;
 	try {
 		const result = await vscode.window.withProgress(
 			{
 				location: vscode.ProgressLocation.Notification,
-				title: 'Reading the functions of the LLVM IR',
+				title: `Reading the functions of the ${listingName}`,
 				cancellable: true,
 			},
 			(_progress, token) =>
 				compilationService.compile({
 					variant,
-					artifactKind: 'llvm-ir',
+					artifactKind: listingKind,
 					presetId: preset.id,
 					extraArguments: preset.extraArguments,
 					options,
@@ -363,20 +371,24 @@ async function pickFilterFunction(
 		);
 		if (result.status !== 'available' || result.artifact.presentation !== 'text') {
 			await vscode.window.showInformationMessage(
-				result.status === 'available' ? 'The LLVM IR of the source is not a text listing.' : result.explanation,
+				result.status === 'available'
+					? `The ${listingName} of the source is not a text listing.`
+					: result.explanation,
 			);
 			return undefined;
 		}
 		listing = result.artifact;
 	} catch (error) {
 		if (!(error instanceof vscode.CancellationError)) {
-			await vscode.window.showErrorMessage(`The LLVM IR of the source did not compile: ${failureDetails(error)}`);
+			await vscode.window.showErrorMessage(
+				`The ${listingName} of the source did not compile: ${failureDetails(error)}`,
+			);
 		}
 		return undefined;
 	}
 	const names = [...new Set(listing.symbols.map((symbol) => symbol.name))];
 	if (names.length === 0) {
-		await vscode.window.showInformationMessage('The LLVM IR of the source has no functions.');
+		await vscode.window.showInformationMessage(`The ${listingName} of the source has no functions.`);
 		return undefined;
 	}
 	const labels = await demangledNames(backend, names, path.dirname(source.fsPath));

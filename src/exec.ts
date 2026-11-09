@@ -1,4 +1,6 @@
 import childProcess, { type SpawnOptions } from 'child_process';
+import fs from 'fs';
+import path from 'path';
 
 export type ExecFailureKind = 'cancelled' | 'timeout' | 'output-limit' | 'spawn';
 
@@ -36,7 +38,18 @@ export interface ExecOptions extends Omit<SpawnOptions, 'shell'> {
 	 * toward the output limit, so a tool can print more than the limit when most of it is dropped.
 	 */
 	stdoutLineFilter?: (line: string) => boolean;
+	/**
+	 * A directory that the process writes its output files to. The process stops when the files
+	 * are larger than `maxOutputDirectoryBytes` in total, because a compiler such as GCC writes its
+	 * dump files with no limit.
+	 */
+	outputDirectory?: string;
+	maxOutputDirectoryBytes?: number;
 }
+
+/** The files in an output directory can use this many times the output limit of a process. */
+export const outputDirectoryLimitFactor = 20;
+const outputDirectoryCheckMs = 200;
 
 export interface ProcessLimits {
 	readonly timeoutMs: number;
@@ -96,8 +109,11 @@ export async function execute(
 		cancellationToken,
 		stdin,
 		stdoutLineFilter,
+		outputDirectory,
+		maxOutputDirectoryBytes = processLimits.maxOutputBytes * outputDirectoryLimitFactor,
 		...spawnOptions
 	} = options;
+	const limitedDirectory = maxOutputDirectoryBytes > 0 ? outputDirectory : undefined;
 
 	if (cancellationToken?.isCancellationRequested) {
 		throw new ExecError('cancelled', 'Process execution was cancelled before it started');
@@ -111,6 +127,7 @@ export async function execute(
 		let settled = false;
 		let timeout: ReturnType<typeof setTimeout> | undefined;
 		let terminationGrace: ReturnType<typeof setTimeout> | undefined;
+		let directoryCheck: ReturnType<typeof setInterval> | undefined;
 		let cancellation: { dispose(): void } | undefined;
 
 		const process = childProcess.spawn(command, [...args], {
@@ -126,6 +143,9 @@ export async function execute(
 			}
 			if (terminationGrace) {
 				clearTimeout(terminationGrace);
+			}
+			if (directoryCheck) {
+				clearInterval(directoryCheck);
 			}
 			cancellation?.dispose();
 		};
@@ -213,6 +233,23 @@ export async function execute(
 				: undefined;
 		timeout?.unref();
 
+		if (limitedDirectory !== undefined) {
+			let checking = false;
+			directoryCheck = setInterval(() => {
+				if (checking || failure || settled) {
+					return;
+				}
+				checking = true;
+				void directorySize(limitedDirectory).then((size) => {
+					checking = false;
+					if (size > maxOutputDirectoryBytes) {
+						fail('output-limit', outputDirectoryLimitMessage(maxOutputDirectoryBytes));
+					}
+				});
+			}, outputDirectoryCheckMs);
+			directoryCheck.unref();
+		}
+
 		cancellation = cancellationToken?.onCancellationRequested(() => {
 			fail('cancelled', 'Process execution was cancelled');
 		});
@@ -243,10 +280,23 @@ export async function execute(
 				reject(failure);
 				return;
 			}
-			resolve({
+			const result = {
 				returnCode: code ?? -1,
 				stdout: Buffer.concat(stdout).toString(),
 				stderr: Buffer.concat(stderr).toString(),
+			};
+			if (limitedDirectory === undefined) {
+				resolve(result);
+				return;
+			}
+			// A fast process can write past the limit between two checks.
+			void directorySize(limitedDirectory).then((size) => {
+				if (size > maxOutputDirectoryBytes) {
+					const message = outputDirectoryLimitMessage(maxOutputDirectoryBytes);
+					reject(new ExecError('output-limit', message, result.stdout, result.stderr));
+				} else {
+					resolve(result);
+				}
 			});
 		});
 	});
@@ -255,6 +305,29 @@ export async function execute(
 /** Explains an output limit and the setting that raises it. */
 export function outputLimitMessage(maxOutputBytes: number): string {
 	return `The process wrote more than ${formatMegabytes(maxOutputBytes)} of output. Raise coglens.processOutputLimit to allow more.`;
+}
+
+/** Explains the limit of the files in an output directory, and the setting that raises it. */
+export function outputDirectoryLimitMessage(maxOutputDirectoryBytes: number): string {
+	return `The process wrote more than ${formatMegabytes(maxOutputDirectoryBytes)} of output files. Raise coglens.processOutputLimit to allow more.`;
+}
+
+/** The total size of the files in a directory. A file that cannot be read counts as empty. */
+async function directorySize(directory: string): Promise<number> {
+	try {
+		const names = await fs.promises.readdir(directory);
+		const sizes = await Promise.all(
+			names.map((name) =>
+				fs.promises.stat(path.join(directory, name)).then(
+					(stat) => stat.size,
+					() => 0,
+				),
+			),
+		);
+		return sizes.reduce((total, size) => total + size, 0);
+	} catch {
+		return 0;
+	}
 }
 
 function formatMegabytes(bytes: number): string {

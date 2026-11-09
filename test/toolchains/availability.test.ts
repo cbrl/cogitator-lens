@@ -39,7 +39,7 @@ const matrix: Readonly<
 	'control-flow-graph': {
 		available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'msvc', 'rust', 'python', 'go', 'zig'],
 	},
-	'optimization-pipeline': { available: ['clang', 'apple-clang', 'clang-cl', 'rust'] },
+	'optimization-pipeline': { available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'rust'] },
 	'machine-code-analysis': { unavailable: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'rust'] },
 	'code-size': { unavailable: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'msvc', 'nvcc'] },
 };

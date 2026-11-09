@@ -128,7 +128,8 @@ export async function recordProduction(
 			recorded = {
 				spec,
 				output: spec.output,
-				outputFilename: spec.output === 'stdout' || spec.output === 'stderr' ? undefined : spec.output.filename,
+				outputFilename:
+					typeof spec.output === 'object' && 'filename' in spec.output ? spec.output.filename : undefined,
 				arguments: spec.arguments(
 					options.outputFile ?? '',
 					options.temporaryDirectory ?? '/temporary',

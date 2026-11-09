@@ -2,7 +2,7 @@
  * Prints the optimization pipeline of one function with real toolchains.
  *
  * Each test needs its compiler and skips when it is absent. The function name comes from the LLVM IR
- * of the source, as in the function picker of Open Artifact.
+ * of the source, or from the assembly for GCC, as in the function picker of Open Artifact.
  */
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -12,6 +12,7 @@ import test, { type TestContext } from 'node:test';
 import { artifactDefinitions } from '../../src/artifacts/core/artifact-definitions.js';
 import { renderOptimizationPipeline } from '../../src/artifacts/optimization-pipeline/pipeline-renderer.js';
 import { detectVisualStudioToolchains } from '../../src/toolchains/visual-studio-detection.js';
+import { toolchainDefinitions } from '../../src/toolchains/toolchain-map.js';
 import {
 	defaultArtifactOptions,
 	type RawArtifact,
@@ -63,8 +64,8 @@ async function visualStudioClangCl(t: TestContext): Promise<string | undefined> 
 }
 
 /**
- * Compiles the LLVM IR, selects the function whose name has `sum_squares`, and prints the pipeline
- * of that function. Each pass must name that function only.
+ * Compiles the LLVM IR or the assembly, selects the function whose name has `sum_squares`, and prints
+ * the pipeline of that function. Each pass must name that function only.
  */
 async function pipelineOf(
 	kind: ToolchainKind,
@@ -79,7 +80,7 @@ async function pipelineOf(
 		await fs.promises.writeFile(source, text);
 		const backend = toolchainBackend(kind, { executable });
 		const options = { args, workingDirectory: temporary, productionOptions: defaultArtifactOptions.production };
-		const produce = async (artifact: 'llvm-ir' | 'optimization-pipeline', functionFilter?: string) => {
+		const produce = async (artifact: 'llvm-ir' | 'assembly' | 'optimization-pipeline', functionFilter?: string) => {
 			const produced = await declaredImplementation(kind, artifact).producer(
 				backend,
 				sourceUri(source),
@@ -89,24 +90,27 @@ async function pipelineOf(
 			return { ...produced, kind: artifact } satisfies RawArtifact;
 		};
 
-		const llvmIr = await artifactDefinitions['llvm-ir'].renderer(
-			await produce('llvm-ir'),
+		const listingKind = toolchainDefinitions[kind].artifacts['llvm-ir'] ? 'llvm-ir' : 'assembly';
+		const listing = await artifactDefinitions[listingKind].renderer(
+			await produce(listingKind),
 			defaultArtifactOptions.display,
 			renderContext(backend),
 		);
 		const name =
-			llvmIr.presentation === 'text'
-				? llvmIr.symbols.find((symbol) => /sum_squares/u.test(symbol.name))?.name
+			listing.presentation === 'text'
+				? listing.symbols.find((symbol) => /sum_squares/u.test(symbol.name))?.name
 				: undefined;
-		assert.ok(name, 'The LLVM IR defines sum_squares');
+		assert.ok(name, `The ${listingKind} defines sum_squares`);
 
 		const raw = await produce('optimization-pipeline', name);
 		assert.ok(raw.text.length < 50 * 1024 * 1024, 'The pass dumps of one function stay under the output limit');
-		const pipeline = renderOptimizationPipeline(
+		const render = declaredImplementation(kind, 'optimization-pipeline').renderer ?? renderOptimizationPipeline;
+		const pipeline = await render(
 			raw,
 			{ ...defaultArtifactOptions.display, showUnchangedPasses: true },
 			renderContext(backend),
 		);
+		assert.ok(pipeline.presentation === 'text', 'The pipeline is a text listing');
 		const passes = pipeline.passes ?? [];
 		assert.ok(passes.length > 50, `${passes.length} passes`);
 		assert.ok(passes.filter((pass) => pass.changed).length > 5, 'Several passes change the function');
@@ -127,6 +131,31 @@ test('clang prints the optimization pipeline of one function', async (t) => {
 	}
 	const pipeline = await pipelineOf('clang', clang, 'main.c', cSource, ['-O2']);
 	assert.ok(pipeline.passes?.some((pass) => pass.changed && /^InstCombinePass on /u.test(pass.name)));
+});
+
+test('GCC prints the optimization pipeline of one function in C and C++', async (t) => {
+	const gcc = firstCommand(t, ['gcc', 'gcc-16', 'gcc-15', 'gcc-14']);
+	if (!gcc) {
+		return;
+	}
+	for (const filename of ['main.c', 'main.cpp']) {
+		const pipeline = await pipelineOf('gcc', gcc, filename, cSource, ['-O2']);
+		const passes = pipeline.passes ?? [];
+		const names = passes.map((pass) => pass.name);
+		// The original and gimple dumps have no function headers, so the first pass comes after them.
+		assert.ok(names[0]?.endsWith('(tree)'), filename);
+		assert.ok(!names.includes('gimple (tree)'), filename);
+		assert.ok(names.includes('optimized (tree)'), filename);
+		assert.ok(names.includes('expand (rtl)'), filename);
+		assert.ok(names.at(-1)?.endsWith('(rtl)'), filename);
+		// The square function is inlined, so the optimized code has no call.
+		const optimized = passes.find((pass) => pass.name === 'optimized (tree)');
+		assert.match(optimized?.after ?? '', /^int sum_squares \(/mu, filename);
+		assert.doesNotMatch(optimized?.after ?? '', /square \(/u, filename);
+		const expand = passes.find((pass) => pass.name === 'expand (rtl)');
+		assert.match(expand?.after ?? '', /^\(note 1 0 /u, filename);
+		assert.ok(passes.every((pass) => pass.extension === '.txt'));
+	}
 });
 
 test('clang-cl prints the optimization pipeline of a function with an MSVC name', async (t) => {
