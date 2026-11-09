@@ -7,6 +7,7 @@ import {
 } from '../artifacts/optimization-pipeline/pipeline-producer.js';
 import { machineCodeAnalysis } from '../artifacts/machine-code-analysis/analysis-producer.js';
 import { outputProducer } from '../artifacts/core/compiler-output-producer.js';
+import { renderRustOptimizationRemarks } from '../artifacts/optimization-remarks/rust-optimization-remarks.js';
 import { parseRustMirControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/rust-mir-cfg-parser.js';
 import { parseLlvmControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/llvm-ir-cfg-parser.js';
 import { ClangAssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/assembly-dialects.js';
@@ -83,6 +84,20 @@ export const rustLlvmIrOutput: ArtifactOutputSpec = Object.freeze({
 });
 
 /**
+ * rustc prints each remark as a note on standard error, with the diagnostics. The line tables of
+ * `-C debuginfo=1` give the remarks their source lines.
+ */
+export const rustOptimizationRemarksOutput: ArtifactOutputSpec = Object.freeze({
+	output: 'stderr',
+	arguments: (_outputFile: string, temporaryDirectory: string, providerArguments: readonly string[]) => [
+		...rustOutputArguments('object', path.join(temporaryDirectory, 'output.o'), providerArguments),
+		'-C',
+		'remark=all',
+	],
+	outputDiagnostics: (text: string) => text,
+});
+
+/**
  * rustc writes assembly with one codegen unit. With more units, the units run at the same time, and
  * their pass dumps mix.
  */
@@ -142,6 +157,10 @@ export const rust: ToolchainDefinition = {
 		assembly: compilerAssembly,
 		'llvm-ir': { producer: outputProducer(rustLlvmIrOutput) },
 		'rust-mir': { producer: outputProducer(rustMirOutput) },
+		'optimization-remarks': {
+			producer: outputProducer(rustOptimizationRemarksOutput),
+			renderer: renderRustOptimizationRemarks,
+		},
 		'control-flow-graph': {
 			outputs: [
 				controlFlowGraphOutput(

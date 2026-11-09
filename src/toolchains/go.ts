@@ -3,6 +3,9 @@ import path from 'node:path';
 import { noopPropertyGetter } from '../vendor/compiler-props.js';
 import { GoAsmParser } from '../vendor/lib/parsers/asm-parser-go.js';
 import { parseGoSsaControlFlowGraphs } from '../artifacts/control-flow-graph/parsers/go-ssa-cfg-parser.js';
+import { outputProducer } from '../artifacts/core/compiler-output-producer.js';
+import { renderGoOptimizationRemarks } from '../artifacts/optimization-remarks/go-optimization-remarks.js';
+import type { ArtifactOutputSpec } from './toolchain-backend.js';
 import {
 	controlFlowGraphOutput,
 	subcommandFirst,
@@ -17,22 +20,45 @@ const goFunctionPattern =
 	/^\s*func\s+(?:\(\s*(?:[\p{L}_][\p{L}\p{N}_]*\s+)?(\*?\s*[\p{L}_][\p{L}\p{N}_]*)\s*\)\s*)?([\p{L}_][\p{L}\p{N}_]*)\s*\(/gmu;
 const goPackagePattern = /^\s*package\s+([\p{L}_][\p{L}\p{N}_]*)\b/mu;
 
-/** Builds \`go build\` arguments, preserving any configured compiler flags for assembly output. */
-export function goOutputArguments(
-	target: 'assembly' | 'object',
-	outputFile: string,
-	providerArguments: readonly string[] = [],
-): readonly string[] {
+/**
+ * Adds a compiler flag to the configured `-gcflags`. The last `-gcflags` applies, so it keeps the
+ * configured flags.
+ */
+function goCompilerFlags(providerArguments: readonly string[], flag: string): string {
 	const configuredGcFlags = providerArguments.reduce<string | undefined>((value, argument, index) => {
 		if (argument.startsWith('-gcflags=')) {
 			return argument.slice('-gcflags='.length);
 		}
 		return providerArguments[index - 1] === '-gcflags' ? argument : value;
 	}, undefined);
+	return `-gcflags=${configuredGcFlags ? `${configuredGcFlags} ` : ''}${flag}`;
+}
+
+/** Builds \`go build\` arguments, preserving any configured compiler flags for assembly output. */
+export function goOutputArguments(
+	target: 'assembly' | 'object',
+	outputFile: string,
+	providerArguments: readonly string[] = [],
+): readonly string[] {
 	return target === 'assembly'
-		? ['build', '-a', `-gcflags=${configuredGcFlags ? `${configuredGcFlags} ` : ''}-S`, '-o', outputFile]
+		? ['build', '-a', goCompilerFlags(providerArguments, '-S'), '-o', outputFile]
 		: ['build', '-o', outputFile];
 }
+
+/**
+ * `-m=2` prints the inlining and escape analysis decisions on standard error. Go 1.24 and 1.26 keep
+ * this output in the build cache and print it again for an unchanged package, so `-a` is not
+ * necessary. A failed compile prints no remarks.
+ */
+export const goOptimizationRemarksOutput: ArtifactOutputSpec = Object.freeze({
+	output: 'stderr',
+	arguments: (_outputFile: string, temporaryDirectory: string, providerArguments: readonly string[]) => [
+		'build',
+		goCompilerFlags(providerArguments, '-m=2'),
+		'-o',
+		path.join(temporaryDirectory, 'output.exe'),
+	],
+});
 
 /** Removes \`go build\` subcommands, generated output paths, and the source path from provider arguments. */
 export function stripGoManagedArguments(
@@ -133,6 +159,10 @@ export const go: ToolchainDefinition = {
 	createParser: () => new GoAsmParser(noopPropertyGetter),
 	artifacts: {
 		assembly: { producer: goAssemblyProducer },
+		'optimization-remarks': {
+			producer: outputProducer(goOptimizationRemarksOutput),
+			renderer: renderGoOptimizationRemarks,
+		},
 		'control-flow-graph': {
 			outputs: [
 				controlFlowGraphOutput(

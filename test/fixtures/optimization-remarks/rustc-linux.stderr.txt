@@ -1,0 +1,270 @@
+warning: unused variable: `unused`
+  --> /work/remarks.rs:28:9
+   |
+28 | ...et unused = 0;
+   |       ^^^^^^ help: if this is intentional, prefix it with an underscore: `_unused`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+note: /work/remarks.rs:22:18 inline (missed): '_ZN16coglens_artifact6square17h427ab34765140738E' not inlined into '_ZN16coglens_artifact7squares17h6b296a379dde9207E' because it should never be inlined (cost=never): noinline function attribute
+
+note: /build/rustc-1.93-DHHnHq/rustc-1.93-1.93.1+dfsg/library/core/src/slice/iter/macros.rs:180:28 TTI (success): advising against unrolling the loop because it contains a call
+
+note: /build/rustc-1.93-DHHnHq/rustc-1.93-1.93.1+dfsg/library/core/src/slice/iter/macros.rs:180:28 loop-vectorize (success): vectorized loop (vectorization width: 4, interleaved count: 2)
+
+note: /work/remarks.rs:29:11 loop-vectorize (analysis): loop not vectorized: value that could not be identified as reduction is used outside the loop
+
+note: /work/remarks.rs:29:11 loop-vectorize (analysis): loop not vectorized: Cannot vectorize uncountable loop
+
+note: /work/remarks.rs:29:11 loop-vectorize (analysis): loop not vectorized: could not determine number of loop iterations
+
+note: /work/remarks.rs:29:11 loop-vectorize (missed): loop not vectorized
+
+note: /work/remarks.rs:22:18 loop-vectorize (analysis): loop not vectorized: call instruction cannot be vectorized
+
+note: /build/rustc-1.93-DHHnHq/rustc-1.93-1.93.1+dfsg/library/core/src/slice/iter/macros.rs:180:28 loop-vectorize (missed): loop not vectorized
+
+note: /build/rustc-1.93-DHHnHq/rustc-1.93-1.93.1+dfsg/library/core/src/slice/iter/macros.rs:180:28 TTI (success): advising against unrolling the loop because it contains a call
+  |
+  = note: duplicate diagnostic emitted due to `-Z deduplicate-diagnostics=no`
+
+note: <unknown file>:0:0 size-info (analysis): Canonicalize natural loops: IR instruction count changed from 65 to 66; Delta: 1
+
+note: <unknown file>:0:0 size-info (analysis): Canonicalize natural loops: Function: _ZN16coglens_artifact3sum17h46f612120e77d959E: IR instruction count changed from 42 to 43; Delta: 1
+
+note: <unknown file>:0:0 size-info (analysis): Loop Strength Reduction: IR instruction count changed from 66 to 68; Delta: 2
+
+note: <unknown file>:0:0 size-info (analysis): Loop Strength Reduction: Function: _ZN16coglens_artifact3sum17h46f612120e77d959E: IR instruction count changed from 43 to 45; Delta: 2
+
+note: <unknown file>:0:0 size-info (analysis): Expand reduction intrinsics: IR instruction count changed from 68 to 72; Delta: 4
+
+note: <unknown file>:0:0 size-info (analysis): Expand reduction intrinsics: Function: _ZN16coglens_artifact3sum17h46f612120e77d959E: IR instruction count changed from 43 to 49; Delta: 6
+
+note: <unknown file>:0:0 size-info (analysis): CodeGen Prepare: IR instruction count changed from 72 to 71; Delta: -1
+
+note: <unknown file>:0:0 size-info (analysis): CodeGen Prepare: Function: _ZN16coglens_artifact3sum17h46f612120e77d959E: IR instruction count changed from 49 to 48; Delta: -1
+
+note: /work/remarks.rs:11:0 size-info (analysis): X86 DAG->DAG Instruction Selection: Function: _ZN16coglens_artifact3sum17h46f612120e77d959E: MI Instruction count changed from 0 to 52; Delta: 52
+
+note: /work/remarks.rs:11:0 size-info (analysis): Eliminate PHI nodes for register allocation: Function: _ZN16coglens_artifact3sum17h46f612120e77d959E: MI Instruction count changed from 52 to 69; Delta: 17
+
+note: /work/remarks.rs:11:0 size-info (analysis): Two-Address instruction pass: Function: _ZN16coglens_artifact3sum17h46f612120e77d959E: MI Instruction count changed from 69 to 81; Delta: 12
+
+note: /work/remarks.rs:11:0 size-info (analysis): Register Coalescer: Function: _ZN16coglens_artifact3sum17h46f612120e77d959E: MI Instruction count changed from 81 to 46; Delta: -35
+
+note: /work/remarks.rs:11:1 regalloc (missed): 2 virtual registers copies 9.375000e-01 total copies cost generated in function
+
+note: /work/remarks.rs:11:0 size-info (analysis): Virtual Register Rewriter: Function: _ZN16coglens_artifact3sum17h46f612120e77d959E: MI Instruction count changed from 46 to 43; Delta: -3
+
+note: /work/remarks.rs:11:0 size-info (analysis): Shrink Wrapping analysis: Function: _ZN16coglens_artifact3sum17h46f612120e77d959E: MI Instruction count changed from 43 to 44; Delta: 1
+
+note: /work/remarks.rs:11:0 prologepilog (analysis): 0 stack bytes in function '_ZN16coglens_artifact3sum17h46f612120e77d959E'
+
+note: /work/remarks.rs:11:0 size-info (analysis): Control Flow Optimizer: Function: _ZN16coglens_artifact3sum17h46f612120e77d959E: MI Instruction count changed from 44 to 39; Delta: -5
+
+note: /work/remarks.rs:11:0 stack-frame-layout (analysis): 
+      Function: _ZN16coglens_artifact3sum17h46f612120e77d959E
+
+note: /build/rustc-1.93-DHHnHq/rustc-1.93-1.93.1+dfsg/library/core/src/ptr/non_null.rs:1692:9 asm-printer (analysis): BasicBlock: 
+      JCC_1: 1
+      TEST64rr: 1
+      
+
+note: /work/remarks.rs:13:18 asm-printer (analysis): BasicBlock: 
+      ADD64ri32: 1
+      CMP64ri32: 1
+      JCC_1: 1
+      LEA64r: 1
+      MOV64rr: 1
+      XOR32rr: 1
+      
+
+note: /build/rustc-1.93-DHHnHq/rustc-1.93-1.93.1+dfsg/library/core/src/slice/iter/macros.rs:180:28 asm-printer (analysis): BasicBlock: 
+      PXORrr: 2
+      AND64ri32: 1
+      INC64r: 1
+      LEA64r: 1
+      MOV64rr: 1
+      SHR64ri: 1
+      XOR32rr: 1
+      
+
+note: /work/remarks.rs:14:28 asm-printer (analysis): BasicBlock: 
+      MOVDQUrm: 2
+      PADDDrr: 2
+      ADD64ri32: 1
+      CMP64rr: 1
+      JCC_1: 1
+      
+
+note: /build/rustc-1.93-DHHnHq/rustc-1.93-1.93.1+dfsg/library/core/src/slice/iter/macros.rs:180:28 asm-printer (analysis): BasicBlock: 
+      PADDDrr: 3
+      PSHUFDri: 2
+      CMP64rr: 1
+      JCC_1: 1
+      MOVPDI2DIrr: 1
+      
+
+note: <unknown file>:0:0 asm-printer (analysis): BasicBlock: 
+      LEA64r: 1
+      
+
+note: /work/remarks.rs:7:5 asm-printer (analysis): BasicBlock: 
+      ADD32rm: 1
+      ADD64ri32: 1
+      CMP64rr: 1
+      JCC_1: 1
+      
+
+note: /work/remarks.rs:17:2 asm-printer (analysis): BasicBlock: 
+      RET64: 1
+      
+
+note: <unknown file>:0:0 asm-printer (analysis): BasicBlock: 
+      RET64: 1
+      XOR32rr: 1
+      
+
+note: /work/remarks.rs:11:0 asm-printer (analysis): 39 instructions in function
+
+note: <unknown file>:0:0 size-info (analysis): Canonicalize natural loops: IR instruction count changed from 71 to 73; Delta: 2
+
+note: <unknown file>:0:0 size-info (analysis): Canonicalize natural loops: Function: _ZN16coglens_artifact5chase17h0ff1dc6920caeeffE: IR instruction count changed from 9 to 11; Delta: 2
+
+note: <unknown file>:0:0 size-info (analysis): CodeGen Prepare: IR instruction count changed from 73 to 72; Delta: -1
+
+note: <unknown file>:0:0 size-info (analysis): CodeGen Prepare: Function: _ZN16coglens_artifact5chase17h0ff1dc6920caeeffE: IR instruction count changed from 11 to 10; Delta: -1
+
+note: /work/remarks.rs:27:0 size-info (analysis): X86 DAG->DAG Instruction Selection: Function: _ZN16coglens_artifact5chase17h0ff1dc6920caeeffE: MI Instruction count changed from 0 to 15; Delta: 15
+
+note: /work/remarks.rs:27:0 size-info (analysis): Early Tail Duplication: Function: _ZN16coglens_artifact5chase17h0ff1dc6920caeeffE: MI Instruction count changed from 15 to 14; Delta: -1
+
+note: /work/remarks.rs:27:0 size-info (analysis): Eliminate PHI nodes for register allocation: Function: _ZN16coglens_artifact5chase17h0ff1dc6920caeeffE: MI Instruction count changed from 14 to 19; Delta: 5
+
+note: /work/remarks.rs:27:0 size-info (analysis): Register Coalescer: Function: _ZN16coglens_artifact5chase17h0ff1dc6920caeeffE: MI Instruction count changed from 19 to 13; Delta: -6
+
+note: /work/remarks.rs:27:1 regalloc (missed): 1 virtual registers copies 1.000000e+00 total copies cost generated in function
+
+note: /work/remarks.rs:27:0 size-info (analysis): Virtual Register Rewriter: Function: _ZN16coglens_artifact5chase17h0ff1dc6920caeeffE: MI Instruction count changed from 13 to 10; Delta: -3
+
+note: /work/remarks.rs:27:0 prologepilog (analysis): 0 stack bytes in function '_ZN16coglens_artifact5chase17h0ff1dc6920caeeffE'
+
+note: /work/remarks.rs:27:0 size-info (analysis): Control Flow Optimizer: Function: _ZN16coglens_artifact5chase17h0ff1dc6920caeeffE: MI Instruction count changed from 10 to 7; Delta: -3
+
+note: /work/remarks.rs:27:0 stack-frame-layout (analysis): 
+      Function: _ZN16coglens_artifact5chase17h0ff1dc6920caeeffE
+
+note: <unknown file>:0:0 asm-printer (analysis): BasicBlock: 
+      CMP64rr: 1
+      JCC_1: 1
+      MOV64rr: 1
+      
+
+note: /work/remarks.rs:30:17 asm-printer (analysis): BasicBlock: 
+      CMP64rr: 1
+      JCC_1: 1
+      MOV64rm: 1
+      
+
+note: /work/remarks.rs:33:2 asm-printer (analysis): BasicBlock: 
+      RET64: 1
+      
+
+note: /work/remarks.rs:27:0 asm-printer (analysis): 7 instructions in function
+
+note: /work/remarks.rs:2:0 size-info (analysis): X86 DAG->DAG Instruction Selection: Function: _ZN16coglens_artifact6square17h427ab34765140738E: MI Instruction count changed from 0 to 4; Delta: 4
+
+note: /work/remarks.rs:2:0 size-info (analysis): Two-Address instruction pass: Function: _ZN16coglens_artifact6square17h427ab34765140738E: MI Instruction count changed from 4 to 5; Delta: 1
+
+note: /work/remarks.rs:2:0 size-info (analysis): Register Coalescer: Function: _ZN16coglens_artifact6square17h427ab34765140738E: MI Instruction count changed from 5 to 4; Delta: -1
+
+note: /work/remarks.rs:2:1 regalloc (missed): 1 virtual registers copies 1.000000e+00 total copies cost generated in function
+
+note: /work/remarks.rs:2:0 size-info (analysis): Virtual Register Rewriter: Function: _ZN16coglens_artifact6square17h427ab34765140738E: MI Instruction count changed from 4 to 3; Delta: -1
+
+note: /work/remarks.rs:2:0 prologepilog (analysis): 0 stack bytes in function '_ZN16coglens_artifact6square17h427ab34765140738E'
+
+note: /work/remarks.rs:2:0 stack-frame-layout (analysis): 
+      Function: _ZN16coglens_artifact6square17h427ab34765140738E
+
+note: <unknown file>:0:0 asm-printer (analysis): BasicBlock: 
+      IMUL32rr: 1
+      MOV32rr: 1
+      RET64: 1
+      
+
+note: /work/remarks.rs:2:0 asm-printer (analysis): 3 instructions in function
+
+note: <unknown file>:0:0 size-info (analysis): Canonicalize natural loops: IR instruction count changed from 72 to 74; Delta: 2
+
+note: <unknown file>:0:0 size-info (analysis): Canonicalize natural loops: Function: _ZN16coglens_artifact7squares17h6b296a379dde9207E: IR instruction count changed from 12 to 14; Delta: 2
+
+note: <unknown file>:0:0 size-info (analysis): Loop Strength Reduction: IR instruction count changed from 74 to 76; Delta: 2
+
+note: <unknown file>:0:0 size-info (analysis): Loop Strength Reduction: Function: _ZN16coglens_artifact7squares17h6b296a379dde9207E: IR instruction count changed from 14 to 16; Delta: 2
+
+note: <unknown file>:0:0 size-info (analysis): CodeGen Prepare: IR instruction count changed from 76 to 75; Delta: -1
+
+note: <unknown file>:0:0 size-info (analysis): CodeGen Prepare: Function: _ZN16coglens_artifact7squares17h6b296a379dde9207E: IR instruction count changed from 14 to 15; Delta: 1
+
+note: /work/remarks.rs:20:0 size-info (analysis): X86 DAG->DAG Instruction Selection: Function: _ZN16coglens_artifact7squares17h6b296a379dde9207E: MI Instruction count changed from 0 to 21; Delta: 21
+
+note: /work/remarks.rs:20:0 size-info (analysis): Eliminate PHI nodes for register allocation: Function: _ZN16coglens_artifact7squares17h6b296a379dde9207E: MI Instruction count changed from 21 to 23; Delta: 2
+
+note: /work/remarks.rs:20:0 size-info (analysis): Two-Address instruction pass: Function: _ZN16coglens_artifact7squares17h6b296a379dde9207E: MI Instruction count changed from 23 to 25; Delta: 2
+
+note: /work/remarks.rs:20:0 size-info (analysis): Register Coalescer: Function: _ZN16coglens_artifact7squares17h6b296a379dde9207E: MI Instruction count changed from 25 to 19; Delta: -6
+
+note: /work/remarks.rs:20:1 regalloc (missed): 2 virtual registers copies 2.000000e+00 total copies cost generated in function
+
+note: /work/remarks.rs:20:0 size-info (analysis): Virtual Register Rewriter: Function: _ZN16coglens_artifact7squares17h6b296a379dde9207E: MI Instruction count changed from 19 to 17; Delta: -2
+
+note: /work/remarks.rs:20:0 size-info (analysis): Shrink Wrapping analysis: Function: _ZN16coglens_artifact7squares17h6b296a379dde9207E: MI Instruction count changed from 17 to 18; Delta: 1
+
+note: /work/remarks.rs:20:0 prologepilog (analysis): 24 stack bytes in function '_ZN16coglens_artifact7squares17h6b296a379dde9207E'
+
+note: /work/remarks.rs:20:0 size-info (analysis): Prologue/Epilogue Insertion & Frame Finalization: Function: _ZN16coglens_artifact7squares17h6b296a379dde9207E: MI Instruction count changed from 18 to 34; Delta: 16
+
+note: /work/remarks.rs:20:0 size-info (analysis): Control Flow Optimizer: Function: _ZN16coglens_artifact7squares17h6b296a379dde9207E: MI Instruction count changed from 34 to 31; Delta: -3
+
+note: /work/remarks.rs:20:0 stack-frame-layout (analysis): 
+      Function: _ZN16coglens_artifact7squares17h6b296a379dde9207E
+      Offset: [SP-8], Type: Spill, Align: 16, Size: 8
+      Offset: [SP-16], Type: Spill, Align: 8, Size: 8
+      Offset: [SP-24], Type: Spill, Align: 16, Size: 8
+
+note: /build/rustc-1.93-DHHnHq/rustc-1.93-1.93.1+dfsg/library/core/src/ptr/non_null.rs:1692:9 asm-printer (analysis): BasicBlock: 
+      JCC_1: 1
+      TEST64rr: 1
+      
+  |
+  = note: duplicate diagnostic emitted due to `-Z deduplicate-diagnostics=no`
+
+note: <unknown file>:0:0 asm-printer (analysis): BasicBlock: 
+      PUSH64r: 3
+      MOV64rr: 2
+      SHL64ri: 1
+      XOR32rr: 1
+      
+
+note: /work/remarks.rs:22:25 asm-printer (analysis): BasicBlock: 
+      ADD64ri32: 1
+      CALL64pcrel32: 1
+      CMP64rr: 1
+      JCC_1: 1
+      MOV32mr: 1
+      MOV32rm: 1
+      
+
+note: <unknown file>:0:0 asm-printer (analysis): BasicBlock: 
+      POP64r: 3
+      
+
+note: /work/remarks.rs:24:2 asm-printer (analysis): BasicBlock: 
+      RET64: 1
+      
+
+note: /work/remarks.rs:20:0 asm-printer (analysis): 19 instructions in function
+
+warning: 1 warning emitted
+

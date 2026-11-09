@@ -12,12 +12,18 @@ import {
 import { clangClOptimizationRemarksOutput } from '../../src/artifacts/optimization-remarks/clang-cl-optimization-remarks.js';
 import { clangOptimizationRemarksOutput } from '../../src/artifacts/optimization-remarks/clang-optimization-remarks.js';
 import { gccOptimizationRemarksOutput } from '../../src/artifacts/optimization-remarks/gcc-optimization-remarks.js';
+import { msvcOptimizationRemarksOutput } from '../../src/artifacts/optimization-remarks/msvc-optimization-remarks.js';
+import { goOptimizationRemarksOutput } from '../../src/toolchains/go.js';
 import {
 	clangClStackUsageOutput,
 	nativeStackUsageOutput,
 } from '../../src/artifacts/stack-analysis/native-stack-analysis.js';
 import { flattenCmakeArguments } from '../../src/buildsystems/cmake-arguments.js';
-import { rustArtifactArguments, rustOutputArguments } from '../../src/toolchains/rust.js';
+import {
+	rustArtifactArguments,
+	rustOptimizationRemarksOutput,
+	rustOutputArguments,
+} from '../../src/toolchains/rust.js';
 import { nvccOutputArguments, nvdisasm } from '../../src/toolchains/nvcc.js';
 import { zigLlvmIrOutput, zigOutputArguments } from '../../src/toolchains/zig.js';
 import { intelOutputArguments } from '../../src/toolchains/toolchain-backend.js';
@@ -154,6 +160,37 @@ test('optimization-record specifications compile to a throwaway object beside th
 		'-fopt-info-all=artifact.opt',
 		'-o',
 		path.join(temporary, 'output.o'),
+	]);
+});
+
+test('remark specifications of rustc, Go, and cl.exe read the remarks from a stream', () => {
+	assert.equal(rustOptimizationRemarksOutput.output, 'stderr');
+	assert.deepEqual(rustOptimizationRemarksOutput.arguments('', temporary, ['--crate-type=bin']), [
+		'--crate-name=coglens_artifact',
+		'--emit=obj',
+		'-C',
+		'debuginfo=1',
+		'--error-format=human',
+		'--color=never',
+		'-o',
+		path.join(temporary, 'output.o'),
+		'-C',
+		'remark=all',
+	]);
+	assert.equal(goOptimizationRemarksOutput.output, 'stderr');
+	assert.deepEqual(goOptimizationRemarksOutput.arguments('', temporary, ['-gcflags', '-N -l']), [
+		'build',
+		'-gcflags=-N -l -m=2',
+		'-o',
+		path.join(temporary, 'output.exe'),
+	]);
+	assert.deepEqual(goOptimizationRemarksOutput.arguments('', temporary, [])[1], '-gcflags=-m=2');
+	assert.equal(msvcOptimizationRemarksOutput.output, 'stdout');
+	assert.deepEqual(msvcOptimizationRemarksOutput.arguments('', windowsTemporary, []), [
+		'/c',
+		'/Qvec-report:2',
+		'/Qpar-report:2',
+		`/Fo${path.join(windowsTemporary, 'output.obj')}`,
 	]);
 });
 

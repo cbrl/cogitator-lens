@@ -10,6 +10,10 @@ import type { ParseFiltersAndOutputOptions } from '../vendor/types/features/filt
 import type { ToolchainProfile } from '../types/index.js';
 import * as exec from '../exec.js';
 import { outputProducer } from '../artifacts/core/compiler-output-producer.js';
+import {
+	msvcOptimizationRemarksOutput,
+	renderMsvcOptimizationRemarks,
+} from '../artifacts/optimization-remarks/msvc-optimization-remarks.js';
 import type { BinaryDisassembler } from '../artifacts/binary-disassembly/binary-disassembly-producer.js';
 import { masmProcedureLine } from '../artifacts/assembly/assembly-navigation.js';
 import { parseMsvcSourceDependencies } from '../compilation/artifact-inputs.js';
@@ -534,6 +538,10 @@ export const msvc: ToolchainDefinition = {
 		'binary-disassembly': binaryDisassembly('dumpbin', dumpbin),
 		'code-size': codeSize('dumpbin', dumpbin),
 		'preprocessed-source': { producer: msvcPreprocessedSourceProducer },
+		'optimization-remarks': {
+			producer: outputProducer(msvcOptimizationRemarksOutput),
+			renderer: renderMsvcOptimizationRemarks,
+		},
 		'control-flow-graph': { outputs: [assemblyControlFlowGraphOutput] },
 	},
 };

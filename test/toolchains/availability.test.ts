@@ -34,7 +34,7 @@ const matrix: Readonly<
 	ast: { available: ['clang', 'apple-clang', 'clang-cl', 'python'] },
 	'llvm-ir': { available: ['clang', 'apple-clang', 'clang-cl', 'rust', 'zig'] },
 	'rust-mir': { available: ['rust'] },
-	'optimization-remarks': { available: ['gcc', 'clang', 'apple-clang', 'clang-cl'] },
+	'optimization-remarks': { available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'msvc', 'rust', 'go'] },
 	'stack-analysis': { available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'python'] },
 	'control-flow-graph': {
 		available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'msvc', 'rust', 'python', 'go', 'zig'],

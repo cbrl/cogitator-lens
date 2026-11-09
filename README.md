@@ -107,6 +107,25 @@ other compiler names the function in another way, you also select the function o
 The comparison can also renumber local labels and hide addresses, so the diff shows only changed
 instructions.
 
+### Optimization remarks
+
+The **Optimization remarks** artifact shows the source with the remarks of the compiler above each
+line. A remark is passed, missed, or analysis.
+
+- GCC uses `-fopt-info-all`. Clang and clang-cl use `-fsave-optimization-record`.
+- rustc uses `-C remark=all`. The size-info remarks, which give the instruction count after each
+  pass, are left out.
+- Go uses `-gcflags=-m=2`. An inlined call and a value that does not escape are passed. A function
+  that cannot be inlined and a value that escapes to the heap are missed. The explanation of each
+  escape is left out.
+- cl.exe uses `/Qvec-report:2` and `/Qpar-report:2`. Each loop shows if it was vectorized. A reason
+  code also shows its description from the Microsoft documentation. Add `/Qpar` to also see the
+  parallelizer.
+
+A compile without optimization gives few remarks or none. cl.exe reports only on loops. A remark on
+code that came from a library, such as the loop of a Rust slice iterator, has the location of the
+library line, so the artifact does not show it. Artifact Details counts these remarks as omitted.
+
 ### Optimization pipeline
 
 The **Optimization pipeline** artifact shows the LLVM passes that ran on one function. Clang,
@@ -181,7 +200,7 @@ and the metrics.
 | AST                   | —   | Yes                 | Yes      | —    | —    | Yes (3.9+)     | —        | —         | —   | —          |
 | LLVM IR               | —   | Yes                 | Yes      | —    | Yes  | —              | —        | —         | Yes | —          |
 | Rust MIR              | —   | —                   | —        | —    | Yes  | —              | —        | —         | —   | —          |
-| Optimization remarks  | Yes | Yes                 | Yes      | —    | —    | —              | —        | —         | —   | —          |
+| Optimization remarks  | Yes | Yes                 | Yes      | Yes  | Yes  | —              | —        | Yes       | —   | —          |
 | Stack analysis        | Yes | Yes                 | Yes      | —    | —    | Yes            | —        | —         | —   | —          |
 | Control-flow graph    | Yes | Yes                 | Yes      | —    | Yes  | Yes            | —        | Yes (SSA) | Yes | —          |
 | Optimization pipeline | —   | Yes                 | Yes      | —    | Yes  | —              | —        | —         | —   | —          |

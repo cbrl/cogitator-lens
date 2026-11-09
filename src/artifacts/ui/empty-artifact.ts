@@ -55,7 +55,31 @@ function emptyStatement(kind: ArtifactKind, label: string, source: string): stri
 	}
 }
 
+const rustCodeCauses = [
+	'A private function that nothing calls is not compiled. Make it pub, or call it from main.',
+	'With optimization, a small pub function of a library crate is not compiled either, because each crate that calls it compiles its own copy. Add #[inline(never)] to it.',
+	'A generic function makes no code until code uses it with a type.',
+];
+
+/** A compile without optimization gives few remarks or none. */
+function remarkCauses(toolchainKind: string): string[] {
+	const level = 'Set Optimization Level in the status menu selects a level, such as';
+	switch (toolchainKind) {
+		case 'msvc':
+			return [`cl.exe reports only on loops, and only when it optimizes. ${level} /O2.`];
+		case 'go':
+			return [];
+		case 'rust':
+			return [`The compile does not optimize. ${level} -C opt-level=2.`, ...rustCodeCauses];
+		default:
+			return [`The compile does not optimize. ${level} -O2.`];
+	}
+}
+
 function likelyCauses(kind: ArtifactKind, toolchainKind: string): string[] {
+	if (kind === 'optimization-remarks') {
+		return remarkCauses(toolchainKind);
+	}
 	if (!codeKinds.has(kind) && kind !== 'stack-analysis') {
 		return [];
 	}
@@ -71,11 +95,7 @@ function likelyCauses(kind: ArtifactKind, toolchainKind: string): string[] {
 	}
 	switch (toolchainKind) {
 		case 'rust':
-			return [
-				'A private function that nothing calls is not compiled. Make it pub, or call it from main.',
-				'A generic function makes no code until code uses it with a type.',
-				...libraryCode,
-			];
+			return [...rustCodeCauses, ...libraryCode];
 		case 'go':
 			return ['A function that nothing calls can be removed, or inlined into its callers.', ...libraryCode];
 		default:

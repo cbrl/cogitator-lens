@@ -102,6 +102,11 @@ export interface ArtifactOutputSpec {
 	readonly acceptOutputOnError?: boolean;
 	/** Creates a filter for the stdout lines of one run, which drops output before it is kept. */
 	readonly stdoutLineFilter?: (sourcePath: string, workingDirectory: string) => (line: string) => boolean;
+	/**
+	 * Returns the diagnostics in the text of a `stdout` or `stderr` output, when the compiler writes
+	 * them to the same stream. The diagnostic parser of the toolchain also reads this text.
+	 */
+	readonly outputDiagnostics?: (text: string) => string;
 }
 
 export interface DependencyCollectionSpec {
@@ -401,8 +406,9 @@ export class ToolchainBackend {
 				spec.environment?.(temporaryDirectory),
 				spec.stdoutLineFilter,
 			);
-			// The selected output holds the artifact text. The other streams hold diagnostics.
-			const [rawText, diagnosticOutput] =
+			// The selected output holds the artifact text. The other streams hold diagnostics. A
+			// selected stream can also hold diagnostics.
+			const [rawText, otherOutput] =
 				spec.output === 'stdout'
 					? [result.stdout, result.stderr]
 					: spec.output === 'stderr'
@@ -411,6 +417,9 @@ export class ToolchainBackend {
 								await readBoundedArtifactFile(outputFile, spec.output.optional),
 								`${result.stderr}\n${result.stdout}`,
 							];
+			const diagnosticOutput = spec.outputDiagnostics
+				? `${otherOutput}\n${spec.outputDiagnostics(rawText)}`
+				: otherOutput;
 			const text = await transform(rawText, invocation);
 			const inputMetadata = await this.collectDependencyInputs(
 				source,

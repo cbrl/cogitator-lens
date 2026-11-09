@@ -1,0 +1,11 @@
+remarks.cpp
+C:\work\remarks.cpp(19): warning C4101: 'unused': unreferenced local variable
+
+--- Analyzing function: unsigned __int64 __cdecl chase(unsigned __int64 const * __ptr64,unsigned __int64,unsigned __int64)
+C:\work\remarks.cpp(12) : info C5002: loop not vectorized due to reason '502'
+
+--- Analyzing function: void __cdecl prefix(int * __ptr64,int)
+C:\work\remarks.cpp(20) : info C5002: loop not vectorized due to reason '1200'
+
+--- Analyzing function: int __cdecl sum(int const * __ptr64,int)
+C:\work\remarks.cpp(5) : info C5001: loop vectorized

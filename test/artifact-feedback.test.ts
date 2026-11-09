@@ -31,6 +31,7 @@ test('an empty listing names the filtered lines and the likely causes for C and 
 test('an empty listing gives the causes of its toolchain and kind', () => {
 	const rust = emptyArtifactText({ kind: 'assembly', metrics: {} }, { sourceLabel: source, toolchainKind: 'rust' });
 	assert.match(rust, /Make it pub/u);
+	assert.match(rust, /small pub function of a library crate is not compiled either/u);
 	assert.doesNotMatch(rust, /removed all/u, 'No filtered lines, so no filter text');
 
 	// LLVM IR has no library code option, so it does not name one.
@@ -38,11 +39,20 @@ test('an empty listing gives the causes of its toolchain and kind', () => {
 	assert.doesNotMatch(ir, /Show library code/u);
 	assert.match(ir, /static or inline/u);
 
-	const remarks = emptyArtifactText(
-		{ kind: 'optimization-remarks', metrics: {} },
-		{ sourceLabel: source, toolchainKind: 'clang' },
+	const remarks = (toolchainKind: string) =>
+		emptyArtifactText({ kind: 'optimization-remarks', metrics: {} }, { sourceLabel: source, toolchainKind });
+	assert.equal(
+		remarks('clang'),
+		[
+			'The compiler reported no optimization remarks for main.cpp.',
+			'',
+			'Possible causes:',
+			'- The compile does not optimize. Set Optimization Level in the status menu selects a level, such as -O2.',
+		].join('\n'),
 	);
-	assert.equal(remarks, 'The compiler reported no optimization remarks for main.cpp.');
+	assert.match(remarks('msvc'), /only on loops, and only when it optimizes\. .* \/O2\./u);
+	assert.match(remarks('rust'), /-C opt-level=2\.\n- A private function/u);
+	assert.equal(remarks('go'), 'The compiler reported no optimization remarks for main.cpp.');
 
 	const python = emptyArtifactText(
 		{ kind: 'assembly', metrics: { filteredLineCount: 1 } },

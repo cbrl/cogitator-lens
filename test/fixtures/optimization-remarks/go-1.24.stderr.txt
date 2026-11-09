@@ -1,0 +1,86 @@
+# command-line-arguments
+./remarks.go:7:6: can inline add with cost 4 as: func(int, int) int { return a + b }
+./remarks.go:11:6: can inline newPoint with cost 7 as: func(int, int) *point { return &point{...} }
+./remarks.go:15:6: can inline sum with cost 24 as: func([]int) int { total := 0; for loop; return total }
+./remarks.go:23:6: cannot inline complex: function too complex: cost 122 exceeds budget 80
+./remarks.go:40:6: can inline keep with cost 22 as: func([]int) []int { copy := make([]int, len(values)); for loop; return copy }
+./remarks.go:48:6: cannot inline main: function too complex: cost 215 exceeds budget 80
+./remarks.go:18:14: inlining call to add
+./remarks.go:49:15: inlining call to newPoint
+./remarks.go:50:17: inlining call to sum
+./remarks.go:50:64: inlining call to keep
+./remarks.go:50:13: inlining call to fmt.Println
+./remarks.go:50:17: inlining call to add
+./remarks.go:12:9: &point{...} escapes to heap:
+./remarks.go:12:9:   flow: ~r0 = &{storage for &point{...}}:
+./remarks.go:12:9:     from &point{...} (spill) at ./remarks.go:12:9
+./remarks.go:12:9:     from return &point{...} (return) at ./remarks.go:12:2
+./remarks.go:12:9: &point{...} escapes to heap
+./remarks.go:15:10: values does not escape
+./remarks.go:34:34: values[i] escapes to heap:
+./remarks.go:34:34:   flow: {storage for ... argument} = &{storage for values[i]}:
+./remarks.go:34:34:     from values[i] (spill) at ./remarks.go:34:34
+./remarks.go:34:34:     from ... argument (slice-literal-element) at ./remarks.go:34:27
+./remarks.go:34:34:   flow: {heap} = {storage for ... argument}:
+./remarks.go:34:34:     from ... argument (spill) at ./remarks.go:34:27
+./remarks.go:34:34:     from fmt.Sprint(... argument...) (call parameter) at ./remarks.go:34:27
+./remarks.go:23:14: values does not escape
+./remarks.go:34:27: ... argument does not escape
+./remarks.go:34:34: values[i] escapes to heap
+./remarks.go:41:14: make([]int, len(values)) escapes to heap:
+./remarks.go:41:14:   flow: {heap} = &{storage for make([]int, len(values))}:
+./remarks.go:41:14:     from make([]int, len(values)) (non-constant size) at ./remarks.go:41:14
+./remarks.go:40:11: values does not escape
+./remarks.go:41:14: make([]int, len(values)) escapes to heap
+./remarks.go:50:64: make([]int, len(values)) escapes to heap:
+./remarks.go:50:64:   flow: {heap} = &{storage for make([]int, len(values))}:
+./remarks.go:50:64:     from make([]int, len(values)) (non-constant size) at ./remarks.go:50:64
+./remarks.go:50:64: ~r0 escapes to heap:
+./remarks.go:50:64:   flow: {storage for ... argument} = &{storage for ~r0}:
+./remarks.go:50:64:     from ~r0 (spill) at ./remarks.go:50:64
+./remarks.go:50:64:     from ... argument (slice-literal-element) at ./remarks.go:50:13
+./remarks.go:50:64:   flow: fmt.a = &{storage for ... argument}:
+./remarks.go:50:64:     from ... argument (spill) at ./remarks.go:50:13
+./remarks.go:50:64:     from fmt.a := ... argument (assign-pair) at ./remarks.go:50:13
+./remarks.go:50:64:   flow: {heap} = *fmt.a:
+./remarks.go:50:64:     from fmt.Fprintln(os.Stdout, fmt.a...) (call parameter) at ./remarks.go:50:13
+./remarks.go:49:15: &point{...} escapes to heap:
+./remarks.go:49:15:   flow: ~r0 = &{storage for &point{...}}:
+./remarks.go:49:15:     from &point{...} (spill) at ./remarks.go:49:15
+./remarks.go:49:15:     from ~r0 = &point{...} (assign-pair) at ./remarks.go:49:15
+./remarks.go:49:15:   flow: p = ~r0:
+./remarks.go:49:15:     from p := ~r0 (assign) at ./remarks.go:49:4
+./remarks.go:49:15:   flow: {storage for ... argument} = p:
+./remarks.go:49:15:     from p (interface-converted) at ./remarks.go:50:57
+./remarks.go:49:15:     from ... argument (slice-literal-element) at ./remarks.go:50:13
+./remarks.go:49:15:   flow: fmt.a = &{storage for ... argument}:
+./remarks.go:49:15:     from ... argument (spill) at ./remarks.go:50:13
+./remarks.go:49:15:     from fmt.a := ... argument (assign-pair) at ./remarks.go:50:13
+./remarks.go:49:15:   flow: {heap} = *fmt.a:
+./remarks.go:49:15:     from fmt.Fprintln(os.Stdout, fmt.a...) (call parameter) at ./remarks.go:50:13
+./remarks.go:50:42: complex([]int{...}) escapes to heap:
+./remarks.go:50:42:   flow: {storage for ... argument} = &{storage for complex([]int{...})}:
+./remarks.go:50:42:     from complex([]int{...}) (spill) at ./remarks.go:50:42
+./remarks.go:50:42:     from ... argument (slice-literal-element) at ./remarks.go:50:13
+./remarks.go:50:42:   flow: fmt.a = &{storage for ... argument}:
+./remarks.go:50:42:     from ... argument (spill) at ./remarks.go:50:13
+./remarks.go:50:42:     from fmt.a := ... argument (assign-pair) at ./remarks.go:50:13
+./remarks.go:50:42:   flow: {heap} = *fmt.a:
+./remarks.go:50:42:     from fmt.Fprintln(os.Stdout, fmt.a...) (call parameter) at ./remarks.go:50:13
+./remarks.go:50:17: ~r0 escapes to heap:
+./remarks.go:50:17:   flow: {storage for ... argument} = &{storage for ~r0}:
+./remarks.go:50:17:     from ~r0 (spill) at ./remarks.go:50:17
+./remarks.go:50:17:     from ... argument (slice-literal-element) at ./remarks.go:50:13
+./remarks.go:50:17:   flow: fmt.a = &{storage for ... argument}:
+./remarks.go:50:17:     from ... argument (spill) at ./remarks.go:50:13
+./remarks.go:50:17:     from fmt.a := ... argument (assign-pair) at ./remarks.go:50:13
+./remarks.go:50:17:   flow: {heap} = *fmt.a:
+./remarks.go:50:17:     from fmt.Fprintln(os.Stdout, fmt.a...) (call parameter) at ./remarks.go:50:13
+./remarks.go:49:15: &point{...} escapes to heap
+./remarks.go:50:13: ... argument does not escape
+./remarks.go:50:17: ~r0 escapes to heap
+./remarks.go:50:23: []int{...} does not escape
+./remarks.go:50:42: complex([]int{...}) escapes to heap
+./remarks.go:50:48: []int{...} does not escape
+./remarks.go:50:64: ~r0 escapes to heap
+./remarks.go:50:64: make([]int, len(values)) escapes to heap
