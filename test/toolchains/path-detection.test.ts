@@ -66,6 +66,7 @@ test('PATH detection keeps tools whose version command works', posixOnly, async 
 		python3: { banner: 'Python 2.7.18' },
 		python: { banner: 'Python 3.12.3' },
 		go: { banner: 'go version go1.22.2 linux/amd64' },
+		javac: { banner: 'javac 21.0.13' },
 	});
 	try {
 		const profiles = await detectPathToolchains({ PATH: directory }, 'linux');
@@ -75,6 +76,7 @@ test('PATH detection keeps tools whose version command works', posixOnly, async 
 				['clang', 'clang', 'clang 18.1.3', path.join(directory, 'clang')],
 				['python', 'python', 'python 3.12.3', path.join(directory, 'python')],
 				['go', 'go', 'go 1.22.2', path.join(directory, 'go')],
+				['javac', 'java', 'javac 21.0.13', path.join(directory, 'javac')],
 			],
 		);
 	} finally {

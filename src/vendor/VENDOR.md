@@ -20,7 +20,7 @@ unmodified upstream files.
 The providers under `lib/asm-docs/`, their generated lookup tables, and
 `types/assembly-docs.interfaces.ts` are also copied from upstream. The
 extension bundles the tables for AMD64, ARM32, AArch64, RISC-V64, POWER, PTX,
-SASS, LLVM IR, and Python bytecode. Their corresponding Compiler Explorer generators—and the
+SASS, LLVM IR, Python bytecode, and JVM bytecode. Their corresponding Compiler Explorer generators—and the
 other docenizers available for future artifact types—are preserved byte for
 byte under `scripts/compiler-explorer-docenizers/`. Docenizers are offline
 maintenance tools; they are never executed while the extension is running.

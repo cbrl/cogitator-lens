@@ -8,6 +8,7 @@ import { rust } from './rust.js';
 import { cargo } from './cargo.js';
 import { python } from './python.js';
 import { dotnet } from './dotnet.js';
+import { java } from './java.js';
 import { go } from './go.js';
 import { zig } from './zig.js';
 import { nvcc } from './nvcc.js';
@@ -25,6 +26,7 @@ export const toolchainDefinitions = {
 	cargo,
 	python,
 	dotnet,
+	java,
 	go,
 	zig,
 	nvcc,

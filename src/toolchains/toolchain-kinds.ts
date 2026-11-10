@@ -8,6 +8,7 @@ export const supportedToolchainKinds = [
 	'cargo',
 	'python',
 	'dotnet',
+	'java',
 	'go',
 	'zig',
 	'nvcc',

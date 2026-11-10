@@ -197,6 +197,15 @@ export const goSourceOverlay: SourceOverlaySpec = {
 	},
 };
 
+/**
+ * javac reads the overlay file. Java has no `#line` directive, but the overlay file has the name of
+ * the source. So the `SourceFile` attribute of each class names the source, as for the saved file.
+ * javac 21 and 27 name the overlay file in the diagnostics, and the backend changes it to the source.
+ */
+export const javaSourceOverlay: SourceOverlaySpec = {
+	invocation: ({ overlayPath }) => ({ inputPath: overlayPath }),
+};
+
 /** The Python helpers compile the text of the second argument with the name of the first. */
 export const pythonSourceOverlay: SourceOverlaySpec = {
 	invocation: ({ sourcePath, overlayPath }) => ({ inputPath: sourcePath, trailingArguments: [overlayPath] }),

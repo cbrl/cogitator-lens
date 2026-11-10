@@ -100,6 +100,8 @@ function likelyCauses(kind: ArtifactKind, toolchainKind: string): string[] {
 			return [...rustCodeCauses, ...libraryCode];
 		case 'go':
 			return ['A function that nothing calls can be removed, or inlined into its callers.', ...libraryCode];
+		case 'java':
+			return ['The file declares no class, interface, enum, or record, so javac writes no class file.'];
 		default:
 			return libraryCode;
 	}

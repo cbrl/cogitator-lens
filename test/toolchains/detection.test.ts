@@ -33,6 +33,7 @@ test('executable names resolve to the toolchain that owns them', () => {
 		['rustc', 'rust'],
 		['python3.13', 'python'],
 		['dotnet.exe', 'dotnet'],
+		['javac.exe', 'java'],
 		['go.exe', 'go'],
 		['zig', 'zig'],
 		['nvcc.exe', 'nvcc'],

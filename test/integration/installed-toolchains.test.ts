@@ -23,7 +23,12 @@ import {
 	pythonStackAnalysisHelper,
 } from '../../src/artifacts/stack-analysis/python-stack-analysis.js';
 import { inferGoSsaFunction } from '../../src/toolchains/go.js';
-import { ToolExitError } from '../../src/toolchains/toolchain-backend.js';
+import { ToolExitError, ToolchainBackend } from '../../src/toolchains/toolchain-backend.js';
+import { fileURLToPath } from 'node:url';
+import { sameLocalFile } from '../../src/file-identity.js';
+import { renderJavaBytecode } from '../../src/artifacts/java/java-bytecode-renderer.js';
+import { findExecutableOnPath } from '../../src/toolchains/path-detection.js';
+import { createToolchainProfile, toolchainDefinitions } from '../../src/toolchains/toolchain-map.js';
 import { defaultArtifactOptions } from '../../src/types/index.js';
 import { rawArtifact, renderContext, renderGraphs } from '../support/artifacts.js';
 import { fixturePath, requireCommand, run } from '../support/environment.js';
@@ -32,6 +37,7 @@ import {
 	declaredOutput,
 	neverCancelled,
 	sourceUri,
+	testToolchainHost,
 	toolchainBackend,
 } from '../support/toolchains.js';
 
@@ -255,6 +261,70 @@ test('the Go compiler produces normalized assembly and a GOSSAFUNC graph', async
 		{ backend, source: { uri: sourceUri(source), text: fs.readFileSync(source, 'utf8') } },
 	);
 	assert.ok(rendered.graphs.some((graph) => graph.label === 'classify'));
+});
+
+test('javac and javap produce line-mapped JVM bytecode for a source of a package', async (t) => {
+	if (!requireCommand(t, 'javac', '-version')) {
+		return;
+	}
+	const javac = await findExecutableOnPath('javac');
+	assert.ok(javac);
+	const profile = createToolchainProfile('java', 'javac', javac);
+	if (!profile.tools.javap) {
+		t.skip(`javap was not found for ${javac}`);
+		return;
+	}
+	const backend = new ToolchainBackend(profile, toolchainDefinitions.java, testToolchainHost);
+	const source = fixturePath('java', 'src', 'com', 'example', 'Shapes.java');
+	const options = { productionOptions: defaultArtifactOptions.production };
+	const produced = await declaredImplementation('java', 'assembly').producer(
+		backend,
+		sourceUri(source),
+		options,
+		neverCancelled,
+	);
+	assert.equal(produced.command.executable, profile.tools.javap.executable);
+	// javac read Helper.java from the source root that the package declaration gives.
+	assert.equal(produced.dependencyCoverage, 'complete');
+	const inputs = produced.inputs.map((input) => fileURLToPath(input.uri));
+	for (const file of [source, fixturePath('java', 'src', 'com', 'example', 'Helper.java')]) {
+		assert.ok(
+			inputs.some((input) => sameLocalFile(input, file)),
+			inputs.join('\n'),
+		);
+	}
+	const rendered = renderJavaBytecode(
+		{ ...produced, kind: 'assembly' },
+		display,
+		renderContext('java', { file: source }),
+	);
+	assert.deepEqual(
+		rendered.symbols.map((symbol) => symbol.name).filter((name) => name.startsWith('com.example.Shapes.s')),
+		['com.example.Shapes.sum(int[])', 'com.example.Shapes.square(double)'],
+	);
+	const sum = rendered.symbols.find((symbol) => symbol.name === 'com.example.Shapes.sum(int[])');
+	assert.ok(sum);
+	const add = rendered.lines.findIndex((line, index) => index > sum.line && /: iadd$/u.test(line.text));
+	assert.equal(rendered.lines[add].source?.line, 22);
+	assert.ok(rendered.lines.every((line) => !/^\s*(?:Code|LineNumberTable):$/u.test(line.text)));
+	// The listing has the classes of this source only, though javac also read Helper.java.
+	assert.ok(rendered.lines.every((line) => !/class com\.example\.Helper/u.test(line.text)));
+
+	const temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'coglens-java-'));
+	try {
+		const empty = path.join(temporary, 'Empty.java');
+		await fs.promises.writeFile(empty, '// No class.\n');
+		const nothing = await declaredImplementation('java', 'assembly').producer(
+			backend,
+			sourceUri(empty),
+			options,
+			neverCancelled,
+		);
+		assert.equal(nothing.text, '');
+		assert.equal(nothing.command.executable, javac);
+	} finally {
+		await fs.promises.rm(temporary, { recursive: true, force: true });
+	}
 });
 
 test('nvcc produces line-mapped PTX and nvdisasm produces SASS', async (t) => {

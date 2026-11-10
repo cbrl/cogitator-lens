@@ -14,6 +14,10 @@ import { fileURLToPath } from 'node:url';
 import { sameLocalFile } from '../../src/file-identity.js';
 import { ToolExitError } from '../../src/toolchains/toolchain-backend.js';
 import { discoverDotNetTools } from '../../src/toolchains/dotnet.js';
+import { findJavap } from '../../src/toolchains/java.js';
+import { findExecutableOnPath } from '../../src/toolchains/path-detection.js';
+import { renderJavaBytecode } from '../../src/artifacts/java/java-bytecode-renderer.js';
+import { renderContext } from '../support/artifacts.js';
 import { toolchainDefinitions } from '../../src/toolchains/toolchain-map.js';
 import { detectVisualStudioToolchains } from '../../src/toolchains/visual-studio-detection.js';
 import {
@@ -352,6 +356,72 @@ test('Python compiles unsaved text with the name of the source', async (t) => {
 		});
 		assertFromUnsavedText(graph, /buffer_version/u);
 	});
+});
+
+test('javac compiles unsaved text from a file with the name of the source', async (t) => {
+	const javac = firstCommand(t, ['javac'], '-version');
+	const javacPath = javac && (await findExecutableOnPath(javac));
+	const javap = javacPath && findJavap(javacPath);
+	if (!javacPath || !javap) {
+		if (javacPath) {
+			t.skip('javap was not found');
+		}
+		return;
+	}
+	/** Line 7 has a raw type, which -Xlint:rawtypes reports. */
+	const text = [
+		'public class Main {',
+		'    static int bufferVersion(int n) {',
+		'        int total = 0;',
+		'        for (int i = 0; i < n; i++) total += i * Helper.VALUE;',
+		'        return total;',
+		'    }',
+		'    static java.util.List raw() { return null; }',
+		'}',
+		'',
+	].join('\n');
+	await withUnsavedSource(
+		'Main.java',
+		'public class Main { static int SavedVersion() { return 1; } }\n',
+		async (files) => {
+			const helper = path.join(files.directory, 'Helper.java');
+			await fs.promises.writeFile(helper, 'class Helper { static int VALUE = 7; }\n');
+			const bytecode = await produceUnsaved('java', javacPath, 'assembly', files, text, {
+				args: ['-Xlint:rawtypes'],
+				tools: { javap: { executable: javap, inputMode: 'file-argument' } },
+			});
+			assertFromUnsavedText(bytecode, /bufferVersion/u);
+			// The listing maps the loop body of the unsaved text.
+			const rendered = renderJavaBytecode(
+				{ ...bytecode, kind: 'assembly' },
+				display,
+				renderContext('java', { file: files.source }),
+			);
+			assert.ok(rendered.lines.some((line) => /: imul/u.test(line.text) && line.source?.line === 4));
+			const inputs = bytecode.inputs.map((input) => fileURLToPath(input.uri));
+			assert.ok(
+				inputs.some((input) => sameLocalFile(input, helper)),
+				inputs.join('\n'),
+			);
+			assert.ok(!inputs.some((input) => sameLocalFile(input, files.source) || overlayFolder.test(input)));
+			const warning = bytecode.diagnostics.find((diagnostic) => /rawtypes/u.test(diagnostic.message));
+			assert.ok(warning, bytecode.diagnostics.map((diagnostic) => diagnostic.message).join('\n'));
+			assert.ok(sameLocalFile(warning.uri.fsPath, files.source), warning.uri.fsPath);
+			assert.equal(warning.line, 6);
+
+			// An error in the unsaved text names the source, and the -verbose lines are not in the output.
+			await assert.rejects(
+				produceUnsaved('java', javacPath, 'assembly', files, text.replace('Helper.VALUE', 'missing'), {
+					tools: { javap: { executable: javap, inputMode: 'file-argument' } },
+				}),
+				(error: unknown) =>
+					error instanceof ToolExitError &&
+					error.stderr.includes(`${files.source}:4: error: cannot find symbol`) &&
+					!overlayFolder.test(error.stderr) &&
+					!/^\[/mu.test(error.stderr),
+			);
+		},
+	);
 });
 
 test('Roslyn compiles unsaved text with a #line directive', async (t) => {

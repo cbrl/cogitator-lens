@@ -8,7 +8,7 @@ Cogitator Lens is a VS Code extension for inspecting compiler and interpreter ar
 
 Open a source file and run `Cogitator Lens: Open Artifact`. Without any configuration, Cogitator
 Lens uses the compilers and interpreters it finds on `PATH`: `gcc`, `clang`, `rustc`, `python3` (or
-`python`), `go`, `zig`, `dotnet`, and `nvcc`. It also finds versioned compilers, such as `gcc-14`
+`python`), `go`, `zig`, `dotnet`, `javac`, and `nvcc`. It also finds versioned compilers, such as `gcc-14`
 and `clang-18`, and the same compiler in other `PATH` folders. It finds each rustup toolchain that
 differs from the `rustc` on `PATH`. On Windows, it finds `cl` and `clang-cl` on `PATH`. It also finds
 each MSVC toolset and the clang-cl of each Visual Studio install, without a developer prompt. Run
@@ -86,9 +86,10 @@ folder. Then a header there can hide a header with the same name in a later incl
 compile of the saved file does not have this limit.
 Clang and clang-cl read the text through a virtual file system. rustc reads a copy and gets
 `--remap-path-prefix`. Go uses `go build -overlay`, and the Python helpers compile the text with
-the name of the source. Some sources still compile the saved file: each Zig source, each source of a
-Cargo variant, a Rust crate with module files, `#[path]`, or `include!`, and a saved file that is not
-UTF-8 text. The first line of the artifact then gives the reason.
+the name of the source. javac reads a copy with the name of the source, in another folder. Some
+sources still compile the saved file: each Zig source, each source of a Cargo variant, a Rust crate
+with module files, `#[path]`, or `include!`, and a saved file that is not UTF-8 text. The first line
+of the artifact then gives the reason.
 
 The status bar shows the state of the focused artifact. When the focus is in a source, it shows a
 visible artifact of that source. Click it for the artifact actions: refresh, cancel, reveal the
@@ -214,20 +215,20 @@ and the metrics.
 
 ### Artifact support
 
-| Artifact              | GCC | Clang / Apple Clang | clang-cl | MSVC | Rust | Python         | .NET     | Go        | Zig | nvcc       |
-| --------------------- | --- | ------------------- | -------- | ---- | ---- | -------------- | -------- | --------- | --- | ---------- |
-| Assembly              | Yes | Yes                 | Yes      | Yes  | Yes  | Yes (bytecode) | Yes (IL) | Yes       | Yes | Yes (PTX)  |
-| Binary disassembly    | Yes | Yes                 | Yes      | Yes  | —    | —              | —        | —         | —   | Yes (SASS) |
-| Preprocessed source   | Yes | Yes                 | Yes      | Yes  | —    | —              | —        | —         | —   | Yes        |
-| AST                   | —   | Yes                 | Yes      | —    | —    | Yes (3.9+)     | —        | —         | —   | —          |
-| LLVM IR               | —   | Yes                 | Yes      | —    | Yes  | —              | —        | —         | Yes | —          |
-| Rust MIR              | —   | —                   | —        | —    | Yes  | —              | —        | —         | —   | —          |
-| Optimization remarks  | Yes | Yes                 | Yes      | Yes  | Yes  | —              | —        | Yes       | —   | —          |
-| Stack analysis        | Yes | Yes                 | Yes      | —    | —    | Yes            | —        | —         | —   | —          |
-| Control-flow graph    | Yes | Yes                 | Yes      | —    | Yes  | Yes            | —        | Yes (SSA) | Yes | —          |
-| Optimization pipeline | Yes | Yes                 | Yes      | —    | Yes  | —              | —        | —         | —   | —          |
-| Machine code analysis | Yes | Yes                 | Yes      | —    | Yes  | —              | —        | —         | —   | —          |
-| Code size             | Yes | Yes                 | Yes      | Yes  | —    | —              | —        | —         | —   | Yes        |
+| Artifact              | GCC | Clang / Apple Clang | clang-cl | MSVC | Rust | Python         | .NET     | Java           | Go        | Zig | nvcc       |
+| --------------------- | --- | ------------------- | -------- | ---- | ---- | -------------- | -------- | -------------- | --------- | --- | ---------- |
+| Assembly              | Yes | Yes                 | Yes      | Yes  | Yes  | Yes (bytecode) | Yes (IL) | Yes (bytecode) | Yes       | Yes | Yes (PTX)  |
+| Binary disassembly    | Yes | Yes                 | Yes      | Yes  | —    | —              | —        | —              | —         | —   | Yes (SASS) |
+| Preprocessed source   | Yes | Yes                 | Yes      | Yes  | —    | —              | —        | —              | —         | —   | Yes        |
+| AST                   | —   | Yes                 | Yes      | —    | —    | Yes (3.9+)     | —        | —              | —         | —   | —          |
+| LLVM IR               | —   | Yes                 | Yes      | —    | Yes  | —              | —        | —              | —         | Yes | —          |
+| Rust MIR              | —   | —                   | —        | —    | Yes  | —              | —        | —              | —         | —   | —          |
+| Optimization remarks  | Yes | Yes                 | Yes      | Yes  | Yes  | —              | —        | —              | Yes       | —   | —          |
+| Stack analysis        | Yes | Yes                 | Yes      | —    | —    | Yes            | —        | —              | —         | —   | —          |
+| Control-flow graph    | Yes | Yes                 | Yes      | —    | Yes  | Yes            | —        | —              | Yes (SSA) | Yes | —          |
+| Optimization pipeline | Yes | Yes                 | Yes      | —    | Yes  | —              | —        | —              | —         | —   | —          |
+| Machine code analysis | Yes | Yes                 | Yes      | —    | Yes  | —              | —        | —              | —         | —   | —          |
+| Code size             | Yes | Yes                 | Yes      | Yes  | —    | —              | —        | —              | —         | —   | Yes        |
 
 The Rust column applies to `rustc` and to the Cargo variants.
 
@@ -241,7 +242,7 @@ sidebar.
 
 A toolchain has the form
 `{ displayName, kind, executable, defaultArguments?, environment?, tools?, target? }`. Supported kinds are
-`gcc`, `clang`, `apple-clang`, `clang-cl`, `msvc`, `rust`, `cargo`, `python`, `dotnet`, `go`, `zig`, and `nvcc`. Use
+`gcc`, `clang`, `apple-clang`, `clang-cl`, `msvc`, `rust`, `cargo`, `python`, `dotnet`, `java`, `go`, `zig`, and `nvcc`. Use
 `defaultArguments` for include paths and macro definitions. Set auxiliary tools, such as a
 disassembler or demangler, in `tools` when they are not found beside the compiler or on `PATH`.
 A `cargo` toolchain runs `cargo rustc`. Cargo reads the arguments before the first `--`, such as
@@ -364,6 +365,26 @@ standalone C# file, then runs
 host and looks for `ildasm` beside it, on `PATH`, or in the Windows .NET Framework SDK. Configure
 `tools.compiler` and `tools.ildasm` explicitly when those locations are nonstandard. Default and
 preset arguments are passed to Roslyn as C# compiler options.
+
+### Java
+
+For Java, the Assembly artifact is JVM bytecode. A `java` toolchain runs `javac` on the source,
+then runs `javap -c -l -p -constants` on each class file. A nested, local, or anonymous class has a
+class file of its own, so it is in the listing too. Each instruction maps to its source line, and
+a hover documents the instruction. A jump, a switch case, and an exception table row link to their
+target instruction. A call to a method of the listing links to that method.
+
+The `package` declaration gives the source root. For `src/main/java/com/example/A.java` in
+package `com.example`, it is `src/main/java`. javac gets it as `-sourcepath`, so it finds the
+other classes of the project. The listing has the classes of the source only. An edit to another
+source that javac read also refreshes the artifact. Give a JAR file of a dependency with
+`-classpath` in `defaultArguments` or in a preset. Cogitator Lens adds `-encoding UTF-8`. Your own
+`-encoding` or `-sourcepath` argument replaces the argument of Cogitator Lens.
+
+Cogitator Lens looks for `javap` beside `javac`, in `JAVA_HOME`, and on `PATH`. The Oracle
+installer puts only a launcher of `javac` into its `javapath` folder. For that launcher, `javap`
+comes from the newest JDK folder in `Program Files\Java`. Configure `tools.javap` when the JDK is
+in another place.
 
 ### Rust
 

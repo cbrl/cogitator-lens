@@ -14,5 +14,6 @@ export const instructionSetLabels = {
 	sass: 'SASS',
 	llvmIr: 'LLVM IR',
 	dotNetIl: '.NET IL',
+	javaBytecode: 'JVM bytecode',
 	pythonBytecode: 'Python bytecode',
 } as const;

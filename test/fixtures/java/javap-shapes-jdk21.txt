@@ -1,0 +1,266 @@
+Compiled from "Shapes.java"
+public class com.example.Shapes {
+  static final int LIMIT = 5;
+
+  static int created;
+
+  public com.example.Shapes();
+    Code:
+       0: aload_0
+       1: invokespecial #3                  // Method java/lang/Object."<init>":()V
+       4: return
+    LineNumberTable:
+      line 5: 0
+
+  public static int sum(int[]);
+    Code:
+       0: iconst_0
+       1: istore_1
+       2: aload_0
+       3: astore_2
+       4: aload_2
+       5: arraylength
+       6: istore_3
+       7: iconst_0
+       8: istore        4
+      10: iload         4
+      12: iload_3
+      13: if_icmpge     33
+      16: aload_2
+      17: iload         4
+      19: iaload
+      20: istore        5
+      22: iload_1
+      23: iload         5
+      25: iadd
+      26: istore_1
+      27: iinc          4, 1
+      30: goto          10
+      33: iload_1
+      34: ireturn
+    LineNumberTable:
+      line 20: 0
+      line 21: 2
+      line 22: 22
+      line 21: 27
+      line 24: 33
+
+  static java.lang.String name(int);
+    Code:
+       0: iload_0
+       1: lookupswitch  { // 3
+                     1: 36
+                     2: 39
+                   100: 42
+               default: 45
+          }
+      36: ldc           #9                  // String one
+      38: areturn
+      39: ldc           #11                 // String two
+      41: areturn
+      42: ldc           #13                 // String hundred
+      44: areturn
+      45: ldc           #15                 // String other
+      47: areturn
+    LineNumberTable:
+      line 28: 0
+      line 29: 36
+      line 30: 39
+      line 31: 42
+      line 32: 45
+
+  static int dense(int);
+    Code:
+       0: iload_0
+       1: tableswitch   { // 0 to 2
+                     0: 28
+                     1: 33
+                     2: 38
+               default: 43
+          }
+      28: bipush        10
+      30: goto          44
+      33: bipush        11
+      35: goto          44
+      38: bipush        12
+      40: goto          44
+      43: iconst_m1
+      44: ireturn
+    LineNumberTable:
+      line 37: 0
+
+  static long count(java.util.List<java.lang.String>);
+    Code:
+       0: aload_0
+       1: invokeinterface #17,  1           // InterfaceMethod java/util/List.stream:()Ljava/util/stream/Stream;
+       6: invokedynamic #23,  0             // InvokeDynamic #0:test:()Ljava/util/function/Predicate;
+      11: invokeinterface #27,  2           // InterfaceMethod java/util/stream/Stream.filter:(Ljava/util/function/Predicate;)Ljava/util/stream/Stream;
+      16: invokeinterface #33,  1           // InterfaceMethod java/util/stream/Stream.count:()J
+      21: lreturn
+    LineNumberTable:
+      line 41: 0
+
+  com.example.Shapes$Shape square(double);
+    Code:
+       0: new           #37                 // class com/example/Shapes$1
+       3: dup
+       4: aload_0
+       5: dload_1
+       6: invokespecial #39                 // Method com/example/Shapes$1."<init>":(Lcom/example/Shapes;D)V
+       9: areturn
+    LineNumberTable:
+      line 45: 0
+
+  static int parse(java.lang.String);
+    Code:
+       0: aload_0
+       1: invokestatic  #42                 // Method java/lang/Integer.parseInt:(Ljava/lang/String;)I
+       4: ireturn
+       5: astore_1
+       6: iconst_m1
+       7: ireturn
+    Exception table:
+       from    to  target type
+           0     4     5   Class java/lang/NumberFormatException
+    LineNumberTable:
+      line 52: 0
+      line 53: 5
+      line 54: 6
+
+  static int total(int...);
+    Code:
+       0: aload_0
+       1: invokestatic  #50                 // Method sum:([I)I
+       4: aload_0
+       5: arraylength
+       6: invokestatic  #56                 // Method com/example/Helper.twice:(I)I
+       9: iadd
+      10: ireturn
+    LineNumberTable:
+      line 59: 0
+
+  static int origin();
+    Code:
+       0: new           #60                 // class com/example/Shapes$Point
+       3: dup
+       4: iconst_0
+       5: iconst_0
+       6: invokespecial #62                 // Method com/example/Shapes$Point."<init>":(II)V
+       9: invokevirtual #65                 // Method com/example/Shapes$Point.x:()I
+      12: ireturn
+    LineNumberTable:
+      line 63: 0
+
+  private static boolean lambda$count$0(java.lang.String);
+    Code:
+       0: aload_0
+       1: invokevirtual #69                 // Method java/lang/String.length:()I
+       4: iconst_5
+       5: if_icmple     12
+       8: iconst_1
+       9: goto          13
+      12: iconst_0
+      13: ireturn
+    LineNumberTable:
+      line 41: 0
+
+  static {};
+    Code:
+       0: iconst_5
+       1: putstatic     #74                 // Field created:I
+       4: return
+    LineNumberTable:
+      line 10: 0
+      line 11: 4
+}
+Compiled from "Shapes.java"
+class com.example.Shapes$1 implements com.example.Shapes$Shape {
+  final double val$side;
+
+  com.example.Shapes$1();
+    Code:
+       0: aload_0
+       1: dload_2
+       2: putfield      #1                  // Field val$side:D
+       5: aload_0
+       6: invokespecial #7                  // Method java/lang/Object."<init>":()V
+       9: return
+    LineNumberTable:
+      line 45: 0
+
+  public double area();
+    Code:
+       0: aload_0
+       1: getfield      #1                  // Field val$side:D
+       4: aload_0
+       5: getfield      #1                  // Field val$side:D
+       8: dmul
+       9: dreturn
+    LineNumberTable:
+      line 46: 0
+}
+Compiled from "Shapes.java"
+final class com.example.Shapes$Point extends java.lang.Record {
+  private final int x;
+
+  private final int y;
+
+  com.example.Shapes$Point(int, int);
+    Code:
+       0: aload_0
+       1: invokespecial #1                  // Method java/lang/Record."<init>":()V
+       4: aload_0
+       5: iload_1
+       6: putfield      #7                  // Field x:I
+       9: aload_0
+      10: iload_2
+      11: putfield      #13                 // Field y:I
+      14: return
+    LineNumberTable:
+      line 13: 0
+
+  public final java.lang.String toString();
+    Code:
+       0: aload_0
+       1: invokedynamic #16,  0             // InvokeDynamic #0:toString:(Lcom/example/Shapes$Point;)Ljava/lang/String;
+       6: areturn
+    LineNumberTable:
+      line 13: 0
+
+  public final int hashCode();
+    Code:
+       0: aload_0
+       1: invokedynamic #20,  0             // InvokeDynamic #0:hashCode:(Lcom/example/Shapes$Point;)I
+       6: ireturn
+    LineNumberTable:
+      line 13: 0
+
+  public final boolean equals(java.lang.Object);
+    Code:
+       0: aload_0
+       1: aload_1
+       2: invokedynamic #24,  0             // InvokeDynamic #0:equals:(Lcom/example/Shapes$Point;Ljava/lang/Object;)Z
+       7: ireturn
+    LineNumberTable:
+      line 13: 0
+
+  public int x();
+    Code:
+       0: aload_0
+       1: getfield      #7                  // Field x:I
+       4: ireturn
+    LineNumberTable:
+      line 13: 0
+
+  public int y();
+    Code:
+       0: aload_0
+       1: getfield      #13                 // Field y:I
+       4: ireturn
+    LineNumberTable:
+      line 13: 0
+}
+Compiled from "Shapes.java"
+interface com.example.Shapes$Shape {
+  public abstract double area();
+}

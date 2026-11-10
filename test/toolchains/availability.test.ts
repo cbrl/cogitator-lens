@@ -27,7 +27,7 @@ const matrix: Readonly<
 > = {
 	assembly: {
 		available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'msvc', 'rust', 'cargo', 'python', 'go', 'zig', 'nvcc'],
-		unavailable: ['dotnet'],
+		unavailable: ['dotnet', 'java'],
 	},
 	'binary-disassembly': { unavailable: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'msvc', 'nvcc'] },
 	'preprocessed-source': { available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'msvc', 'nvcc'] },
@@ -57,6 +57,7 @@ const controlFlowOutputs: Readonly<Partial<Record<ToolchainKind, readonly string
 	cargo: ['rust-mir', 'llvm-ir', 'assembly'],
 	python: ['python-bytecode'],
 	dotnet: [],
+	java: [],
 	go: ['go-ssa'],
 	nvcc: [],
 };
@@ -112,6 +113,13 @@ test('an artifact that needs an external tool becomes available once the profile
 					ildasm: { executable: 'ildasm', inputMode: 'stdin' },
 				},
 			}),
+			'assembly',
+		).status,
+		'available',
+	);
+	assert.equal(
+		resolveArtifactAvailability(
+			toolchainProfile('java', { tools: { javap: { executable: 'javap', inputMode: 'file-argument' } } }),
 			'assembly',
 		).status,
 		'available',

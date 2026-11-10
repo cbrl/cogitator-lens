@@ -30,6 +30,7 @@ import { composeDiagnosticParsers } from '../../src/diagnostics.js';
 import { parseGnuDiagnostics } from '../../src/toolchains/c-family/diagnostics.js';
 import { parseParenthesizedDiagnostics } from '../../src/toolchains/msvc/diagnostics.js';
 import { parsePythonDiagnostics } from '../../src/toolchains/python/diagnostics.js';
+import { parseJavacDiagnostics } from '../../src/toolchains/java/diagnostics.js';
 import { parseRustDiagnostics } from '../../src/toolchains/rust/diagnostics.js';
 import { CompilationService } from '../../src/compilation/compilation-service.js';
 import { ConfigurationService, type SettingsChange } from '../../src/services/configuration-service.js';
@@ -1485,6 +1486,23 @@ function verifyDiagnostics(workspaceFolder: vscode.WorkspaceFolder): void {
 	assert.equal(pythonDiagnostics[0].line, 2);
 	assert.equal(pythonDiagnostics[0].column, 7);
 	assert.equal(pythonDiagnostics[0].message, 'SyntaxError: invalid syntax');
+
+	const javacDiagnostics = parseJavacDiagnostics(
+		[
+			`${path.join(workingDirectory, 'Main.java')}:9: error: cannot find symbol`,
+			'\t\treturn missing;',
+			'\t\t       ^',
+			'  symbol:   variable missing',
+			'1 error',
+		].join('\n'),
+		fallback,
+		workingDirectory,
+	);
+	assert.equal(javacDiagnostics.length, 1);
+	assert.equal(javacDiagnostics[0].uri.fsPath, path.join(workingDirectory, 'Main.java'));
+	assert.equal(javacDiagnostics[0].line, 8);
+	assert.equal(javacDiagnostics[0].column, 9);
+	assert.equal(javacDiagnostics[0].message, 'cannot find symbol\nsymbol:   variable missing');
 }
 
 async function verifyArtifactDetailsTree(workspaceFolder: vscode.WorkspaceFolder): Promise<void> {

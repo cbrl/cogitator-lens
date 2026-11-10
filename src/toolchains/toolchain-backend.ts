@@ -64,7 +64,14 @@ export interface SecondaryToolSpec {
 	) => readonly string[];
 	/** Profile key of the auxiliary tool that consumes the compiler output. */
 	readonly tool: string;
-	readonly toolArguments: (files: Readonly<Record<string, string>>) => readonly string[];
+	/**
+	 * Runs after the compiler, so it can read the files that the compiler wrote. `undefined` means
+	 * that the compiler wrote nothing for the tool. The tool then does not run, and the artifact has
+	 * no text.
+	 */
+	readonly toolArguments: (
+		files: Readonly<Record<string, string>>,
+	) => readonly string[] | undefined | Promise<readonly string[] | undefined>;
 	/** Runs while the workspace files still exist. */
 	readonly normalizeOutput?: (output: string, files: Readonly<Record<string, string>>) => string | Promise<string>;
 	/**
@@ -366,17 +373,10 @@ export class ToolchainBackend {
 				throw new Error(`${this.profile.displayName} has no ${spec.tool} auxiliary tool.`);
 			}
 
-			const toolArguments = spec.toolArguments(files);
-			this.reportInvocation(options, invocation, tool.executable, toolArguments);
-			this.host.log(`Command: ${tool.executable} ${toolArguments.join(' ')}`);
-			const toolResult = await withOverlayFailurePaths(
-				invocation,
-				executeChecked('Auxiliary tool', tool.executable, toolArguments, {
-					cwd: invocation.workingDirectory,
-					env: invocation.preparedEnvironment,
-					cancellationToken,
-				}),
-			);
+			const toolArguments = await spec.toolArguments(files);
+			const toolResult = toolArguments
+				? await this.runTool(options, invocation, tool.executable, toolArguments, cancellationToken)
+				: { stdout: '', stderr: '' };
 
 			const inputMetadata = await this.collectDependencyInputs(
 				source,
@@ -401,7 +401,8 @@ export class ToolchainBackend {
 				source,
 				invocation,
 				inputMetadata,
-				tool.executable,
+				// Without a tool run, the artifact names the compile.
+				toolArguments && tool.executable,
 				toolArguments,
 			);
 			return {
@@ -409,6 +410,26 @@ export class ToolchainBackend {
 				...(producerData === undefined ? {} : { producerData }),
 			};
 		});
+	}
+
+	/** Runs the auxiliary tool of a compile in the working directory and the environment of the compile. */
+	private runTool(
+		options: CompileOptions,
+		invocation: PreparedInvocation,
+		executable: string,
+		args: readonly string[],
+		cancellationToken: CancellationToken,
+	): Promise<exec.ExecResult> {
+		this.reportInvocation(options, invocation, executable, args);
+		this.host.log(`Command: ${executable} ${args.join(' ')}`);
+		return withOverlayFailurePaths(
+			invocation,
+			executeChecked('Auxiliary tool', executable, args, {
+				cwd: invocation.workingDirectory,
+				env: invocation.preparedEnvironment,
+				cancellationToken,
+			}),
+		);
 	}
 
 	async produceArtifact(

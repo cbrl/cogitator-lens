@@ -3,6 +3,7 @@ import type { BaseAssemblyDocumentationProvider } from '../../vendor/lib/asm-doc
 import type { ArtifactListingSyntax } from './artifact-contracts.js';
 import { nativeAssemblyListing } from '../assembly/native-assembly-listing.js';
 import { dotNetIlListing } from '../dotnet/dotnet-il-listing.js';
+import { javaBytecodeListing } from '../java/java-bytecode-listing.js';
 import { llvmIrListing } from '../llvm-ir/llvm-ir-listing.js';
 import { pythonBytecodeListing } from '../python/python-bytecode-listing.js';
 
@@ -76,6 +77,7 @@ export function addMatches(
 export const listingSyntaxes: Readonly<Record<ArtifactListingSyntax, ListingSyntaxDefinition>> = {
 	'native-assembly': nativeAssemblyListing,
 	'dotnet-il': dotNetIlListing,
+	'java-bytecode': javaBytecodeListing,
 	'python-bytecode': pythonBytecodeListing,
 	'llvm-ir': llvmIrListing,
 };

@@ -41,7 +41,7 @@ export type ArtifactKind =
 	| 'code-size';
 
 /** How a rendered text listing is written, for mnemonic and token analysis. */
-export type ArtifactListingSyntax = 'native-assembly' | 'python-bytecode' | 'dotnet-il' | 'llvm-ir';
+export type ArtifactListingSyntax = 'native-assembly' | 'python-bytecode' | 'dotnet-il' | 'java-bytecode' | 'llvm-ir';
 
 export interface ArtifactDefinition {
 	readonly presentation: 'text' | 'graph';

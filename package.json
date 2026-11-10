@@ -32,6 +32,7 @@
     "onLanguage:cuda",
     "onLanguage:cuda-cpp",
     "onLanguage:go",
+    "onLanguage:java",
     "onLanguage:objective-c",
     "onLanguage:objective-cpp",
     "onLanguage:python",
@@ -784,6 +785,7 @@
                     "cargo",
                     "python",
                     "dotnet",
+                    "java",
                     "go",
                     "zig",
                     "nvcc"
@@ -1352,7 +1354,7 @@
       "explorer/context": [
         {
           "command": "coglens.OpenArtifact",
-          "when": "resourceScheme == file && resourceLangId =~ /^(?:c|cpp|csharp|cuda|cuda-cpp|go|objective-c|objective-cpp|python|rust|zig)$/",
+          "when": "resourceScheme == file && resourceLangId =~ /^(?:c|cpp|csharp|cuda|cuda-cpp|go|java|objective-c|objective-cpp|python|rust|zig)$/",
           "group": "navigation@90"
         }
       ],

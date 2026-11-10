@@ -50,6 +50,8 @@ export function pathCandidates(platform: NodeJS.Platform = process.platform): re
 		{ names: ['go'], versionArguments: ['version'] },
 		{ names: ['zig'], versionArguments: ['version'] },
 		{ names: ['dotnet'], versionArguments: ['--version'] },
+		// javac 8 knows only `-version`, and it prints the version to stderr.
+		{ names: ['javac'], versionArguments: ['-version'] },
 		{ names: ['nvcc'], versionArguments: ['--version'] },
 	];
 }
