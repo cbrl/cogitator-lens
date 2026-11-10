@@ -221,6 +221,16 @@ export class ConfigurationService implements Disposable {
 		return workspace.getConfiguration('coglens', scope).get('cppToolsConfiguration', true);
 	}
 
+	/** Whether the Cargo workspaces give variants to the Rust sources of a folder. */
+	getReadCargoWorkspaces(scope?: Uri): boolean {
+		return workspace.getConfiguration('coglens', scope).get('cargoWorkspaces', true);
+	}
+
+	/** The Cargo profile of the Cargo variants of a folder. */
+	getCargoProfile(scope?: Uri): string {
+		return workspace.getConfiguration('coglens', scope).get<string>('cargoProfile', 'release').trim() || 'release';
+	}
+
 	getCompilationDatabases(scope?: Uri): readonly string[] {
 		return workspace.getConfiguration('coglens', scope).get<string[]>('compilationDatabases', []);
 	}

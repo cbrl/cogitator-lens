@@ -5,6 +5,7 @@ import { clang, appleClang } from './clang.js';
 import { clangCl } from './clang-cl.js';
 import { msvc } from './msvc.js';
 import { rust } from './rust.js';
+import { cargo } from './cargo.js';
 import { python } from './python.js';
 import { dotnet } from './dotnet.js';
 import { go } from './go.js';
@@ -21,6 +22,7 @@ export const toolchainDefinitions = {
 	clang,
 	'apple-clang': appleClang,
 	rust,
+	cargo,
 	python,
 	dotnet,
 	go,

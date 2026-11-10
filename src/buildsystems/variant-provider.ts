@@ -7,6 +7,7 @@ export const variantProviderDefinitions = {
 	'compilation-database': { label: 'Compilation database' },
 	cpptools: { label: 'C/C++ configuration' },
 	'python-environments': { label: 'Python environments' },
+	cargo: { label: 'Cargo' },
 	path: { label: 'Detected' },
 } as const satisfies Record<string, { readonly label: string }>;
 

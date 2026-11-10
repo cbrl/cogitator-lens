@@ -22,13 +22,16 @@ The checked-in settings use executables found on `PATH`:
 | C#                                 | `dotnet`              | Assembly (IL)                                                                                        |
 | Go                                 | `go`                  | Assembly, SSA CFG                                                                                    |
 | Zig                                | `zig`                 | Assembly, LLVM IR, CFG                                                                               |
-| Rust                               | `rustc`               | Assembly, LLVM IR, MIR, CFG                                                                          |
+| Rust                               | `cargo` or `rustc`    | Assembly, LLVM IR, MIR, CFG                                                                          |
 | Python                             | `python`              | Assembly (bytecode), AST, stack analysis, CFG                                                        |
 
 Edit `.vscode/settings.json` in a standalone project, or the `settings` section of the umbrella
 workspace, if an executable has a different name or location. Binary disassembly additionally needs
 `llvm-objdump` beside Clang or on `PATH`. Optional Rust demangling needs `rustfilt`. CUDA requires
 the CUDA toolkit; its bundled `nvdisasm` enables the SASS disassembly artifact.
+
+The Rust sample is a Cargo package. When Cargo is installed, its source gets a Cargo variant, which
+compiles the package with `cargo rustc`. Without Cargo, the source uses the `Sample Rust` toolchain.
 
 ## Trying the artifacts
 

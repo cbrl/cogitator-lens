@@ -5,6 +5,7 @@ export const supportedToolchainKinds = [
 	'clang',
 	'apple-clang',
 	'rust',
+	'cargo',
 	'python',
 	'dotnet',
 	'go',

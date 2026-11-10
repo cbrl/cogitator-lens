@@ -23,6 +23,7 @@ import type { AsmParser } from '../vendor/lib/parsers/asm-parser.js';
 import type { AssemblyCfgParser } from '../artifacts/control-flow-graph/parsers/assembly-cfg-parser.js';
 import type { DependencyCollectionSpec, ToolchainBackend } from './toolchain-backend.js';
 import type { DiagnosticParser } from '../diagnostics.js';
+import type { ExecResult } from '../exec.js';
 import { sameLocalFile } from '../file-identity.js';
 import type { OptimizationLevel } from './optimization-levels.js';
 import type { SourceOverlaySpec } from './source-overlay.js';
@@ -121,9 +122,23 @@ export interface ToolchainDefinition {
 	readonly sourceOverlay?: SourceOverlaySpec;
 	/** Omit when the toolchain has no auxiliary tools. */
 	readonly discoverTools?: (executable: string) => Readonly<Record<string, AuxiliaryTool>>;
+	/** Runs the compiler. Omit to run it one time with the arguments of the invocation. */
+	readonly runInvocation?: InvocationRunner;
 	/** The artifact kinds this toolchain supports. A missing kind is unsupported. */
 	readonly artifacts: Readonly<Partial<Record<ArtifactKind, ArtifactSupport>>>;
 }
+
+/** One run of the compiler. A toolchain can change its arguments and its output files. */
+export interface InvocationRun {
+	readonly arguments: readonly string[];
+	/** The directory of the run. The backend reads the output files from it after the run. */
+	readonly temporaryDirectory: string;
+	/** Runs the compiler with the working directory, the environment, and the limits of the run. */
+	readonly execute: (args: readonly string[]) => Promise<ExecResult>;
+	readonly log: (message: string) => void;
+}
+
+export type InvocationRunner = (run: InvocationRun) => Promise<ExecResult>;
 
 /** Places the first owned argument (a subcommand) before the provider arguments. */
 export const subcommandFirst: NonNullable<ToolchainDefinition['assembleArguments']> = (owned, provider, sourcePath) => [

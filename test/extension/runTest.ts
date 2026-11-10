@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
+import childProcess from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as vscode from 'vscode';
 import type { PythonExtension, ResolvedEnvironment } from '@vscode/python-extension';
+import { CargoVariantProvider } from '../../src/buildsystems/cargo.js';
 import { CompilationDatabaseVariantProvider } from '../../src/buildsystems/compilation-database.js';
 import {
 	isWorkspacePythonDocument,
@@ -130,8 +132,59 @@ export async function run(): Promise<void> {
 	await verifyNativeStackProduction(workspaceFolder);
 	await verifyArtifactDetailsTree(workspaceFolder);
 	await verifyCompilationDatabaseVariantProvider(workspaceFolder);
+	await verifyCargoVariantProvider(workspaceFolder);
 	await verifyPythonEnvironmentVariantProvider(workspaceFolder);
 	verifyTreeModels(workspaceFolder);
+}
+
+/**
+ * The Cargo provider reads the fixture workspace of the repository with `cargo metadata`. It does
+ * not compile, so the test is fast. It skips without Cargo.
+ */
+async function verifyCargoVariantProvider(workspaceFolder: vscode.WorkspaceFolder): Promise<void> {
+	if (childProcess.spawnSync('cargo', ['--version'], { windowsHide: true }).status !== 0) {
+		return;
+	}
+	const fixture = path.join(workspaceFolder.uri.fsPath, 'test', 'fixtures', 'cargo');
+	const geometry = vscode.Uri.file(path.join(fixture, 'app', 'src', 'geometry.rs'));
+	const tool = vscode.Uri.file(path.join(fixture, 'app', 'src', 'bin', 'tool.rs'));
+	let enabled = true;
+	const configurationChange = new vscode.EventEmitter<void>();
+	const configuration = testConfiguration(configurationChange, {
+		getReadCargoWorkspaces: () => enabled,
+		getCargoProfile: () => 'dev',
+	});
+	const service = new CompilationService(configuration);
+	const provider = new CargoVariantProvider(configuration);
+	const subscription = provider.onSnapshot((snapshot) => service.reconcileProviderSnapshot(snapshot));
+	try {
+		await provider.initialize();
+		const [variant, ...others] = service.getVariants(geometry);
+		assert.ok(variant, 'A module file of a Cargo package gets a variant');
+		assert.deepEqual(others, [], 'One variant for each source asks for no choice');
+		assert.equal(variant.provider, 'cargo');
+		assert.equal(variant.displayLabel, 'Cargo · app lib · dev');
+		// VS Code and Cargo can spell the drive letter of a Windows path differently.
+		assert.equal(path.relative(fixture, variant.workingDirectory), '');
+		assert.deepEqual(variant.arguments.slice(2, 6), ['--lib', '--profile', 'dev', '--target-dir']);
+		assert.equal(path.relative(path.join(fixture, 'target', 'coglens'), variant.arguments[6]), '');
+		assert.equal(variant.arguments[7], '--');
+		assert.equal(service.toolchainRegistry.getToolchainById(variant.toolchainProfileId)?.profile.kind, 'cargo');
+		assert.deepEqual(service.getVariants(tool)[0]?.arguments.slice(2, 6), ['--bin', 'tool', '--features', 'extra']);
+
+		enabled = false;
+		await provider.refresh();
+		assert.equal(
+			service.getVariants(geometry).some((candidate) => candidate.provider === 'cargo'),
+			false,
+			'coglens.cargoWorkspaces turns the Cargo variants off',
+		);
+	} finally {
+		subscription.dispose();
+		provider.dispose();
+		service.dispose();
+		configurationChange.dispose();
+	}
 }
 
 async function verifyAdditionalSourceLanguageIds(): Promise<void> {

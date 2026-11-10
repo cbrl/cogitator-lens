@@ -133,8 +133,11 @@ export interface DependencyCollectionSpec {
 	 * or lists nothing, the companion invocation runs.
 	 */
 	readonly inlineArguments?: (outputFile: string, profile: ToolchainProfile) => readonly string[];
-	/** Builds a bounded companion invocation that writes dependency metadata. */
-	readonly arguments: (
+	/**
+	 * Builds a bounded companion invocation that writes dependency metadata. Omit when the main
+	 * compile always writes the file.
+	 */
+	readonly arguments?: (
 		outputFile: string,
 		temporaryDirectory: string,
 		providerArguments: readonly string[],
@@ -513,12 +516,11 @@ export class ToolchainBackend {
 		this.host.log(`Command: ${this.profile.executable} ${invocation.argumentsList.join(' ')}`);
 		this.host.log(`Environment overrides: ${invocation.overriddenNames.join(', ') || '(none)'}`, 'debug');
 
-		const result = await withOverlayFailurePaths(
-			invocation,
+		const execute = (args: readonly string[]): Promise<exec.ExecResult> =>
 			executeChecked(
 				'Toolchain',
 				this.profile.executable,
-				invocation.argumentsList,
+				args,
 				{
 					cwd: invocation.workingDirectory,
 					env: invocation.preparedEnvironment,
@@ -529,7 +531,18 @@ export class ToolchainBackend {
 					...(outputDirectory === undefined ? {} : { outputDirectory }),
 				},
 				acceptOutputOnError,
-			),
+			);
+		const runInvocation = this.definition.runInvocation;
+		const result = await withOverlayFailurePaths(
+			invocation,
+			runInvocation
+				? runInvocation({
+						arguments: invocation.argumentsList,
+						temporaryDirectory,
+						execute,
+						log: (message) => this.host.log(message),
+					})
+				: execute(invocation.argumentsList),
 		);
 		return { invocation, result };
 	}
@@ -682,9 +695,10 @@ export class ToolchainBackend {
 		if (inlineDependencies.length > 0) {
 			return snapshot(inlineDependencies);
 		}
-		// A compile of unsaved text runs often, so it does not start a second run for its inputs.
-		// Without a list of its headers, a later request does not use its output again.
-		if (overlay) {
+		// A compile of unsaved text runs often, so it does not start a second run for its inputs. A
+		// toolchain without a second run has no other list. Without a list of its headers, a later
+		// request does not use its output again.
+		if (overlay || !spec.arguments) {
 			return unknownArtifactInputs(source.fsPath);
 		}
 		const dependencyFile = path.join(temporaryDirectory, spec.outputFilename);

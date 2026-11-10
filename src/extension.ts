@@ -17,6 +17,7 @@ import { CompilationDatabaseVariantProvider } from './buildsystems/compilation-d
 import { CppToolsVariantProvider } from './buildsystems/cpptools.js';
 import { PathToolchainProvider } from './buildsystems/path-toolchains.js';
 import { PythonEnvironmentVariantProvider } from './buildsystems/python-environments.js';
+import { CargoVariantProvider } from './buildsystems/cargo.js';
 import type { VariantProvider } from './buildsystems/variant-provider.js';
 import * as artifactCommands from './commands/artifacts.js';
 import * as experimentCommands from './commands/experiment.js';
@@ -93,6 +94,7 @@ export async function activate(context: ExtensionContext): Promise<void> {
 		new CompilationDatabaseVariantProvider(configuration),
 		new CppToolsVariantProvider(configuration),
 		new PythonEnvironmentVariantProvider(),
+		new CargoVariantProvider(configuration),
 		pathToolchains,
 	];
 	const providerSubscriptions = variantProviders.map((provider) =>

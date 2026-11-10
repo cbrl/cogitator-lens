@@ -26,21 +26,21 @@ const matrix: Readonly<
 	>
 > = {
 	assembly: {
-		available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'msvc', 'rust', 'python', 'go', 'zig', 'nvcc'],
+		available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'msvc', 'rust', 'cargo', 'python', 'go', 'zig', 'nvcc'],
 		unavailable: ['dotnet'],
 	},
 	'binary-disassembly': { unavailable: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'msvc', 'nvcc'] },
 	'preprocessed-source': { available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'msvc', 'nvcc'] },
 	ast: { available: ['clang', 'apple-clang', 'clang-cl', 'python'] },
-	'llvm-ir': { available: ['clang', 'apple-clang', 'clang-cl', 'rust', 'zig'] },
-	'rust-mir': { available: ['rust'] },
-	'optimization-remarks': { available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'msvc', 'rust', 'go'] },
+	'llvm-ir': { available: ['clang', 'apple-clang', 'clang-cl', 'rust', 'cargo', 'zig'] },
+	'rust-mir': { available: ['rust', 'cargo'] },
+	'optimization-remarks': { available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'msvc', 'rust', 'cargo', 'go'] },
 	'stack-analysis': { available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'python'] },
 	'control-flow-graph': {
-		available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'msvc', 'rust', 'python', 'go', 'zig'],
+		available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'msvc', 'rust', 'cargo', 'python', 'go', 'zig'],
 	},
-	'optimization-pipeline': { available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'rust'] },
-	'machine-code-analysis': { unavailable: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'rust'] },
+	'optimization-pipeline': { available: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'rust', 'cargo'] },
+	'machine-code-analysis': { unavailable: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'rust', 'cargo'] },
 	'code-size': { unavailable: ['gcc', 'clang', 'apple-clang', 'clang-cl', 'msvc', 'nvcc'] },
 };
 
@@ -54,6 +54,7 @@ const controlFlowOutputs: Readonly<Partial<Record<ToolchainKind, readonly string
 	zig: ['llvm-ir', 'assembly'],
 	msvc: ['assembly'],
 	rust: ['rust-mir', 'llvm-ir', 'assembly'],
+	cargo: ['rust-mir', 'llvm-ir', 'assembly'],
 	python: ['python-bytecode'],
 	dotnet: [],
 	go: ['go-ssa'],

@@ -70,6 +70,7 @@ function remarkCauses(toolchainKind: string): string[] {
 		case 'go':
 			return [];
 		case 'rust':
+		case 'cargo':
 			return [`The compile does not optimize. ${level} -C opt-level=2.`, ...rustCodeCauses];
 		default:
 			return [`The compile does not optimize. ${level} -O2.`];
@@ -95,6 +96,7 @@ function likelyCauses(kind: ArtifactKind, toolchainKind: string): string[] {
 	}
 	switch (toolchainKind) {
 		case 'rust':
+		case 'cargo':
 			return [...rustCodeCauses, ...libraryCode];
 		case 'go':
 			return ['A function that nothing calls can be removed, or inlined into its callers.', ...libraryCode];

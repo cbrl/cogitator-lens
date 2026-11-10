@@ -296,24 +296,24 @@ test('dependency collection names its own output and keeps the project crate ide
 	const gcc = getToolchainDefinition('gcc').dependencyCollection;
 	assert.ok(gcc);
 	assert.equal(gcc.outputFilename, 'dependencies.d');
-	assert.deepEqual(gcc.arguments('deps.d', temporary, ['-O2']), ['-M', '-MF', 'deps.d']);
+	assert.deepEqual(gcc.arguments?.('deps.d', temporary, ['-O2']), ['-M', '-MF', 'deps.d']);
 
 	const msvc = getToolchainDefinition('msvc').dependencyCollection;
 	assert.ok(msvc);
 	assert.equal(msvc.outputFilename, 'dependencies.json');
-	assert.deepEqual(msvc.arguments('deps.json', temporary, ['/O2']).slice(0, 3), [
+	assert.deepEqual(msvc.arguments?.('deps.json', temporary, ['/O2'])?.slice(0, 3), [
 		'/c',
 		'/sourceDependencies',
 		'deps.json',
 	]);
 	// With /Zi from the provider, cl.exe writes the program database into the working directory without /Fd.
 	assert.ok(
-		msvc.arguments('deps.json', temporary, ['/Zi']).includes(`/Fd${path.join(temporary, 'dependencies.pdb')}`),
+		msvc.arguments?.('deps.json', temporary, ['/Zi'])?.includes(`/Fd${path.join(temporary, 'dependencies.pdb')}`),
 	);
 
 	const rust = getToolchainDefinition('rust').dependencyCollection;
 	assert.ok(rust);
-	assert.deepEqual(rust.arguments('deps.d', temporary, ['--crate-name=real']), [
+	assert.deepEqual(rust.arguments?.('deps.d', temporary, ['--crate-name=real']), [
 		'--crate-type=lib',
 		'--emit=dep-info=deps.d',
 		'--error-format=human',
@@ -340,7 +340,7 @@ test('the main compile lists the inputs when the compiler can do it', () => {
 	// clang-cl ignores /sourceDependencies, so it writes the Make format of the Clang driver.
 	const clangCl = getToolchainDefinition('clang-cl').dependencyCollection;
 	assert.deepEqual(inline('clang-cl'), ['/clang:-MD', '/clang:-MF', '/clang:deps.out']);
-	assert.deepEqual(clangCl?.arguments('deps.out', temporary, []), [
+	assert.deepEqual(clangCl?.arguments?.('deps.out', temporary, []), [
 		'/Zs',
 		'/clang:-MD',
 		'/clang:-MF',

@@ -127,4 +127,6 @@ const targetQueries: Partial<
 	'apple-clang': { arguments: ['-dumpmachine'], read: (output) => output.trim() || undefined },
 	'clang-cl': { arguments: ['--version'], read: targetFromClangBanner },
 	rust: { arguments: ['-vV'], read: (output) => /^host:\s*(\S+)/m.exec(output)?.[1] },
+	// Cargo 1.97 reports the host of its toolchain in the same form as rustc.
+	cargo: { arguments: ['-vV'], read: (output) => /^host:\s*(\S+)/m.exec(output)?.[1] },
 };

@@ -36,6 +36,17 @@ When [CMake Tools](https://marketplace.visualstudio.com/items?itemName=ms-vscode
 installed, its configured projects are also available. If both sources describe a file, select the
 required variant in the picker.
 
+It also reads each Cargo workspace with `cargo metadata`. Each Rust source of a package gets a
+variant that runs `cargo rustc` for the target that compiles the source. The target is the library,
+a binary, an example, a test, or a benchmark. A module file compiles with its crate. With "Show
+library code" off, the listing keeps the code of the module only. The variant uses the `release`
+profile. Set `coglens.cargoProfile` to use another profile, such as `dev`. A target with
+`required-features` gets these features. The compiles use the folder `coglens` of the target
+directory. So they do not wait for rust-analyzer, and they do not change the files of your builds.
+The first compile also builds the dependencies of the package, and it can need more time than
+`coglens.processTimeout`. An edit in a crate of the workspace that the package uses also refreshes
+the artifact. Set `coglens.cargoWorkspaces` to `false` to turn this off.
+
 Use the sidebar to browse variants and toolchains. Run `Cogitator Lens: Open Artifact` to generate
 an artifact for the active variant. Run `Cogitator Lens: Compare Artifacts` to compare a supported
 text artifact from two variants or presets. Control-flow graphs open in their own view. The
@@ -75,9 +86,9 @@ folder. Then a header there can hide a header with the same name in a later incl
 compile of the saved file does not have this limit.
 Clang and clang-cl read the text through a virtual file system. rustc reads a copy and gets
 `--remap-path-prefix`. Go uses `go build -overlay`, and the Python helpers compile the text with
-the name of the source. Some sources still compile the saved file: each Zig source, a Rust crate
-with module files, `#[path]`, or `include!`, and a saved file that is not UTF-8 text. The first line
-of the artifact then gives the reason.
+the name of the source. Some sources still compile the saved file: each Zig source, each source of a
+Cargo variant, a Rust crate with module files, `#[path]`, or `include!`, and a saved file that is not
+UTF-8 text. The first line of the artifact then gives the reason.
 
 The status bar shows the state of the focused artifact. When the focus is in a source, it shows a
 visible artifact of that source. Click it for the artifact actions: refresh, cancel, reveal the
@@ -216,6 +227,8 @@ and the metrics.
 | Machine code analysis | Yes | Yes                 | Yes      | —    | Yes  | —              | —        | —         | —   | —          |
 | Code size             | Yes | Yes                 | Yes      | Yes  | —    | —              | —        | —         | —   | Yes        |
 
+The Rust column applies to `rustc` and to the Cargo variants.
+
 ## Configuration
 
 To use a toolchain that is not on `PATH`, or to give it default arguments, configure it in
@@ -226,9 +239,12 @@ sidebar.
 
 A toolchain has the form
 `{ displayName, kind, executable, defaultArguments?, environment?, tools?, target? }`. Supported kinds are
-`gcc`, `clang`, `apple-clang`, `clang-cl`, `msvc`, `rust`, `python`, `dotnet`, `go`, `zig`, and `nvcc`. Use
+`gcc`, `clang`, `apple-clang`, `clang-cl`, `msvc`, `rust`, `cargo`, `python`, `dotnet`, `go`, `zig`, and `nvcc`. Use
 `defaultArguments` for include paths and macro definitions. Set auxiliary tools, such as a
 disassembler or demangler, in `tools` when they are not found beside the compiler or on `PATH`.
+A `cargo` toolchain runs `cargo rustc`. Cargo reads the arguments before the first `--`, such as
+`--manifest-path`, `--bin`, and `--features`, and rustc reads the arguments after it. A preset or an
+edit adds rustc arguments, so the arguments of a `cargo` variant end with `--`.
 
 Use the add action in **Project Compile Info** to create a `coglens.compileVariants` entry for the
 active file. Variants specify a source file, toolchain, working directory, arguments, and
@@ -367,7 +383,7 @@ preset arguments are passed to Roslyn as C# compiler options.
 
 For standalone files, Cogitator Lens supplies required output options. Configure project-specific
 arguments such as the edition, target, features, dependencies, and `--extern` entries in the
-invocation.
+invocation. A source of a Cargo package gets a Cargo variant, which needs none of these arguments.
 
 ### Python
 

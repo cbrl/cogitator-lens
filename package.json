@@ -662,6 +662,18 @@
             "default": true,
             "description": "Read the configurations of the C/C++ extension in .vscode/c_cpp_properties.json, and the C_Cpp.default settings. A source that no compilation database or CMake project describes gets a variant for each configuration whose compiler exists, with its compiler, include paths, defines, and language standards. The default invocation comes before these variants. The compilation database of a configuration gives the variants of its sources."
           },
+          "coglens.cargoWorkspaces": {
+            "type": "boolean",
+            "scope": "resource",
+            "default": true,
+            "description": "Read the Cargo workspaces of the workspace folders with cargo metadata. Each Rust source of a package gets a variant that compiles its target with cargo rustc, also a module file. The compiles use the target directory folder coglens, so they do not wait for rust-analyzer or change your builds."
+          },
+          "coglens.cargoProfile": {
+            "type": "string",
+            "scope": "resource",
+            "default": "release",
+            "description": "The Cargo profile of the Cargo variants, such as release, dev, or a profile of the manifest."
+          },
           "coglens.detectToolchainsOnPath": {
             "type": "boolean",
             "scope": "window",
@@ -769,6 +781,7 @@
                     "clang",
                     "apple-clang",
                     "rust",
+                    "cargo",
                     "python",
                     "dotnet",
                     "go",
