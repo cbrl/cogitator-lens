@@ -679,7 +679,7 @@
             "type": "boolean",
             "scope": "window",
             "default": true,
-            "description": "Look for gcc, clang, rustc, python, go, zig, dotnet, and nvcc on PATH, also versioned compilers such as gcc-14 and clang-18. On Windows, also look for cl and clang-cl in each Visual Studio install. Also look for the rustup toolchains. Use the toolchains for files that have no other compilation variant."
+            "description": "Look for gcc, clang, rustc, python, go, zig, dotnet, javac, and nvcc on PATH, also versioned compilers such as gcc-14 and clang-18. On Windows, also look for cl and clang-cl in each Visual Studio install. Also look for the rustup toolchains. Use the toolchains for files that have no other compilation variant."
           },
           "coglens.processTimeout": {
             "type": "number",

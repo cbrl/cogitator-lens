@@ -6,70 +6,59 @@ All notable changes to Cogitator Lens are in this file.
 
 ### Added
 
-- A slow first compile opens the artifact at once with a "Compiling main.cpp with GCC…" line. The output replaces it when the compile ends. A compile that ends within 150 ms shows no placeholder.
-- The control-flow graph view shows each state: compiling, stale, cancelled, or failed. A badge cancels a compile or starts a refresh. A failure shows the compiler output.
-- Control-flow graph diagnostics appear in the Problems view.
-- Open control-flow graphs come back after VS Code restarts.
-- The function filter of the graph view takes the arrow keys. Graph search has previous and next controls, and Enter and Shift+Enter move between matches.
-- An empty listing names the likely causes, such as an unused `static` function, a template without an instantiation, or "Show library code". Artifact Details shows the number of filtered lines.
-- Artifact Details lists each diagnostic with its severity and location.
-- While a source has unsaved changes, the status bar shows "Unsaved source", and the artifact says so on its first line, because the compiler reads the saved file. The highlights between the source and the artifact move with the edits.
-- `coglens.compileOnType` compiles the unsaved text of a source when typing pauses for half a second, so its open artifacts update without a save. Each output names the source, not a temporary file: GCC, cl.exe, nvcc, and Roslyn read a copy with a `#line` directive, Clang and clang-cl read the text through a virtual file system, rustc gets `--remap-path-prefix`, Go uses `go build -overlay`, and the Python helpers compile the text with the name of the source. A compile of unsaved text adds nothing to the Problems view. A failure keeps the last listing. Zig, a Rust crate with module files, and a saved file that is not UTF-8 text compile the saved file, and the artifact gives the reason. With GCC, cl.exe, and nvcc, a compile of unsaved text searches the folder of the source before the project include folders. A header there can hide a header with the same name in a later include folder. The README gives the details.
-- The **Optimization pipeline** artifact lists the LLVM passes that ran on one function, for Clang, clang-cl, and rustc. Open Artifact asks for the function first, and the compile prints the passes of that function only. A click on a pass, or **Show Pass Change**, compares the function before and after the pass. The `showUnchangedPasses` option also lists the passes that changed nothing.
-- The **Optimization pipeline** artifact also supports GCC. The compile dumps each tree, IPA, and RTL pass to files, and the artifact keeps the code of the selected function after each pass. Open Artifact reads the functions from the assembly. The dump files can use 20 times `coglens.processOutputLimit`, and a compile that writes more stops.
-- The **Machine code analysis** artifact runs `llvm-mca` on the assembly, for GCC, Clang, clang-cl, and rustc. Each function is a code region, and each row of an instruction table connects to its source line. The compiler arguments set the target and the processor, and the default processor is generic.
-- The **Optimization remarks** artifact also supports rustc (`-C remark=all`), Go (`-gcflags=-m=2`), and cl.exe (`/Qvec-report:2` and `/Qpar-report:2`). Go shows the inlining and escape analysis decisions. cl.exe shows the result of each loop, and the description of each reason code. The warnings of rustc and cl.exe, which come in the same output as the remarks, stay in the Problems view.
-- An empty optimization remarks artifact says that a compile without optimization gives few remarks.
-- The empty-listing text for Rust says that, with optimization, rustc does not compile a small `pub` function of a library crate, and that `#[inline(never)]` keeps it.
-- The **Code size** artifact lists the size of each function and each section of the compiled object, for GCC, Clang, clang-cl, MSVC, and nvcc. It shares the compile of the binary disassembly. A function row maps to the first source line of the function.
-- The editor context menu has a **Cogitator Lens** submenu. The explorer context menu has **Open Artifact** for a source file.
-- The **Get Started with Cogitator Lens** walkthrough shows the first steps.
-- The artifact picker shows the kinds that you opened last at the top.
-- `coglens.OpenArtifact` accepts `{ "kind": "assembly", "preset": "fast" }`, so a key binding can open one kind with one preset.
-- `coglens.listingLineLimit` sets the number of lines in binary disassembly and LLVM IR listings. Before, the limit was always 5000. A new limit applies to the open listings at once, without a compile. The status menu of a truncated artifact can raise the limit.
-- **Edit Compiler Arguments** adds arguments to one artifact, and the tab stays open. **Set Optimization Level** offers the levels of the toolchain, such as `-O2`, `/O2`, or `-C opt-level=2`. **Save as Preset** keeps the edited arguments in a new preset.
-- When a preset or an edit adds `/O1`, `/O2`, or `/Ox`, the compile removes the `/RTC` checks of the variant. cl.exe stops with error D8016 when they come together, and a CMake Debug configuration adds `/RTC1`.
-- The status menu has toggles for the options of the artifact kind, such as Intel syntax and demangling.
-- **Compare With Previous Result** compares an artifact with its listing before the last change. **Snapshot Artifact** and **Compare With Snapshot** keep a listing and compare an artifact with it later.
-- Compare Artifacts offers each other toolchain that compiles the language. It keeps the arguments of the selected variant when the toolchain reads the same arguments, and it warns when it drops them.
-- Compare Artifacts can show one function, and it can renumber local labels and hide addresses, so the diff shows only changed instructions. When the right listing names the function in another way, such as MSVC and GCC names, you select the function of the right listing too.
-- A source hover shows the lines that the open artifacts generated from the line. **Reveal in Artifact** selects those lines, and it opens the assembly when no artifact is open. `coglens.functionCodeLens` shows the instruction count above each function. These features use only the result of a successful compile of the text that the editor holds, so the line numbers always match it.
-- In an artifact, a register highlights each use of its family, such as `rax`, `eax`, and `al`. **Find All References** and **Show Call Hierarchy** use the links of the listing.
-- LLVM IR links each label, local value, and global to its definition, and its branches have jump arrows.
-- **Copy With Addresses** copies listing lines with their address and code byte columns.
-- Optimization remarks and stack usage show at the end of the source lines too. `coglens.showAnalysisOnSource` turns this off. `coglens.optimizationRemarkCategories` and **Filter Optimization Remarks** select the remark categories that the editors show.
-- Detection finds each MSVC toolset and the clang-cl of each Visual Studio install through vswhere, without a developer prompt. It also finds versioned compilers, such as `gcc-14` and `clang-18`, the same compiler in other PATH folders, and the rustup toolchains. On Windows, it finds `cl` and `clang-cl` on PATH.
-- The configurations of the C/C++ extension in `.vscode/c_cpp_properties.json` and the `C_Cpp.default` settings give variants. A configuration gives its compiler, include paths, defines, forced includes, and language standard to each source in its folder without another variant. Only a configuration whose compiler exists on this computer gives a variant. The configuration for the platform, such as "Win32", comes first, after `coglens.defaultInvocation`. On Windows, a bare `cl.exe` or `clang-cl.exe` comes from a Visual Studio install when it is not on PATH. Its `compileCommands` database gives the variants of its sources. `coglens.cppToolsConfiguration` turns this off.
-- Instruction hovers document POWER, PTX, and SASS. The target of the compile selects the instruction set: a `--target` argument, then the target that the compiler reports. The new `target` property of a toolchain sets it.
-- Java support: the new `java` toolchain kind runs `javac`, and detection finds `javac` on PATH. The Assembly artifact is the `javap` listing of the class files of the source. Each instruction maps to its source line, a hover documents it, and jumps, switch cases, exception table rows, and calls link to their targets. The `package` declaration gives the source root, so javac finds the other classes of the project, and an edit to one of them refreshes the artifact. A compile of unsaved text works too. `javap` comes from beside `javac`, from `JAVA_HOME`, or from PATH. For the `javapath` launcher of the Oracle installer, it comes from the newest JDK folder.
-- Cargo workspaces give variants. `cargo metadata` gives the packages, and each Rust source gets the target that compiles it. The new `cargo` toolchain kind runs `cargo rustc` for that target, so a module file compiles with its crate, and a crate with dependencies needs no manual arguments. The compiles use the folder `coglens` of the target directory, so they do not wait for rust-analyzer. `coglens.cargoProfile` selects the profile, `release` by default, and `coglens.cargoWorkspaces` turns the variants off. An edit in a crate of the workspace that the package uses also refreshes the artifact.
+- Java support. A `java` toolchain compiles with `javac` and shows the `javap` bytecode, mapped to the source.
+- Cargo support. Each Rust source of a Cargo package gets a variant that compiles its target with `cargo rustc`.
+- The configurations of the C/C++ extension give variants.
+- Detection finds each MSVC toolset and clang-cl of each Visual Studio install, without a developer prompt. It also finds versioned compilers, such as `gcc-14`, and the rustup toolchains.
+- The **Optimization pipeline** artifact shows the passes that changed one function, for GCC, Clang, clang-cl, and rustc.
+- The **Machine code analysis** artifact runs `llvm-mca` on the assembly, for GCC, Clang, clang-cl, and rustc.
+- The **Code size** artifact lists the size of each function and section, for GCC, Clang, clang-cl, MSVC, and nvcc.
+- The **Optimization remarks** artifact supports rustc, Go, and cl.exe.
+- `coglens.compileOnType` compiles the unsaved text when you stop typing, so the artifacts update without a save.
+- **Edit Compiler Arguments**, **Set Optimization Level**, and **Save as Preset** change the arguments of one artifact.
+- The status menu has toggles for the options of the artifact, such as Intel syntax and demangling.
+- **Compare With Previous Result** and **Compare With Snapshot** compare an artifact with an earlier listing.
+- Compare Artifacts offers the other toolchains of the language. It can compare one function and hide addresses and label numbers.
+- A source hover shows the lines that the open artifacts generated from the line. **Reveal in Artifact** selects them.
+- `coglens.functionCodeLens` shows the instruction count above each function.
+- In an artifact, the cursor on a register highlights each use of its family, such as `rax` and `eax`.
+- **Find All References**, **Show Call Hierarchy**, and **Copy With Addresses** work in artifacts.
+- LLVM IR links each label and value to its definition.
+- The optimization remarks and the stack usage also show at the end of the source lines. **Filter Optimization Remarks** selects the categories.
+- Instruction hovers document POWER, PTX, and SASS. The target of the compile selects the instruction set.
+- A slow first compile shows a "Compiling…" line until the output is ready.
+- An empty listing names the likely causes. Artifact Details lists each diagnostic.
+- The status bar shows "Unsaved source" while the source has unsaved changes.
+- The control-flow graph view shows each compile state and the compiler output of a failure. Its diagnostics go to the Problems view, and open graphs come back after a restart.
+- The editor context menu has a **Cogitator Lens** submenu. The **Get Started with Cogitator Lens** walkthrough shows the first steps.
+- A key binding can open one artifact kind with one preset.
+- `coglens.listingLineLimit` sets the line limit of binary disassembly and LLVM IR listings.
 
 ### Changed
 
-- Artifacts that need the same compiler output share one compile, such as the assembly and its control-flow graph. When one of them closes during the compile, the compile continues for the others. Half the processor cores, and at least two, compile at the same time.
-- The main compile lists the headers of the source for GCC, Clang, MSVC, clang-cl, and rustc. Before, a second compile listed them for each artifact.
-- The Toolchains view shows the detected toolchains under **Detected**. The label of a detected variant names where detection found it, such as `(PATH)` or the Visual Studio install. The command is now **Detect Toolchains**.
-- The status bar follows the visible artifact of the focused source. Before, it hid when the focus stayed in the source, which is where Open Artifact leaves it. **Refresh Artifact**, **Cancel Artifact Generation**, and **Save Current Options as Artifact Preset** use the same artifact, and they also work for a focused control-flow graph.
+- Artifacts that need the same compiler output share one compile, such as the assembly and its control-flow graph.
+- GCC, Clang, MSVC, clang-cl, and rustc find the headers of a source in the main compile, without a second compile.
+- For MSVC, an optimization level of `/O1`, `/O2`, or `/Ox` removes the `/RTC` checks, because cl.exe does not accept both.
+- The status bar follows the visible artifact of the focused source.
+- The Toolchains view shows the detected toolchains under **Detected**. The command is now **Detect Toolchains**.
 - The Command Palette no longer shows commands that need a sidebar item.
-- `npm run test:coverage` writes a coverage report to `coverage/lcov.info`. CI uploads the report from the Linux job.
+- The artifact picker shows the kinds that you opened last at the top.
 
 ### Fixed
 
-- Closing the last tab of an artifact stops its compile at once. Before, VS Code kept the document open for a while, and the compile continued. A diff tab now counts as a tab of both of its artifacts.
-- The Problems view shows each compiler diagnostic once. Before, it repeated a diagnostic for each open artifact of the same source.
-- Problems entries name Cogitator Lens as their source and underline the whole word at the position.
-- Cancel Generation stops a compile when a refresh request is pending. Before, the command refused, because the state was stale.
-- A cancelled MSVC, clang-cl, or nvcc compile no longer fails other compiles that wait for the same Visual Studio environment.
-- Python bytecode runs in isolated mode. A local `dis.py` or `opcode.py` beside the source no longer replaces the standard module.
-- A header edit during a compile no longer lets the old output validate as current. The next refresh compiles again.
-- Artifact documents use private file suffixes, such as `main.coglens.asm`. The extension no longer claims your own `.asm`, `.ll`, `.ast`, and `.mir` files.
-- MSVC assembly obeys "Show address and opcode columns". Before, the address and code bytes from `/FAcs` were part of each line, so they always showed. They are now columns beside the text, as in binary disassembly. Search, copy, and instruction hovers see only the instruction, and a wrapped long encoding is one line.
-- Exported control-flow graph SVG files keep their colors, fonts, and background.
-- In an MSVC listing, the fold of a function ends at its `ENDP` line. Before, the fold also held the frame variables of the next function, such as `left$ = 16`.
-- In a narrow control-flow graph view, the toolbar wraps, and the search box stays. Before, the controls at the end of the toolbar were past the edge of the view.
-- The control-flow graph legend stays hidden until you click **Legend**. Before, it always showed.
-- The manifest declares `onFileSystem:coglens-artifact`, so a restored artifact tab can activate the extension.
-- A clang-cl artifact refreshes when a header of its source changes. Before, clang-cl ignored `/sourceDependencies` with a warning, so only the source was watched.
+- Closing the last tab of an artifact stops its compile at once.
+- The Problems view shows each diagnostic once, not once for each open artifact.
+- **Cancel Artifact Generation** works when a refresh is pending.
+- A cancelled MSVC, clang-cl, or nvcc compile no longer fails the other compiles.
+- A local `dis.py` or `opcode.py` beside a Python source no longer replaces the standard module.
+- A header edit during a compile no longer leaves old output marked as current.
+- The extension no longer claims your own `.asm`, `.ll`, `.ast`, and `.mir` files.
+- MSVC assembly obeys "Show address and opcode columns".
+- In an MSVC listing, the fold of a function ends at its `ENDP` line.
+- A clang-cl artifact refreshes when a header of its source changes.
+- Exported control-flow graph SVG files keep their colors and fonts.
+- The control-flow graph toolbar wraps in a narrow view, and the legend stays hidden until you click **Legend**.
+- A restored artifact tab now starts the extension.
 
 ## 0.9.1 - 2026-10-30
 

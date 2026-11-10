@@ -1,15 +1,11 @@
 # Cogitator Lens sample projects
 
-These projects are small, dependency-free inputs for manually exercising every source language
-recognized by Cogitator Lens. Open a project directory on its own, or open
-`coglens-samples.code-workspace` to browse all of them at once. Trust the workspace so the extension
-can invoke the configured toolchains.
+These small projects have no dependencies. Use them to test each source language of Cogitator Lens
+by hand. Open one project folder, or open `coglens-samples.code-workspace` for all of them. Trust
+the workspace, so the extension can run the configured toolchains.
 
-The samples intentionally contain calls, branches, loops, switch-like control flow, inline
-candidates, and fixed-size local storage. Those patterns make source mappings, symbol demangling,
-optimization remarks, stack reports, and control-flow graphs easy to inspect without producing a
-large artifact. C and C++ also include a local header to exercise preprocessing and dependency-aware
-cache invalidation.
+The samples have calls, branches, loops, and switches, so each artifact has something to show. The
+C and C++ samples include a local header, to test preprocessing and header refreshes.
 
 ## Toolchains
 
@@ -25,8 +21,8 @@ The checked-in settings use executables found on `PATH`:
 | Rust                               | `cargo` or `rustc`    | Assembly, LLVM IR, MIR, CFG                                                                          |
 | Python                             | `python`              | Assembly (bytecode), AST, stack analysis, CFG                                                        |
 
-Edit `.vscode/settings.json` in a standalone project, or the `settings` section of the umbrella
-workspace, if an executable has a different name or location. Binary disassembly additionally needs
+An executable can have a different name or location on your computer. Then edit
+`.vscode/settings.json` of the project, or the `settings` section of the workspace file. Binary disassembly additionally needs
 `llvm-objdump` beside Clang or on `PATH`. Optional Rust demangling needs `rustfilt`. CUDA requires
 the CUDA toolkit; its bundled `nvdisasm` enables the SASS disassembly artifact.
 
