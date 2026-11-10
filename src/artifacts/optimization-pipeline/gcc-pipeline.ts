@@ -1,6 +1,6 @@
 import path from 'path';
-import { CompilationError } from '../../types/index.js';
 import type { ArtifactProducer } from '../../toolchains/toolchain-contracts.js';
+import { requiredFunctionFilter } from './pipeline-producer.js';
 import { pipelineRenderer, type ParsedPipeline } from './pipeline-renderer.js';
 
 /** The name of a GCC pass dump, `<base>.<number><kind>.<pass>`, such as `output.c.271r.expand`. */
@@ -29,12 +29,7 @@ const passKinds: Readonly<Record<string, string>> = { t: 'tree', i: 'ipa', r: 'r
  * GCC has no option that dumps one function, so the dumps of a large source can be very large.
  */
 export const gccPipelineProducer: ArtifactProducer = async (backend, source, options, cancellationToken) => {
-	const { functionFilter } = options;
-	if (functionFilter === undefined) {
-		throw new CompilationError(
-			'The optimization pipeline shows one function. Run "Open Artifact" again to select a function.',
-		);
-	}
+	const functionFilter = requiredFunctionFilter(options);
 	return backend.produceArtifact(
 		source,
 		options,

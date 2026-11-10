@@ -1,8 +1,7 @@
-import path from 'node:path';
 import type { CancellationToken } from 'vscode';
 import { execute } from '../../exec.js';
 import type { ArtifactProducer } from '../../toolchains/toolchain-contracts.js';
-import { executeTextTool, type ToolRunContext } from '../../toolchains/toolchain-backend.js';
+import type { ToolRunContext } from '../../toolchains/toolchain-backend.js';
 import type { AuxiliaryTool } from '../../types/index.js';
 import { parseObjdumpSections, type ObjectSection } from '../code-size/object-sections.js';
 
@@ -41,7 +40,6 @@ export function binaryDisassemblyProducer(disassembler: BinaryDisassembler): Art
 		if (!outputArguments || !objectFilename) {
 			throw new Error(`${backend.profile.displayName} has no object-file production capability.`);
 		}
-		const demangler = options.productionOptions.demangle ? backend.profile.tools.demangler : undefined;
 		return backend.produceWithTool(
 			source,
 			options,
@@ -61,18 +59,8 @@ export function binaryDisassemblyProducer(disassembler: BinaryDisassembler): Art
 					);
 					return sections ? { sections } : {};
 				},
-				normalizeOutput: async (output, files) => {
-					const normalized = (await disassembler.normalizeOutput?.(output, files.object)) ?? output;
-					return demangler
-						? executeTextTool(
-								normalized,
-								demangler,
-								{ ...process.env, ...backend.profile.environment, ...options.env },
-								options.workingDirectory ?? path.dirname(source.fsPath),
-								cancellationToken,
-							)
-						: normalized;
-				},
+				normalizeOutput: (output, files) => disassembler.normalizeOutput?.(output, files.object) ?? output,
+				demangle: true,
 			},
 			cancellationToken,
 		);

@@ -9,6 +9,7 @@ import {
 	targetFromArguments,
 	targetFromClangBanner,
 	toolchainTarget,
+	withX86Mode,
 } from '../../src/toolchains/target-architecture.js';
 import { toolchainProfile } from '../support/toolchains.js';
 
@@ -38,6 +39,19 @@ test('the last target argument applies', () => {
 	);
 	assert.equal(targetFromArguments(['-O2', '-target']), undefined);
 	assert.equal(targetFromArguments([]), undefined);
+});
+
+test('-m32 and -m64 select the x86 mode of the target, and the last one applies', () => {
+	// llvm-mca stops on 32-bit code such as pushl with a 64-bit target.
+	assert.equal(withX86Mode('x86_64-linux-gnu', ['-O2', '-m32']), 'i686-linux-gnu');
+	assert.equal(withX86Mode('x86_64-pc-windows-msvc', ['/clang:-m32']), 'i686-pc-windows-msvc');
+	assert.equal(withX86Mode('i686-w64-mingw32', ['-m64']), 'x86_64-w64-mingw32');
+	assert.equal(withX86Mode('x86_64-linux-gnu', ['-m32', '-m64']), 'x86_64-linux-gnu');
+	assert.equal(withX86Mode('i686-linux-gnu', ['-m32']), 'i686-linux-gnu');
+	assert.equal(withX86Mode('x86_64-linux-gnu', ['-O2']), 'x86_64-linux-gnu');
+	// -m32 is no mode option of another instruction set.
+	assert.equal(withX86Mode('aarch64-linux-gnu', ['-m32']), 'aarch64-linux-gnu');
+	assert.equal(withX86Mode(undefined, ['-m32']), undefined);
 });
 
 test('the path of cl.exe names its target', () => {

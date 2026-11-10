@@ -1,8 +1,11 @@
 import fs from 'node:fs';
-import path from 'node:path';
 import type { ArtifactImplementation, ArtifactProducer } from '../../toolchains/toolchain-contracts.js';
-import { executeTextTool } from '../../toolchains/toolchain-backend.js';
-import { architectureOfTriple, targetFromArguments, toolchainTarget } from '../../toolchains/target-architecture.js';
+import {
+	architectureOfTriple,
+	targetFromArguments,
+	toolchainTarget,
+	withX86Mode,
+} from '../../toolchains/target-architecture.js';
 import type { TargetArchitecture } from '../../types/index.js';
 import { markAnalysisRegions, type AnalysisRegion } from './analysis-regions.js';
 
@@ -44,14 +47,13 @@ export const machineCodeAnalysisProducer: ArtifactProducer = async (backend, sou
 		throw new Error(`${backend.profile.displayName} has no assembly production capability.`);
 	}
 	const args = [...backend.profile.defaultArguments, ...(options.args ?? [])];
-	const target = targetFromArguments(args) ?? (await toolchainTarget(backend.profile));
+	const target = withX86Mode(targetFromArguments(args) ?? (await toolchainTarget(backend.profile)), args);
 	const architecture = architectureOfTriple(target);
 	const analysisArguments = [
 		...(target ? [`-mtriple=${target}`] : []),
 		`-mcpu=${analysisProcessor(args, architecture)}`,
 		...(options.productionOptions.intel && architecture === 'x86' ? ['-output-asm-variant=1'] : []),
 	];
-	const workingDirectory = options.workingDirectory ?? path.dirname(source.fsPath);
 	return backend.produceWithTool(
 		source,
 		options,
@@ -66,18 +68,7 @@ export const machineCodeAnalysisProducer: ArtifactProducer = async (backend, sou
 				await fs.promises.writeFile(files.analysis, marked.text);
 				return { regions: marked.regions } satisfies AnalysisData;
 			},
-			normalizeOutput: (output) => {
-				const demangler = backend.profile.tools.demangler;
-				return options.productionOptions.demangle && demangler
-					? executeTextTool(
-							output,
-							demangler,
-							{ ...process.env, ...backend.profile.environment, ...options.env },
-							workingDirectory,
-							cancellationToken,
-						)
-					: output;
-			},
+			demangle: true,
 		},
 		cancellationToken,
 	);

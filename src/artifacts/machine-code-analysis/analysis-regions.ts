@@ -27,8 +27,12 @@ const coffDefinition = /^\s*\.def\s+("(?:[^"\\]|\\.)+"|[^\s;]+)\s*;/u;
 const coffFunctionType = /\.type\s+32\s*;/u;
 /** A directive that follows the label of a function on a target without symbol types. */
 const procedureStart = /^\s*\.(?:cfi_startproc|seh_proc)\b/u;
-/** A line after which no instruction belongs to the function before it. */
-const functionEnd = /^\s*(?:\.(?:section|text|data|bss|cfi_endproc|seh_endproc|size)\b|#\s*-- End function)/u;
+/**
+ * A line after which no instruction belongs to the function before it. A section directive does not
+ * end a function: GCC puts a jump table into `.rodata` in the middle of its function, and then the
+ * code of the function continues in `.text`. A data section holds no instructions.
+ */
+const functionEnd = /^\s*(?:\.(?:cfi_endproc|seh_endproc|size)\b|#\s*-- End function)/u;
 /** Debug line directives: DWARF `.file` and `.loc`, and CodeView `.cv_file` and `.cv_loc`. */
 const dwarfFile = /^\s*\.file\s+(\d+)\s+("(?:[^"\\]|\\.)*")(?:\s+("(?:[^"\\]|\\.)*"))?/u;
 const dwarfLocation = /^\s*\.loc\s+(\d+)\s+(\d+)/u;

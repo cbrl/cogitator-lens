@@ -2,10 +2,12 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import type { CancellationToken } from 'vscode';
 import { parseMakeDepfile } from '../compilation/artifact-inputs.js';
+import { ExecError } from '../exec.js';
 import {
-	llvmPassDumpOptions,
 	pipelineProducer,
+	rustPassDumpArguments,
 	type PipelineArguments,
 } from '../artifacts/optimization-pipeline/pipeline-producer.js';
 import { machineCodeAnalysis } from '../artifacts/machine-code-analysis/analysis-producer.js';
@@ -189,13 +191,8 @@ export const cargoOptimizationRemarksOutput: ArtifactOutputSpec = Object.freeze(
 	outputDiagnostics: (text: string) => text,
 });
 
-/** With more than one codegen unit, the units run at the same time, and their pass dumps mix. */
-const cargoPipelineArguments: PipelineArguments = (functionFilter) => [
-	'-C',
-	'codegen-units=1',
-	'-C',
-	`llvm-args=${llvmPassDumpOptions(functionFilter).join(' ')}`,
-];
+/** Cargo builds the crate, so each pass of the code generator runs without an output. */
+const cargoPipelineArguments: PipelineArguments = (functionFilter) => rustPassDumpArguments(functionFilter);
 
 /**
  * The dep-info file of rustc lists the files of the crate and of its path dependencies. With this
@@ -212,6 +209,14 @@ const cargoDependencyCollection: DependencyCollectionSpec = Object.freeze({
 const outputDirectoryRuns = new Map<string, Promise<void>>();
 
 /**
+ * The folder of the output directories of this user. On Linux, all users share the temporary
+ * folder, so the name of the folder has the user ID.
+ */
+export function cargoRunsFolder(): string {
+	return path.join(os.tmpdir(), `coglens-cargo-${process.getuid?.() ?? os.userInfo().username}`);
+}
+
+/**
  * The directory of the outputs of the arguments, which is the same for each run of them. Cargo puts
  * the rustc arguments into the file names of its outputs, so a new temporary directory in the
  * arguments makes new files at each run. The files then fill the target directory. Cargo also keeps
@@ -223,7 +228,74 @@ export function cargoOutputDirectory(args: readonly string[], temporaryDirectory
 		.update(JSON.stringify(args.map((argument) => argument.split(temporaryDirectory).join('\0'))))
 		.digest('hex')
 		.slice(0, 16);
-	return path.join(os.tmpdir(), 'coglens-cargo', key);
+	return path.join(cargoRunsFolder(), key);
+}
+
+/**
+ * Makes the folder of the output directories. Only its owner can open it. A folder of another
+ * user, or a link, stops the run, because another user could then change the outputs.
+ */
+async function makeRunsFolder(folder: string): Promise<void> {
+	await fs.promises.mkdir(folder, { recursive: true, mode: 0o700 });
+	const stats = await fs.promises.lstat(folder);
+	const user = process.getuid?.();
+	if (!stats.isDirectory() || (user !== undefined && stats.uid !== user)) {
+		throw new Error(`The Cargo output folder ${folder} belongs to another user. Remove it, then compile again.`);
+	}
+}
+
+/** The time between two checks of a lock file that another process has. */
+const lockRetryMilliseconds = 100;
+/** A lock file older than this is free, also when its process ID is in use again. */
+const staleLockMilliseconds = 60 * 60 * 1000;
+
+function processRuns(processId: number): boolean {
+	try {
+		process.kill(processId, 0);
+		return true;
+	} catch (error) {
+		return (error as NodeJS.ErrnoException).code === 'EPERM';
+	}
+}
+
+/**
+ * Takes the lock file of an output directory, and waits while another process has it. Each VS Code
+ * window has its own extension host, so two windows can compile the same target at the same time.
+ * The lock file holds the process ID of its owner. The lock of a process that stopped is free.
+ * Returns the function that frees the lock.
+ */
+export async function lockOutputDirectory(
+	directory: string,
+	cancellationToken: CancellationToken,
+): Promise<() => Promise<void>> {
+	const lockFile = `${directory}.lock`;
+	for (;;) {
+		if (cancellationToken.isCancellationRequested) {
+			throw new ExecError(
+				'cancelled',
+				'The compile was cancelled while another window compiled the same target.',
+			);
+		}
+		try {
+			await fs.promises.writeFile(lockFile, String(process.pid), { flag: 'wx' });
+			return () => fs.promises.rm(lockFile, { force: true });
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code !== 'EEXIST') {
+				throw error;
+			}
+		}
+		const owner = Number.parseInt(await fs.promises.readFile(lockFile, 'utf8').catch(() => ''), 10);
+		const modified = (await fs.promises.stat(lockFile).catch(() => undefined))?.mtimeMs ?? Date.now();
+		// This process takes the lock of a directory once at a time, so its own ID in the file is old.
+		const free =
+			Date.now() - modified > staleLockMilliseconds ||
+			(owner > 0 && (owner === process.pid || !processRuns(owner)));
+		if (free) {
+			await fs.promises.rm(lockFile, { force: true });
+			continue;
+		}
+		await new Promise((resolve) => setTimeout(resolve, lockRetryMilliseconds));
+	}
 }
 
 /**
@@ -231,14 +303,22 @@ export function cargoOutputDirectory(args: readonly string[], temporaryDirectory
  * directory of the run, where the backend reads them. The JSON messages of Cargo give the files of
  * the local dependencies, and they do not go into the output that the user sees.
  */
-export const runCargoInvocation: InvocationRunner = async ({ arguments: args, temporaryDirectory, execute, log }) => {
+export const runCargoInvocation: InvocationRunner = async ({
+	arguments: args,
+	temporaryDirectory,
+	execute,
+	log,
+	cancellationToken,
+}) => {
 	const directory = cargoOutputDirectory(args, temporaryDirectory);
 	const runArguments = args.map((argument) => argument.split(temporaryDirectory).join(directory));
 	return oneRunAtATime(directory, async () => {
-		await fs.promises.rm(directory, { recursive: true, force: true });
-		await fs.promises.mkdir(directory, { recursive: true });
-		log(`Cargo writes the outputs to ${directory}, so that each run has the same arguments.`);
+		await makeRunsFolder(path.dirname(directory));
+		const unlock = await lockOutputDirectory(directory, cancellationToken);
 		try {
+			await fs.promises.rm(directory, { recursive: true, force: true });
+			await fs.promises.mkdir(directory);
+			log(`Cargo writes the outputs to ${directory}, so that each run has the same arguments.`);
 			const result = await execute(runArguments);
 			const { messages, text } = cargoMessages(result.stdout);
 			await addLocalDependencies(runArguments, localDependencyInfoFiles(messages));
@@ -250,6 +330,7 @@ export const runCargoInvocation: InvocationRunner = async ({ arguments: args, te
 				: error;
 		} finally {
 			await fs.promises.rm(directory, { recursive: true, force: true }).catch(() => undefined);
+			await unlock().catch(() => undefined);
 		}
 	});
 };

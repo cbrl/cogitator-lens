@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import childProcess from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,13 +11,16 @@ import {
 	cargoOptimizationRemarksOutput,
 	cargoOutputArguments,
 	cargoOutputDirectory,
+	cargoRunsFolder,
 	localDependencyInfoFiles,
+	lockOutputDirectory,
 	runCargoInvocation,
 	splitCargoArguments,
 	stripCargoManagedArguments,
 } from '../../src/toolchains/cargo.js';
 import { ToolExitError } from '../../src/toolchains/toolchain-backend.js';
-import type { ExecResult } from '../../src/exec.js';
+import { ExecError, type ExecResult } from '../../src/exec.js';
+import { neverCancelled } from '../support/toolchains.js';
 
 const source = path.resolve('crate', 'src', 'geometry.rs');
 const variantArguments = [
@@ -137,6 +141,7 @@ async function runWith(
 			temporaryDirectory: temporary,
 			execute: cargo,
 			log: () => undefined,
+			cancellationToken: neverCancelled,
 		});
 		const names = (await fs.promises.readdir(temporary)).sort();
 		const files = Object.fromEntries(
@@ -204,6 +209,62 @@ test('each run of the same arguments writes the outputs to the same directory, a
 	}
 	assert.equal(directories[0], directories[1]);
 	assert.notEqual(directories[0], cargoOutputDirectory(['rustc', '--bin', 'other'], os.tmpdir()));
+	// Each user has a folder of its own, because Linux users share the temporary folder.
+	assert.equal(path.dirname(directories[0]), cargoRunsFolder());
+	assert.match(path.basename(cargoRunsFolder()), /^coglens-cargo-.+/u);
+	if (process.platform !== 'win32') {
+		assert.equal((await fs.promises.stat(cargoRunsFolder())).mode & 0o777, 0o700);
+	}
+});
+
+test('a run waits for the lock of another process, and takes the lock of a process that stopped', async () => {
+	const args = (temporary: string) => [
+		'rustc',
+		'--lib',
+		'lock-test',
+		'--',
+		`--emit=asm=${path.join(temporary, 'a.s')}`,
+	];
+	const directory = cargoOutputDirectory(args(os.tmpdir()), os.tmpdir());
+	const lockFile = `${directory}.lock`;
+	await fs.promises.mkdir(path.dirname(directory), { recursive: true });
+	const cargo = async (runArguments: readonly string[]) => {
+		await fs.promises.writeFile(path.join(outputDirectoryOf(runArguments), 'a.s'), 'code');
+		return { returnCode: 0, stdout: '', stderr: '' };
+	};
+	try {
+		// The test runner is a process that runs, so its lock stays until it frees it.
+		await fs.promises.writeFile(lockFile, String(process.ppid));
+		let started = 0;
+		const run = runWith(args, async (runArguments) => {
+			started = Date.now();
+			return cargo(runArguments);
+		});
+		await new Promise((resolve) => setTimeout(resolve, 300));
+		assert.equal(started, 0, 'The run waits while the other process has the lock');
+		const freed = Date.now();
+		await fs.promises.rm(lockFile);
+		assert.deepEqual((await run).files, { 'a.s': 'code' });
+		assert.ok(started >= freed);
+		assert.equal(fs.existsSync(lockFile), false, 'The run frees its lock');
+
+		// A process that stopped does not free its lock, and the next run takes it.
+		const stopped = childProcess.spawnSync(process.execPath, ['-e', '']).pid;
+		await fs.promises.writeFile(lockFile, String(stopped));
+		assert.deepEqual((await runWith(args, cargo)).files, { 'a.s': 'code' });
+		assert.equal(fs.existsSync(lockFile), false);
+
+		// A cancelled request stops waiting.
+		await fs.promises.writeFile(lockFile, String(process.ppid));
+		const token = { isCancellationRequested: false, onCancellationRequested: () => ({ dispose: () => undefined }) };
+		setTimeout(() => (token.isCancellationRequested = true), 150);
+		await assert.rejects(
+			lockOutputDirectory(directory, token as never),
+			(error: unknown) => error instanceof ExecError && error.kind === 'cancelled',
+		);
+	} finally {
+		await fs.promises.rm(lockFile, { force: true });
+	}
 });
 
 test('a failed run removes the JSON messages from its output, and the next run starts clean', async () => {

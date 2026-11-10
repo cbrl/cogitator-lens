@@ -5,6 +5,7 @@
  * the PATH. It skips when one of them is absent.
  */
 import assert from 'node:assert/strict';
+import childProcess from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -26,8 +27,25 @@ const cSource = [
 	'}',
 	'int counter = 3;',
 	'int other_function(int v) { return v + counter; }',
+	'int dense(int value, int other) {',
+	'\tswitch (value) {',
+	'\tcase 0: return other * 3;',
+	'\tcase 1: return other + 7;',
+	'\tcase 2: return other << 2;',
+	'\tcase 3: return other ^ 5;',
+	'\tcase 4: return other - 9;',
+	'\tcase 5: return other / 3;',
+	'\tdefault: return other;',
+	'\t}',
+	'}',
 	'',
 ].join('\n');
+
+/** The text of the report of one region, from its title to the title of the next region. */
+function regionReport(rendered: RenderedTextArtifact | undefined, name: string): string {
+	const text = rendered?.lines.map((line) => line.text).join('\n') ?? '';
+	return text.split(/^\[\d+\] Code Region - /mu).find((part) => part.startsWith(`${name}\n`)) ?? '';
+}
 
 function firstCommand(t: TestContext, commands: readonly string[]): string | undefined {
 	const found = commands.find((command) => commandExists(command, '--version'));
@@ -101,8 +119,28 @@ test('llvm-mca analyzes each function of the clang assembly', async (t) => {
 test('llvm-mca analyzes each function of the GCC assembly', async (t) => {
 	const gcc = firstCommand(t, ['gcc', 'gcc-14', 'gcc-13']);
 	if (gcc) {
-		assertMapped(await analyze(t, 'gcc', gcc, 'main.c', ['-O2', '-g']), 'main.c');
+		const rendered = await analyze(t, 'gcc', gcc, 'main.c', ['-O2', '-g']);
+		assertMapped(rendered, 'main.c');
+		// GCC puts the jump table of the switch into .rodata, and the cases follow it.
+		assert.ok(rendered === undefined || /xorl\s/u.test(regionReport(rendered, 'dense')), 'The cases are in dense');
 	}
+});
+
+test('llvm-mca analyzes the 32-bit code of GCC -m32 with a 32-bit target', async (t) => {
+	const gcc = firstCommand(t, ['gcc', 'gcc-14', 'gcc-13']);
+	if (!gcc) {
+		return;
+	}
+	const probe = childProcess.spawnSync(gcc, ['-m32', '-S', '-x', 'c', '-o', '-', '-'], {
+		input: 'int f(void) { return 1; }\n',
+		stdio: ['pipe', 'ignore', 'ignore'],
+		windowsHide: true,
+	});
+	if (probe.status !== 0 || process.arch !== 'x64') {
+		t.skip(`${gcc} does not compile 32-bit x86 code here`);
+		return;
+	}
+	assertMapped(await analyze(t, 'gcc', gcc, 'main.c', ['-O2', '-g', '-m32']), 'main.c');
 });
 
 test('llvm-mca analyzes each function of the clang-cl assembly, also a leaf function', async (t) => {

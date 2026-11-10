@@ -87,10 +87,43 @@ test('the image sections merge the sections of each function and leave out metad
 		{ name: '.text', size: 0x35 },
 		{ name: '.data', size: 4 },
 	]);
+	// With -ffunction-sections and -fdata-sections, and in rustc output, each function and variable
+	// has a section of its own. GNU ld merges them as its default linker script does.
+	const sections = (entries: readonly (readonly [string, number])[]) =>
+		imageSections(entries.map(([name, size]) => ({ name, size })));
+	assert.deepEqual(
+		sections([
+			['.text', 0],
+			['.text._Z3fooi', 0x10],
+			['.text._ZN3app8geometry5total17h0123456789abcdefE', 0x20],
+			['.text.unlikely', 4],
+			['.text.startup.main', 8],
+			['.rela.text._Z3fooi', 0x18],
+			['.rodata.str1.1', 6],
+			['.rodata..L__unnamed_1', 2],
+			['.data.rel.ro..L__unnamed_2', 0x10],
+			['.data.rel.ro.local._ZTV3Foo', 8],
+			['.data.rel.local.pointer', 8],
+			['.bss.counter', 4],
+			['.tbss.value', 4],
+			['.init_array.00099', 8],
+			['.eh_frame', 0x30],
+		]),
+		[
+			{ name: '.text', size: 0x10 + 0x20 + 4 + 8 },
+			{ name: '.eh_frame', size: 0x30 },
+			{ name: '.data.rel.ro', size: 0x18 },
+			{ name: '.data', size: 8 },
+			{ name: '.init_array', size: 8 },
+			{ name: '.rodata', size: 8 },
+			{ name: '.bss', size: 4 },
+			{ name: '.tbss', size: 4 },
+		],
+	);
 });
 
-function renderSize(producerData?: unknown) {
-	const text = readFixture('binary', 'gnu-objdump.txt');
+function renderSize(producerData?: unknown, fixture = 'gnu-objdump.txt') {
+	const text = readFixture('binary', fixture);
 	const projectRoot = process.platform === 'win32' ? 'C:/project' : '/project';
 	return renderCodeSize(
 		rawArtifact('code-size', process.platform === 'win32' ? text : text.replaceAll('C:/project', '/project'), {
@@ -125,6 +158,16 @@ test('the code size lists each function by the bytes of its instructions, larges
 		],
 	);
 	assert.deepEqual(rendered.metrics, { functionCount: 2, codeSizeBytes: 11, sectionBytes: 129 });
+});
+
+test('an AArch64 instruction word of GNU objdump is four bytes', () => {
+	// GNU objdump 2.46 of clang 20.1 --target=aarch64-linux-gnu -O1: twice has 2 instructions, and sum has 12.
+	const rendered = renderSize(undefined, 'gnu-objdump-aarch64.txt');
+	assert.deepEqual(
+		rendered.lines.slice(4, 6).map((line) => line.text),
+		['     48   85.7%  sum', '      8   14.3%  twice'],
+	);
+	assert.equal(rendered.metrics.codeSizeBytes, 56);
 });
 
 test('the code size without a section listing shows the functions only', () => {

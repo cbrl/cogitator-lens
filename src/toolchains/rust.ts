@@ -1,8 +1,8 @@
 import path from 'path';
 import { parseMakeDepfile } from '../compilation/artifact-inputs.js';
 import {
-	llvmPassDumpOptions,
 	pipelineProducer,
+	rustPassDumpArguments,
 	type PipelineArguments,
 } from '../artifacts/optimization-pipeline/pipeline-producer.js';
 import { machineCodeAnalysis } from '../artifacts/machine-code-analysis/analysis-producer.js';
@@ -97,16 +97,10 @@ export const rustOptimizationRemarksOutput: ArtifactOutputSpec = Object.freeze({
 	outputDiagnostics: (text: string) => text,
 });
 
-/**
- * rustc writes assembly with one codegen unit. With more units, the units run at the same time, and
- * their pass dumps mix.
- */
+/** rustc writes assembly, so each pass of the code generator runs. */
 const rustPipelineArguments: PipelineArguments = (functionFilter, temporaryDirectory, providerArguments) => [
 	...rustOutputArguments('assembly', path.join(temporaryDirectory, 'output.s'), providerArguments),
-	'-C',
-	'codegen-units=1',
-	'-C',
-	`llvm-args=${llvmPassDumpOptions(functionFilter).join(' ')}`,
+	...rustPassDumpArguments(functionFilter),
 ];
 
 /** Removes the output, emit, and diagnostic-format flags that the Rust backend owns. */

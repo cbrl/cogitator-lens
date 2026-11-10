@@ -116,7 +116,8 @@ selected variant. Otherwise, the comparison uses no variant arguments and shows 
 assembly, binary disassembly, LLVM IR, and Rust MIR, the comparison can show one function. When the
 other compiler names the function in another way, you also select the function of the right listing.
 The comparison can also renumber local labels and hide addresses, so the diff shows only changed
-instructions.
+instructions. Compare Artifacts does not offer the optimization pipeline, because it shows one
+function. To compare two pipeline results, use **Compare With Previous Result** or a snapshot.
 
 ### Optimization remarks
 
@@ -166,7 +167,8 @@ compiler or on the PATH. Each function is a code region, so `llvm-mca` analyzes 
 its own. The report shows the throughput, the latency of each instruction, and the resource
 pressure. Each row of an instruction table connects to its source line, like a listing.
 
-The target of the compile sets the `-mtriple` of `llvm-mca`. A `-mcpu` argument, an x86 `-march`
+The target of the compile sets the `-mtriple` of `llvm-mca`, and on x86, `-m32` or `-m64` sets its
+mode. A `-mcpu` argument, an x86 `-march`
 argument, or a rustc `-C target-cpu` argument sets its processor. Without one, `llvm-mca` models a
 generic processor, so the result does not depend on the computer. The Intel syntax option shows
 x86 instructions in Intel syntax.
@@ -177,8 +179,8 @@ The **Code size** artifact lists the size of each function and each section of t
 It uses the disassembler of the binary disassembly, so the two artifacts share one compile. The size
 of a function is the sum of the bytes of its instructions, and the largest function comes first.
 Select a function row to show its first source line. The section table merges the sections that the
-linker merges, such as the `.text` section of each function. It leaves out the debug, symbol, and
-relocation sections. Turn on the demangle option to show the demangled names.
+linker merges, such as the `.text` section of each function in a COFF object, and the `.text.name`
+sections of an ELF object. It leaves out the debug, symbol, and relocation sections. Turn on the demangle option to show the demangled names.
 
 ### Navigation
 

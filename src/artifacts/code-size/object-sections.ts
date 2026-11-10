@@ -46,15 +46,25 @@ const metadataSection =
 	/^(?:\.debug|__debug|\.rela?(?:\.|$)|\.rel\.|\.symtab|\.strtab|\.shstrtab|\.comment|\.note|\.group|\.drectve|\.llvm_addrsig|\.llvm\.|\.cv_|__LD|__compact_unwind)/u;
 
 /**
- * The sections of the linked image: the linker merges `.text$mn` into `.text` and merges sections
- * with the same name, such as the one section of each function. Debug, symbol, relocation, and
- * linker sections and empty sections are left out. The largest section comes first.
+ * An ELF section of one function or one variable, such as `.text._Z3fooi` from `-ffunction-sections`
+ * or `.rodata.str1.1`. rustc gives each function a section of its own by default. The default linker
+ * script of GNU ld puts each one into the output section that the first group names.
+ */
+const elfInputSection =
+	/^(\.data\.rel\.ro|\.text|\.rodata|\.data|\.bss|\.tdata|\.tbss|\.sdata|\.sbss|\.srodata|\.gcc_except_table|\.init_array|\.fini_array|\.ARM\.extab|\.ARM\.exidx)\./u;
+
+/**
+ * The sections of the linked image. The linker merges the COFF section `.text$mn` into `.text`, and
+ * the ELF section `.text.name` into `.text`. It also merges the sections with the same name, such as
+ * the one section of each function. Debug, symbol, relocation, and linker sections and empty sections
+ * are left out. The largest section comes first.
  */
 export function imageSections(sections: readonly ObjectSection[]): readonly ObjectSection[] {
 	const sizes = new Map<string, number>();
 	for (const section of sections) {
-		const name = section.name.replace(/\$.*$/u, '');
-		if (!metadataSection.test(name)) {
+		const objectName = section.name.replace(/\$.*$/u, '');
+		const name = elfInputSection.exec(objectName)?.[1] ?? objectName;
+		if (!metadataSection.test(objectName)) {
 			sizes.set(name, (sizes.get(name) ?? 0) + section.size);
 		}
 	}

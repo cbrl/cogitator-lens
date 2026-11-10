@@ -13,6 +13,18 @@ const fullModuleKey = '<Full Module>';
 /** The function filter of a compile, from the LLVM option in its arguments. */
 const functionFilterArgument = /-filter-print-funcs=(\S+)/u;
 
+/** The last line of a function in an IR dump or in a machine code dump. */
+const functionDumpEnd = /^(?:\}|# End machine code for function .+\.)\s*$/u;
+
+function lastIndex<T>(items: readonly T[], predicate: (item: T) => boolean): number {
+	for (let index = items.length - 1; index >= 0; index--) {
+		if (predicate(items[index])) {
+			return index;
+		}
+	}
+	return -1;
+}
+
 /**
  * Reads the passes of an optimization pipeline from LLVM `-print-before-all` and
  * `-print-after-all` output. The compile prints one function only, so the full-module mode keeps
@@ -21,18 +33,24 @@ const functionFilterArgument = /-filter-print-funcs=(\S+)/u;
  */
 export function parsePipelinePasses(text: string): readonly Pass[] {
 	const lines = text.split(/\r?\n/u).map((line) => ({ text: line }));
-	// Without a dump header, the parser starts at the last line, and then it fails.
-	const hasDump = lines.some(
+	const lastHeader = lastIndex(
+		lines,
 		(line) =>
 			parser.irDumpHeader.test(line.text) ||
 			parser.machineCodeDumpHeader.test(line.text) ||
 			parser.cirDumpHeader.test(line.text),
 	);
-	if (!hasDump) {
+	// Without a dump header, the parser starts at the last line, and then it fails.
+	if (lastHeader < 0) {
 		return [];
 	}
+	// The compiler prints lines after the last dump, such as "warning: 1 warning emitted" of rustc or
+	// the "Finished" line of Cargo. They are not part of the function, so the last dump ends with the
+	// function. Otherwise the last pass seems to change the function.
+	const lastFunctionEnd = lastIndex(lines, (line) => functionDumpEnd.test(line.text));
+	const dumps = lastFunctionEnd > lastHeader ? lines.slice(0, lastFunctionEnd + 1) : lines;
 	try {
-		const results = parser.process(lines, {}, { filterDebugInfo: true, filterIRMetadata: false, fullModule: true });
+		const results = parser.process(dumps, {}, { filterDebugInfo: true, filterIRMetadata: false, fullModule: true });
 		return results[fullModuleKey] ?? [];
 	} catch (error) {
 		const message = error instanceof Error ? error.message : String(error);

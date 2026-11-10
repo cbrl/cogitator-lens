@@ -39,7 +39,7 @@ import { CompilationError } from '../types/index.js';
 import * as logger from '../logger.js';
 import type { ConfigurationService } from '../services/configuration-service.js';
 import { getArtifactOutputChoices } from '../toolchains/toolchain-artifacts.js';
-import { executeTextTool, type ToolchainBackend } from '../toolchains/toolchain-backend.js';
+import type { ToolchainBackend } from '../toolchains/toolchain-backend.js';
 import type { TreeNode } from '../tree/treedata.js';
 import type {
 	ArtifactKind,
@@ -391,7 +391,7 @@ async function pickFilterFunction(
 		await vscode.window.showInformationMessage(`The ${listingName} of the source has no functions.`);
 		return undefined;
 	}
-	const labels = await demangledNames(backend, names, path.dirname(source.fsPath));
+	const labels = await demangledNames(backend, names, variant, path.dirname(source.fsPath));
 	const choice = await vscode.window.showQuickPick(
 		names.map((name, index) => ({
 			label: labels[index],
@@ -403,23 +403,25 @@ async function pickFilterFunction(
 	return choice?.name;
 }
 
-/** The names that the demangler of the toolchain gives, or the names when it has no demangler or fails. */
+/**
+ * The names that the demangler of the toolchain gives, or the names when it has no demangler or fails.
+ * The demangler runs with the environment and in the working directory of the variant.
+ */
 async function demangledNames(
 	backend: ToolchainBackend,
 	names: readonly string[],
+	variant: CompilationVariant,
 	workingDirectory: string,
 ): Promise<readonly string[]> {
-	const demangler = backend.profile.tools.demangler;
-	if (!demangler) {
+	if (!backend.profile.tools.demangler) {
 		return names;
 	}
 	const cancellation = new vscode.CancellationTokenSource();
 	try {
-		const output = await executeTextTool(
+		const output = await backend.demangle(
 			`${names.join('\n')}\n`,
-			demangler,
-			{ ...process.env, ...backend.profile.environment },
-			workingDirectory,
+			{ ...process.env, ...backend.profile.environment, ...variant.environment },
+			variant.workingDirectory || workingDirectory,
 			cancellation.token,
 		);
 		// The demangler writes one line for each line that it reads.
@@ -795,7 +797,11 @@ export function compatibleComparisonTargets(
 	);
 }
 
-/** The text artifact kinds that both targets support, and whether they also share a graph kind. */
+/**
+ * The text artifact kinds that both targets support, and whether they also share a graph kind. A
+ * kind that shows one function, such as the optimization pipeline, is not in the list. Its URI
+ * needs a function, and the comparison does not ask for one.
+ */
 export function commonComparisonKinds(
 	left: ComparisonTarget,
 	right: ComparisonTarget,
@@ -805,7 +811,10 @@ export function commonComparisonKinds(
 		(kind) => targetSupportsKind(left, kind, registry) && targetSupportsKind(right, kind, registry),
 	);
 	return {
-		textKinds: common.filter((kind) => artifactDefinitions[kind].presentation === 'text'),
+		textKinds: common.filter(
+			(kind) =>
+				artifactDefinitions[kind].presentation === 'text' && !artifactDefinitions[kind].requiresFunctionFilter,
+		),
 		hasGraphKind: common.some((kind) => artifactDefinitions[kind].presentation === 'graph'),
 	};
 }

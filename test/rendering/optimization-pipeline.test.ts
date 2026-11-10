@@ -12,6 +12,7 @@ import {
 	clangPipelineArguments,
 	llvmPassDumpOptions,
 	pipelineProducer,
+	rustPassDumpArguments,
 } from '../../src/artifacts/optimization-pipeline/pipeline-producer.js';
 import { defaultArtifactOptions, type DisplayOptions } from '../../src/types/index.js';
 import { rawArtifact, renderContext } from '../support/artifacts.js';
@@ -166,6 +167,32 @@ test('a blank line at the end of the output is no change of the last pass', () =
 	assert.equal(rendered.metrics.changedPassCount, 0);
 });
 
+test('the lines after the last dump are no change of the last pass', () => {
+	// The end of the error output of rustc 1.97, Cargo 1.97, and clang, after the dumps.
+	const trailers = [
+		['', 'warning: 1 warning emitted', ''],
+		[
+			'',
+			'warning: `app` (lib) generated 1 warning (run `cargo fix --lib -p app` to apply 1 suggestion)',
+			'    Finished `release` profile [optimized] target(s) in 0.41s',
+		],
+		['1 warning generated.'],
+	];
+	for (const trailer of trailers) {
+		const rendered = renderOptimizationPipeline(
+			pipelineArtifact([passDump('_Z3fooi'), ...trailer].join('\n'), ['-mllvm', '-filter-print-funcs=_Z3fooi']),
+			display({ showUnchangedPasses: true }),
+			renderContext('clang'),
+		);
+		assert.deepEqual(
+			rendered.passes?.map((pass) => pass.changed),
+			[false, true, true, false],
+			trailer.join('\n'),
+		);
+		assert.doesNotMatch(rendered.passes?.at(-1)?.after ?? '', /warning|Finished/u);
+	}
+});
+
 test('output without pass dumps says that the compiler printed no passes', () => {
 	const raw = pipelineArtifact('warning: an unused argument\n', [
 		'-C',
@@ -194,6 +221,13 @@ test('each toolchain prints the passes of one function and writes its code', () 
 	assert.deepEqual(clangClPipelineArguments('?f@@YAXXZ', temporary, []).slice(0, 2), [
 		'/c',
 		`/Fo${path.join(temporary, 'output.obj')}`,
+	]);
+	// rustc and Cargo give the LLVM options in one argument, and they compile one codegen unit.
+	assert.deepEqual(rustPassDumpArguments('f'), [
+		'-C',
+		'codegen-units=1',
+		'-C',
+		'llvm-args=-print-before-all -print-after-all -filter-print-funcs=f',
 	]);
 });
 

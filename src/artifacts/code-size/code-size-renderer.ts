@@ -33,6 +33,15 @@ function sectionsOf(data: unknown): readonly ObjectSection[] | undefined {
 }
 
 /**
+ * The bytes of the opcodes of one instruction. x86 disassembly gives each byte on its own. The GNU
+ * objdump of a fixed-width instruction set gives words, such as `d10043ff` on AArch64, and Thumb
+ * gives halfwords, such as `f852 3b04`. Two hex digits are one byte in each form.
+ */
+function opcodeBytes(opcodes: readonly string[] | undefined): number {
+	return (opcodes ?? []).reduce((total, opcode) => total + Math.ceil(opcode.length / 2), 0);
+}
+
+/**
  * Lists the size of each function and each section of the object file. The size of a function is
  * the sum of the bytes of its instructions in the disassembly, so it has no alignment padding. The
  * largest function comes first. Each function row maps to the first source line of the function,
@@ -56,7 +65,7 @@ export function renderCodeSize(
 			const source = lines.find((line) => line.source?.file && line.source.line)?.source ?? undefined;
 			return {
 				name: range.name,
-				size: lines.reduce((total, line) => total + (line.opcodes?.length ?? 0), 0),
+				size: lines.reduce((total, line) => total + opcodeBytes(line.opcodes), 0),
 				...(source ? { source: { file: source.file, line: source.line } } : {}),
 			};
 		})

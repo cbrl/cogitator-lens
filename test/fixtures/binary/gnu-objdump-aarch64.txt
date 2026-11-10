@@ -1,0 +1,28 @@
+
+a64.o:     file format elf64-littleaarch64
+
+
+Disassembly of section .text:
+
+0000000000000000 <twice>:
+twice():
+C:/project/source.c:2
+   0:	531f7800 	lsl	w0, w0, #1
+   4:	d65f03c0 	ret
+
+0000000000000008 <sum>:
+sum():
+C:/project/source.c:6
+   8:	7100043f 	cmp	w1, #0x1
+   c:	5400012b 	b.lt	30 <sum+0x28>  // b.tstop
+  10:	aa0003e8 	mov	x8, x0
+  14:	2a1f03e0 	mov	w0, wzr
+  18:	2a0103e9 	mov	w9, w1
+  1c:	b840450a 	ldr	w10, [x8], #4
+  20:	f1000529 	subs	x9, x9, #0x1
+  24:	0b0a0400 	add	w0, w0, w10, lsl #1
+  28:	54ffffa1 	b.ne	1c <sum+0x14>  // b.any
+C:/project/source.c:7
+  2c:	d65f03c0 	ret
+  30:	2a1f03e0 	mov	w0, wzr
+  34:	d65f03c0 	ret

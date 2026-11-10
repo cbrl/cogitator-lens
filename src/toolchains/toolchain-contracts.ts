@@ -136,6 +136,8 @@ export interface InvocationRun {
 	/** Runs the compiler with the working directory, the environment, and the limits of the run. */
 	readonly execute: (args: readonly string[]) => Promise<ExecResult>;
 	readonly log: (message: string) => void;
+	/** Stops the run, also while it waits before the compiler starts. */
+	readonly cancellationToken: CancellationToken;
 }
 
 export type InvocationRunner = (run: InvocationRun) => Promise<ExecResult>;

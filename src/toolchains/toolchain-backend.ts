@@ -68,6 +68,11 @@ export interface SecondaryToolSpec {
 	/** Runs while the workspace files still exist. */
 	readonly normalizeOutput?: (output: string, files: Readonly<Record<string, string>>) => string | Promise<string>;
 	/**
+	 * When the production options ask for it, the demangler of the profile reads the output after
+	 * `normalizeOutput`. It runs in the environment and the working directory of the compile.
+	 */
+	readonly demangle?: true;
+	/**
 	 * Runs after the compiler, before the tool; its result becomes RawArtifact.producerData. It gets
 	 * the environment and the working directory of the compile, so it can run a tool too.
 	 */
@@ -379,8 +384,19 @@ export class ToolchainBackend {
 				temporaryDirectory,
 				cancellationToken,
 			);
+			const normalized = spec.normalizeOutput
+				? await spec.normalizeOutput(toolResult.stdout, files)
+				: toolResult.stdout;
 			const artifact = this.buildRawArtifact(
-				spec.normalizeOutput ? await spec.normalizeOutput(toolResult.stdout, files) : toolResult.stdout,
+				spec.demangle
+					? await this.postProcessAssembly(
+							normalized,
+							options.productionOptions,
+							invocation.preparedEnvironment,
+							invocation.workingDirectory,
+							cancellationToken,
+						)
+					: normalized,
 				[compilerResult.stderr, compilerResult.stdout, toolResult.stderr].join('\n'),
 				source,
 				invocation,
@@ -541,6 +557,7 @@ export class ToolchainBackend {
 						temporaryDirectory,
 						execute,
 						log: (message) => this.host.log(message),
+						cancellationToken,
 					})
 				: execute(invocation.argumentsList),
 		);
@@ -742,16 +759,22 @@ export class ToolchainBackend {
 		workingDirectory: string,
 		cancellationToken: CancellationToken,
 	): Promise<string> {
-		if (!options.demangle || !this.profile.tools.demangler) {
-			return rawAssembly;
-		}
-		return executeTextTool(
-			rawAssembly,
-			this.profile.tools.demangler,
-			environment,
-			workingDirectory,
-			cancellationToken,
-		);
+		return options.demangle
+			? this.demangle(rawAssembly, environment, workingDirectory, cancellationToken)
+			: rawAssembly;
+	}
+
+	/** The text from the demangler of the profile. Without a demangler, the text does not change. */
+	demangle(
+		text: string,
+		environment: NodeJS.ProcessEnv,
+		workingDirectory: string,
+		cancellationToken: CancellationToken,
+	): Promise<string> {
+		const demangler = this.profile.tools.demangler;
+		return demangler
+			? executeTextTool(text, demangler, environment, workingDirectory, cancellationToken)
+			: Promise.resolve(text);
 	}
 }
 

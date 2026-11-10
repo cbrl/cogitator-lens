@@ -570,6 +570,8 @@ export function verifyComparisonTargets(): void {
 	assert.equal(variants.textKinds.includes('assembly'), true);
 	assert.equal(variants.textKinds.includes('llvm-ir'), false);
 	assert.equal(variants.textKinds.includes('control-flow-graph'), false);
+	// The pipeline shows one function, and the comparison does not ask for a function.
+	assert.equal(variants.textKinds.includes('optimization-pipeline'), false);
 	assert.equal(variants.hasGraphKind, true);
 	assert.deepEqual(commonComparisonKinds(target('preset:fast'), target('variant:cmake:clang'), registry), {
 		textKinds: ['assembly'],

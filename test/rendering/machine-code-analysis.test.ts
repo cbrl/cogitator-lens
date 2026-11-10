@@ -78,6 +78,64 @@ test('each function of ELF assembly becomes a code region with the source of eac
 	assert.equal(lines.filter((line) => line.includes('LLVM-MCA-BEGIN')).length, 2, 'A variable is no region');
 });
 
+test('the code after a GCC jump table stays in its function, and a cold part is a region of its own', () => {
+	// GCC 15 -O2 writes the jump table of a switch into .rodata, and the cases follow it in .text.
+	const gcc = [
+		'\t.text',
+		'\t.globl\tdense',
+		'\t.type\tdense, @function',
+		'dense:',
+		'.LFB1:',
+		'\t.cfi_startproc',
+		'\tcmpl\t$5, %edi',
+		'\tja\t.L14',
+		'\tleaq\t.L8(%rip), %rax',
+		'\tmovslq\t(%rax,%rdi,4), %rdx',
+		'\taddq\t%rax, %rdx',
+		'\tnotrack jmp\t*%rdx',
+		'\t.section\t.rodata',
+		'\t.align 4',
+		'.L8:',
+		'\t.long\t.L13-.L8',
+		'\t.long\t.L10-.L8',
+		'\t.text',
+		'\t.p2align 4,,10',
+		'.L13:',
+		'\tleal\t(%rsi,%rsi,2), %eax',
+		'\tret',
+		'.L10:',
+		'\tmovl\t%esi, %eax',
+		'\txorl\t$5, %eax',
+		'\tret',
+		'\t.cfi_endproc',
+		'\t.section\t.text.unlikely',
+		'\t.cfi_startproc',
+		'\t.type\tdense.cold, @function',
+		'dense.cold:',
+		'.L14:',
+		'\tmovl\t%esi, %eax',
+		'\tret',
+		'\t.cfi_endproc',
+		'\t.text',
+		'\t.size\tdense, .-dense',
+		'\t.section\t.text.unlikely',
+		'\t.size\tdense.cold, .-dense.cold',
+		'\t.section\t.rodata',
+		'CSWTCH.1:',
+		'\t.long\t11',
+	].join('\n');
+	const marked = markAnalysisRegions(gcc, 'x86');
+	assert.deepEqual(
+		marked.regions.map((region) => [region.name, region.sources.length]),
+		[
+			['dense', 11],
+			['dense.cold', 2],
+		],
+	);
+	const lines = marked.text.split('\n');
+	assert.ok(lines.indexOf('# LLVM-MCA-END dense') > lines.indexOf('\txorl\t$5, %eax'));
+});
+
 test('COFF functions are regions, also without unwind information, and CodeView gives their sources', () => {
 	const clangCl = [
 		'\t.def\t"?leaf@@YAHH@Z";',

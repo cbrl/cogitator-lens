@@ -50,6 +50,26 @@ export function targetFromArguments(args: readonly string[]): string | undefined
 	return target;
 }
 
+/**
+ * The target with the x86 mode of the arguments. `-m32` selects 32-bit code and `-m64` selects
+ * 64-bit code in GCC, Clang, and clang-cl, also in the `/clang:` form. The last one applies. The
+ * target triple of the compiler names its default mode only.
+ */
+export function withX86Mode(target: string | undefined, args: readonly string[]): string | undefined {
+	if (target === undefined || architectureOfTriple(target) !== 'x86') {
+		return target;
+	}
+	const mode = [...args].reverse().find((argument) => /^(?:\/clang:)?-m(?:32|64)$/u.test(argument));
+	const [architecture, ...rest] = target.split('-');
+	if (mode?.endsWith('-m32') && /^(?:x86_64h?|amd64|x64)$/iu.test(architecture)) {
+		return ['i686', ...rest].join('-');
+	}
+	if (mode?.endsWith('-m64') && /^(?:i[3-6]86|x86)$/iu.test(architecture)) {
+		return ['x86_64', ...rest].join('-');
+	}
+	return target;
+}
+
 /** The target triple of a Visual Studio compiler, from the target folder of its path. */
 export function msvcTarget(executable: string, hostArchitecture: string = os.arch()): string {
 	const folder = /[\\/]Host[^\\/]+[\\/]([^\\/]+)[\\/]cl\.exe$/i.exec(executable)?.[1]?.toLowerCase();
