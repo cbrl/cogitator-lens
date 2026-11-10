@@ -379,7 +379,8 @@ package `com.example`, it is `src/main/java`. javac gets it as `-sourcepath`, so
 other classes of the project. The listing has the classes of the source only. An edit to another
 source that javac read also refreshes the artifact. Give a JAR file of a dependency with
 `-classpath` in `defaultArguments` or in a preset. Cogitator Lens adds `-encoding UTF-8`. Your own
-`-encoding` or `-sourcepath` argument replaces the argument of Cogitator Lens.
+`-encoding` or `-sourcepath` argument replaces the argument of Cogitator Lens. javac writes its
+messages in English, because Cogitator Lens reads only English messages.
 
 Cogitator Lens looks for `javap` beside `javac`, in `JAVA_HOME`, and on `PATH`. The Oracle
 installer puts only a launcher of `javac` into its `javapath` folder. For that launcher, `javap`

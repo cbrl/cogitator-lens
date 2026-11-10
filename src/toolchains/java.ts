@@ -40,6 +40,13 @@ export const javaBytecodeProducer: ArtifactProducer = async (backend, source, op
 };
 
 /**
+ * javac writes its diagnostics and its `-verbose` lines in the language of the system, but the
+ * extension reads only the English lines. The last value of a JVM property is the value that
+ * javac uses.
+ */
+const englishMessages = '-J-Duser.language=en';
+
+/**
  * The javac arguments of the extension. `-implicit:none` keeps the class files of the other sources
  * that the compile reads out of the listing. A provider argument for the encoding or the source
  * path replaces the one of the extension.
@@ -54,6 +61,7 @@ export function javacArguments(
 		'-d',
 		classDirectory,
 		'-implicit:none',
+		englishMessages,
 		...(has(/^-encoding$/u) ? [] : ['-encoding', 'UTF-8']),
 		...(sourceRoot && !has(/^(?:-sourcepath|--source-path|--module-source-path)(?:=|$)/u)
 			? ['-sourcepath', sourceRoot]
@@ -94,20 +102,31 @@ export function javaSourceRoot(
 }
 
 const identifier = String.raw`[\p{L}_$][\p{L}\p{N}_$]*`;
-/** A package declaration after the comments, and after the annotations of a `package-info.java`. */
+/**
+ * A comment, a text block, a string, or a character. Each match starts at the first of these, so a
+ * `/*` in a line comment or a `//` in a string does not start a comment.
+ */
+const commentOrLiteral =
+	/\/\*[\s\S]*?\*\/|\/\/[^\n]*|"""(?:\\[\s\S]|[^\\])*?"""|"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'/gu;
+/** A pair of parentheses with no parentheses in it. */
+const innerParentheses = /\([^()]*\)/gu;
+/** A package declaration after the annotations of a `package-info.java`, without their arguments. */
 const packageDeclaration = new RegExp(
-	String.raw`^\s*(?:@[\p{L}_$][\p{L}\p{N}_$.]*\s*(?:\([^)]*\))?\s*)*package\s+(${identifier}(?:\s*\.\s*${identifier})*)\s*;`,
+	String.raw`^\s*(?:@[\p{L}_$][\p{L}\p{N}_$.]*\s*)*package\s+(${identifier}(?:\s*\.\s*${identifier})*)\s*;`,
 	'u',
 );
 
 /** The package of a source, or nothing for the unnamed package. */
 export function javaPackage(text: string): string | undefined {
-	// The package declaration comes before each string, so the comment removal cannot change it.
-	const code = text
-		.replace(/^﻿/u, '')
-		.replace(/\/\*[\s\S]*?\*\//gu, ' ')
-		.replace(/\/\/[^\n]*/gu, '');
-	return packageDeclaration.exec(code)?.[1].replace(/\s+/gu, '');
+	const code = text.replace(/^﻿/u, '').replace(commentOrLiteral, ' ');
+	// The package declaration is the first statement. An annotation argument can hold annotations
+	// with arguments, so the parentheses go from the innermost pair out.
+	let declaration = code.slice(0, code.indexOf(';') + 1);
+	for (let previous = ''; previous !== declaration;) {
+		previous = declaration;
+		declaration = declaration.replace(innerParentheses, ' ');
+	}
+	return packageDeclaration.exec(declaration)?.[1].replace(/\s+/gu, '');
 }
 
 /** The class files in a folder and its subfolders, in the order of their class names. */
@@ -164,7 +183,7 @@ export function stripJavaManagedArguments(
 ): readonly string[] {
 	return withoutOwnedArguments(args, sourceFile, workingDirectory, {
 		withValue: [new Set(['-d', '-s', '-h'])],
-		standalone: [/^-implicit:/u, new Set(['-verbose'])],
+		standalone: [/^-implicit:/u, /^-J-Duser\.language=/u, new Set(['-verbose'])],
 	});
 }
 
@@ -224,17 +243,24 @@ export function splitVerboseLines(text: string): { readonly verbose: string[]; r
 }
 
 /**
+ * A class of the JDK that is not a file. javac 9 and later load the classes of the JDK from
+ * `/modules/`. With `--release`, they load `.sig` files from `ct.sym`, such as
+ * `/89A/java.base/java/io/Serializable.sig`.
+ */
+const jdkClass = /^(?:\/modules\/|jrt:)|\.sig$/iu;
+
+/**
  * The files in the `-verbose` lines of javac: the sources that it parses and the class files that
- * it loads. A file in a JAR file gives the JAR file. The classes of the JDK, under `/modules/`, are
- * not files. javac writes these lines in English only. In another language, the list is empty, and
- * the backend then does not use the output again.
+ * it loads. A file in a JAR file, or in the `ct.sym` file of javac 8, gives that file. When an
+ * option of the environment changes the language of the lines, the list is empty. The backend
+ * then does not use the output again.
  */
 export function javacVerboseInputs(text: string, workingDirectory: string): readonly string[] {
 	const inputs = new Set<string>();
 	for (const line of text.split(/\r?\n/u)) {
 		const reference = /^\[(?:parsing started|loading) (.+)\]\s*$/u.exec(line);
 		const file = reference && fileObjectPath(reference[1]);
-		if (file && !file.startsWith('/modules/') && !/^jrt:/u.test(file)) {
+		if (file && !jdkClass.test(file)) {
 			inputs.add(path.resolve(workingDirectory, file));
 		}
 	}
@@ -243,7 +269,8 @@ export function javacVerboseInputs(text: string, workingDirectory: string): read
 
 /**
  * The path of a javac file object. `DirectoryFileObject[src:p/A.java]` names a folder of the source
- * path and a path in it. `lib.jar(/p/A.class)` names a file in a JAR file.
+ * path and a path in it. `lib.jar(/p/A.class)` names a file in a JAR file, and javac 8 names the
+ * classes of the JDK as `lib\ct.sym(META-INF/sym/rt.jar/java/lang/Object.class)`.
  */
 function fileObjectPath(reference: string): string | undefined {
 	const wrapped = /^(\w+)FileObject\[(.*)\]$/u.exec(reference);
@@ -255,7 +282,7 @@ function fileObjectPath(reference: string): string | undefined {
 		}
 		file = path.join(file.slice(0, separator), file.slice(separator + 1));
 	}
-	const archive = /^(.*\.(?:jar|zip))\(.*\)$/iu.exec(file);
+	const archive = /^(.*\.(?:jar|zip|sym))\(.*\)$/iu.exec(file);
 	return archive ? archive[1] : file || undefined;
 }
 

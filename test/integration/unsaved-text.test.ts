@@ -410,8 +410,10 @@ test('javac compiles unsaved text from a file with the name of the source', asyn
 			assert.equal(warning.line, 6);
 
 			// An error in the unsaved text names the source, and the -verbose lines are not in the output.
+			// The messages are in English, also when a project argument sets another language.
 			await assert.rejects(
 				produceUnsaved('java', javacPath, 'assembly', files, text.replace('Helper.VALUE', 'missing'), {
+					args: ['-J-Duser.language=de'],
 					tools: { javap: { executable: javap, inputMode: 'file-argument' } },
 				}),
 				(error: unknown) =>

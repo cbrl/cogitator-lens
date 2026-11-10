@@ -310,6 +310,20 @@ test('javac and javap produce line-mapped JVM bytecode for a source of a package
 	// The listing has the classes of this source only, though javac also read Helper.java.
 	assert.ok(rendered.lines.every((line) => !/class com\.example\.Helper/u.test(line.text)));
 
+	// With --release, javac loads the classes of the JDK from ct.sym. These are not inputs, so each
+	// input is a file, and the next request can use the output again.
+	const release = await declaredImplementation('java', 'assembly').producer(
+		backend,
+		sourceUri(source),
+		// The fixture has records and switch expressions, which need Java 16.
+		{ ...options, args: ['--release', '17'] },
+		neverCancelled,
+	);
+	assert.ok(
+		release.inputs.length > 0 && release.inputs.every((input) => input.size >= 0),
+		release.inputs.map((input) => `${input.uri} ${input.size}`).join('\n'),
+	);
+
 	const temporary = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'coglens-java-'));
 	try {
 		const empty = path.join(temporary, 'Empty.java');

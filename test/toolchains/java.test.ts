@@ -47,6 +47,12 @@ test('the package declaration gives the source root that javac searches', () => 
 	assert.equal(javaPackage('@Deprecated\n@SuppressWarnings("x")\npackage p.q;'), 'p.q');
 	assert.equal(javaPackage('import java.util.List;\nclass A { String s = "package x;"; }'), undefined);
 	assert.equal(javaPackage('class A {}\npackage late;'), undefined);
+	// A `/*` in a line comment does not start a block comment.
+	assert.equal(javaPackage('// see /* legacy\npackage com.example;\n/* doc */ class A {}'), 'com.example');
+	assert.equal(javaPackage('/* a // b */ /* c */\npackage p;'), 'p');
+	// The arguments of annotations can hold annotations, parentheses, and comment markers in strings.
+	assert.equal(javaPackage('@Ann(x = @B(1), y = "a)b;")\n@See("http://x")\npackage p.q;'), 'p.q');
+	assert.equal(javaPackage('@Ann(@B(@C(1)))\npackage p;'), 'p');
 
 	assert.equal(javaSourceRoot('/w/src/com/example/A.java', 'package com.example;', 'linux'), '/w/src');
 	assert.equal(javaSourceRoot('/w/src/A.java', 'class A {}', 'linux'), '/w/src');
@@ -61,6 +67,7 @@ test('javac writes the class files into the temporary folder, and project argume
 		'-d',
 		'/tmp/c',
 		'-implicit:none',
+		'-J-Duser.language=en',
 		'-encoding',
 		'UTF-8',
 		'-sourcepath',
@@ -70,11 +77,13 @@ test('javac writes the class files into the temporary folder, and project argume
 		'-d',
 		'/tmp/c',
 		'-implicit:none',
+		'-J-Duser.language=en',
 	]);
 	assert.deepEqual(javacArguments('/tmp/c', ['-sourcepath', 'a'], undefined), [
 		'-d',
 		'/tmp/c',
 		'-implicit:none',
+		'-J-Duser.language=en',
 		'-encoding',
 		'UTF-8',
 	]);
@@ -90,6 +99,8 @@ test('javac writes the class files into the temporary folder, and project argume
 				'jni',
 				'-implicit:class',
 				'-verbose',
+				'-J-Duser.language=de',
+				'-J-Xmx1g',
 				'-g',
 				'--release',
 				'21',
@@ -98,7 +109,7 @@ test('javac writes the class files into the temporary folder, and project argume
 			'/w/A.java',
 			'/w',
 		),
-		['-g', '--release', '21'],
+		['-J-Xmx1g', '-g', '--release', '21'],
 	);
 });
 
@@ -174,6 +185,19 @@ test('the -verbose lines of javac give the sources and the class files that the 
 		path.resolve('/w/A.java'),
 	]);
 	assert.deepEqual(javacVerboseInputs('[構文解析開始 SimpleFileObject[/w/A.java]]', '/w'), []);
+
+	// javac 27 with --release 8 and 11 loads .sig files from ct.sym, and javac 8 loads classes from ct.sym.
+	const jdkClasses = [
+		'[loading /8/java.base/java/lang/Object.sig]',
+		'[loading /89A/java.base/java/io/Serializable.sig]',
+		'[loading /B/java.base/module-info.sig]',
+		'[loading ZipFileIndexFileObject[/opt/jdk8/lib/ct.sym(META-INF/sym/rt.jar/java/lang/Object.class)]]',
+		'[loading ZipFileIndexFileObject[/opt/jdk8/jre/lib/rt.jar(java/lang/Object.class)]]',
+	].join('\n');
+	assert.deepEqual(javacVerboseInputs(jdkClasses, '/w'), [
+		path.resolve('/opt/jdk8/lib/ct.sym'),
+		path.resolve('/opt/jdk8/jre/lib/rt.jar'),
+	]);
 });
 
 test('the -verbose lines leave the compiler output, and the other lines stay', () => {
